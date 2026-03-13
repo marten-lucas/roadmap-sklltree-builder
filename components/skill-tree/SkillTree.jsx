@@ -1,15 +1,48 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { TransformComponent, TransformWrapper } from 'react-zoom-pan-pinch'
 import { TREE_CONFIG } from './config'
 import { initialData } from './data'
+import { InspectorPanel } from './InspectorPanel'
 import { calculateRadialSkillTree } from './layout'
 import { SkillNode } from './SkillNode'
+import { findNodeById, updateNodeData as updateNodeDataInTree } from './treeData'
 
 export function SkillTree() {
-  const { nodes, links } = useMemo(() => calculateRadialSkillTree(initialData, TREE_CONFIG), [])
+  const [roadmapData, setRoadmapData] = useState(initialData)
+  const [selectedNodeId, setSelectedNodeId] = useState(null)
+
+  const { nodes, links } = useMemo(
+    () => calculateRadialSkillTree(roadmapData, TREE_CONFIG),
+    [roadmapData],
+  )
+
+  const selectedNode = useMemo(
+    () => findNodeById(roadmapData, selectedNodeId),
+    [roadmapData, selectedNodeId],
+  )
+
+  const updateNodeData = (id, newLabel, newStatus) => {
+    setRoadmapData((previousData) => updateNodeDataInTree(previousData, id, newLabel, newStatus))
+  }
+
+  const handleLabelChange = (newLabel) => {
+    if (!selectedNodeId || !selectedNode) {
+      return
+    }
+
+    updateNodeData(selectedNodeId, newLabel, selectedNode.status)
+  }
+
+  const handleStatusChange = (newStatus) => {
+    if (!selectedNodeId || !selectedNode) {
+      return
+    }
+
+    updateNodeData(selectedNodeId, selectedNode.label, newStatus)
+  }
 
   return (
-    <main className="h-screen w-full overflow-hidden bg-slate-950 text-slate-100">
+    <main className="relative h-screen w-full overflow-hidden bg-slate-950 text-slate-100">
       <TransformWrapper
         minScale={0.45}
         maxScale={2.2}
@@ -47,11 +80,24 @@ export function SkillTree() {
             ))}
 
             {nodes.map((node) => (
-              <SkillNode key={node.id} node={node} nodeSize={TREE_CONFIG.nodeSize} />
+              <SkillNode
+                key={node.id}
+                node={node}
+                nodeSize={TREE_CONFIG.nodeSize}
+                isSelected={node.id === selectedNodeId}
+                onSelect={setSelectedNodeId}
+              />
             ))}
           </svg>
         </TransformComponent>
       </TransformWrapper>
+
+      <InspectorPanel
+        selectedNode={selectedNode}
+        onClose={() => setSelectedNodeId(null)}
+        onLabelChange={handleLabelChange}
+        onStatusChange={handleStatusChange}
+      />
     </main>
   )
 }

@@ -1,24 +1,26 @@
+const uid = () => crypto.randomUUID()
+
 export const initialData = {
-  id: 'root',
+  id: uid(),
   label: 'Skilltree',
   status: 'jetzt',
   children: [
     {
-      id: 'frontend',
+      id: uid(),
       label: 'Frontend',
       status: 'fertig',
       children: [
-        { id: 'react-core', label: 'React Core', status: 'fertig', children: [] },
-        { id: 'tailwind-ui', label: 'Tailwind UI', status: 'später', children: [] },
+        { id: uid(), label: 'React Core', status: 'fertig', children: [] },
+        { id: uid(), label: 'Tailwind UI', status: 'später', children: [] },
       ],
     },
     {
-      id: 'backend',
+      id: uid(),
       label: 'Backend',
       status: 'jetzt',
       children: [
-        { id: 'api-design', label: 'API Design', status: 'jetzt', children: [] },
-        { id: 'db-modeling', label: 'DB Modeling', status: 'später', children: [] },
+        { id: uid(), label: 'API Design', status: 'jetzt', children: [] },
+        { id: uid(), label: 'DB Modeling', status: 'später', children: [] },
       ],
     },
   ],
