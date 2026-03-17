@@ -5,11 +5,12 @@ import { initialData } from './data'
 import { InspectorPanel } from './InspectorPanel'
 import { calculateRadialSkillTree } from './layout'
 import { SkillNode } from './SkillNode'
-import { findNodeById, updateNodeData as updateNodeDataInTree } from './treeData'
+import { findNodeById, updateNodeData as updateNodeDataInTree, getNodeLevelInfo, updateNodeLevel } from './treeData'
 
 export function SkillTree() {
   const [roadmapData, setRoadmapData] = useState(initialData)
   const [selectedNodeId, setSelectedNodeId] = useState(null)
+  const centerSize = TREE_CONFIG.nodeSize * 2
 
   const { nodes, links } = useMemo(
     () => calculateRadialSkillTree(roadmapData, TREE_CONFIG),
@@ -20,6 +21,15 @@ export function SkillTree() {
     () => findNodeById(roadmapData, selectedNodeId),
     [roadmapData, selectedNodeId],
   )
+
+  const levelInfo = useMemo(() => {
+    if (!selectedNodeId) return { minLevel: 1, maxLevel: 2 }
+    const info = getNodeLevelInfo(roadmapData, selectedNodeId)
+    return {
+      minLevel: info.parentLevel + 1,
+      maxLevel: info.maxLevel + 1, // Always allow +1 above highest current level
+    }
+  }, [roadmapData, selectedNodeId])
 
   const updateNodeData = (id, newLabel, newStatus) => {
     setRoadmapData((previousData) => updateNodeDataInTree(previousData, id, newLabel, newStatus))
@@ -39,6 +49,14 @@ export function SkillTree() {
     }
 
     updateNodeData(selectedNodeId, selectedNode.label, newStatus)
+  }
+
+  const handleLevelChange = (newLevel) => {
+    if (!selectedNodeId) {
+      return
+    }
+
+    setRoadmapData((previousData) => updateNodeLevel(previousData, selectedNodeId, newLevel))
   }
 
   return (
@@ -69,7 +87,17 @@ export function SkillTree() {
 
             <circle cx={TREE_CONFIG.origin.x} cy={TREE_CONFIG.origin.y} r="530" fill="url(#nodeHalo)" />
 
-            {links.map((link) => (
+            <image
+              href="/Kyana_Visual_final.svg"
+              x={TREE_CONFIG.origin.x - centerSize / 2}
+              y={TREE_CONFIG.origin.y - centerSize / 2}
+              width={centerSize}
+              height={centerSize}
+              preserveAspectRatio="xMidYMid meet"
+              opacity="0.95"
+            />
+
+            {links.filter((link) => link.sourceDepth > 0).map((link) => (
               <path
                 key={link.id}
                 d={link.path}
@@ -97,6 +125,9 @@ export function SkillTree() {
         onClose={() => setSelectedNodeId(null)}
         onLabelChange={handleLabelChange}
         onStatusChange={handleStatusChange}
+        onLevelChange={handleLevelChange}
+        minLevel={levelInfo.minLevel}
+        maxLevel={levelInfo.maxLevel}
       />
     </main>
   )

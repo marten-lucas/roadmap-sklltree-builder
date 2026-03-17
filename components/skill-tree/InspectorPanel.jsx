@@ -1,4 +1,4 @@
-import { Button, Input, Radio, RadioGroup } from '@heroui/react'
+import { Button, Input, Radio, RadioGroup, Select, SelectItem } from '@heroui/react'
 
 const STATUS_OPTIONS = [
   { value: 'fertig', label: 'Fertig', color: 'text-blue-300', ring: 'border-blue-400/70' },
@@ -6,9 +6,15 @@ const STATUS_OPTIONS = [
   { value: 'später', label: 'Später', color: 'text-slate-300', ring: 'border-slate-400/50' },
 ]
 
-export function InspectorPanel({ selectedNode, onClose, onLabelChange, onStatusChange }) {
+export function InspectorPanel({ selectedNode, onClose, onLabelChange, onStatusChange, onLevelChange, minLevel, maxLevel }) {
   if (!selectedNode) {
     return null
+  }
+
+  const currentLevel = selectedNode.ebene !== undefined && selectedNode.ebene !== null ? selectedNode.ebene : minLevel
+  const levelOptions = []
+  for (let i = minLevel; i <= maxLevel; i++) {
+    levelOptions.push(i)
   }
 
   return (
@@ -77,6 +83,35 @@ export function InspectorPanel({ selectedNode, onClose, onLabelChange, onStatusC
                 </Radio>
               ))}
             </RadioGroup>
+          </div>
+
+          <div className="flex flex-col gap-2">
+            <label className="text-sm font-medium text-slate-300">Ebene</label>
+            <Select
+              selectedKeys={new Set([String(currentLevel)])}
+              onSelectionChange={(keys) => {
+                const selected = Array.from(keys)[0]
+                if (selected) {
+                  onLevelChange(parseInt(selected, 10))
+                }
+              }}
+              variant="bordered"
+              size="lg"
+              className="w-full"
+              classNames={{
+                trigger: [
+                  'h-14 bg-slate-900/80 border-slate-700',
+                  'hover:border-slate-500 focus-within:!border-cyan-400',
+                ].join(' '),
+                value: 'text-white text-base',
+              }}
+            >
+              {levelOptions.map((level) => (
+                <SelectItem key={String(level)} value={String(level)}>
+                  Ebene {level}
+                </SelectItem>
+              ))}
+            </Select>
           </div>
         </div>
       </div>
