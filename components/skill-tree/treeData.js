@@ -126,3 +126,61 @@ export const updateNodeLevel = (tree, nodeId, newLevel) => {
 
   return adjustDescendants(tree, 0, false)
 }
+
+const createNewNode = (level) => ({
+  id: crypto.randomUUID(),
+  label: 'Neuer Skill',
+  status: 'später',
+  ebene: level,
+  children: [],
+})
+
+export const addChildNode = (tree, parentId) => {
+  const { nodeLevel: parentLevel } = getNodeLevelInfo(tree, parentId)
+
+  const addToParent = (node) => {
+    if (node.id === parentId) {
+      const existingChildren = node.children ?? []
+      const insertIndex = Math.floor(existingChildren.length / 2)
+      const nextChildren = [...existingChildren]
+      nextChildren.splice(insertIndex, 0, createNewNode(parentLevel + 1))
+
+      return {
+        ...node,
+        children: nextChildren,
+      }
+    }
+
+    const nextChildren = (node.children ?? []).map(addToParent)
+    const changed = nextChildren.some((child, index) => child !== (node.children ?? [])[index])
+
+    if (!changed) {
+      return node
+    }
+
+    return {
+      ...node,
+      children: nextChildren,
+    }
+  }
+
+  return addToParent(tree)
+}
+
+export const addRootNodeNear = (tree, anchorRootId, side = 'right') => {
+  const roots = tree.children ?? []
+  const anchorIndex = roots.findIndex((node) => node.id === anchorRootId)
+
+  if (anchorIndex < 0) {
+    return tree
+  }
+
+  const insertIndex = side === 'left' ? anchorIndex : anchorIndex + 1
+  const nextRoots = [...roots]
+  nextRoots.splice(insertIndex, 0, createNewNode(1))
+
+  return {
+    ...tree,
+    children: nextRoots,
+  }
+}

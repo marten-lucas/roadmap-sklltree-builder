@@ -1,16 +1,26 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { TransformComponent, TransformWrapper } from 'react-zoom-pan-pinch'
 import { TREE_CONFIG } from './config'
 import { initialData } from './data'
 import { InspectorPanel } from './InspectorPanel'
 import { calculateRadialSkillTree } from './layout'
 import { SkillNode } from './SkillNode'
-import { findNodeById, updateNodeData as updateNodeDataInTree, getNodeLevelInfo, updateNodeLevel } from './treeData'
+import {
+  addChildNode,
+  addRootNodeNear,
+  findNodeById,
+  getNodeLevelInfo,
+  updateNodeData as updateNodeDataInTree,
+  updateNodeLevel,
+} from './treeData'
 
 export function SkillTree() {
   const [roadmapData, setRoadmapData] = useState(initialData)
   const [selectedNodeId, setSelectedNodeId] = useState(null)
+  const [hoveredNodeId, setHoveredNodeId] = useState(null)
+  const hoverLeaveTimerRef = useRef(null)
   const centerSize = TREE_CONFIG.nodeSize * 2
+  const addControlOffset = TREE_CONFIG.nodeSize * 0.82
 
   const { nodes, links, canvas } = useMemo(
     () => calculateRadialSkillTree(roadmapData, TREE_CONFIG),
@@ -31,6 +41,77 @@ export function SkillTree() {
       maxLevel: info.maxLevel + 1, // Always allow +1 above highest current level
     }
   }, [roadmapData, selectedNodeId])
+
+  const hoveredNode = useMemo(
+    () => nodes.find((node) => node.id === hoveredNodeId) ?? null,
+    [nodes, hoveredNodeId],
+  )
+
+  const hoveredControlGeometry = useMemo(() => {
+    if (!hoveredNode) {
+      return null
+    }
+
+    const dx = hoveredNode.x - canvas.origin.x
+    const dy = hoveredNode.y - canvas.origin.y
+    const length = Math.hypot(dx, dy) || 1
+    const radial = { x: dx / length, y: dy / length }
+    const tangent = { x: -radial.y, y: radial.x }
+
+    return {
+      child: {
+        x: hoveredNode.x + radial.x * addControlOffset,
+        y: hoveredNode.y + radial.y * addControlOffset,
+      },
+      left: {
+        x: hoveredNode.x - tangent.x * addControlOffset,
+        y: hoveredNode.y - tangent.y * addControlOffset,
+      },
+      right: {
+        x: hoveredNode.x + tangent.x * addControlOffset,
+        y: hoveredNode.y + tangent.y * addControlOffset,
+      },
+    }
+  }, [hoveredNode, canvas.origin.x, canvas.origin.y, addControlOffset])
+
+  const clearHoverLeaveTimer = () => {
+    if (hoverLeaveTimerRef.current) {
+      clearTimeout(hoverLeaveTimerRef.current)
+      hoverLeaveTimerRef.current = null
+    }
+  }
+
+  const handleNodeHoverStart = (nodeId) => {
+    clearHoverLeaveTimer()
+
+    if (nodeId !== selectedNodeId) {
+      setHoveredNodeId(null)
+      return
+    }
+
+    setHoveredNodeId(nodeId)
+  }
+
+  const handleNodeHoverEnd = () => {
+    clearHoverLeaveTimer()
+    hoverLeaveTimerRef.current = setTimeout(() => {
+      setHoveredNodeId(null)
+      hoverLeaveTimerRef.current = null
+    }, 120)
+  }
+
+  const handleAddChild = (parentId) => {
+    setRoadmapData((previousData) => addChildNode(previousData, parentId))
+  }
+
+  const handleAddRootNear = (anchorRootId, side) => {
+    setRoadmapData((previousData) => addRootNodeNear(previousData, anchorRootId, side))
+  }
+
+  const handleSelectNode = (nodeId) => {
+    setSelectedNodeId(nodeId)
+    setHoveredNodeId(null)
+  }
 
   const updateNodeData = (id, newLabel, newStatus) => {
     setRoadmapData((previousData) => updateNodeDataInTree(previousData, id, newLabel, newStatus))
@@ -114,9 +195,85 @@ export function SkillTree() {
                 node={node}
                 nodeSize={TREE_CONFIG.nodeSize}
                 isSelected={node.id === selectedNodeId}
-                onSelect={setSelectedNodeId}
+                onSelect={handleSelectNode}
+                onHoverStart={node.id === selectedNodeId ? handleNodeHoverStart : undefined}
+                onHoverEnd={node.id === selectedNodeId ? handleNodeHoverEnd : undefined}
               />
             ))}
+
+            {hoveredNode && hoveredControlGeometry && (
+              <g
+                onMouseEnter={clearHoverLeaveTimer}
+                onMouseLeave={handleNodeHoverEnd}
+              >
+                <g
+                  transform={`translate(${hoveredControlGeometry.child.x}, ${hoveredControlGeometry.child.y})`}
+                  onMouseDown={(event) => event.stopPropagation()}
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    handleAddChild(hoveredNode.id)
+                  }}
+                  className="cursor-pointer"
+                >
+                  <circle r="18" className="fill-slate-900/95 stroke-cyan-300" strokeWidth="2.5" />
+                  <text
+                    x="0"
+                    y="1"
+                    textAnchor="middle"
+                    dominantBaseline="middle"
+                    className="select-none fill-cyan-200 text-[24px] font-semibold"
+                  >
+                    +
+                  </text>
+                </g>
+
+                {hoveredNode.depth === 1 && hoveredNode.level === 1 && (
+                  <g>
+                    <g
+                      transform={`translate(${hoveredControlGeometry.left.x}, ${hoveredControlGeometry.left.y})`}
+                      onMouseDown={(event) => event.stopPropagation()}
+                      onClick={(event) => {
+                        event.stopPropagation()
+                        handleAddRootNear(hoveredNode.id, 'left')
+                      }}
+                      className="cursor-pointer"
+                    >
+                      <circle r="18" className="fill-slate-900/95 stroke-blue-300" strokeWidth="2.5" />
+                      <text
+                        x="0"
+                        y="1"
+                        textAnchor="middle"
+                        dominantBaseline="middle"
+                        className="select-none fill-blue-200 text-[24px] font-semibold"
+                      >
+                        +
+                      </text>
+                    </g>
+
+                    <g
+                      transform={`translate(${hoveredControlGeometry.right.x}, ${hoveredControlGeometry.right.y})`}
+                      onMouseDown={(event) => event.stopPropagation()}
+                      onClick={(event) => {
+                        event.stopPropagation()
+                        handleAddRootNear(hoveredNode.id, 'right')
+                      }}
+                      className="cursor-pointer"
+                    >
+                      <circle r="18" className="fill-slate-900/95 stroke-blue-300" strokeWidth="2.5" />
+                      <text
+                        x="0"
+                        y="1"
+                        textAnchor="middle"
+                        dominantBaseline="middle"
+                        className="select-none fill-blue-200 text-[24px] font-semibold"
+                      >
+                        +
+                      </text>
+                    </g>
+                  </g>
+                )}
+              </g>
+            )}
           </svg>
         </TransformComponent>
       </TransformWrapper>
@@ -124,7 +281,10 @@ export function SkillTree() {
       <InspectorPanel
         selectedNode={selectedNode}
         currentLevel={levelInfo.nodeLevel}
-        onClose={() => setSelectedNodeId(null)}
+        onClose={() => {
+          setSelectedNodeId(null)
+          setHoveredNodeId(null)
+        }}
         onLabelChange={handleLabelChange}
         onStatusChange={handleStatusChange}
         onLevelChange={handleLevelChange}
