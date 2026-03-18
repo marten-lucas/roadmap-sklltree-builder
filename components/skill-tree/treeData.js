@@ -127,11 +127,12 @@ export const updateNodeLevel = (tree, nodeId, newLevel) => {
   return adjustDescendants(tree, 0, false)
 }
 
-const createNewNode = (level) => ({
+const createNewNode = (level, segmentId = null) => ({
   id: crypto.randomUUID(),
   label: 'Neuer Skill',
   status: 'später',
   ebene: level,
+  segmentId,
   children: [],
 })
 
@@ -143,7 +144,7 @@ export const addChildNode = (tree, parentId) => {
       const existingChildren = node.children ?? []
       const insertIndex = Math.floor(existingChildren.length / 2)
       const nextChildren = [...existingChildren]
-      nextChildren.splice(insertIndex, 0, createNewNode(parentLevel + 1))
+      nextChildren.splice(insertIndex, 0, createNewNode(parentLevel + 1, node.segmentId ?? null))
 
       return {
         ...node,
@@ -175,9 +176,10 @@ export const addRootNodeNear = (tree, anchorRootId, side = 'right') => {
     return tree
   }
 
+  const anchorSegmentId = roots[anchorIndex].segmentId ?? null
   const insertIndex = side === 'left' ? anchorIndex : anchorIndex + 1
   const nextRoots = [...roots]
-  nextRoots.splice(insertIndex, 0, createNewNode(1))
+  nextRoots.splice(insertIndex, 0, createNewNode(1, anchorSegmentId))
 
   return {
     ...tree,

@@ -55,6 +55,10 @@ export const calculateRadialSkillTree = (data, config) => {
     return {
       nodes: [],
       links: [],
+      segments: {
+        separators: [],
+        labels: [],
+      },
       canvas: {
         width: config.horizontalPadding * 2 + config.nodeSize,
         height: config.topPadding + config.bottomPadding + config.nodeSize,
@@ -261,6 +265,7 @@ export const calculateRadialSkillTree = (data, config) => {
       id: node.data.id,
       label: node.data.label,
       status: node.data.status,
+      segmentId: node.data.segmentId ?? null,
       depth: node.depth,
       level: effectiveLevel,
       x: point.x,
@@ -335,9 +340,80 @@ export const calculateRadialSkillTree = (data, config) => {
     })
     .filter(Boolean)
 
+  const explicitSegments = data.segments ?? []
+  const segmentLabelById = new Map(explicitSegments.map((segment) => [segment.id, segment.label]))
+  const segmentRangesMap = new Map()
+
+  for (const node of allNodes) {
+    const segmentId = node.data.segmentId
+    if (!segmentId) {
+      continue
+    }
+
+    const angle = getAngleForNode(node)
+    const existing = segmentRangesMap.get(segmentId)
+
+    if (!existing) {
+      segmentRangesMap.set(segmentId, {
+        id: segmentId,
+        label: segmentLabelById.get(segmentId) ?? segmentId,
+        min: angle,
+        max: angle,
+      })
+      continue
+    }
+
+    existing.min = Math.min(existing.min, angle)
+    existing.max = Math.max(existing.max, angle)
+  }
+
+  const segmentRanges = Array.from(segmentRangesMap.values())
+    .map((segment) => ({
+      ...segment,
+      center: (segment.min + segment.max) / 2,
+    }))
+    .sort((a, b) => a.center - b.center)
+
+  const separatorInnerRadius = Math.max(config.nodeSize * 0.9, config.levelSpacing * 0.9)
+  const separatorOuterRadius = maxRadius + 120
+
+  const segmentSeparators = segmentRanges.slice(0, -1).map((segment, index) => {
+    const next = segmentRanges[index + 1]
+    const angle = (segment.max + next.min) / 2
+    const from = toCartesian(angle, separatorInnerRadius, origin)
+    const to = toCartesian(angle, separatorOuterRadius, origin)
+
+    return {
+      id: `segment-separator-${segment.id}-${next.id}`,
+      path: `M ${from.x} ${from.y} L ${to.x} ${to.y}`,
+    }
+  })
+
+  const segmentLabels = segmentRanges.map((segment) => {
+    const point = toCartesian(segment.center, separatorOuterRadius + 34, origin)
+    let rotation = segment.center + 90
+
+    // Keep text readable by flipping labels on the lower half.
+    if (rotation > 90 && rotation < 270) {
+      rotation += 180
+    }
+
+    return {
+      id: `segment-label-${segment.id}`,
+      text: segment.label,
+      x: point.x,
+      y: point.y,
+      rotation,
+    }
+  })
+
   return {
     nodes,
     links: [...links, ...siblingArcs, ...levelOneBridges],
+    segments: {
+      separators: segmentSeparators,
+      labels: segmentLabels,
+    },
     canvas: {
       width: svgWidth,
       height: svgHeight,

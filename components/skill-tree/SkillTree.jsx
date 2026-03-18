@@ -22,7 +22,7 @@ export function SkillTree() {
   const centerSize = TREE_CONFIG.nodeSize * 2
   const addControlOffset = TREE_CONFIG.nodeSize * 0.82
 
-  const { nodes, links, canvas } = useMemo(
+  const { nodes, links, segments, canvas } = useMemo(
     () => calculateRadialSkillTree(roadmapData, TREE_CONFIG),
     [roadmapData],
   )
@@ -178,6 +178,33 @@ export function SkillTree() {
               preserveAspectRatio="xMidYMid meet"
               opacity="0.95"
             />
+
+            <g>
+              {segments.separators.map((separator) => (
+                <path
+                  key={separator.id}
+                  d={separator.path}
+                  className="fill-none"
+                  stroke="#1e3a8a"
+                  strokeOpacity="0.7"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                />
+              ))}
+            </g>
+
+            {segments.labels.map((segmentLabel) => (
+              <text
+                key={segmentLabel.id}
+                x={segmentLabel.x}
+                y={segmentLabel.y}
+                textAnchor="middle"
+                transform={`rotate(${segmentLabel.rotation} ${segmentLabel.x} ${segmentLabel.y})`}
+                className="select-none fill-slate-400 text-[12px] font-semibold uppercase tracking-[0.18em]"
+              >
+                {segmentLabel.text}
+              </text>
+            ))}
 
             {links.filter((link) => link.sourceDepth > 0).map((link) => (
               <path
