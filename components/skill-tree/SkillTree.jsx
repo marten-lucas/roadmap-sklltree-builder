@@ -12,6 +12,7 @@ import {
   getNodeLevelInfo,
   updateNodeData as updateNodeDataInTree,
   updateNodeLevel,
+  updateNodeSegment,
 } from './treeData'
 
 export function SkillTree() {
@@ -317,6 +318,10 @@ export function SkillTree() {
         onLevelChange={handleLevelChange}
         minLevel={levelInfo.minLevel}
         maxLevel={levelInfo.maxLevel}
+        segments={roadmapData.segments ?? []}
+        onSegmentChange={(newSegmentId) => {
+          setRoadmapData((prev) => updateNodeSegment(prev, selectedNodeId, newSegmentId))
+        }}
       />
     </main>
   )

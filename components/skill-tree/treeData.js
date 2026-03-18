@@ -46,6 +46,11 @@ export const updateNodeData = (treeData, id, newLabel, newStatus) =>
     status: newStatus,
   }))
 
+export const updateNodeSegment = (treeData, id, newSegmentId) =>
+  updateNodeById(treeData, id, () => ({
+    segmentId: newSegmentId,
+  }))
+
 /**
  * Gets the maximum level (ebene) in the entire tree.
  */

@@ -6,7 +6,7 @@ const STATUS_OPTIONS = [
   { value: 'später', label: 'Später', color: 'text-slate-300', ring: 'border-slate-400/50' },
 ]
 
-export function InspectorPanel({ selectedNode, currentLevel, onClose, onLabelChange, onStatusChange, onLevelChange, minLevel, maxLevel }) {
+export function InspectorPanel({ selectedNode, currentLevel, onClose, onLabelChange, onStatusChange, onLevelChange, minLevel, maxLevel, segments, onSegmentChange }) {
   if (!selectedNode) {
     return null
   }
@@ -114,6 +114,37 @@ export function InspectorPanel({ selectedNode, currentLevel, onClose, onLabelCha
               ))}
             </Select>
           </div>
+
+          {segments && segments.length > 0 && (
+            <div className="flex flex-col gap-2">
+              <label className="text-sm font-medium text-slate-300">Segment</label>
+              <Select
+                selectedKeys={selectedNode.segmentId ? new Set([selectedNode.segmentId]) : new Set()}
+                disallowEmptySelection
+                onSelectionChange={(keys) => {
+                  const selected = Array.from(keys)[0]
+                  if (selected) onSegmentChange(selected)
+                }}
+                renderValue={(items) => items.map((item) => item?.textValue ?? item?.key).join(', ')}
+                variant="bordered"
+                size="lg"
+                className="w-full"
+                classNames={{
+                  trigger: [
+                    'h-14 bg-slate-900/80 border-slate-700',
+                    'hover:border-slate-500 focus-within:!border-cyan-400',
+                  ].join(' '),
+                  value: 'text-white text-base',
+                }}
+              >
+                {segments.map((seg) => (
+                  <SelectItem key={seg.id} textValue={seg.label}>
+                    {seg.label}
+                  </SelectItem>
+                ))}
+              </Select>
+            </div>
+          )}
         </div>
       </div>
     </div>
