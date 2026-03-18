@@ -1,6 +1,8 @@
-import { hierarchy, tree } from 'd3-hierarchy'
+import { hierarchy } from 'd3-hierarchy'
 
-const clamp = (value, min, max) => Math.max(min, Math.min(max, value))
+const toRadians = (angleDeg) => (angleDeg * Math.PI) / 180
+const toDegrees = (angleRad) => (angleRad * 180) / Math.PI
+const centerAngle = -90
 
 const toCartesian = (angleDeg, radius, origin) => {
   const radians = (angleDeg * Math.PI) / 180
@@ -49,11 +51,19 @@ export const calculateRadialSkillTree = (data, config) => {
   }
 
   const allHierarchyNodes = root.descendants().filter((node) => node.depth > 0)
-  const maxDepth = Math.max(1, ...allHierarchyNodes.map((node) => node.depth))
-  const maxEffectiveLevel = Math.max(1, Math.max(...allHierarchyNodes.map(getEffectiveLevel)))
-  const maxRadius = Math.max(config.levelSpacing, maxEffectiveLevel * config.levelSpacing)
+  if (allHierarchyNodes.length === 0) {
+    return {
+      nodes: [],
+      links: [],
+      canvas: {
+        width: config.horizontalPadding * 2 + config.nodeSize,
+        height: config.topPadding + config.bottomPadding + config.nodeSize,
+        origin: { x: config.horizontalPadding, y: config.topPadding },
+        maxRadius: config.levelSpacing,
+      },
+    }
+  }
 
-  // Increase fan angle based on node density per level to avoid node overlap.
   const levelCounts = allHierarchyNodes.reduce((acc, node) => {
     const level = getEffectiveLevel(node)
     acc.set(level, (acc.get(level) ?? 0) + 1)
@@ -61,39 +71,175 @@ export const calculateRadialSkillTree = (data, config) => {
   }, new Map())
 
   const minimumArcGap = config.nodeSize * config.minArcGapFactor
-  const requiredSpread = Array.from(levelCounts.entries()).reduce((angle, [level, count]) => {
-    if (count <= 1) {
-      return angle
+  const sortedLevels = Array.from(levelCounts.keys()).sort((a, b) => a - b)
+
+  const buildRadiusByLevel = (spacingScale = 1) => {
+    const radiusByLevel = new Map()
+    let previousRadius = 0
+
+    for (const level of sortedLevels) {
+      const count = levelCounts.get(level)
+      const spacing = config.levelSpacing * spacingScale
+      const baseRadius = Math.max(level * spacing, previousRadius + spacing)
+      const minimumRadiusForSpread =
+        count <= 1
+          ? 0
+          : (((count - 1) * minimumArcGap) / toRadians(config.maxAngleSpread))
+      const radius = Math.max(baseRadius, minimumRadiusForSpread)
+      radiusByLevel.set(level, radius)
+      previousRadius = radius
     }
 
-    const radius = Math.max(config.levelSpacing, level * config.levelSpacing)
-    const requiredRadians = ((count - 1) * minimumArcGap) / radius
-    return Math.max(angle, (requiredRadians * 180) / Math.PI)
-  }, config.minAngleSpread)
+    return radiusByLevel
+  }
 
-  const angleSpread = clamp(requiredSpread, config.minAngleSpread, config.maxAngleSpread)
+  const getGapByLevel = (radiusByLevel) => {
+    const gapByLevel = new Map()
 
-  const radialLayout = tree().size([angleSpread, maxDepth])
-  const laidOut = radialLayout(root)
+    for (const level of sortedLevels) {
+      const radius = radiusByLevel.get(level)
+      gapByLevel.set(level, toDegrees(minimumArcGap / radius))
+    }
 
-  const allNodes = laidOut.descendants().filter((node) => node.depth > 0)
+    return gapByLevel
+  }
 
-  const startAngle = -90 - angleSpread / 2
-  const endAngle = -90 + angleSpread / 2
-  const criticalAngles = [-180, -90, 0, 90, 180].filter((a) => a >= startAngle && a <= endAngle)
-  const extentAngles = [startAngle, endAngle, ...criticalAngles]
-  const cosValues = extentAngles.map((angle) => Math.cos((angle * Math.PI) / 180))
-  const sinValues = extentAngles.map((angle) => Math.sin((angle * Math.PI) / 180))
-  const minCos = Math.min(...cosValues)
-  const maxCos = Math.max(...cosValues)
-  const minSin = Math.min(...sinValues)
-  const maxSin = Math.max(...sinValues)
+  const computeOffsets = (items, distances) => {
+    if (items.length === 0) {
+      return []
+    }
+
+    const centers = [0]
+    for (let index = 1; index < items.length; index += 1) {
+      centers[index] = centers[index - 1] + distances[index - 1]
+    }
+
+    const minBound = centers[0] - items[0].span / 2
+    const maxBound = centers[centers.length - 1] + items[items.length - 1].span / 2
+    const shift = -((minBound + maxBound) / 2)
+
+    return centers.map((value) => value + shift)
+  }
+
+  const computeAngleLayout = (radiusByLevel) => {
+    const gapByLevel = getGapByLevel(radiusByLevel)
+    const spanByNodeId = new Map()
+    const angleByNodeId = new Map()
+
+    const computeSpan = (node) => {
+      const children = node.children ?? []
+
+      if (children.length === 0) {
+        spanByNodeId.set(node.data.id, 0)
+        return 0
+      }
+
+      const childItems = children.map((child) => ({
+        node: child,
+        span: computeSpan(child),
+        level: getEffectiveLevel(child),
+      }))
+
+      if (childItems.length === 1) {
+        spanByNodeId.set(node.data.id, childItems[0].span)
+        return childItems[0].span
+      }
+
+      const distances = []
+      for (let index = 1; index < childItems.length; index += 1) {
+        const left = childItems[index - 1]
+        const right = childItems[index]
+        const gap = Math.max(gapByLevel.get(left.level), gapByLevel.get(right.level))
+        const distance = (left.span + right.span) / 2 + gap
+        distances.push(distance)
+      }
+
+      const centers = computeOffsets(childItems, distances)
+      const minBound = Math.min(...centers.map((center, idx) => center - childItems[idx].span / 2))
+      const maxBound = Math.max(...centers.map((center, idx) => center + childItems[idx].span / 2))
+      const totalSpan = maxBound - minBound
+      spanByNodeId.set(node.data.id, totalSpan)
+      return totalSpan
+    }
+
+    const assignAngles = (node, angle) => {
+      if (node.depth > 0) {
+        angleByNodeId.set(node.data.id, angle)
+      }
+
+      const children = node.children ?? []
+      if (children.length === 0) {
+        return
+      }
+
+      const childItems = children.map((child) => ({
+        node: child,
+        span: spanByNodeId.get(child.data.id) ?? 0,
+        level: getEffectiveLevel(child),
+      }))
+
+      if (childItems.length === 1) {
+        assignAngles(childItems[0].node, angle)
+        return
+      }
+
+      const distances = []
+      for (let index = 1; index < childItems.length; index += 1) {
+        const left = childItems[index - 1]
+        const right = childItems[index]
+        const gap = Math.max(gapByLevel.get(left.level), gapByLevel.get(right.level))
+        const distance = (left.span + right.span) / 2 + gap
+        distances.push(distance)
+      }
+
+      const offsets = computeOffsets(childItems, distances)
+
+      childItems.forEach((child, index) => {
+        assignAngles(child.node, angle + offsets[index])
+      })
+    }
+
+    const rootChildren = root.children ?? []
+    rootChildren.forEach((child) => computeSpan(child))
+    assignAngles(root, centerAngle)
+
+    const subtreeSpan = rootChildren.length
+      ? Math.max(...rootChildren.map((child) => spanByNodeId.get(child.data.id) ?? 0))
+      : 0
+
+    return {
+      angleByNodeId,
+      subtreeSpan,
+    }
+  }
+
+  let spacingScale = 1
+  let radiusByLevel = buildRadiusByLevel(spacingScale)
+  let { angleByNodeId, subtreeSpan } = computeAngleLayout(radiusByLevel)
+
+  for (let attempt = 0; attempt < 5 && subtreeSpan > config.maxAngleSpread; attempt += 1) {
+    spacingScale *= subtreeSpan / config.maxAngleSpread + 0.08
+    radiusByLevel = buildRadiusByLevel(spacingScale)
+    const nextLayout = computeAngleLayout(radiusByLevel)
+    angleByNodeId = nextLayout.angleByNodeId
+    subtreeSpan = nextLayout.subtreeSpan
+  }
+
+  const allNodes = root.descendants().filter((node) => node.depth > 0)
+  const maxRadius = Math.max(config.levelSpacing, ...radiusByLevel.values())
+
+  const resolvedPoints = allNodes.map((node) => {
+    const level = getEffectiveLevel(node)
+    const angle = angleByNodeId.get(node.data.id) ?? centerAngle
+    const radius = radiusByLevel.get(level) ?? level * config.levelSpacing
+    return { angle, radius }
+  })
 
   const nodePadding = config.nodeSize / 2 + 40
-  const minX = maxRadius * minCos - nodePadding
-  const maxX = maxRadius * maxCos + nodePadding
-  const minY = maxRadius * minSin - nodePadding
-  const maxY = maxRadius * maxSin + nodePadding
+  const minX = Math.min(...resolvedPoints.map((point) => point.radius * Math.cos(toRadians(point.angle)))) - nodePadding
+  const maxX = Math.max(...resolvedPoints.map((point) => point.radius * Math.cos(toRadians(point.angle)))) + nodePadding
+  const minY = Math.min(...resolvedPoints.map((point) => point.radius * Math.sin(toRadians(point.angle)))) - nodePadding
+  const maxY = Math.max(...resolvedPoints.map((point) => point.radius * Math.sin(toRadians(point.angle)))) + nodePadding
 
   const svgWidth = maxX - minX + config.horizontalPadding * 2
   const svgHeight = maxY - minY + config.topPadding + config.bottomPadding
@@ -102,11 +248,11 @@ export const calculateRadialSkillTree = (data, config) => {
     y: config.topPadding - minY,
   }
 
-  // Helper: Calculate radius based on effective level
-  const getRadiusForLevel = (level) => level * config.levelSpacing
+  const getRadiusForLevel = (level) => radiusByLevel.get(level) ?? level * config.levelSpacing
+  const getAngleForNode = (node) => angleByNodeId.get(node.data.id) ?? centerAngle
 
   const nodes = allNodes.map((node) => {
-    const centeredAngle = node.x - angleSpread / 2 - 90
+    const centeredAngle = getAngleForNode(node)
     const effectiveLevel = getEffectiveLevel(node)
     const radius = getRadiusForLevel(effectiveLevel)
     const point = toCartesian(centeredAngle, radius, origin)
@@ -123,9 +269,9 @@ export const calculateRadialSkillTree = (data, config) => {
     }
   })
 
-  const links = laidOut.links().map((link) => {
-    const sourceAngle = link.source.x - angleSpread / 2 - 90
-    const targetAngle = link.target.x - angleSpread / 2 - 90
+  const links = root.links().map((link) => {
+    const sourceAngle = getAngleForNode(link.source)
+    const targetAngle = getAngleForNode(link.target)
     const getEffectiveLevelForLink = (node) => {
       if (node.data.ebene !== undefined && node.data.ebene !== null) {
         return node.data.ebene
@@ -149,16 +295,14 @@ export const calculateRadialSkillTree = (data, config) => {
   })
 
   // Connect all level-1 siblings with a continuous arc along their shared radius.
-  const depthOneNodes = laidOut
-    .descendants()
-    .filter((n) => n.depth === 1)
-    .sort((a, b) => a.x - b.x)
+  const depthOneNodes = root.children ?? []
+  depthOneNodes.sort((a, b) => getAngleForNode(a) - getAngleForNode(b))
   const levelOneRadius = getRadiusForLevel(1)
 
   const siblingArcs = depthOneNodes.slice(0, -1).map((node, i) => {
     const next = depthOneNodes[i + 1]
-    const fromAngle = node.x - angleSpread / 2 - 90
-    const toAngle = next.x - angleSpread / 2 - 90
+    const fromAngle = getAngleForNode(node)
+    const toAngle = getAngleForNode(next)
     const from = toCartesian(fromAngle, levelOneRadius, origin)
     const to = toCartesian(toAngle, levelOneRadius, origin)
     const sweep = toAngle > fromAngle ? 1 : 0
@@ -173,7 +317,7 @@ export const calculateRadialSkillTree = (data, config) => {
   // If a depth-1 node is moved to another level, draw a radial bridge from level 1.
   const levelOneBridges = depthOneNodes
     .map((node) => {
-      const angle = node.x - angleSpread / 2 - 90
+      const angle = getAngleForNode(node)
       const nodeRadius = getRadiusForLevel(getEffectiveLevel(node))
 
       if (Math.abs(nodeRadius - levelOneRadius) < 0.01) {
