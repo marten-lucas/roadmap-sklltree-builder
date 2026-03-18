@@ -37,7 +37,9 @@ const buildRadialEdgePath = (sourceAngle, sourceRadius, targetAngle, targetRadiu
 
 export const calculateRadialSkillTree = (data, config) => {
   const root = hierarchy(data)
-  const radialLayout = tree().size([config.angleSpread, config.maxRadius])
+  const allHierarchyNodes = root.descendants().filter((node) => node.depth > 0)
+  const maxDepth = Math.max(1, ...allHierarchyNodes.map((node) => node.depth))
+  const radialLayout = tree().size([config.angleSpread, maxDepth])
   const laidOut = radialLayout(root)
 
   // Helper: Get effective level (custom ebene or depth), and find max level for scaling
@@ -50,18 +52,22 @@ export const calculateRadialSkillTree = (data, config) => {
 
   const allNodes = laidOut.descendants().filter((node) => node.depth > 0)
   const maxEffectiveLevel = Math.max(1, Math.max(...allNodes.map(getEffectiveLevel)))
+  const maxRadius = Math.max(config.levelSpacing, maxEffectiveLevel * config.levelSpacing)
+  const svgWidth = maxRadius * 2 + config.horizontalPadding * 2
+  const svgHeight = maxRadius + config.topPadding + config.bottomPadding
+  const origin = {
+    x: svgWidth / 2,
+    y: svgHeight - config.bottomPadding,
+  }
 
   // Helper: Calculate radius based on effective level
-  const getRadiusForLevel = (level) => {
-    if (maxEffectiveLevel <= 1) return config.maxRadius * 0.3
-    return (level / maxEffectiveLevel) * config.maxRadius
-  }
+  const getRadiusForLevel = (level) => level * config.levelSpacing
 
   const nodes = allNodes.map((node) => {
     const centeredAngle = node.x - config.angleSpread / 2 - 90
     const effectiveLevel = getEffectiveLevel(node)
     const radius = getRadiusForLevel(effectiveLevel)
-    const point = toCartesian(centeredAngle, radius, config.origin)
+    const point = toCartesian(centeredAngle, radius, origin)
 
     return {
       id: node.data.id,
@@ -93,7 +99,7 @@ export const calculateRadialSkillTree = (data, config) => {
         sourceRadius,
         targetAngle,
         targetRadius,
-        config.origin,
+        origin,
       ),
     }
   })
@@ -109,8 +115,8 @@ export const calculateRadialSkillTree = (data, config) => {
     const next = depthOneNodes[i + 1]
     const fromAngle = node.x - config.angleSpread / 2 - 90
     const toAngle = next.x - config.angleSpread / 2 - 90
-    const from = toCartesian(fromAngle, levelOneRadius, config.origin)
-    const to = toCartesian(toAngle, levelOneRadius, config.origin)
+    const from = toCartesian(fromAngle, levelOneRadius, origin)
+    const to = toCartesian(toAngle, levelOneRadius, origin)
     const sweep = toAngle > fromAngle ? 1 : 0
 
     return {
@@ -130,8 +136,8 @@ export const calculateRadialSkillTree = (data, config) => {
         return null
       }
 
-      const from = toCartesian(angle, levelOneRadius, config.origin)
-      const to = toCartesian(angle, nodeRadius, config.origin)
+      const from = toCartesian(angle, levelOneRadius, origin)
+      const to = toCartesian(angle, nodeRadius, origin)
 
       return {
         id: `bridge-level1-${node.data.id}`,
@@ -141,5 +147,14 @@ export const calculateRadialSkillTree = (data, config) => {
     })
     .filter(Boolean)
 
-  return { nodes, links: [...links, ...siblingArcs, ...levelOneBridges] }
+  return {
+    nodes,
+    links: [...links, ...siblingArcs, ...levelOneBridges],
+    canvas: {
+      width: svgWidth,
+      height: svgHeight,
+      origin,
+      maxRadius,
+    },
+  }
 }

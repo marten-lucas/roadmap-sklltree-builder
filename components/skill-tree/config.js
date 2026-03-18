@@ -17,10 +17,10 @@ export const STATUS_STYLES = {
 }
 
 export const TREE_CONFIG = {
-  svgWidth: 1600,
-  svgHeight: 1200,
-  origin: { x: 800, y: 800 },
   angleSpread: 140,
-  maxRadius: 500,
   nodeSize: 120,
+  levelSpacing: 180,
+  horizontalPadding: 260,
+  topPadding: 260,
+  bottomPadding: 320,
 }

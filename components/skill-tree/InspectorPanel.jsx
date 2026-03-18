@@ -6,12 +6,11 @@ const STATUS_OPTIONS = [
   { value: 'später', label: 'Später', color: 'text-slate-300', ring: 'border-slate-400/50' },
 ]
 
-export function InspectorPanel({ selectedNode, onClose, onLabelChange, onStatusChange, onLevelChange, minLevel, maxLevel }) {
+export function InspectorPanel({ selectedNode, currentLevel, onClose, onLabelChange, onStatusChange, onLevelChange, minLevel, maxLevel }) {
   if (!selectedNode) {
     return null
   }
 
-  const currentLevel = selectedNode.ebene !== undefined && selectedNode.ebene !== null ? selectedNode.ebene : minLevel
   const levelOptions = []
   for (let i = minLevel; i <= maxLevel; i++) {
     levelOptions.push(i)
@@ -89,12 +88,14 @@ export function InspectorPanel({ selectedNode, onClose, onLabelChange, onStatusC
             <label className="text-sm font-medium text-slate-300">Ebene</label>
             <Select
               selectedKeys={new Set([String(currentLevel)])}
+              disallowEmptySelection
               onSelectionChange={(keys) => {
                 const selected = Array.from(keys)[0]
                 if (selected) {
                   onLevelChange(parseInt(selected, 10))
                 }
               }}
+              renderValue={(items) => items.map((item) => item?.textValue ?? `Ebene ${item?.key}`).join(', ')}
               variant="bordered"
               size="lg"
               className="w-full"
@@ -107,7 +108,7 @@ export function InspectorPanel({ selectedNode, onClose, onLabelChange, onStatusC
               }}
             >
               {levelOptions.map((level) => (
-                <SelectItem key={String(level)} value={String(level)}>
+                <SelectItem key={String(level)} textValue={`Ebene ${level}`}>
                   Ebene {level}
                 </SelectItem>
               ))}

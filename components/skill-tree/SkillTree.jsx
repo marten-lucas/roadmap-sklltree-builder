@@ -12,7 +12,7 @@ export function SkillTree() {
   const [selectedNodeId, setSelectedNodeId] = useState(null)
   const centerSize = TREE_CONFIG.nodeSize * 2
 
-  const { nodes, links } = useMemo(
+  const { nodes, links, canvas } = useMemo(
     () => calculateRadialSkillTree(roadmapData, TREE_CONFIG),
     [roadmapData],
   )
@@ -23,9 +23,10 @@ export function SkillTree() {
   )
 
   const levelInfo = useMemo(() => {
-    if (!selectedNodeId) return { minLevel: 1, maxLevel: 2 }
+    if (!selectedNodeId) return { nodeLevel: 1, minLevel: 1, maxLevel: 2 }
     const info = getNodeLevelInfo(roadmapData, selectedNodeId)
     return {
+      nodeLevel: info.nodeLevel,
       minLevel: info.parentLevel + 1,
       maxLevel: info.maxLevel + 1, // Always allow +1 above highest current level
     }
@@ -62,7 +63,7 @@ export function SkillTree() {
   return (
     <main className="relative h-screen w-full overflow-hidden bg-slate-950 text-slate-100">
       <TransformWrapper
-        minScale={0.45}
+        minScale={0.2}
         maxScale={2.2}
         initialScale={0.7}
         wheel={{ step: 0.12 }}
@@ -70,12 +71,12 @@ export function SkillTree() {
       >
         <TransformComponent
           wrapperClass="!h-screen !w-full"
-          contentClass="!h-full !w-full"
+          contentClass="!h-auto !w-auto"
         >
           <svg
-            width={TREE_CONFIG.svgWidth}
-            height={TREE_CONFIG.svgHeight}
-            viewBox={`0 0 ${TREE_CONFIG.svgWidth} ${TREE_CONFIG.svgHeight}`}
+            width={canvas.width}
+            height={canvas.height}
+            viewBox={`0 0 ${canvas.width} ${canvas.height}`}
             className="bg-[radial-gradient(circle_at_50%_60%,rgba(30,41,59,0.45),rgba(2,6,23,1)_55%)]"
           >
             <defs>
@@ -85,12 +86,12 @@ export function SkillTree() {
               </radialGradient>
             </defs>
 
-            <circle cx={TREE_CONFIG.origin.x} cy={TREE_CONFIG.origin.y} r="530" fill="url(#nodeHalo)" />
+            <circle cx={canvas.origin.x} cy={canvas.origin.y} r={canvas.maxRadius + 160} fill="url(#nodeHalo)" />
 
             <image
               href="/Kyana_Visual_final.svg"
-              x={TREE_CONFIG.origin.x - centerSize / 2}
-              y={TREE_CONFIG.origin.y - centerSize / 2}
+              x={canvas.origin.x - centerSize / 2}
+              y={canvas.origin.y - centerSize / 2}
               width={centerSize}
               height={centerSize}
               preserveAspectRatio="xMidYMid meet"
@@ -122,6 +123,7 @@ export function SkillTree() {
 
       <InspectorPanel
         selectedNode={selectedNode}
+        currentLevel={levelInfo.nodeLevel}
         onClose={() => setSelectedNodeId(null)}
         onLabelChange={handleLabelChange}
         onStatusChange={handleStatusChange}
