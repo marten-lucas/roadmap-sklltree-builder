@@ -141,6 +141,116 @@ const createNewNode = (level, segmentId = null) => ({
   children: [],
 })
 
+const promoteSubtreeLevels = (node, levelDiff) => {
+  const nextNode = { ...node }
+
+  if (nextNode.ebene !== undefined && nextNode.ebene !== null) {
+    nextNode.ebene = Math.max(1, nextNode.ebene + levelDiff)
+  }
+
+  if (node.children?.length) {
+    nextNode.children = node.children.map((child) => promoteSubtreeLevels(child, levelDiff))
+  }
+
+  return nextNode
+}
+
+export const deleteNodeBranch = (tree, nodeId) => {
+  const removeFromChildren = (children) => {
+    let changed = false
+    const nextChildren = []
+
+    for (const child of children ?? []) {
+      if (child.id === nodeId) {
+        changed = true
+        continue
+      }
+
+      const result = removeNode(child)
+      nextChildren.push(result.node)
+      changed ||= result.changed
+    }
+
+    return { children: nextChildren, changed }
+  }
+
+  const removeNode = (node) => {
+    const { children: nextChildren, changed } = removeFromChildren(node.children ?? [])
+
+    if (!changed) {
+      return { node, changed: false }
+    }
+
+    return {
+      node: {
+        ...node,
+        children: nextChildren,
+      },
+      changed: true,
+    }
+  }
+
+  const { children: nextRoots, changed } = removeFromChildren(tree.children ?? [])
+
+  if (!changed) {
+    return tree
+  }
+
+  return {
+    ...tree,
+    children: nextRoots,
+  }
+}
+
+export const deleteNodeOnly = (tree, nodeId) => {
+  const replaceInChildren = (children) => {
+    let changed = false
+    const nextChildren = []
+
+    for (const child of children ?? []) {
+      if (child.id === nodeId) {
+        changed = true
+        const promotedChildren = (child.children ?? []).map((grandChild) => promoteSubtreeLevels(grandChild, -1))
+        nextChildren.push(...promotedChildren)
+        continue
+      }
+
+      const result = replaceNode(child)
+      nextChildren.push(result.node)
+      changed ||= result.changed
+    }
+
+    return { children: nextChildren, changed }
+  }
+
+  const replaceNode = (node) => {
+    const { children: nextChildren, changed } = replaceInChildren(node.children ?? [])
+
+    if (!changed) {
+      return { node, changed: false }
+    }
+
+    return {
+      node: {
+        ...node,
+        children: nextChildren,
+      },
+      changed: true,
+    }
+  }
+
+  const { children: nextRoots, changed } = replaceInChildren(tree.children ?? [])
+
+  if (!changed) {
+    return tree
+  }
+
+  return {
+    ...tree,
+    children: nextRoots,
+  }
+}
+
 export const addChildNode = (tree, parentId) => {
   return addChildNodeWithResult(tree, parentId).tree
 }
@@ -185,6 +295,21 @@ export const addChildNodeWithResult = (tree, parentId) => {
 
 export const addRootNodeNear = (tree, anchorRootId, side = 'right') => {
   return addRootNodeNearWithResult(tree, anchorRootId, side).tree
+}
+
+export const addInitialRootNodeWithResult = (tree) => {
+  const nextRoots = [...(tree.children ?? [])]
+  const defaultSegmentId = tree.segments?.[0]?.id ?? null
+  const newNode = createNewNode(1, defaultSegmentId)
+  nextRoots.push(newNode)
+
+  return {
+    tree: {
+      ...tree,
+      children: nextRoots,
+    },
+    createdNodeId: newNode.id,
+  }
 }
 
 export const addRootNodeNearWithResult = (tree, anchorRootId, side = 'right') => {

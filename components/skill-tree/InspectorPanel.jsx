@@ -6,7 +6,7 @@ const STATUS_OPTIONS = [
   { value: 'später', label: 'Später', color: 'text-slate-300', ring: 'border-slate-400/50' },
 ]
 
-export function InspectorPanel({ selectedNode, currentLevel, onClose, onLabelChange, onStatusChange, onLevelChange, minLevel, maxLevel, segments, onSegmentChange }) {
+export function InspectorPanel({ selectedNode, currentLevel, onClose, onLabelChange, onStatusChange, onLevelChange, minLevel, maxLevel, segments, onSegmentChange, onDeleteNodeOnly, onDeleteNodeBranch }) {
   if (!selectedNode) {
     return null
   }
@@ -145,6 +145,27 @@ export function InspectorPanel({ selectedNode, currentLevel, onClose, onLabelCha
               </Select>
             </div>
           )}
+
+          <div className="mt-2 flex flex-col gap-3 border-t border-slate-800 pt-6">
+            <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Löschen</p>
+            <Button
+              variant="bordered"
+              size="lg"
+              onPress={onDeleteNodeOnly}
+              className="h-12 border-amber-500/40 bg-amber-500/10 text-amber-200 hover:border-amber-400 hover:bg-amber-500/15"
+            >
+              Skill löschen
+            </Button>
+            <Button
+              color="danger"
+              variant="bordered"
+              size="lg"
+              onPress={onDeleteNodeBranch}
+              className="h-12 border-red-500/50 bg-red-500/10 text-red-200 hover:border-red-400 hover:bg-red-500/15"
+            >
+              Zweig löschen
+            </Button>
+          </div>
         </div>
       </div>
     </div>

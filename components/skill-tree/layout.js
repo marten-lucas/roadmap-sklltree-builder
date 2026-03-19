@@ -52,6 +52,10 @@ export const calculateRadialSkillTree = (data, config) => {
 
   const allHierarchyNodes = root.descendants().filter((node) => node.depth > 0)
   if (allHierarchyNodes.length === 0) {
+    const outerContentRadius = config.levelSpacing + config.nodeSize
+    const width = outerContentRadius * 2 + config.horizontalPadding * 2
+    const height = outerContentRadius * 2 + config.topPadding + config.bottomPadding
+
     return {
       nodes: [],
       links: [],
@@ -60,9 +64,12 @@ export const calculateRadialSkillTree = (data, config) => {
         labels: [],
       },
       canvas: {
-        width: config.horizontalPadding * 2 + config.nodeSize,
-        height: config.topPadding + config.bottomPadding + config.nodeSize,
-        origin: { x: config.horizontalPadding, y: config.topPadding },
+        width,
+        height,
+        origin: {
+          x: config.horizontalPadding + outerContentRadius,
+          y: config.topPadding + outerContentRadius,
+        },
         maxRadius: config.levelSpacing,
       },
     }

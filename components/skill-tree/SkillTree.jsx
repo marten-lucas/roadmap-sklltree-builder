@@ -7,7 +7,10 @@ import { calculateRadialSkillTree } from './layout'
 import { SkillNode } from './SkillNode'
 import {
   addChildNodeWithResult,
+  addInitialRootNodeWithResult,
   addRootNodeNearWithResult,
+  deleteNodeBranch,
+  deleteNodeOnly,
   findNodeById,
   getNodeLevelInfo,
   updateNodeData as updateNodeDataInTree,
@@ -73,6 +76,17 @@ export function SkillTree() {
     }
   }, [selectedLayoutNode, canvas.origin.x, canvas.origin.y, addControlOffset])
 
+  const emptyStateAddControl = useMemo(() => {
+    if (nodes.length > 0) {
+      return null
+    }
+
+    return {
+      x: canvas.origin.x,
+      y: canvas.origin.y - canvas.maxRadius,
+    }
+  }, [nodes.length, canvas.origin.x, canvas.origin.y, canvas.maxRadius])
+
   const handleAddChild = (parentId) => {
     let createdNodeId = null
 
@@ -92,6 +106,20 @@ export function SkillTree() {
 
     setRoadmapData((previousData) => {
       const result = addRootNodeNearWithResult(previousData, anchorRootId, side)
+      createdNodeId = result.createdNodeId
+      return result.tree
+    })
+
+    if (createdNodeId) {
+      setSelectedNodeId(createdNodeId)
+    }
+  }
+
+  const handleAddInitialRoot = () => {
+    let createdNodeId = null
+
+    setRoadmapData((previousData) => {
+      const result = addInitialRootNodeWithResult(previousData)
       createdNodeId = result.createdNodeId
       return result.tree
     })
@@ -131,6 +159,24 @@ export function SkillTree() {
     }
 
     setRoadmapData((previousData) => updateNodeLevel(previousData, selectedNodeId, newLevel))
+  }
+
+  const handleDeleteNodeOnly = () => {
+    if (!selectedNodeId) {
+      return
+    }
+
+    setRoadmapData((previousData) => deleteNodeOnly(previousData, selectedNodeId))
+    setSelectedNodeId(null)
+  }
+
+  const handleDeleteNodeBranch = () => {
+    if (!selectedNodeId) {
+      return
+    }
+
+    setRoadmapData((previousData) => deleteNodeBranch(previousData, selectedNodeId))
+    setSelectedNodeId(null)
   }
 
   return (
@@ -219,6 +265,29 @@ export function SkillTree() {
                 onSelect={handleSelectNode}
               />
             ))}
+
+            {emptyStateAddControl && (
+              <g
+                transform={`translate(${emptyStateAddControl.x}, ${emptyStateAddControl.y})`}
+                onMouseDown={(event) => event.stopPropagation()}
+                onClick={(event) => {
+                  event.stopPropagation()
+                  handleAddInitialRoot()
+                }}
+                className="cursor-pointer"
+              >
+                <circle r="22" className="fill-slate-900/95 stroke-cyan-300" strokeWidth="2.5" />
+                <text
+                  x="0"
+                  y="1"
+                  textAnchor="middle"
+                  dominantBaseline="middle"
+                  className="select-none fill-cyan-200 text-[28px] font-semibold"
+                >
+                  +
+                </text>
+              </g>
+            )}
 
             {selectedLayoutNode && selectedControlGeometry && (
               <g>
@@ -309,6 +378,8 @@ export function SkillTree() {
         onSegmentChange={(newSegmentId) => {
           setRoadmapData((prev) => updateNodeSegment(prev, selectedNodeId, newSegmentId))
         }}
+        onDeleteNodeOnly={handleDeleteNodeOnly}
+        onDeleteNodeBranch={handleDeleteNodeBranch}
       />
     </main>
   )
