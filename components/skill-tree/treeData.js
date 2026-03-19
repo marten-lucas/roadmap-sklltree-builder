@@ -142,14 +142,21 @@ const createNewNode = (level, segmentId = null) => ({
 })
 
 export const addChildNode = (tree, parentId) => {
+  return addChildNodeWithResult(tree, parentId).tree
+}
+
+export const addChildNodeWithResult = (tree, parentId) => {
   const { nodeLevel: parentLevel } = getNodeLevelInfo(tree, parentId)
+  let createdNodeId = null
 
   const addToParent = (node) => {
     if (node.id === parentId) {
       const existingChildren = node.children ?? []
       const insertIndex = Math.floor(existingChildren.length / 2)
       const nextChildren = [...existingChildren]
-      nextChildren.splice(insertIndex, 0, createNewNode(parentLevel + 1, node.segmentId ?? null))
+      const newNode = createNewNode(parentLevel + 1, node.segmentId ?? null)
+      createdNodeId = newNode.id
+      nextChildren.splice(insertIndex, 0, newNode)
 
       return {
         ...node,
@@ -170,24 +177,38 @@ export const addChildNode = (tree, parentId) => {
     }
   }
 
-  return addToParent(tree)
+  return {
+    tree: addToParent(tree),
+    createdNodeId,
+  }
 }
 
 export const addRootNodeNear = (tree, anchorRootId, side = 'right') => {
+  return addRootNodeNearWithResult(tree, anchorRootId, side).tree
+}
+
+export const addRootNodeNearWithResult = (tree, anchorRootId, side = 'right') => {
   const roots = tree.children ?? []
   const anchorIndex = roots.findIndex((node) => node.id === anchorRootId)
 
   if (anchorIndex < 0) {
-    return tree
+    return {
+      tree,
+      createdNodeId: null,
+    }
   }
 
   const anchorSegmentId = roots[anchorIndex].segmentId ?? null
   const insertIndex = side === 'left' ? anchorIndex : anchorIndex + 1
   const nextRoots = [...roots]
-  nextRoots.splice(insertIndex, 0, createNewNode(1, anchorSegmentId))
+  const newNode = createNewNode(1, anchorSegmentId)
+  nextRoots.splice(insertIndex, 0, newNode)
 
   return {
-    ...tree,
-    children: nextRoots,
+    tree: {
+      ...tree,
+      children: nextRoots,
+    },
+    createdNodeId: newNode.id,
   }
 }

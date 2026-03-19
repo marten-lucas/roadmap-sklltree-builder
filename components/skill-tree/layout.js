@@ -232,28 +232,25 @@ export const calculateRadialSkillTree = (data, config) => {
   const allNodes = root.descendants().filter((node) => node.depth > 0)
   const maxRadius = Math.max(config.levelSpacing, ...radiusByLevel.values())
 
-  const resolvedPoints = allNodes.map((node) => {
-    const level = getEffectiveLevel(node)
-    const angle = angleByNodeId.get(node.data.id) ?? centerAngle
-    const radius = radiusByLevel.get(level) ?? level * config.levelSpacing
-    return { angle, radius }
-  })
-
-  const nodePadding = config.nodeSize / 2 + 40
-  const minX = Math.min(...resolvedPoints.map((point) => point.radius * Math.cos(toRadians(point.angle)))) - nodePadding
-  const maxX = Math.max(...resolvedPoints.map((point) => point.radius * Math.cos(toRadians(point.angle)))) + nodePadding
-  const minY = Math.min(...resolvedPoints.map((point) => point.radius * Math.sin(toRadians(point.angle)))) - nodePadding
-  const maxY = Math.max(...resolvedPoints.map((point) => point.radius * Math.sin(toRadians(point.angle)))) + nodePadding
-
-  const svgWidth = maxX - minX + config.horizontalPadding * 2
-  const svgHeight = maxY - minY + config.topPadding + config.bottomPadding
-  const origin = {
-    x: config.horizontalPadding - minX,
-    y: config.topPadding - minY,
-  }
-
   const getRadiusForLevel = (level) => radiusByLevel.get(level) ?? level * config.levelSpacing
   const getAngleForNode = (node) => angleByNodeId.get(node.data.id) ?? centerAngle
+  const separatorInnerRadius = Math.max(config.nodeSize * 0.9, config.levelSpacing * 0.9)
+  const separatorOuterRadius = maxRadius + 120
+  const segmentLabelRadius = Math.max(
+    maxRadius + config.nodeSize * 0.95,
+    separatorInnerRadius + config.nodeSize * 0.7,
+  )
+  const outerContentRadius = Math.max(
+    maxRadius + config.nodeSize,
+    separatorOuterRadius + config.nodeSize * 0.35,
+    segmentLabelRadius + config.nodeSize,
+  )
+  const svgWidth = outerContentRadius * 2 + config.horizontalPadding * 2
+  const svgHeight = outerContentRadius * 2 + config.topPadding + config.bottomPadding
+  const origin = {
+    x: config.horizontalPadding + outerContentRadius,
+    y: config.topPadding + outerContentRadius,
+  }
 
   const nodes = allNodes.map((node) => {
     const centeredAngle = getAngleForNode(node)
@@ -343,6 +340,18 @@ export const calculateRadialSkillTree = (data, config) => {
   const explicitSegments = data.segments ?? []
   const segmentLabelById = new Map(explicitSegments.map((segment) => [segment.id, segment.label]))
   const segmentRangesMap = new Map()
+  const segmentRootAnglesMap = new Map()
+
+  for (const node of root.children ?? []) {
+    const segmentId = node.data.segmentId
+    if (!segmentId) {
+      continue
+    }
+
+    const existingAngles = segmentRootAnglesMap.get(segmentId) ?? []
+    existingAngles.push(getAngleForNode(node))
+    segmentRootAnglesMap.set(segmentId, existingAngles)
+  }
 
   for (const node of allNodes) {
     const segmentId = node.data.segmentId
@@ -371,11 +380,17 @@ export const calculateRadialSkillTree = (data, config) => {
     .map((segment) => ({
       ...segment,
       center: (segment.min + segment.max) / 2,
+      anchorAngle: (() => {
+        const rootAngles = segmentRootAnglesMap.get(segment.id) ?? []
+
+        if (rootAngles.length === 0) {
+          return (segment.min + segment.max) / 2
+        }
+
+        return rootAngles.reduce((sum, angle) => sum + angle, 0) / rootAngles.length
+      })(),
     }))
     .sort((a, b) => a.center - b.center)
-
-  const separatorInnerRadius = Math.max(config.nodeSize * 0.9, config.levelSpacing * 0.9)
-  const separatorOuterRadius = maxRadius + 120
 
   const segmentSeparators = segmentRanges.slice(0, -1).map((segment, index) => {
     const next = segmentRanges[index + 1]
@@ -390,8 +405,8 @@ export const calculateRadialSkillTree = (data, config) => {
   })
 
   const segmentLabels = segmentRanges.map((segment) => {
-    const point = toCartesian(segment.center, separatorOuterRadius + 34, origin)
-    let rotation = segment.center + 90
+    const point = toCartesian(segment.anchorAngle, segmentLabelRadius, origin)
+    let rotation = segment.anchorAngle + 90
 
     // Keep text readable by flipping labels on the lower half.
     if (rotation > 90 && rotation < 270) {
