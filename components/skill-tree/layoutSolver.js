@@ -2,7 +2,7 @@ import { buildLayoutDiagnostics } from './layoutDiagnostics'
 import { buildEdgeRoutingModel, buildRoutedEdgeLinks } from './edgeRouter'
 import { analyzeSegmentLevelFeasibility, buildSegmentLevelGroups } from './layoutFeasibility'
 import {
-  buildRadialEdgePath,
+  buildRadialArcPath,
   centerAngle,
   clamp,
   toCartesian,
@@ -738,18 +738,71 @@ export const solveSkillTreeLayout = (data, config) => {
 
       const { leftCenter, rightCenter, centerGap } = feasibilityEntry
 
+      const getPreferredPlacementAngle = (node) => {
+        if (node.parent && node.parent.depth > 0) {
+          return getAngleForNode(node.parent)
+        }
+
+        return getAngleForNode(node)
+      }
+
+      const buildPreferredCenters = (orderedNodes) => {
+        const preferredCenters = []
+
+        for (let start = 0; start < orderedNodes.length;) {
+          const parentId = orderedNodes[start].parent?.data.id ?? null
+          const baseAngle = clamp(getPreferredPlacementAngle(orderedNodes[start]), leftCenter, rightCenter)
+          let end = start + 1
+
+          while (end < orderedNodes.length && (orderedNodes[end].parent?.data.id ?? null) === parentId) {
+            end += 1
+          }
+
+          const groupSize = end - start
+          if (!parentId || groupSize === 1) {
+            preferredCenters.push(baseAngle)
+            start = end
+            continue
+          }
+
+          const offsets = Array.from({ length: groupSize }, (_, index) =>
+            (index - (groupSize - 1) / 2) * centerGap,
+          )
+
+          if (groupSize > 1 && offsets.some((offset) => Math.abs(offset) < 1e-6)) {
+            const leftRoom = baseAngle - leftCenter
+            const rightRoom = rightCenter - baseAngle
+            const shift = (rightRoom >= leftRoom ? 0.5 : -0.5) * centerGap
+
+            offsets.forEach((offset, index) => {
+              preferredCenters.push(clamp(baseAngle + offset + shift, leftCenter, rightCenter))
+            })
+            start = end
+            continue
+          }
+
+          offsets.forEach((offset) => {
+            preferredCenters.push(clamp(baseAngle + offset, leftCenter, rightCenter))
+          })
+          start = end
+        }
+
+        return preferredCenters
+      }
+
       const sortedNodes = [...nodes].sort((leftNode, rightNode) =>
-        getAngleForNode(leftNode) - getAngleForNode(rightNode),
+        getPreferredPlacementAngle(leftNode) - getPreferredPlacementAngle(rightNode)
+          || getAngleForNode(leftNode) - getAngleForNode(rightNode),
       )
 
       if (sortedNodes.length === 1) {
-        const center = clamp(getAngleForNode(sortedNodes[0]), leftCenter, rightCenter)
+        const center = clamp(getPreferredPlacementAngle(sortedNodes[0]), leftCenter, rightCenter)
         packedAngleByNodeId.set(sortedNodes[0].data.id, center)
         nodeOrderWithinLevelSegment.set(`${level}|${segmentId}`, [sortedNodes[0].data.id])
         continue
       }
 
-      const centers = sortedNodes.map((node) => clamp(getAngleForNode(node), leftCenter, rightCenter))
+      const centers = buildPreferredCenters(sortedNodes)
       for (let index = 1; index < centers.length; index += 1) {
         centers[index] = Math.max(centers[index], centers[index - 1] + centerGap)
       }
@@ -768,6 +821,27 @@ export const solveSkillTreeLayout = (data, config) => {
       if (shiftLeft > 0) {
         for (let index = 0; index < centers.length; index += 1) {
           centers[index] -= shiftLeft
+        }
+      }
+
+      // Keep single-child chains close to their parent ray whenever spacing constraints allow it.
+      for (let index = 0; index < sortedNodes.length; index += 1) {
+        const node = sortedNodes[index]
+        const parentChildCount = node.parent?.children?.length ?? 0
+        if (parentChildCount !== 1 || !node.parent || node.parent.depth <= 0) {
+          continue
+        }
+
+        let desired = clamp(getAngleForNode(node.parent), leftCenter, rightCenter)
+        if (index > 0) {
+          desired = Math.max(desired, centers[index - 1] + centerGap)
+        }
+        if (index < centers.length - 1) {
+          desired = Math.min(desired, centers[index + 1] - centerGap)
+        }
+
+        if (desired >= leftCenter && desired <= rightCenter) {
+          centers[index] = desired
         }
       }
 
@@ -909,7 +983,7 @@ export const solveSkillTreeLayout = (data, config) => {
       id: `root-bridge-${node.id}`,
       linkKind: 'direct',
       sourceDepth: 1,
-      path: buildRadialEdgePath(centerAngle, levelOneRadius, node.angle, node.radius, origin),
+      path: buildRadialArcPath(centerAngle, levelOneRadius, node.angle, node.radius, origin),
     }))
 
   const levelOneNodes = nodes

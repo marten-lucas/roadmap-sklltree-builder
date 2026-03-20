@@ -1,4 +1,4 @@
-import { buildRadialEdgePath, toCartesian, toDegrees } from './layoutMath'
+import { buildArcRadialPath, buildRadialArcPath, toCartesian, toDegrees } from './layoutMath'
 import { getGroupedSegmentId } from './layoutShared'
 
 const DEFAULT_CLUSTER_ANGLE_DEG = 18
@@ -252,13 +252,11 @@ export const buildRoutedEdgeLinks = ({ edgeRouting, nodesById, origin }) => {
     let path
 
     if (!shared) {
-      // Single child: radial segment from source angle, then target arc when needed.
-      path = buildRadialEdgePath(parent.angle, sourceRadius, childAngle, targetRadius, origin)
+      path = buildRadialArcPath(parent.angle, sourceRadius, childAngle, targetRadius, origin)
     } else if (Math.abs(childAngle - trunkAngle) < 0.5) {
-      // Tightly aligned with trunk entry: direct radial path
-      path = buildRadialEdgePath(parent.angle, sourceRadius, childAngle, targetRadius, origin)
+      path = buildRadialArcPath(parent.angle, sourceRadius, childAngle, targetRadius, origin)
     } else {
-      // Shared trunk: source arc -> radial trunk (center-aligned ray) -> target arc.
+      // Shared trunk: source-radius arc -> radial trunk -> target-radius arc.
       const parts = [`M ${parent.x} ${parent.y}`]
       const sourceTrunkPoint = toCartesian(trunkAngle, sourceRadius, origin)
       const targetTrunkPoint = toCartesian(trunkAngle, targetRadius, origin)

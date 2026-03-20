@@ -801,5 +801,333 @@ describe('layoutSolver', () => {
       expect(level2Node.radius).toBeGreaterThan(TREE_CONFIG.levelSpacing * 2)
       expect(level3Node.radius).toBeGreaterThanOrEqual(level2Node.radius + TREE_CONFIG.levelSpacing)
     })
+
+    it('should order same-level nodes by parent-guided angle to avoid long detours', () => {
+      const tree = {
+        segments: [{ id: 'seg', label: 'Seg' }],
+        children: [
+          {
+            id: 'left-parent',
+            label: 'Left Parent',
+            status: 'fertig',
+            ebene: 1,
+            segmentId: 'seg',
+            children: [
+              {
+                id: 'api',
+                label: 'API',
+                status: 'jetzt',
+                ebene: 2,
+                segmentId: 'seg',
+                children: [],
+              },
+            ],
+          },
+          {
+            id: 'right-parent',
+            label: 'Right Parent',
+            status: 'fertig',
+            ebene: 1,
+            segmentId: 'seg',
+            children: [
+              {
+                id: 'dbm',
+                label: 'DBM',
+                status: 'später',
+                ebene: 2,
+                segmentId: 'seg',
+                children: [],
+              },
+            ],
+          },
+        ],
+      }
+
+      const result = solveSkillTreeLayout(tree, TREE_CONFIG)
+      const byId = new Map(result.layout.nodes.map((node) => [node.id, node]))
+
+      expect(byId.get('left-parent').angle).toBeLessThan(byId.get('right-parent').angle)
+      expect(byId.get('api').angle).toBeLessThan(byId.get('dbm').angle)
+      expect(Math.abs(byId.get('api').angle - byId.get('left-parent').angle)).toBeLessThan(
+        Math.abs(byId.get('api').angle - byId.get('right-parent').angle),
+      )
+      expect(Math.abs(byId.get('dbm').angle - byId.get('right-parent').angle)).toBeLessThan(
+        Math.abs(byId.get('dbm').angle - byId.get('left-parent').angle),
+      )
+    })
+
+    it('should keep all line segments radial (links are rays or circular arcs only)', () => {
+      const tree = {
+        segments: [
+          { id: 'seg-a', label: 'A' },
+          { id: 'seg-b', label: 'B' },
+        ],
+        children: [
+          {
+            id: 'root-a',
+            label: 'Root A',
+            status: 'fertig',
+            ebene: 1,
+            segmentId: 'seg-a',
+            children: [
+              { id: 'a1', label: 'A1', status: 'jetzt', ebene: 2, segmentId: 'seg-a', children: [] },
+              { id: 'a2', label: 'A2', status: 'später', ebene: 2, segmentId: 'seg-b', children: [] },
+            ],
+          },
+          {
+            id: 'root-b-promoted',
+            label: 'Root B Promoted',
+            status: 'jetzt',
+            ebene: 2,
+            segmentId: 'seg-b',
+            children: [],
+          },
+        ],
+      }
+
+      const result = solveSkillTreeLayout(tree, TREE_CONFIG)
+      const { origin } = result.layout.canvas
+
+      const norm = (value) => {
+        let next = value
+        while (next > Math.PI) next -= 2 * Math.PI
+        while (next < -Math.PI) next += 2 * Math.PI
+        return next
+      }
+
+      const radialAngleEps = 1e-3
+      const links = result.layout.links.filter((link) => link.linkKind !== 'ring')
+
+      links.forEach((link) => {
+        const commands = [...link.path.matchAll(/([MLA])([^MLA]*)/g)]
+        let current = null
+
+        commands.forEach((match) => {
+          const type = match[1]
+          const nums = (match[2].match(/-?\d*\.?\d+(?:e[-+]?\d+)?/gi) ?? []).map(Number)
+
+          if (type === 'M' || type === 'L') {
+            const nextPoint = { x: nums[0], y: nums[1] }
+            if (type === 'L' && current) {
+              const a1 = Math.atan2(current.y - origin.y, current.x - origin.x)
+              const a2 = Math.atan2(nextPoint.y - origin.y, nextPoint.x - origin.x)
+              expect(Math.abs(norm(a2 - a1))).toBeLessThan(radialAngleEps)
+            }
+            current = nextPoint
+            return
+          }
+
+          if (type === 'A') {
+            current = { x: nums[5], y: nums[6] }
+          }
+        })
+      })
+    })
+
+    it('should keep single-child nodes on the same parent ray when constraints allow it', () => {
+      const tree = {
+        segments: [{ id: 'seg', label: 'Seg' }],
+        children: [
+          {
+            id: 'p1',
+            label: 'P1',
+            status: 'fertig',
+            ebene: 1,
+            segmentId: 'seg',
+            children: [
+              { id: 'c1', label: 'C1', status: 'jetzt', ebene: 2, segmentId: 'seg', children: [] },
+            ],
+          },
+          {
+            id: 'p2',
+            label: 'P2',
+            status: 'fertig',
+            ebene: 1,
+            segmentId: 'seg',
+            children: [
+              { id: 'c2', label: 'C2', status: 'später', ebene: 2, segmentId: 'seg', children: [] },
+            ],
+          },
+        ],
+      }
+
+      const result = solveSkillTreeLayout(tree, TREE_CONFIG)
+      const byId = new Map(result.layout.nodes.map((node) => [node.id, node]))
+
+      expect(Math.abs(byId.get('p1').angle - byId.get('c1').angle)).toBeLessThan(1e-3)
+      expect(Math.abs(byId.get('p2').angle - byId.get('c2').angle)).toBeLessThan(1e-3)
+    })
+
+    it('should move siblings off the parent ray when a parent gains multiple children', () => {
+      const tree = {
+        segments: [{ id: 'seg', label: 'Seg' }],
+        children: [
+          {
+            id: 'parent',
+            label: 'Parent',
+            status: 'fertig',
+            ebene: 1,
+            segmentId: 'seg',
+            children: [
+              { id: 'left-child', label: 'Left', status: 'jetzt', ebene: 2, segmentId: 'seg', children: [] },
+              { id: 'mid-child', label: 'Mid', status: 'jetzt', ebene: 2, segmentId: 'seg', children: [] },
+              { id: 'right-child', label: 'Right', status: 'später', ebene: 2, segmentId: 'seg', children: [] },
+            ],
+          },
+        ],
+      }
+
+      const result = solveSkillTreeLayout(tree, TREE_CONFIG)
+      const byId = new Map(result.layout.nodes.map((node) => [node.id, node]))
+      const parentAngle = byId.get('parent').angle
+      const childAngles = ['left-child', 'mid-child', 'right-child'].map((id) => byId.get(id).angle)
+
+      childAngles.forEach((angle) => {
+        expect(Math.abs(angle - parentAngle)).toBeGreaterThan(1e-3)
+      })
+
+      const hasLeft = childAngles.some((angle) => angle < parentAngle)
+      const hasRight = childAngles.some((angle) => angle > parentAngle)
+      expect(hasLeft).toBe(true)
+      expect(hasRight).toBe(true)
+    })
+
+    it('should connect direct links from parent center with a radial first segment', () => {
+      const tree = {
+        segments: [
+          { id: 'frontend', label: 'Frontend' },
+          { id: 'backend', label: 'Backend' },
+        ],
+        children: [
+          {
+            id: 'fnd',
+            label: 'FND',
+            status: 'fertig',
+            ebene: 1,
+            segmentId: 'frontend',
+            children: [
+              {
+                id: 'twd',
+                label: 'TWD',
+                status: 'jetzt',
+                ebene: 2,
+                segmentId: 'frontend',
+                children: [],
+              },
+            ],
+          },
+          {
+            id: 'bck',
+            label: 'BCK',
+            status: 'jetzt',
+            ebene: 1,
+            segmentId: 'backend',
+            children: [
+              {
+                id: 'api',
+                label: 'API',
+                status: 'jetzt',
+                ebene: 2,
+                segmentId: 'backend',
+                children: [],
+              },
+            ],
+          },
+        ],
+      }
+
+      const result = solveSkillTreeLayout(tree, TREE_CONFIG)
+      const byId = new Map(result.layout.nodes.map((node) => [node.id, node]))
+      const origin = result.layout.canvas.origin
+
+      ;['fnd=>twd', 'bck=>api'].forEach((id) => {
+        const link = result.layout.links.find((entry) => entry.id === id)
+        const [parentId, childId] = id.split('=>')
+        const parent = byId.get(parentId)
+        const child = byId.get(childId)
+        const match = /^M\s+([^\s]+)\s+([^\s]+)\s+L\s+([^\s]+)\s+([^\s]+)/.exec(link.path)
+
+        expect(link).toBeDefined()
+        expect(match).toBeTruthy()
+
+        const startX = Number(match[1])
+        const startY = Number(match[2])
+        const lineEndX = Number(match[3])
+        const lineEndY = Number(match[4])
+
+        expect(startX).toBeCloseTo(parent.x, 6)
+        expect(startY).toBeCloseTo(parent.y, 6)
+
+        const startAngle = Math.atan2(startY - origin.y, startX - origin.x)
+        const lineEndAngle = Math.atan2(lineEndY - origin.y, lineEndX - origin.x)
+        expect(Math.abs(lineEndAngle - startAngle)).toBeLessThan(1e-6)
+
+        expect(link.path).toContain(`${child.x} ${child.y}`)
+      })
+    })
+
+    it('should keep routed multi-child links on source radius, target radius, or center rays only', () => {
+      const tree = {
+        segments: [
+          { id: 'frontend', label: 'Frontend' },
+          { id: 'backend', label: 'Backend' },
+        ],
+        children: [
+          {
+            id: 'fnd',
+            label: 'FND',
+            status: 'fertig',
+            ebene: 1,
+            segmentId: 'frontend',
+            children: [
+              { id: 'rct', label: 'RCT', status: 'fertig', ebene: 2, segmentId: 'frontend', children: [] },
+              { id: 'twd', label: 'TWD', status: 'jetzt', ebene: 2, segmentId: 'frontend', children: [] },
+            ],
+          },
+          {
+            id: 'bck',
+            label: 'BCK',
+            status: 'jetzt',
+            ebene: 1,
+            segmentId: 'backend',
+            children: [
+              { id: 'api', label: 'API', status: 'jetzt', ebene: 2, segmentId: 'backend', children: [] },
+              { id: 'dbm', label: 'DBM', status: 'später', ebene: 2, segmentId: 'backend', children: [] },
+            ],
+          },
+        ],
+      }
+
+      const result = solveSkillTreeLayout(tree, TREE_CONFIG)
+      const byId = new Map(result.layout.nodes.map((node) => [node.id, node]))
+      const byLinkId = new Map(result.layout.links.map((link) => [link.id, link]))
+
+      ;['fnd=>twd', 'bck=>api'].forEach((id) => {
+        const link = byLinkId.get(id)
+        const [parentId, childId] = id.split('=>')
+        const parent = byId.get(parentId)
+        const child = byId.get(childId)
+        const commands = [...link.path.matchAll(/([MLA])([^MLA]*)/g)]
+
+        expect(link).toBeDefined()
+        expect(link.linkKind).toBe('routed')
+
+        const arcRadii = commands
+          .filter((match) => match[1] === 'A')
+          .map((match) => {
+            const nums = (match[2].match(/-?\d*\.?\d+(?:e[-+]?\d+)?/gi) ?? []).map(Number)
+            return nums[0]
+          })
+
+        arcRadii.forEach((radius) => {
+          const onSource = Math.abs(radius - parent.radius) < 1e-6
+          const onTarget = Math.abs(radius - child.radius) < 1e-6
+          expect(onSource || onTarget).toBe(true)
+        })
+
+        const lineCommands = commands.filter((match) => match[1] === 'L')
+        expect(lineCommands.length).toBe(1)
+      })
+    })
   })
 })
