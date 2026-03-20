@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { TransformComponent, TransformWrapper } from 'react-zoom-pan-pinch'
 import './skillTree.css'
 import { TREE_CONFIG, normalizeStatusKey, STATUS_STYLES } from './config'
@@ -76,18 +76,15 @@ export function SkillTree() {
     ]
   }, [selectedNode])
 
-  useEffect(() => {
+  const activeSelectedProgressLevelId = useMemo(() => {
     if (!selectedNode) {
-      setSelectedProgressLevelId(null)
-      return
+      return null
     }
 
     const fallbackLevelId = selectedNodeLevels[0]?.id ?? null
     const stillExists = selectedNodeLevels.some((entry) => entry.id === selectedProgressLevelId)
 
-    if (!stillExists) {
-      setSelectedProgressLevelId(fallbackLevelId)
-    }
+    return stillExists ? selectedProgressLevelId : fallbackLevelId
   }, [selectedNode, selectedNodeLevels, selectedProgressLevelId])
 
   const levelInfo = useMemo(() => {
@@ -313,24 +310,24 @@ export function SkillTree() {
   }
 
   const handleStatusChange = (newStatus) => {
-    if (!selectedNodeId || !selectedProgressLevelId) {
+    if (!selectedNodeId || !activeSelectedProgressLevelId) {
       return
     }
 
     setRoadmapData((previousData) =>
-      updateNodeProgressLevel(previousData, selectedNodeId, selectedProgressLevelId, {
+      updateNodeProgressLevel(previousData, selectedNodeId, activeSelectedProgressLevelId, {
         status: newStatus,
       }),
     )
   }
 
   const handleReleaseNoteChange = (releaseNote) => {
-    if (!selectedNodeId || !selectedProgressLevelId) {
+    if (!selectedNodeId || !activeSelectedProgressLevelId) {
       return
     }
 
     setRoadmapData((previousData) =>
-      updateNodeProgressLevel(previousData, selectedNodeId, selectedProgressLevelId, {
+      updateNodeProgressLevel(previousData, selectedNodeId, activeSelectedProgressLevelId, {
         releaseNote,
       }),
     )
@@ -709,7 +706,7 @@ export function SkillTree() {
       <InspectorPanel
         selectedNode={selectedNode}
         currentLevel={levelInfo.nodeLevel}
-        selectedProgressLevelId={selectedProgressLevelId}
+        selectedProgressLevelId={activeSelectedProgressLevelId}
         onClose={() => {
           setSelectedNodeId(null)
         }}

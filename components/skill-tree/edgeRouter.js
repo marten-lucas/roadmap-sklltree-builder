@@ -1,4 +1,4 @@
-import { buildArcRadialPath, buildRadialArcPath, toCartesian, toDegrees } from './layoutMath'
+import { buildRadialArcPath, toCartesian, toDegrees } from './layoutMath'
 import { getGroupedSegmentId } from './layoutShared'
 
 const DEFAULT_CLUSTER_ANGLE_DEG = 18

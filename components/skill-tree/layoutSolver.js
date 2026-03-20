@@ -774,7 +774,7 @@ export const solveSkillTreeLayout = (data, config) => {
             const rightRoom = rightCenter - baseAngle
             const shift = (rightRoom >= leftRoom ? 0.5 : -0.5) * centerGap
 
-            offsets.forEach((offset, index) => {
+            offsets.forEach((offset) => {
               preferredCenters.push(clamp(baseAngle + offset + shift, leftCenter, rightCenter))
             })
             start = end
