@@ -1,4 +1,4 @@
-import { Card, CardBody } from '@heroui/react'
+import { Paper, Text } from '@mantine/core'
 import { STATUS_STYLES } from './config'
 
 export function SkillNode({ node, nodeSize, isSelected, onSelect }) {
@@ -19,21 +19,21 @@ export function SkillNode({ node, nodeSize, isSelected, onSelect }) {
         className="h-full w-full p-1"
         onClick={(event) => event.stopPropagation()}
       >
-        <Card
-          isBlurred
-          isPressable
-          onPress={() => onSelect(node.id)}
+        <Paper
+          component="button"
+          type="button"
+          onClick={() => onSelect(node.id)}
           className={`h-full w-full rounded-full border border-slate-700/80 bg-slate-900/95 ring-1 transition-all ${statusStyles.ring} ${statusStyles.glow} ${selectedStyles}`}
         >
-          <CardBody className="flex h-full items-center justify-center p-2 text-center">
-            <span className="max-w-[88px] text-[13px] font-semibold uppercase tracking-wide text-slate-100">
+          <div className="flex h-full items-center justify-center p-2 text-center">
+            <Text className="max-w-[88px] text-[13px] font-semibold uppercase tracking-wide text-slate-100">
               {node.label}
-            </span>
-            <span className={`text-[10px] font-medium uppercase ${statusStyles.badge}`}>
+            </Text>
+            <Text className={`text-[10px] font-medium uppercase ${statusStyles.badge}`}>
               {node.status}
-            </span>
-          </CardBody>
-        </Card>
+            </Text>
+          </div>
+        </Paper>
       </div>
     </foreignObject>
   )

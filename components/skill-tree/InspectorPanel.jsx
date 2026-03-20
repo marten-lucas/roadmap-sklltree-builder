@@ -1,4 +1,4 @@
-import { Button, Textarea, Select, SelectItem } from '@heroui/react'
+import { ActionIcon, Alert, Button, Select, Stack, Text, Textarea } from '@mantine/core'
 import { UNASSIGNED_SEGMENT_ID } from './layoutShared'
 
 const STATUS_OPTIONS = [
@@ -6,14 +6,6 @@ const STATUS_OPTIONS = [
   { value: 'jetzt', label: 'Jetzt' },
   { value: 'später', label: 'Später' },
 ]
-
-const selectClassNames = {
-  label: 'text-slate-300 font-medium pb-1',
-  trigger: 'border-slate-700 hover:border-slate-500 data-[open=true]:!border-cyan-400 bg-transparent',
-  value: 'text-white',
-  popoverContent: 'bg-slate-900 border border-slate-700 text-white',
-  description: 'text-amber-300/90 text-xs',
-}
 
 export function InspectorPanel({ selectedNode, currentLevel, onClose, onLabelChange, onStatusChange, onLevelChange, levelOptions, segmentOptions, validationMessage, onSegmentChange, onDeleteNodeOnly, onDeleteNodeBranch }) {
   if (!selectedNode) {
@@ -23,23 +15,16 @@ export function InspectorPanel({ selectedNode, currentLevel, onClose, onLabelCha
   const selectedSegmentKey = selectedNode.segmentId ?? UNASSIGNED_SEGMENT_ID
   const blockedLevelHint = levelOptions.find((option) => !option.isAllowed)?.reasons?.[0] ?? null
   const blockedSegmentHint = segmentOptions?.find((option) => !option.isAllowed)?.reasons?.[0] ?? null
-  const disabledLevelKeys = levelOptions.filter(o => !o.isAllowed).map(o => String(o.value))
-  const disabledSegmentKeys = segmentOptions?.filter(o => !o.isAllowed).map(o => o.id) ?? []
-
-  const handleStatusChange = (keys) => {
-    const selected = Array.from(keys)[0]
-    if (selected) onStatusChange(selected)
-  }
-
-  const handleLevelChange = (keys) => {
-    const selected = Array.from(keys)[0]
-    if (selected) onLevelChange(parseInt(selected, 10))
-  }
-
-  const handleSegmentChange = (keys) => {
-    const selected = Array.from(keys)[0]
-    if (selected) onSegmentChange(selected)
-  }
+  const levelData = levelOptions.map((option) => ({
+    value: String(option.value),
+    label: `Ebene ${option.value}`,
+    disabled: !option.isAllowed,
+  }))
+  const segmentData = (segmentOptions ?? []).map((option) => ({
+    value: option.id,
+    label: option.label,
+    disabled: !option.isAllowed,
+  }))
 
   return (
     <div className="absolute inset-y-0 right-0 z-50 flex w-96 flex-col border-l border-slate-700/60 bg-slate-950/90 text-slate-100 backdrop-blur-xl">
@@ -48,13 +33,13 @@ export function InspectorPanel({ selectedNode, currentLevel, onClose, onLabelCha
           <p className="text-xs uppercase tracking-[0.2em] text-slate-400">Inspector</p>
           <h2 className="mt-1 text-2xl font-semibold tracking-tight text-white">Skill bearbeiten</h2>
         </div>
-        <Button isIconOnly variant="light" onPress={onClose} aria-label="Inspector schließen">
+        <ActionIcon variant="subtle" color="gray" onClick={onClose} aria-label="Inspector schließen">
           ✕
-        </Button>
+        </ActionIcon>
       </div>
 
       <div className="flex-1 overflow-y-auto px-6 py-6">
-        <div className="flex flex-col gap-5">
+        <Stack gap="md">
           <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
             <p className="mb-1 text-xs uppercase tracking-widest text-slate-500">Ausgewählt</p>
             <p className="text-xl font-bold text-white">{selectedNode.label}</p>
@@ -62,94 +47,69 @@ export function InspectorPanel({ selectedNode, currentLevel, onClose, onLabelCha
 
           <Textarea
             label="Name"
-            labelPlacement="outside-top"
             placeholder="Skill-Name eingeben …"
             value={selectedNode.label}
-            onValueChange={onLabelChange}
-            variant="bordered"
+            onChange={(event) => onLabelChange(event.currentTarget.value)}
             minRows={2}
             maxRows={5}
-            classNames={{
-              label: 'text-slate-300 font-medium pb-1',
-              inputWrapper: 'border-slate-700 hover:border-slate-500 focus-within:!border-cyan-400',
-              input: 'text-white placeholder:text-slate-500',
+            styles={{
+              label: { color: '#cbd5e1', fontWeight: 500, marginBottom: '0.25rem' },
             }}
           />
 
           <Select
             label="Status"
-            labelPlacement="outside-top"
-            selectedKeys={new Set([selectedNode.status])}
-            onSelectionChange={handleStatusChange}
-            variant="bordered"
-            disallowEmptySelection
-            classNames={selectClassNames}
-          >
-            {STATUS_OPTIONS.map(({ value, label }) => (
-              <SelectItem key={value}>{label}</SelectItem>
-            ))}
-          </Select>
+            data={STATUS_OPTIONS}
+            value={selectedNode.status}
+            onChange={(value) => value && onStatusChange(value)}
+            allowDeselect={false}
+          />
 
           <Select
             label="Ebene"
-            labelPlacement="outside-top"
-            selectedKeys={new Set([String(currentLevel)])}
-            onSelectionChange={handleLevelChange}
-            variant="bordered"
-            disallowEmptySelection
-            disabledKeys={disabledLevelKeys}
-            description={blockedLevelHint}
-            classNames={selectClassNames}
-          >
-            {levelOptions.map((option) => (
-              <SelectItem key={String(option.value)}>Ebene {option.value}</SelectItem>
-            ))}
-          </Select>
+            data={levelData}
+            value={String(currentLevel)}
+            onChange={(value) => value && onLevelChange(parseInt(value, 10))}
+            allowDeselect={false}
+            description={blockedLevelHint ?? undefined}
+          />
 
           {segmentOptions && segmentOptions.length > 0 && (
             <Select
               label="Segment"
-              labelPlacement="outside-top"
-              selectedKeys={new Set([selectedSegmentKey])}
-              onSelectionChange={handleSegmentChange}
-              variant="bordered"
-              disallowEmptySelection
-              disabledKeys={disabledSegmentKeys}
-              description={blockedSegmentHint}
-              classNames={selectClassNames}
-            >
-              {segmentOptions.map((segmentOption) => (
-                <SelectItem key={segmentOption.id}>{segmentOption.label}</SelectItem>
-              ))}
-            </Select>
+              data={segmentData}
+              value={selectedSegmentKey}
+              onChange={(value) => value && onSegmentChange(value)}
+              allowDeselect={false}
+              description={blockedSegmentHint ?? undefined}
+            />
           )}
 
           {validationMessage && (
-            <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
+            <Alert color="yellow" variant="light">
               {validationMessage}
-            </div>
+            </Alert>
           )}
 
           <div className="mt-2 flex flex-col gap-3 border-t border-slate-800 pt-5">
-            <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Löschen</p>
+            <Text size="xs" c="dimmed" tt="uppercase" style={{ letterSpacing: '0.2em' }}>Löschen</Text>
             <Button
-              variant="bordered"
+              variant="default"
               fullWidth
-              onPress={onDeleteNodeOnly}
-              className="border-slate-700 text-slate-300 hover:border-slate-500"
+              onClick={onDeleteNodeOnly}
             >
               Skill löschen
             </Button>
             <Button
-              color="danger"
-              variant="bordered"
+              color="red"
+              variant="outline"
               fullWidth
-              onPress={onDeleteNodeBranch}
+              onClick={onDeleteNodeBranch}
             >
               Zweig löschen
             </Button>
           </div>
-        </div>
+        </Stack>
       </div>
     </div>
   )

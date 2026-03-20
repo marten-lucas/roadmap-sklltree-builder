@@ -12,7 +12,8 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@heroui/react": "^2.8.10",
+    "@mantine/core": "^8.3.18",
+    "@mantine/hooks": "^8.3.18",
     "d3-force": "^3.0.0",
     "d3-hierarchy": "^3.1.2",
     "react": "^19.2.4",
