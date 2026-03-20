@@ -1,4 +1,4 @@
-import { ActionIcon, Button, Stack, Text, TextInput } from '@mantine/core'
+import { ActionIcon, Button, Paper, Stack, Text, TextInput } from '@mantine/core'
 
 export function SegmentPanel({ selectedSegment, onClose, onLabelChange, onDelete }) {
   if (!selectedSegment) {
@@ -6,44 +6,42 @@ export function SegmentPanel({ selectedSegment, onClose, onLabelChange, onDelete
   }
 
   return (
-    <div className="absolute right-6 top-6 z-50 flex w-80 flex-col rounded-2xl border border-slate-700/60 bg-slate-950/90 text-slate-100 shadow-2xl backdrop-blur-xl">
-      <div className="flex items-center justify-between border-b border-slate-800 px-5 py-4">
+    <Paper className="skill-panel skill-panel--segment" radius="xl" shadow="xl">
+      <div className="skill-panel__header">
         <div>
-          <p className="text-xs uppercase tracking-[0.2em] text-slate-400">Segment</p>
-          <h2 className="mt-1 text-xl font-semibold tracking-tight text-white">Segment bearbeiten</h2>
+          <Text className="skill-panel__eyebrow">Segment</Text>
+          <Text className="skill-panel__title">Segment bearbeiten</Text>
         </div>
-        <ActionIcon
-          variant="subtle"
-          color="gray"
-          onClick={onClose}
-          aria-label="Segment-Editor schließen"
-        >
+        <ActionIcon variant="subtle" color="gray" onClick={onClose} aria-label="Segment-Editor schließen">
           ✕
         </ActionIcon>
       </div>
 
-      <Stack gap="md" className="px-5 py-5">
-        <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
-          <p className="mb-1 text-xs uppercase tracking-widest text-slate-500">Ausgewählt</p>
-          <p className="text-xl font-bold text-white">{selectedSegment.label}</p>
-        </div>
+      <Stack gap="md" className="skill-panel__body">
+        <Paper className="skill-panel__selected" radius="lg" withBorder>
+          <Text className="skill-panel__selected-label">Ausgewählt</Text>
+          <Text className="skill-panel__selected-value">{selectedSegment.label}</Text>
+        </Paper>
 
         <TextInput
           label="Name"
           placeholder="Segment-Name eingeben …"
           value={selectedSegment.label}
           onChange={(event) => onLabelChange(event.currentTarget.value)}
+          classNames={{
+            input: 'mantine-dark-input',
+            label: 'mantine-dark-label',
+          }}
         />
 
         <Button
           color="red"
           variant="outline"
-          fullWidth
           onClick={onDelete}
         >
           Segment löschen
         </Button>
       </Stack>
-    </div>
+    </Paper>
   )
 }

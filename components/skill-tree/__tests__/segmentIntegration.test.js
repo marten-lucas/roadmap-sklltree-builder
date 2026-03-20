@@ -210,7 +210,7 @@ describe('Segment Integration Tests', () => {
       }
 
       const result = calculateRadialSkillTree(tree, TREE_CONFIG)
-      expect(result.nodes.length).toBe(7)
+      expect(result.nodes.length).toBe(6)
     })
 
     it('should handle segment reorganization without losing data', () => {

@@ -1,4 +1,4 @@
-import { ActionIcon, Alert, Button, Select, Stack, Text, Textarea } from '@mantine/core'
+import { ActionIcon, Alert, Button, Paper, Select, Stack, Text, Textarea } from '@mantine/core'
 import { UNASSIGNED_SEGMENT_ID } from './layoutShared'
 
 const STATUS_OPTIONS = [
@@ -27,23 +27,23 @@ export function InspectorPanel({ selectedNode, currentLevel, onClose, onLabelCha
   }))
 
   return (
-    <div className="absolute inset-y-0 right-0 z-50 flex w-96 flex-col border-l border-slate-700/60 bg-slate-950/90 text-slate-100 backdrop-blur-xl">
-      <div className="flex items-center justify-between border-b border-slate-800 px-6 py-5">
+    <Paper className="skill-panel skill-panel--inspector" radius={0} shadow="none">
+      <div className="skill-panel__header">
         <div>
-          <p className="text-xs uppercase tracking-[0.2em] text-slate-400">Inspector</p>
-          <h2 className="mt-1 text-2xl font-semibold tracking-tight text-white">Skill bearbeiten</h2>
+          <Text className="skill-panel__eyebrow">Inspector</Text>
+          <Text className="skill-panel__title skill-panel__title--large">Skill bearbeiten</Text>
         </div>
         <ActionIcon variant="subtle" color="gray" onClick={onClose} aria-label="Inspector schließen">
           ✕
         </ActionIcon>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-6 py-6">
+      <div className="skill-panel__body skill-panel__body--scrollable">
         <Stack gap="md">
-          <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
-            <p className="mb-1 text-xs uppercase tracking-widest text-slate-500">Ausgewählt</p>
-            <p className="text-xl font-bold text-white">{selectedNode.label}</p>
-          </div>
+          <Paper className="skill-panel__selected" radius="lg" withBorder>
+            <Text className="skill-panel__selected-label">Ausgewählt</Text>
+            <Text className="skill-panel__selected-value">{selectedNode.label}</Text>
+          </Paper>
 
           <Textarea
             label="Name"
@@ -52,8 +52,9 @@ export function InspectorPanel({ selectedNode, currentLevel, onClose, onLabelCha
             onChange={(event) => onLabelChange(event.currentTarget.value)}
             minRows={2}
             maxRows={5}
-            styles={{
-              label: { color: '#cbd5e1', fontWeight: 500, marginBottom: '0.25rem' },
+            classNames={{
+              input: 'mantine-dark-input',
+              label: 'mantine-dark-label',
             }}
           />
 
@@ -63,6 +64,13 @@ export function InspectorPanel({ selectedNode, currentLevel, onClose, onLabelCha
             value={selectedNode.status}
             onChange={(value) => value && onStatusChange(value)}
             allowDeselect={false}
+            classNames={{
+              input: 'mantine-dark-input',
+              label: 'mantine-dark-label',
+              dropdown: 'mantine-dark-dropdown',
+              option: 'mantine-dark-option',
+            }}
+            comboboxProps={{ withinPortal: true, zIndex: 450 }}
           />
 
           <Select
@@ -72,6 +80,14 @@ export function InspectorPanel({ selectedNode, currentLevel, onClose, onLabelCha
             onChange={(value) => value && onLevelChange(parseInt(value, 10))}
             allowDeselect={false}
             description={blockedLevelHint ?? undefined}
+            classNames={{
+              input: 'mantine-dark-input',
+              label: 'mantine-dark-label',
+              description: 'mantine-dark-description',
+              dropdown: 'mantine-dark-dropdown',
+              option: 'mantine-dark-option',
+            }}
+            comboboxProps={{ withinPortal: true, zIndex: 450 }}
           />
 
           {segmentOptions && segmentOptions.length > 0 && (
@@ -82,35 +98,34 @@ export function InspectorPanel({ selectedNode, currentLevel, onClose, onLabelCha
               onChange={(value) => value && onSegmentChange(value)}
               allowDeselect={false}
               description={blockedSegmentHint ?? undefined}
+              classNames={{
+                input: 'mantine-dark-input',
+                label: 'mantine-dark-label',
+                description: 'mantine-dark-description',
+                dropdown: 'mantine-dark-dropdown',
+                option: 'mantine-dark-option',
+              }}
+              comboboxProps={{ withinPortal: true, zIndex: 450 }}
             />
           )}
 
           {validationMessage && (
-            <Alert color="yellow" variant="light">
+            <Alert color="yellow" variant="light" className="skill-panel__alert">
               {validationMessage}
             </Alert>
           )}
 
-          <div className="mt-2 flex flex-col gap-3 border-t border-slate-800 pt-5">
-            <Text size="xs" c="dimmed" tt="uppercase" style={{ letterSpacing: '0.2em' }}>Löschen</Text>
-            <Button
-              variant="default"
-              fullWidth
-              onClick={onDeleteNodeOnly}
-            >
+          <div className="skill-panel__danger-zone">
+            <Text className="skill-panel__danger-title">Löschen</Text>
+            <Button variant="default" onClick={onDeleteNodeOnly}>
               Skill löschen
             </Button>
-            <Button
-              color="red"
-              variant="outline"
-              fullWidth
-              onClick={onDeleteNodeBranch}
-            >
+            <Button color="red" variant="outline" onClick={onDeleteNodeBranch}>
               Zweig löschen
             </Button>
           </div>
         </Stack>
       </div>
-    </div>
+    </Paper>
   )
 }

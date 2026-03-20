@@ -371,11 +371,11 @@ describe('Segment Slot Computation', () => {
       const result2 = calculateRadialSkillTree(tree, TREE_CONFIG)
 
       // Same number of nodes
-      expect(result1.layout.nodes.length).toBe(result2.layout.nodes.length)
+      expect(result1.nodes.length).toBe(result2.nodes.length)
 
       // Nodes in same order should have same positions
-      result1.layout.nodes.forEach((node1, index) => {
-        const node2 = result2.layout.nodes[index]
+      result1.nodes.forEach((node1, index) => {
+        const node2 = result2.nodes[index]
         expect(node1.id).toBe(node2.id)
         expect(node1.angle).toBeCloseTo(node2.angle, 1)
         expect(node1.radius).toBeCloseTo(node2.radius, 1)

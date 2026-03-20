@@ -1,18 +1,18 @@
 export const STATUS_STYLES = {
   fertig: {
-    glow: 'shadow-[0_0_20px_#3b82f6]',
-    ring: 'ring-blue-400/70',
-    badge: 'text-blue-300',
+    glow: '0 0 20px rgba(59, 130, 246, 0.55)',
+    ring: 'rgba(96, 165, 250, 0.75)',
+    badge: '#93c5fd',
   },
   jetzt: {
-    glow: 'shadow-[0_0_20px_#22d3ee]',
-    ring: 'ring-cyan-300/70',
-    badge: 'text-cyan-200',
+    glow: '0 0 20px rgba(34, 211, 238, 0.5)',
+    ring: 'rgba(103, 232, 249, 0.78)',
+    badge: '#bae6fd',
   },
   später: {
-    glow: 'shadow-[0_0_16px_#64748b]',
-    ring: 'ring-slate-400/50',
-    badge: 'text-slate-300',
+    glow: '0 0 16px rgba(100, 116, 139, 0.45)',
+    ring: 'rgba(148, 163, 184, 0.58)',
+    badge: '#cbd5e1',
   },
 }
 

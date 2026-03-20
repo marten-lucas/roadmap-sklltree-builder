@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { solveSkillTreeLayout } from '../layoutSolver'
 import { TREE_CONFIG } from '../config'
-import { createSimpleTree, createCrossSegmentTree, createDenseTree, createEmptyTree, countNodesInTree } from './testUtils'
+import { createSimpleTree, createCrossSegmentTree, createEmptyTree, countNodesInTree } from './testUtils'
 
 describe('layoutSolver', () => {
   describe('solveSkillTreeLayout', () => {

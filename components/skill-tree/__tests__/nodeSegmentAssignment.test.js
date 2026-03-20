@@ -100,8 +100,8 @@ describe('Node-Segment Assignment (Recursive)', () => {
     })
   })
 
-  describe('Subtree Propagation (CRITICAL RECURSIVE BEHAVIOR)', () => {
-    it('should move entire subtree when parent segment changes', () => {
+  describe('Single-Node Segment Updates', () => {
+    it('should only move the selected parent when parent segment changes', () => {
       const tree = createSimpleTree()
       const parentNode = 'root-frontend'
       const parentChildren = ['child-react', 'child-vue']
@@ -112,10 +112,10 @@ describe('Node-Segment Assignment (Recursive)', () => {
       const parent = findNodeById(result, parentNode)
       expect(parent.segmentId).toBe(SEGMENT_BACKEND)
 
-      // Children should ALSO move (this is the key recursive behavior!)
+      // Children should keep their own explicit segments.
       parentChildren.forEach((childId) => {
         const child = findNodeById(result, childId)
-        expect(child.segmentId).toBe(SEGMENT_BACKEND)
+        expect(child.segmentId).toBe(SEGMENT_FRONTEND)
       })
     })
 
@@ -132,7 +132,7 @@ describe('Node-Segment Assignment (Recursive)', () => {
       expect(children.map((c) => c.id)).toContain('child-vue')
     })
 
-    it('should handle deep subtree recursion', () => {
+    it('should keep descendants unchanged for deep trees', () => {
       const tree = {
         segments: [
           { id: SEGMENT_FRONTEND, label: 'Frontend' },
@@ -179,14 +179,14 @@ describe('Node-Segment Assignment (Recursive)', () => {
 
       const result = updateNodeSegment(tree, 'root', SEGMENT_BACKEND)
 
-      // All descendants should move to backend
+      // Only the selected node should move to backend.
       expect(findNodeById(result, 'root').segmentId).toBe(SEGMENT_BACKEND)
-      expect(findNodeById(result, 'level1').segmentId).toBe(SEGMENT_BACKEND)
-      expect(findNodeById(result, 'level2').segmentId).toBe(SEGMENT_BACKEND)
-      expect(findNodeById(result, 'level3').segmentId).toBe(SEGMENT_BACKEND)
+      expect(findNodeById(result, 'level1').segmentId).toBe(SEGMENT_FRONTEND)
+      expect(findNodeById(result, 'level2').segmentId).toBe(SEGMENT_FRONTEND)
+      expect(findNodeById(result, 'level3').segmentId).toBe(SEGMENT_FRONTEND)
     })
 
-    it('should preserve structure of entire subtree', () => {
+    it('should preserve subtree structure while only changing the target node', () => {
       const tree = {
         segments: [
           { id: SEGMENT_FRONTEND, label: 'Frontend' },
@@ -249,18 +249,12 @@ describe('Node-Segment Assignment (Recursive)', () => {
 
       const result = updateNodeSegment(tree, 'root', SEGMENT_BACKEND)
 
-      // Check all nodes moved
-      const nodes = [
-        'root',
-        'branch-a',
-        'branch-b',
-        'leaf-a1',
-        'leaf-a2',
-        'leaf-b1',
-      ]
-      nodes.forEach((nodeId) => {
-        expect(findNodeById(result, nodeId).segmentId).toBe(SEGMENT_BACKEND)
-      })
+      expect(findNodeById(result, 'root').segmentId).toBe(SEGMENT_BACKEND)
+      expect(findNodeById(result, 'branch-a').segmentId).toBe(SEGMENT_FRONTEND)
+      expect(findNodeById(result, 'branch-b').segmentId).toBe(SEGMENT_FRONTEND)
+      expect(findNodeById(result, 'leaf-a1').segmentId).toBe(SEGMENT_FRONTEND)
+      expect(findNodeById(result, 'leaf-a2').segmentId).toBe(SEGMENT_FRONTEND)
+      expect(findNodeById(result, 'leaf-b1').segmentId).toBe(SEGMENT_FRONTEND)
 
       // Check structure preserved
       const root = findNodeById(result, 'root')
@@ -482,7 +476,7 @@ describe('Node-Segment Assignment (Recursive)', () => {
   })
 
   describe('Performance and Consistency', () => {
-    it('should handle large subtree assignments', () => {
+    it('should handle large single-node assignments', () => {
       const tree = {
         segments: [{ id: 'seg1', label: 'Seg1' }],
         children: [
@@ -507,9 +501,9 @@ describe('Node-Segment Assignment (Recursive)', () => {
       const result = updateNodeSegment(tree, 'root', null)
 
       expect(findNodeById(result, 'root').segmentId).toBeNull()
-      // All children should also be null
+      // Children should keep their own segment assignments.
       for (let i = 0; i < 50; i++) {
-        expect(findNodeById(result, `node${i}`).segmentId).toBeNull()
+        expect(findNodeById(result, `node${i}`).segmentId).toBe('seg1')
       }
     })
 

@@ -3,9 +3,6 @@ import { STATUS_STYLES } from './config'
 
 export function SkillNode({ node, nodeSize, isSelected, onSelect }) {
   const statusStyles = STATUS_STYLES[node.status] ?? STATUS_STYLES.später
-  const selectedStyles = isSelected
-    ? 'border-cyan-200/90 ring-2 ring-cyan-300 shadow-[0_0_28px_#22d3ee]'
-    : ''
 
   return (
     <foreignObject
@@ -16,20 +13,27 @@ export function SkillNode({ node, nodeSize, isSelected, onSelect }) {
     >
       <div
         xmlns="http://www.w3.org/1999/xhtml"
-        className="h-full w-full p-1"
+        className="skill-node-foreign"
         onClick={(event) => event.stopPropagation()}
       >
         <Paper
           component="button"
           type="button"
           onClick={() => onSelect(node.id)}
-          className={`h-full w-full rounded-full border border-slate-700/80 bg-slate-900/95 ring-1 transition-all ${statusStyles.ring} ${statusStyles.glow} ${selectedStyles}`}
+          className="skill-node-button"
+          radius="xl"
+          withBorder
+          style={{
+            borderColor: isSelected ? '#67e8f9' : 'rgba(71, 85, 105, 0.8)',
+            boxShadow: isSelected ? '0 0 28px rgba(34, 211, 238, 0.65)' : statusStyles.glow,
+            outline: `1px solid ${statusStyles.ring}`,
+          }}
         >
-          <div className="flex h-full items-center justify-center p-2 text-center">
-            <Text className="max-w-[88px] text-[13px] font-semibold uppercase tracking-wide text-slate-100">
+          <div className="skill-node-button__content">
+            <Text className="skill-node-button__label">
               {node.label}
             </Text>
-            <Text className={`text-[10px] font-medium uppercase ${statusStyles.badge}`}>
+            <Text className="skill-node-button__status" style={{ color: statusStyles.badge }}>
               {node.status}
             </Text>
           </div>

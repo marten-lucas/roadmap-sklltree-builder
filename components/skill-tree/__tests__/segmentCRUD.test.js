@@ -173,11 +173,11 @@ describe('Segment CRUD Operations', () => {
 
     it('should not delete nodes, only clear their segment', () => {
       const tree = createSimpleTree()
-      const initialNodeCount = JSON.stringify(tree).split('"id":"').length - 2 // estimate
+      const initialNodeCount = countTreeNodes(tree)
       const segmentToDelete = SEGMENT_FRONTEND
       const result = deleteSegment(tree, segmentToDelete)
 
-      const resultNodeCount = JSON.stringify(result).split('"id":"').length - 2 // estimate
+      const resultNodeCount = countTreeNodes(result)
       expect(resultNodeCount).toBe(initialNodeCount)
     })
 
@@ -358,3 +358,16 @@ describe('Segment CRUD Operations', () => {
     })
   })
 })
+
+function countTreeNodes(tree) {
+  const queue = [...(tree.children ?? [])]
+  let count = 0
+
+  while (queue.length > 0) {
+    const node = queue.shift()
+    count += 1
+    queue.push(...(node.children ?? []))
+  }
+
+  return count
+}

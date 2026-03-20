@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import { TransformComponent, TransformWrapper } from 'react-zoom-pan-pinch'
+import './skillTree.css'
 import { TREE_CONFIG } from './config'
 import { initialData } from './data'
 import { InspectorPanel } from './InspectorPanel'
@@ -320,7 +321,7 @@ export function SkillTree() {
   }
 
   return (
-    <main className="relative h-screen w-full overflow-hidden bg-slate-950 text-slate-100">
+    <main className="skill-tree-shell">
       <TransformWrapper
         minScale={0.2}
         maxScale={2.2}
@@ -330,14 +331,14 @@ export function SkillTree() {
         centerOnInit
       >
         <TransformComponent
-          wrapperClass="!h-screen !w-full"
-          contentClass="!h-auto !w-auto overflow-visible"
+          wrapperClass="skill-tree-transform-wrapper"
+          contentClass="skill-tree-transform-content"
         >
           <svg
             width={canvas.width}
             height={canvas.height}
             viewBox={`0 0 ${canvas.width} ${canvas.height}`}
-            className="bg-[radial-gradient(circle_at_50%_60%,rgba(30,41,59,0.45),rgba(2,6,23,1)_55%)]"
+            className="skill-tree-canvas"
             onClick={() => {
               setSelectedNodeId(null)
               setSelectedSegmentId(null)
@@ -367,7 +368,7 @@ export function SkillTree() {
                 <path
                   key={separator.id}
                   d={separator.path}
-                  className="fill-none"
+                  fill="none"
                   stroke="#1e3a8a"
                   strokeOpacity="0.7"
                   strokeWidth="2"
@@ -389,7 +390,7 @@ export function SkillTree() {
                     event.stopPropagation()
                     handleSelectSegment(segmentLabel.segmentId)
                   }}
-                  className="cursor-pointer"
+                  className="skill-tree-clickable"
                 >
                   <rect
                     x={-(labelWidth / 2) - 10}
@@ -397,7 +398,8 @@ export function SkillTree() {
                     width={labelWidth + 20}
                     height={24}
                     rx={12}
-                    className={isSelected ? 'fill-cyan-400/10 stroke-cyan-300/60' : 'fill-transparent stroke-transparent'}
+                    fill={isSelected ? 'rgba(34, 211, 238, 0.12)' : 'transparent'}
+                    stroke={isSelected ? 'rgba(103, 232, 249, 0.6)' : 'transparent'}
                     strokeWidth="1.5"
                   />
                   <text
@@ -405,7 +407,7 @@ export function SkillTree() {
                     y="1"
                     textAnchor="middle"
                     dominantBaseline="middle"
-                    className={isSelected ? 'select-none fill-cyan-200 text-[12px] font-semibold uppercase tracking-[0.18em]' : 'select-none fill-slate-400 text-[12px] font-semibold uppercase tracking-[0.18em]'}
+                    className={isSelected ? 'skill-tree-segment-label skill-tree-segment-label--selected' : 'skill-tree-segment-label'}
                   >
                     {segmentLabel.text}
                   </text>
@@ -417,7 +419,7 @@ export function SkillTree() {
               <path
                 key={link.id}
                 d={link.path}
-                className="fill-none stroke-slate-700"
+                className="skill-tree-link"
                 strokeWidth="4"
                 strokeLinecap="round"
               />
@@ -441,15 +443,15 @@ export function SkillTree() {
                   event.stopPropagation()
                   handleAddInitialRoot()
                 }}
-                className="cursor-pointer"
+                className="skill-tree-clickable"
               >
-                <circle r="22" className="fill-slate-900/95 stroke-cyan-300" strokeWidth="2.5" />
+                <circle r="22" className="skill-tree-add-circle" strokeWidth="2.5" />
                 <text
                   x="0"
                   y="1"
                   textAnchor="middle"
                   dominantBaseline="middle"
-                  className="select-none fill-cyan-200 text-[28px] font-semibold"
+                  className="skill-tree-add-text skill-tree-add-text--large"
                 >
                   +
                 </text>
@@ -464,15 +466,15 @@ export function SkillTree() {
                   event.stopPropagation()
                   handleAddInitialSegment()
                 }}
-                className="cursor-pointer"
+                className="skill-tree-clickable"
               >
-                <circle r="18" className="fill-slate-900/95 stroke-cyan-300" strokeWidth="2.5" />
+                <circle r="18" className="skill-tree-add-circle" strokeWidth="2.5" />
                 <text
                   x="0"
                   y="1"
                   textAnchor="middle"
                   dominantBaseline="middle"
-                  className="select-none fill-cyan-200 text-[24px] font-semibold"
+                  className="skill-tree-add-text"
                 >
                   +
                 </text>
@@ -488,15 +490,15 @@ export function SkillTree() {
                     event.stopPropagation()
                     handleAddSegmentNear(selectedSegmentLabel.segmentId, 'left')
                   }}
-                  className="cursor-pointer"
+                  className="skill-tree-clickable"
                 >
-                  <circle r="16" className="fill-slate-900/95 stroke-cyan-300" strokeWidth="2.5" />
+                  <circle r="16" className="skill-tree-add-circle" strokeWidth="2.5" />
                   <text
                     x="0"
                     y="1"
                     textAnchor="middle"
                     dominantBaseline="middle"
-                    className="select-none fill-cyan-200 text-[22px] font-semibold"
+                    className="skill-tree-add-text skill-tree-add-text--small"
                   >
                     +
                   </text>
@@ -509,15 +511,15 @@ export function SkillTree() {
                     event.stopPropagation()
                     handleAddSegmentNear(selectedSegmentLabel.segmentId, 'right')
                   }}
-                  className="cursor-pointer"
+                  className="skill-tree-clickable"
                 >
-                  <circle r="16" className="fill-slate-900/95 stroke-cyan-300" strokeWidth="2.5" />
+                  <circle r="16" className="skill-tree-add-circle" strokeWidth="2.5" />
                   <text
                     x="0"
                     y="1"
                     textAnchor="middle"
                     dominantBaseline="middle"
-                    className="select-none fill-cyan-200 text-[22px] font-semibold"
+                    className="skill-tree-add-text skill-tree-add-text--small"
                   >
                     +
                   </text>
@@ -534,15 +536,15 @@ export function SkillTree() {
                     event.stopPropagation()
                     handleAddChild(selectedLayoutNode.id)
                   }}
-                  className="cursor-pointer"
+                  className="skill-tree-clickable"
                 >
-                  <circle r="18" className="fill-slate-900/95 stroke-cyan-300" strokeWidth="2.5" />
+                  <circle r="18" className="skill-tree-add-circle" strokeWidth="2.5" />
                   <text
                     x="0"
                     y="1"
                     textAnchor="middle"
                     dominantBaseline="middle"
-                    className="select-none fill-cyan-200 text-[24px] font-semibold"
+                    className="skill-tree-add-text"
                   >
                     +
                   </text>
@@ -557,15 +559,15 @@ export function SkillTree() {
                         event.stopPropagation()
                         handleAddRootNear(selectedLayoutNode.id, 'left')
                       }}
-                      className="cursor-pointer"
+                      className="skill-tree-clickable"
                     >
-                      <circle r="18" className="fill-slate-900/95 stroke-blue-300" strokeWidth="2.5" />
+                      <circle r="18" className="skill-tree-add-circle skill-tree-add-circle--secondary" strokeWidth="2.5" />
                       <text
                         x="0"
                         y="1"
                         textAnchor="middle"
                         dominantBaseline="middle"
-                        className="select-none fill-blue-200 text-[24px] font-semibold"
+                        className="skill-tree-add-text skill-tree-add-text--secondary"
                       >
                         +
                       </text>
@@ -578,15 +580,15 @@ export function SkillTree() {
                         event.stopPropagation()
                         handleAddRootNear(selectedLayoutNode.id, 'right')
                       }}
-                      className="cursor-pointer"
+                      className="skill-tree-clickable"
                     >
-                      <circle r="18" className="fill-slate-900/95 stroke-blue-300" strokeWidth="2.5" />
+                      <circle r="18" className="skill-tree-add-circle skill-tree-add-circle--secondary" strokeWidth="2.5" />
                       <text
                         x="0"
                         y="1"
                         textAnchor="middle"
                         dominantBaseline="middle"
-                        className="select-none fill-blue-200 text-[24px] font-semibold"
+                        className="skill-tree-add-text skill-tree-add-text--secondary"
                       >
                         +
                       </text>

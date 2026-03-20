@@ -47,51 +47,10 @@ export const updateNodeData = (treeData, id, newLabel, newStatus) =>
   }))
 
 export const updateNodeSegment = (treeData, id, newSegmentId) => {
-  // When changing a node's segment, move the ENTIRE subtree (recursive behavior)
-  const updateRecursive = (node, targetId) => {
-    if (node.id === targetId) {
-      // Found target node - update it and ALL descendants
-      return updateSubtreeSegment(node, newSegmentId)
-    }
-
-    // Not the target - recurse into children
-    if (!node.children?.length) {
-      return node
-    }
-
-    const nextChildren = node.children.map((child) =>
-      updateRecursive(child, targetId),
-    )
-    const changed = nextChildren.some((child, index) => child !== node.children[index])
-
-    if (!changed) {
-      return node
-    }
-
-    return {
-      ...node,
-      children: nextChildren,
-    }
-  }
-
-  const updateSubtreeSegment = (node, segmentId) => {
-    // Update this node AND all descendants
-    const nextNode = {
-      ...node,
-      segmentId,
-    }
-
-    if (node.children?.length) {
-      nextNode.children = node.children.map((child) =>
-        updateSubtreeSegment(child, segmentId),
-      )
-    }
-
-    return nextNode
-  }
-
   const nextChildren = (treeData.children ?? []).map((child) =>
-    updateRecursive(child, id),
+    updateNodeById(child, id, () => ({
+      segmentId: newSegmentId,
+    })),
   )
   const changed = nextChildren.some(
     (child, index) => child !== (treeData.children ?? [])[index],

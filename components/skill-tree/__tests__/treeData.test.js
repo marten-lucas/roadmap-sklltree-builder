@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { findNodeById, updateNodeData, updateNodeSegment, updateNodeLevel } from '../treeData'
-import { createSimpleTree, createCrossSegmentTree, findNodeInTree, SEGMENT_FRONTEND, SEGMENT_BACKEND } from './testUtils'
+import { createSimpleTree, createCrossSegmentTree, SEGMENT_FRONTEND, SEGMENT_BACKEND } from './testUtils'
 
 describe('treeData', () => {
   describe('findNodeById', () => {

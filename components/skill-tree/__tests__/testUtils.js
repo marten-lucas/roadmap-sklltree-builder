@@ -3,8 +3,6 @@
  * Stellt Helper-Funktionen zum Erstellen von Test-Bäumen bereit
  */
 
-const uid = () => crypto.randomUUID()
-
 const SEGMENT_FRONTEND = 'segment-frontend'
 const SEGMENT_BACKEND = 'segment-backend'
 const SEGMENT_DB = 'segment-db'
@@ -172,14 +170,23 @@ export const createEmptyTree = () => ({
   children: [],
 })
 
+export const createNodelessTree = () => ({
+  segments: [],
+  children: [],
+})
+
 /**
  * Findet einen Node in einem Baum
  */
-export const findNodeInTree = (tree, nodeId) => {
+export const findNodeInTree = (tree, matcher) => {
   const queue = [...(tree.children ?? [])]
+  const predicate = typeof matcher === 'function'
+    ? matcher
+    : (node) => node.id === matcher
+
   while (queue.length > 0) {
     const node = queue.shift()
-    if (node.id === nodeId) return node
+    if (predicate(node)) return node
     queue.push(...(node.children ?? []))
   }
   return null
