@@ -3,6 +3,7 @@ import { hierarchy } from 'd3-hierarchy'
 const toRadians = (angleDeg) => (angleDeg * Math.PI) / 180
 const toDegrees = (angleRad) => (angleRad * 180) / Math.PI
 const centerAngle = -90
+const UNASSIGNED_SEGMENT_ID = '__unassigned__'
 
 const toCartesian = (angleDeg, radius, origin) => {
   const radians = (angleDeg * Math.PI) / 180
@@ -41,6 +42,80 @@ const buildRadialEdgePath = (sourceAngle, sourceRadius, targetAngle, targetRadiu
 
 export const calculateRadialSkillTree = (data, config) => {
   const root = hierarchy(data)
+  const explicitSegments = data.segments ?? []
+  const segmentLabelById = new Map(explicitSegments.map((segment) => [segment.id, segment.label]))
+  const getSegmentLabelText = (segmentId) => {
+    if (segmentId === UNASSIGNED_SEGMENT_ID) {
+      return ''
+    }
+
+    return segmentLabelById.get(segmentId) ?? ''
+  }
+  const getEstimatedSegmentLabelWidthPx = (segmentId) => {
+    const text = getSegmentLabelText(segmentId)
+    const textWidth = Math.max(72, text.length * 9)
+
+    return textWidth + 20
+  }
+  const toAngleSpan = (pixelWidth, radius) => {
+    return toDegrees(pixelWidth / Math.max(radius, 1))
+  }
+  const computeSegmentSlots = ({ segmentIds, statsById, radius, totalSpread }) => {
+    if (segmentIds.length === 0) {
+      return []
+    }
+
+    const domainStart = centerAngle - totalSpread / 2
+    const rawMinWidths = segmentIds.map((segmentId) => {
+      const stats = statsById.get(segmentId) ?? { count: 0 }
+      const labelWidth = toAngleSpan(getEstimatedSegmentLabelWidthPx(segmentId) + config.nodeSize * 0.28, radius)
+
+      if (stats.count > 0) {
+        return Math.max(labelWidth, toAngleSpan(config.nodeSize * 0.9, radius))
+      }
+
+      return labelWidth
+    })
+
+    const minWidthSum = rawMinWidths.reduce((sum, width) => sum + width, 0)
+    const minWidthScale = minWidthSum > totalSpread && minWidthSum > 0 ? totalSpread / minWidthSum : 1
+    const minWidths = rawMinWidths.map((width) => width * minWidthScale)
+    const scaledMinWidthSum = minWidths.reduce((sum, width) => sum + width, 0)
+    const weights = segmentIds.map((segmentId) => {
+      const stats = statsById.get(segmentId) ?? { count: 0 }
+      return stats.count > 0 ? Math.max(1, stats.count) : 0.02
+    })
+    const weightSum = weights.reduce((sum, weight) => sum + weight, 0) || 1
+    const remaining = Math.max(0, totalSpread - scaledMinWidthSum)
+
+    let cursor = domainStart
+    return segmentIds.map((segmentId, index) => {
+      const width = minWidths[index] + (remaining * weights[index]) / weightSum
+      const min = cursor
+      const max = cursor + width
+      cursor = max
+
+      return {
+        id: segmentId,
+        min,
+        max,
+        center: (min + max) / 2,
+        width,
+      }
+    })
+  }
+  const getSegmentOrderIndex = (segmentId) => {
+    if (!segmentId) {
+      return explicitSegments.length
+    }
+
+    const index = explicitSegments.findIndex((segment) => segment.id === segmentId)
+    return index >= 0 ? index : explicitSegments.length + 1
+  }
+  const compareNodesBySegment = (left, right) => {
+    return getSegmentOrderIndex(left.data.segmentId ?? null) - getSegmentOrderIndex(right.data.segmentId ?? null)
+  }
+  const getGroupedSegmentId = (segmentId) => segmentId ?? UNASSIGNED_SEGMENT_ID
 
   // Helper: Get effective level (custom ebene or depth), and find max level for scaling
   const getEffectiveLevel = (node) => {
@@ -55,21 +130,63 @@ export const calculateRadialSkillTree = (data, config) => {
     const outerContentRadius = config.levelSpacing + config.nodeSize
     const width = outerContentRadius * 2 + config.horizontalPadding * 2
     const height = outerContentRadius * 2 + config.topPadding + config.bottomPadding
+    const origin = {
+      x: config.horizontalPadding + outerContentRadius,
+      y: config.topPadding + outerContentRadius,
+    }
+    const separatorInnerRadius = Math.max(config.nodeSize * 0.9, config.levelSpacing * 0.9)
+    const separatorOuterRadius = config.levelSpacing + 120
+    const segmentLabelRadius = Math.max(
+      config.levelSpacing + config.nodeSize * 0.95,
+      separatorInnerRadius + config.nodeSize * 0.7,
+    )
+    const emptySpread =
+      explicitSegments.length > 1
+        ? Math.min(config.maxAngleSpread, Math.max(60, (explicitSegments.length - 1) * 28))
+        : 0
+    const segmentStep = explicitSegments.length > 1 ? emptySpread / (explicitSegments.length - 1) : 0
+    const emptySegmentLabels = explicitSegments.map((segment, index) => {
+      const anchorAngle = centerAngle - emptySpread / 2 + segmentStep * index
+      const point = toCartesian(anchorAngle, segmentLabelRadius, origin)
+      let rotation = anchorAngle + 90
+
+      if (rotation > 90 && rotation < 270) {
+        rotation += 180
+      }
+
+      return {
+        id: `segment-label-${segment.id}`,
+        segmentId: segment.id,
+        text: segment.label,
+        x: point.x,
+        y: point.y,
+        rotation,
+        anchorAngle,
+      }
+    })
+    const emptySegmentSeparators = emptySegmentLabels.slice(0, -1).map((segmentLabel, index) => {
+      const next = emptySegmentLabels[index + 1]
+      const angle = (segmentLabel.anchorAngle + next.anchorAngle) / 2
+      const from = toCartesian(angle, separatorInnerRadius, origin)
+      const to = toCartesian(angle, separatorOuterRadius, origin)
+
+      return {
+        id: `segment-separator-${segmentLabel.segmentId}-${next.segmentId}`,
+        path: `M ${from.x} ${from.y} L ${to.x} ${to.y}`,
+      }
+    })
 
     return {
       nodes: [],
       links: [],
       segments: {
-        separators: [],
-        labels: [],
+        separators: emptySegmentSeparators,
+        labels: emptySegmentLabels,
       },
       canvas: {
         width,
         height,
-        origin: {
-          x: config.horizontalPadding + outerContentRadius,
-          y: config.topPadding + outerContentRadius,
-        },
+        origin,
         maxRadius: config.levelSpacing,
       },
     }
@@ -115,6 +232,15 @@ export const calculateRadialSkillTree = (data, config) => {
     return gapByLevel
   }
 
+  const getDistanceBetweenSiblings = (left, right, gapByLevel) => {
+    const baseGap = Math.max(gapByLevel.get(left.level), gapByLevel.get(right.level))
+    const leftSegmentId = getGroupedSegmentId(left.node.data.segmentId ?? null)
+    const rightSegmentId = getGroupedSegmentId(right.node.data.segmentId ?? null)
+    const segmentGapMultiplier = leftSegmentId === rightSegmentId ? 1 : 2.4
+
+    return (left.span + right.span) / 2 + baseGap * segmentGapMultiplier
+  }
+
   const computeOffsets = (items, distances) => {
     if (items.length === 0) {
       return []
@@ -137,8 +263,128 @@ export const calculateRadialSkillTree = (data, config) => {
     const spanByNodeId = new Map()
     const angleByNodeId = new Map()
 
+    const shiftSubtreeAngles = (node, delta) => {
+      if (node.depth > 0) {
+        angleByNodeId.set(node.data.id, (angleByNodeId.get(node.data.id) ?? centerAngle) + delta)
+      }
+
+      for (const child of node.children ?? []) {
+        shiftSubtreeAngles(child, delta)
+      }
+    }
+
+    const alignRootSubtreesToSegments = () => {
+      const rootChildren = [...(root.children ?? [])].sort(compareNodesBySegment)
+
+      if (rootChildren.length === 0) {
+        return
+      }
+
+      const rootGroupsMap = new Map()
+      for (const child of rootChildren) {
+        const segmentId = getGroupedSegmentId(child.data.segmentId ?? null)
+        const existing = rootGroupsMap.get(segmentId)
+
+        if (!existing) {
+          rootGroupsMap.set(segmentId, { segmentId, nodes: [child] })
+          continue
+        }
+
+        existing.nodes.push(child)
+      }
+
+      const hasUnassignedRoots = rootGroupsMap.has(UNASSIGNED_SEGMENT_ID)
+      const orderedSegmentIds = hasUnassignedRoots
+        ? [...explicitSegments.map((segment) => segment.id), UNASSIGNED_SEGMENT_ID]
+        : explicitSegments.map((segment) => segment.id)
+
+      if (orderedSegmentIds.length === 0) {
+        return
+      }
+
+      const rootGroupGap = (gapByLevel.get(1) ?? toDegrees(minimumArcGap / config.levelSpacing)) * 1.35
+      const hasEmptySegmentSlots = orderedSegmentIds.some((segmentId) => !rootGroupsMap.has(segmentId))
+      const levelOneRadiusForGroups = radiusByLevel.get(1) ?? config.levelSpacing
+
+      const rootStatsBySegmentId = new Map(
+        orderedSegmentIds.map((segmentId) => [segmentId, { count: (rootGroupsMap.get(segmentId)?.nodes.length ?? 0) }]),
+      )
+      const rootSegmentSpread = Math.min(180, config.maxAngleSpread)
+      const rootSegmentSlots = computeSegmentSlots({
+        segmentIds: orderedSegmentIds,
+        statsById: rootStatsBySegmentId,
+        radius: levelOneRadiusForGroups,
+        totalSpread: rootSegmentSpread,
+      })
+      const slotCenterBySegmentId = new Map(rootSegmentSlots.map((slot) => [slot.id, slot.center]))
+
+      const groupItems = orderedSegmentIds.map((segmentId) => {
+        const group = rootGroupsMap.get(segmentId) ?? { segmentId, nodes: [] }
+
+        if (group.nodes.length === 0) {
+          const labelSpan = toAngleSpan(
+            getEstimatedSegmentLabelWidthPx(segmentId) + config.nodeSize * 0.35,
+            levelOneRadiusForGroups,
+          )
+
+          return {
+            group,
+            center: centerAngle,
+            span: hasEmptySegmentSlots ? Math.max(labelSpan, rootGroupGap * 0.9) : rootGroupGap * 0.45,
+          }
+        }
+
+        const bounds = group.nodes.map((node) => {
+          const angle = angleByNodeId.get(node.data.id) ?? centerAngle
+          const span = spanByNodeId.get(node.data.id) ?? 0
+
+          return {
+            min: angle - span / 2,
+            max: angle + span / 2,
+          }
+        })
+        const min = Math.min(...bounds.map((bound) => bound.min))
+        const max = Math.max(...bounds.map((bound) => bound.max))
+
+        return {
+          group,
+          center: (min + max) / 2,
+          span: Math.max(0, max - min),
+        }
+      })
+
+      const distances = []
+      for (let index = 1; index < groupItems.length; index += 1) {
+        const left = groupItems[index - 1]
+        const right = groupItems[index]
+        const distance = (left.span + right.span) / 2 + rootGroupGap
+        distances.push(distance)
+      }
+
+      const offsets = computeOffsets(groupItems, distances)
+
+      groupItems.forEach((item, index) => {
+        const slotCenter = slotCenterBySegmentId.get(item.group.segmentId) ?? centerAngle
+        const packedCenter = centerAngle + offsets[index]
+        const desiredCenter = item.group.nodes.length > 0 ? (slotCenter + packedCenter) / 2 : slotCenter
+        const delta = desiredCenter - item.center
+
+        if (Math.abs(delta) <= 0.01) {
+          return
+        }
+
+        if (item.group.nodes.length === 0) {
+          return
+        }
+
+        item.group.nodes.forEach((node) => {
+          shiftSubtreeAngles(node, delta)
+        })
+      })
+    }
+
     const computeSpan = (node) => {
-      const children = node.children ?? []
+      const children = [...(node.children ?? [])].sort(compareNodesBySegment)
 
       if (children.length === 0) {
         spanByNodeId.set(node.data.id, 0)
@@ -160,8 +406,7 @@ export const calculateRadialSkillTree = (data, config) => {
       for (let index = 1; index < childItems.length; index += 1) {
         const left = childItems[index - 1]
         const right = childItems[index]
-        const gap = Math.max(gapByLevel.get(left.level), gapByLevel.get(right.level))
-        const distance = (left.span + right.span) / 2 + gap
+        const distance = getDistanceBetweenSiblings(left, right, gapByLevel)
         distances.push(distance)
       }
 
@@ -178,7 +423,7 @@ export const calculateRadialSkillTree = (data, config) => {
         angleByNodeId.set(node.data.id, angle)
       }
 
-      const children = node.children ?? []
+      const children = [...(node.children ?? [])].sort(compareNodesBySegment)
       if (children.length === 0) {
         return
       }
@@ -198,8 +443,7 @@ export const calculateRadialSkillTree = (data, config) => {
       for (let index = 1; index < childItems.length; index += 1) {
         const left = childItems[index - 1]
         const right = childItems[index]
-        const gap = Math.max(gapByLevel.get(left.level), gapByLevel.get(right.level))
-        const distance = (left.span + right.span) / 2 + gap
+        const distance = getDistanceBetweenSiblings(left, right, gapByLevel)
         distances.push(distance)
       }
 
@@ -210,12 +454,25 @@ export const calculateRadialSkillTree = (data, config) => {
       })
     }
 
-    const rootChildren = root.children ?? []
+    const rootChildren = [...(root.children ?? [])].sort(compareNodesBySegment)
     rootChildren.forEach((child) => computeSpan(child))
     assignAngles(root, centerAngle)
+    alignRootSubtreesToSegments()
 
     const subtreeSpan = rootChildren.length
-      ? Math.max(...rootChildren.map((child) => spanByNodeId.get(child.data.id) ?? 0))
+      ? (() => {
+          const bounds = rootChildren.map((child) => {
+            const angle = angleByNodeId.get(child.data.id) ?? centerAngle
+            const span = spanByNodeId.get(child.data.id) ?? 0
+
+            return {
+              min: angle - span / 2,
+              max: angle + span / 2,
+            }
+          })
+
+          return Math.max(...bounds.map((bound) => bound.max)) - Math.min(...bounds.map((bound) => bound.min))
+        })()
       : 0
 
     return {
@@ -304,7 +561,7 @@ export const calculateRadialSkillTree = (data, config) => {
   })
 
   // Connect all level-1 siblings with a continuous arc along their shared radius.
-  const depthOneNodes = root.children ?? []
+  const depthOneNodes = [...(root.children ?? [])]
   depthOneNodes.sort((a, b) => getAngleForNode(a) - getAngleForNode(b))
   const levelOneRadius = getRadiusForLevel(1)
 
@@ -344,16 +601,12 @@ export const calculateRadialSkillTree = (data, config) => {
     })
     .filter(Boolean)
 
-  const explicitSegments = data.segments ?? []
-  const segmentLabelById = new Map(explicitSegments.map((segment) => [segment.id, segment.label]))
   const segmentRangesMap = new Map()
   const segmentRootAnglesMap = new Map()
+  const hasUnassignedNodes = allNodes.some((node) => !node.data.segmentId)
 
   for (const node of root.children ?? []) {
-    const segmentId = node.data.segmentId
-    if (!segmentId) {
-      continue
-    }
+    const segmentId = getGroupedSegmentId(node.data.segmentId ?? null)
 
     const existingAngles = segmentRootAnglesMap.get(segmentId) ?? []
     existingAngles.push(getAngleForNode(node))
@@ -361,10 +614,7 @@ export const calculateRadialSkillTree = (data, config) => {
   }
 
   for (const node of allNodes) {
-    const segmentId = node.data.segmentId
-    if (!segmentId) {
-      continue
-    }
+    const segmentId = getGroupedSegmentId(node.data.segmentId ?? null)
 
     const angle = getAngleForNode(node)
     const existing = segmentRangesMap.get(segmentId)
@@ -372,7 +622,6 @@ export const calculateRadialSkillTree = (data, config) => {
     if (!existing) {
       segmentRangesMap.set(segmentId, {
         id: segmentId,
-        label: segmentLabelById.get(segmentId) ?? segmentId,
         min: angle,
         max: angle,
       })
@@ -383,25 +632,62 @@ export const calculateRadialSkillTree = (data, config) => {
     existing.max = Math.max(existing.max, angle)
   }
 
-  const segmentRanges = Array.from(segmentRangesMap.values())
-    .map((segment) => ({
-      ...segment,
-      center: (segment.min + segment.max) / 2,
-      anchorAngle: (() => {
-        const rootAngles = segmentRootAnglesMap.get(segment.id) ?? []
+  const segmentEntries = hasUnassignedNodes
+    ? [...explicitSegments, { id: UNASSIGNED_SEGMENT_ID, label: null, isVirtual: true }]
+    : explicitSegments
+  const segmentStatsById = new Map(
+    segmentEntries.map((segment) => {
+      const range = segmentRangesMap.get(segment.id)
+      const count = allNodes.filter((node) => getGroupedSegmentId(node.data.segmentId ?? null) === segment.id).length
 
-        if (rootAngles.length === 0) {
-          return (segment.min + segment.max) / 2
-        }
+      return [segment.id, { count, range }]
+    }),
+  )
+  const segmentSlotSpread = Math.min(180, config.maxAngleSpread)
+  const segmentSlots = computeSegmentSlots({
+    segmentIds: segmentEntries.map((segment) => segment.id),
+    statsById: segmentStatsById,
+    radius: segmentLabelRadius,
+    totalSpread: segmentSlotSpread,
+  })
+  const segmentSlotById = new Map(segmentSlots.map((slot) => [slot.id, slot]))
 
-        return rootAngles.reduce((sum, angle) => sum + angle, 0) / rootAngles.length
-      })(),
-    }))
-    .sort((a, b) => a.center - b.center)
+  const orderedSegments = segmentEntries.map((segment, index) => {
+    const range = segmentRangesMap.get(segment.id) ?? null
+    const rootSegmentAngles = segmentRootAnglesMap.get(segment.id) ?? []
+    const slot = segmentSlotById.get(segment.id)
+    const populatedAnchorAngle =
+      range
+        ? Math.max(slot.min + 0.5, Math.min(slot.max - 0.5, (range.min + range.max) / 2))
+        : rootSegmentAngles.length > 0
+          ? rootSegmentAngles.reduce((sum, angle) => sum + angle, 0) / rootSegmentAngles.length
+          : slot.center
 
-  const segmentSeparators = segmentRanges.slice(0, -1).map((segment, index) => {
-    const next = segmentRanges[index + 1]
-    const angle = (segment.max + next.min) / 2
+    return {
+      id: segment.id,
+      label: segment.label,
+      isVirtual: segment.isVirtual ?? false,
+      index,
+      min: range?.min ?? null,
+      max: range?.max ?? null,
+      anchorAngle: populatedAnchorAngle,
+      slotMin: slot.min,
+      slotMax: slot.max,
+      slotCenter: slot.center,
+    }
+  })
+
+  const boundarySafetyMarginDeg = toDegrees((config.nodeSize * 0.58) / Math.max(levelOneRadius, config.levelSpacing))
+
+  const segmentSeparators = orderedSegments.slice(0, -1).map((segment, index) => {
+    const next = orderedSegments[index + 1]
+    const leftBoundaryAngle = segment.max ?? segment.slotMax
+    const rightBoundaryAngle = next.min ?? next.slotMin
+    const leftSafe = leftBoundaryAngle + boundarySafetyMarginDeg
+    const rightSafe = rightBoundaryAngle - boundarySafetyMarginDeg
+    const angle = leftSafe < rightSafe
+      ? (leftSafe + rightSafe) / 2
+      : (leftBoundaryAngle + rightBoundaryAngle) / 2
     const from = toCartesian(angle, separatorInnerRadius, origin)
     const to = toCartesian(angle, separatorOuterRadius, origin)
 
@@ -411,7 +697,9 @@ export const calculateRadialSkillTree = (data, config) => {
     }
   })
 
-  const segmentLabels = segmentRanges.map((segment) => {
+  const segmentLabels = orderedSegments
+    .filter((segment) => !segment.isVirtual)
+    .map((segment) => {
     const point = toCartesian(segment.anchorAngle, segmentLabelRadius, origin)
     let rotation = segment.anchorAngle + 90
 
@@ -422,12 +710,14 @@ export const calculateRadialSkillTree = (data, config) => {
 
     return {
       id: `segment-label-${segment.id}`,
+      segmentId: segment.id,
       text: segment.label,
       x: point.x,
       y: point.y,
       rotation,
+      anchorAngle: segment.anchorAngle,
     }
-  })
+    })
 
   return {
     nodes,

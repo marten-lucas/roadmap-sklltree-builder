@@ -1,19 +1,44 @@
-import { Button, Input, Radio, RadioGroup, Select, SelectItem } from '@heroui/react'
+import { Button, Textarea, Select, SelectItem } from '@heroui/react'
+import { UNASSIGNED_SEGMENT_ID } from './layoutShared'
 
 const STATUS_OPTIONS = [
-  { value: 'fertig', label: 'Fertig', color: 'text-blue-300', ring: 'border-blue-400/70' },
-  { value: 'jetzt', label: 'Jetzt', color: 'text-cyan-200', ring: 'border-cyan-300/70' },
-  { value: 'später', label: 'Später', color: 'text-slate-300', ring: 'border-slate-400/50' },
+  { value: 'fertig', label: 'Fertig' },
+  { value: 'jetzt', label: 'Jetzt' },
+  { value: 'später', label: 'Später' },
 ]
 
-export function InspectorPanel({ selectedNode, currentLevel, onClose, onLabelChange, onStatusChange, onLevelChange, minLevel, maxLevel, segments, onSegmentChange, onDeleteNodeOnly, onDeleteNodeBranch }) {
+const selectClassNames = {
+  label: 'text-slate-300 font-medium pb-1',
+  trigger: 'border-slate-700 hover:border-slate-500 data-[open=true]:!border-cyan-400 bg-transparent',
+  value: 'text-white',
+  popoverContent: 'bg-slate-900 border border-slate-700 text-white',
+  description: 'text-amber-300/90 text-xs',
+}
+
+export function InspectorPanel({ selectedNode, currentLevel, onClose, onLabelChange, onStatusChange, onLevelChange, levelOptions, segmentOptions, validationMessage, onSegmentChange, onDeleteNodeOnly, onDeleteNodeBranch }) {
   if (!selectedNode) {
     return null
   }
 
-  const levelOptions = []
-  for (let i = minLevel; i <= maxLevel; i++) {
-    levelOptions.push(i)
+  const selectedSegmentKey = selectedNode.segmentId ?? UNASSIGNED_SEGMENT_ID
+  const blockedLevelHint = levelOptions.find((option) => !option.isAllowed)?.reasons?.[0] ?? null
+  const blockedSegmentHint = segmentOptions?.find((option) => !option.isAllowed)?.reasons?.[0] ?? null
+  const disabledLevelKeys = levelOptions.filter(o => !o.isAllowed).map(o => String(o.value))
+  const disabledSegmentKeys = segmentOptions?.filter(o => !o.isAllowed).map(o => o.id) ?? []
+
+  const handleStatusChange = (keys) => {
+    const selected = Array.from(keys)[0]
+    if (selected) onStatusChange(selected)
+  }
+
+  const handleLevelChange = (keys) => {
+    const selected = Array.from(keys)[0]
+    if (selected) onLevelChange(parseInt(selected, 10))
+  }
+
+  const handleSegmentChange = (keys) => {
+    const selected = Array.from(keys)[0]
+    if (selected) onSegmentChange(selected)
   }
 
   return (
@@ -23,145 +48,103 @@ export function InspectorPanel({ selectedNode, currentLevel, onClose, onLabelCha
           <p className="text-xs uppercase tracking-[0.2em] text-slate-400">Inspector</p>
           <h2 className="mt-1 text-2xl font-semibold tracking-tight text-white">Skill bearbeiten</h2>
         </div>
-        <Button isIconOnly size="md" variant="bordered" onPress={onClose} aria-label="Inspector schließen"
-          className="border-slate-700 text-slate-300 hover:border-slate-500 hover:text-white">
+        <Button isIconOnly variant="light" onPress={onClose} aria-label="Inspector schließen">
           ✕
         </Button>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-6 py-8">
-        <div className="flex flex-col gap-8">
-          <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-5">
-            <p className="mb-2 text-xs uppercase tracking-widest text-slate-500">Ausgewählt</p>
-            <p className="text-2xl font-bold text-white">{selectedNode.label}</p>
+      <div className="flex-1 overflow-y-auto px-6 py-6">
+        <div className="flex flex-col gap-5">
+          <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
+            <p className="mb-1 text-xs uppercase tracking-widest text-slate-500">Ausgewählt</p>
+            <p className="text-xl font-bold text-white">{selectedNode.label}</p>
           </div>
 
-          <div className="flex flex-col gap-2">
-            <label className="text-sm font-medium text-slate-300">Name</label>
-            <Input
-              placeholder="Skill-Name eingeben …"
-              value={selectedNode.label}
-              onValueChange={onLabelChange}
-              variant="bordered"
-              size="lg"
-              classNames={{
-                inputWrapper: [
-                  'h-14 bg-slate-900/80 border-slate-700',
-                  'hover:border-slate-500 focus-within:!border-cyan-400',
-                ].join(' '),
-                input: 'text-white text-base',
-              }}
-            />
-          </div>
+          <Textarea
+            label="Name"
+            labelPlacement="outside-top"
+            placeholder="Skill-Name eingeben …"
+            value={selectedNode.label}
+            onValueChange={onLabelChange}
+            variant="bordered"
+            minRows={2}
+            maxRows={5}
+            classNames={{
+              label: 'text-slate-300 font-medium pb-1',
+              inputWrapper: 'border-slate-700 hover:border-slate-500 focus-within:!border-cyan-400',
+              input: 'text-white placeholder:text-slate-500',
+            }}
+          />
 
-          <div className="flex flex-col gap-3">
-            <label className="text-sm font-medium text-slate-300">Status</label>
-            <RadioGroup
-              value={selectedNode.status}
-              onValueChange={onStatusChange}
-              orientation="vertical"
-              classNames={{ wrapper: 'gap-3' }}
-            >
-              {STATUS_OPTIONS.map(({ value, label, color, ring }) => (
-                <Radio
-                  key={value}
-                  value={value}
-                  classNames={{
-                    base: [
-                      'flex items-center w-full max-w-full m-0 rounded-xl border bg-slate-900/60 px-4 py-3',
-                      'cursor-pointer transition-colors',
-                      selectedNode.status === value
-                        ? `${ring} bg-slate-800/80`
-                        : 'border-slate-800 hover:border-slate-600',
-                    ].join(' '),
-                    label: `text-base font-medium ${color}`,
-                    wrapper: 'hidden',
-                  }}
-                >
-                  {label}
-                </Radio>
-              ))}
-            </RadioGroup>
-          </div>
+          <Select
+            label="Status"
+            labelPlacement="outside-top"
+            selectedKeys={new Set([selectedNode.status])}
+            onSelectionChange={handleStatusChange}
+            variant="bordered"
+            disallowEmptySelection
+            classNames={selectClassNames}
+          >
+            {STATUS_OPTIONS.map(({ value, label }) => (
+              <SelectItem key={value}>{label}</SelectItem>
+            ))}
+          </Select>
 
-          <div className="flex flex-col gap-2">
-            <label className="text-sm font-medium text-slate-300">Ebene</label>
+          <Select
+            label="Ebene"
+            labelPlacement="outside-top"
+            selectedKeys={new Set([String(currentLevel)])}
+            onSelectionChange={handleLevelChange}
+            variant="bordered"
+            disallowEmptySelection
+            disabledKeys={disabledLevelKeys}
+            description={blockedLevelHint}
+            classNames={selectClassNames}
+          >
+            {levelOptions.map((option) => (
+              <SelectItem key={String(option.value)}>Ebene {option.value}</SelectItem>
+            ))}
+          </Select>
+
+          {segmentOptions && segmentOptions.length > 0 && (
             <Select
-              selectedKeys={new Set([String(currentLevel)])}
-              disallowEmptySelection
-              onSelectionChange={(keys) => {
-                const selected = Array.from(keys)[0]
-                if (selected) {
-                  onLevelChange(parseInt(selected, 10))
-                }
-              }}
-              renderValue={(items) => items.map((item) => item?.textValue ?? `Ebene ${item?.key}`).join(', ')}
+              label="Segment"
+              labelPlacement="outside-top"
+              selectedKeys={new Set([selectedSegmentKey])}
+              onSelectionChange={handleSegmentChange}
               variant="bordered"
-              size="lg"
-              className="w-full"
-              classNames={{
-                trigger: [
-                  'h-14 bg-slate-900/80 border-slate-700',
-                  'hover:border-slate-500 focus-within:!border-cyan-400',
-                ].join(' '),
-                value: 'text-white text-base',
-              }}
+              disallowEmptySelection
+              disabledKeys={disabledSegmentKeys}
+              description={blockedSegmentHint}
+              classNames={selectClassNames}
             >
-              {levelOptions.map((level) => (
-                <SelectItem key={String(level)} textValue={`Ebene ${level}`}>
-                  Ebene {level}
-                </SelectItem>
+              {segmentOptions.map((segmentOption) => (
+                <SelectItem key={segmentOption.id}>{segmentOption.label}</SelectItem>
               ))}
             </Select>
-          </div>
+          )}
 
-          {segments && segments.length > 0 && (
-            <div className="flex flex-col gap-2">
-              <label className="text-sm font-medium text-slate-300">Segment</label>
-              <Select
-                selectedKeys={selectedNode.segmentId ? new Set([selectedNode.segmentId]) : new Set()}
-                disallowEmptySelection
-                onSelectionChange={(keys) => {
-                  const selected = Array.from(keys)[0]
-                  if (selected) onSegmentChange(selected)
-                }}
-                renderValue={(items) => items.map((item) => item?.textValue ?? item?.key).join(', ')}
-                variant="bordered"
-                size="lg"
-                className="w-full"
-                classNames={{
-                  trigger: [
-                    'h-14 bg-slate-900/80 border-slate-700',
-                    'hover:border-slate-500 focus-within:!border-cyan-400',
-                  ].join(' '),
-                  value: 'text-white text-base',
-                }}
-              >
-                {segments.map((seg) => (
-                  <SelectItem key={seg.id} textValue={seg.label}>
-                    {seg.label}
-                  </SelectItem>
-                ))}
-              </Select>
+          {validationMessage && (
+            <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
+              {validationMessage}
             </div>
           )}
 
-          <div className="mt-2 flex flex-col gap-3 border-t border-slate-800 pt-6">
+          <div className="mt-2 flex flex-col gap-3 border-t border-slate-800 pt-5">
             <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Löschen</p>
             <Button
               variant="bordered"
-              size="lg"
+              fullWidth
               onPress={onDeleteNodeOnly}
-              className="h-12 border-amber-500/40 bg-amber-500/10 text-amber-200 hover:border-amber-400 hover:bg-amber-500/15"
+              className="border-slate-700 text-slate-300 hover:border-slate-500"
             >
               Skill löschen
             </Button>
             <Button
               color="danger"
               variant="bordered"
-              size="lg"
+              fullWidth
               onPress={onDeleteNodeBranch}
-              className="h-12 border-red-500/50 bg-red-500/10 text-red-200 hover:border-red-400 hover:bg-red-500/15"
             >
               Zweig löschen
             </Button>

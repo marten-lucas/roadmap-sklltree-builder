@@ -46,10 +46,78 @@ export const updateNodeData = (treeData, id, newLabel, newStatus) =>
     status: newStatus,
   }))
 
-export const updateNodeSegment = (treeData, id, newSegmentId) =>
-  updateNodeById(treeData, id, () => ({
-    segmentId: newSegmentId,
-  }))
+export const updateNodeSegment = (treeData, id, newSegmentId) => {
+  // When changing a node's segment, move the ENTIRE subtree (recursive behavior)
+  const updateRecursive = (node, targetId) => {
+    if (node.id === targetId) {
+      // Found target node - update it and ALL descendants
+      return updateSubtreeSegment(node, newSegmentId)
+    }
+
+    // Not the target - recurse into children
+    if (!node.children?.length) {
+      return node
+    }
+
+    const nextChildren = node.children.map((child) =>
+      updateRecursive(child, targetId),
+    )
+    const changed = nextChildren.some((child, index) => child !== node.children[index])
+
+    if (!changed) {
+      return node
+    }
+
+    return {
+      ...node,
+      children: nextChildren,
+    }
+  }
+
+  const updateSubtreeSegment = (node, segmentId) => {
+    // Update this node AND all descendants
+    const nextNode = {
+      ...node,
+      segmentId,
+    }
+
+    if (node.children?.length) {
+      nextNode.children = node.children.map((child) =>
+        updateSubtreeSegment(child, segmentId),
+      )
+    }
+
+    return nextNode
+  }
+
+  const nextChildren = (treeData.children ?? []).map((child) =>
+    updateRecursive(child, id),
+  )
+  const changed = nextChildren.some(
+    (child, index) => child !== (treeData.children ?? [])[index],
+  )
+
+  if (!changed) {
+    return treeData
+  }
+
+  return {
+    ...treeData,
+    children: nextChildren,
+  }
+}
+
+export const updateSegmentLabel = (treeData, segmentId, newLabel) => ({
+  ...treeData,
+  segments: (treeData.segments ?? []).map((segment) =>
+    segment.id === segmentId
+      ? {
+          ...segment,
+          label: newLabel,
+        }
+      : segment,
+  ),
+})
 
 /**
  * Gets the maximum level (ebene) in the entire tree.
@@ -139,6 +207,11 @@ const createNewNode = (level, segmentId = null) => ({
   ebene: level,
   segmentId,
   children: [],
+})
+
+const createNewSegment = () => ({
+  id: `segment-${crypto.randomUUID()}`,
+  label: 'Neues Segment',
 })
 
 const promoteSubtreeLevels = (node, levelDiff) => {
@@ -297,6 +370,43 @@ export const addRootNodeNear = (tree, anchorRootId, side = 'right') => {
   return addRootNodeNearWithResult(tree, anchorRootId, side).tree
 }
 
+export const addInitialSegmentWithResult = (tree) => {
+  const newSegment = createNewSegment()
+
+  return {
+    tree: {
+      ...tree,
+      segments: [...(tree.segments ?? []), newSegment],
+    },
+    createdSegmentId: newSegment.id,
+  }
+}
+
+export const addSegmentNearWithResult = (tree, anchorSegmentId, side = 'right') => {
+  const existingSegments = tree.segments ?? []
+  const anchorIndex = existingSegments.findIndex((segment) => segment.id === anchorSegmentId)
+
+  if (anchorIndex < 0) {
+    return {
+      tree,
+      createdSegmentId: null,
+    }
+  }
+
+  const newSegment = createNewSegment()
+  const insertIndex = side === 'left' ? anchorIndex : anchorIndex + 1
+  const nextSegments = [...existingSegments]
+  nextSegments.splice(insertIndex, 0, newSegment)
+
+  return {
+    tree: {
+      ...tree,
+      segments: nextSegments,
+    },
+    createdSegmentId: newSegment.id,
+  }
+}
+
 export const addInitialRootNodeWithResult = (tree) => {
   const nextRoots = [...(tree.children ?? [])]
   const defaultSegmentId = tree.segments?.[0]?.id ?? null
@@ -335,5 +445,25 @@ export const addRootNodeNearWithResult = (tree, anchorRootId, side = 'right') =>
       children: nextRoots,
     },
     createdNodeId: newNode.id,
+  }
+}
+
+export const deleteSegment = (tree, segmentId) => {
+  const clearSegmentAssignments = (node) => {
+    const nextNode = {
+      ...node,
+      segmentId: node.segmentId === segmentId ? null : node.segmentId ?? null,
+    }
+
+    if (node.children?.length) {
+      nextNode.children = node.children.map(clearSegmentAssignments)
+    }
+
+    return nextNode
+  }
+
+  return {
+    ...clearSegmentAssignments(tree),
+    segments: (tree.segments ?? []).filter((segment) => segment.id !== segmentId),
   }
 }

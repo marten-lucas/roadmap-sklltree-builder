@@ -3,35 +3,52 @@ import { TransformComponent, TransformWrapper } from 'react-zoom-pan-pinch'
 import { TREE_CONFIG } from './config'
 import { initialData } from './data'
 import { InspectorPanel } from './InspectorPanel'
-import { calculateRadialSkillTree } from './layout'
+import { solveSkillTreeLayout } from './layoutSolver'
+import { UNASSIGNED_SEGMENT_ID } from './layoutShared'
+import { SegmentPanel } from './SegmentPanel'
 import { SkillNode } from './SkillNode'
+import {
+  getLevelOptionsForNode,
+  getSegmentOptionsForNode,
+  validateNodeLevelChange,
+  validateNodeSegmentChange,
+} from './treeValidation'
 import {
   addChildNodeWithResult,
   addInitialRootNodeWithResult,
+  addInitialSegmentWithResult,
   addRootNodeNearWithResult,
+  addSegmentNearWithResult,
+  deleteSegment,
   deleteNodeBranch,
   deleteNodeOnly,
   findNodeById,
   getNodeLevelInfo,
   updateNodeData as updateNodeDataInTree,
-  updateNodeLevel,
-  updateNodeSegment,
+  updateSegmentLabel,
 } from './treeData'
 
 export function SkillTree() {
   const [roadmapData, setRoadmapData] = useState(initialData)
   const [selectedNodeId, setSelectedNodeId] = useState(null)
+  const [selectedSegmentId, setSelectedSegmentId] = useState(null)
   const centerSize = TREE_CONFIG.nodeSize * 2
   const addControlOffset = TREE_CONFIG.nodeSize * 0.82
 
-  const { nodes, links, segments, canvas } = useMemo(
-    () => calculateRadialSkillTree(roadmapData, TREE_CONFIG),
+  const { layout, diagnostics } = useMemo(
+    () => solveSkillTreeLayout(roadmapData, TREE_CONFIG),
     [roadmapData],
   )
+  const { nodes, links, segments, canvas } = layout
 
   const selectedNode = useMemo(
     () => findNodeById(roadmapData, selectedNodeId),
     [roadmapData, selectedNodeId],
+  )
+
+  const selectedSegment = useMemo(
+    () => (roadmapData.segments ?? []).find((segment) => segment.id === selectedSegmentId) ?? null,
+    [roadmapData, selectedSegmentId],
   )
 
   const levelInfo = useMemo(() => {
@@ -44,9 +61,34 @@ export function SkillTree() {
     }
   }, [roadmapData, selectedNodeId])
 
+  const selectedNodeLevelOptions = useMemo(
+    () => (selectedNodeId ? getLevelOptionsForNode(roadmapData, selectedNodeId, TREE_CONFIG) : []),
+    [roadmapData, selectedNodeId],
+  )
+
+  const selectedNodeSegmentOptions = useMemo(
+    () => (selectedNodeId ? getSegmentOptionsForNode(roadmapData, selectedNodeId, TREE_CONFIG) : []),
+    [roadmapData, selectedNodeId],
+  )
+
+  const selectedNodeValidationMessage = useMemo(() => {
+    if (!selectedNodeId || diagnostics.isValid) {
+      return null
+    }
+
+    const relevantIssue = diagnostics.issues.find((issue) => issue.nodeIds?.includes(selectedNodeId))
+
+    return relevantIssue?.message ?? null
+  }, [diagnostics, selectedNodeId])
+
   const selectedLayoutNode = useMemo(
     () => nodes.find((node) => node.id === selectedNodeId) ?? null,
     [nodes, selectedNodeId],
+  )
+
+  const selectedSegmentLabel = useMemo(
+    () => segments.labels.find((segmentLabel) => segmentLabel.segmentId === selectedSegmentId) ?? null,
+    [segments.labels, selectedSegmentId],
   )
 
   const selectedControlGeometry = useMemo(() => {
@@ -76,6 +118,31 @@ export function SkillTree() {
     }
   }, [selectedLayoutNode, canvas.origin.x, canvas.origin.y, addControlOffset])
 
+  const selectedSegmentControlGeometry = useMemo(() => {
+    if (!selectedSegmentLabel) {
+      return null
+    }
+
+    const baselineRadians = (selectedSegmentLabel.rotation * Math.PI) / 180
+    const baseline = {
+      x: Math.cos(baselineRadians),
+      y: Math.sin(baselineRadians),
+    }
+    const labelWidth = Math.max(88, selectedSegmentLabel.text.length * 10)
+    const controlOffset = labelWidth / 2 + 28
+
+    return {
+      left: {
+        x: selectedSegmentLabel.x - baseline.x * controlOffset,
+        y: selectedSegmentLabel.y - baseline.y * controlOffset,
+      },
+      right: {
+        x: selectedSegmentLabel.x + baseline.x * controlOffset,
+        y: selectedSegmentLabel.y + baseline.y * controlOffset,
+      },
+    }
+  }, [selectedSegmentLabel])
+
   const emptyStateAddControl = useMemo(() => {
     if (nodes.length > 0) {
       return null
@@ -86,6 +153,23 @@ export function SkillTree() {
       y: canvas.origin.y - canvas.maxRadius,
     }
   }, [nodes.length, canvas.origin.x, canvas.origin.y, canvas.maxRadius])
+
+  const emptySegmentAddControl = useMemo(() => {
+    if ((roadmapData.segments ?? []).length > 0) {
+      return null
+    }
+
+    const separatorInnerRadius = Math.max(TREE_CONFIG.nodeSize * 0.9, TREE_CONFIG.levelSpacing * 0.9)
+    const segmentLabelRadius = Math.max(
+      canvas.maxRadius + TREE_CONFIG.nodeSize * 0.95,
+      separatorInnerRadius + TREE_CONFIG.nodeSize * 0.7,
+    )
+
+    return {
+      x: canvas.origin.x,
+      y: canvas.origin.y - segmentLabelRadius,
+    }
+  }, [roadmapData.segments, canvas.origin.x, canvas.origin.y, canvas.maxRadius])
 
   const handleAddChild = (parentId) => {
     let createdNodeId = null
@@ -115,6 +199,36 @@ export function SkillTree() {
     }
   }
 
+  const handleAddSegmentNear = (anchorSegmentId, side) => {
+    let createdSegmentId = null
+
+    setRoadmapData((previousData) => {
+      const result = addSegmentNearWithResult(previousData, anchorSegmentId, side)
+      createdSegmentId = result.createdSegmentId
+      return result.tree
+    })
+
+    if (createdSegmentId) {
+      setSelectedNodeId(null)
+      setSelectedSegmentId(createdSegmentId)
+    }
+  }
+
+  const handleAddInitialSegment = () => {
+    let createdSegmentId = null
+
+    setRoadmapData((previousData) => {
+      const result = addInitialSegmentWithResult(previousData)
+      createdSegmentId = result.createdSegmentId
+      return result.tree
+    })
+
+    if (createdSegmentId) {
+      setSelectedNodeId(null)
+      setSelectedSegmentId(createdSegmentId)
+    }
+  }
+
   const handleAddInitialRoot = () => {
     let createdNodeId = null
 
@@ -131,6 +245,12 @@ export function SkillTree() {
 
   const handleSelectNode = (nodeId) => {
     setSelectedNodeId(nodeId)
+    setSelectedSegmentId(null)
+  }
+
+  const handleSelectSegment = (segmentId) => {
+    setSelectedSegmentId(segmentId)
+    setSelectedNodeId(null)
   }
 
   const updateNodeData = (id, newLabel, newStatus) => {
@@ -158,7 +278,10 @@ export function SkillTree() {
       return
     }
 
-    setRoadmapData((previousData) => updateNodeLevel(previousData, selectedNodeId, newLevel))
+    setRoadmapData((previousData) => {
+      const validation = validateNodeLevelChange(previousData, selectedNodeId, newLevel, TREE_CONFIG)
+      return validation.isAllowed ? validation.tree : previousData
+    })
   }
 
   const handleDeleteNodeOnly = () => {
@@ -177,6 +300,23 @@ export function SkillTree() {
 
     setRoadmapData((previousData) => deleteNodeBranch(previousData, selectedNodeId))
     setSelectedNodeId(null)
+  }
+
+  const handleSegmentLabelChange = (newLabel) => {
+    if (!selectedSegmentId) {
+      return
+    }
+
+    setRoadmapData((previousData) => updateSegmentLabel(previousData, selectedSegmentId, newLabel))
+  }
+
+  const handleDeleteSegment = () => {
+    if (!selectedSegmentId) {
+      return
+    }
+
+    setRoadmapData((previousData) => deleteSegment(previousData, selectedSegmentId))
+    setSelectedSegmentId(null)
   }
 
   return (
@@ -198,7 +338,10 @@ export function SkillTree() {
             height={canvas.height}
             viewBox={`0 0 ${canvas.width} ${canvas.height}`}
             className="bg-[radial-gradient(circle_at_50%_60%,rgba(30,41,59,0.45),rgba(2,6,23,1)_55%)]"
-            onClick={() => setSelectedNodeId(null)}
+            onClick={() => {
+              setSelectedNodeId(null)
+              setSelectedSegmentId(null)
+            }}
           >
             <defs>
               <radialGradient id="nodeHalo" cx="50%" cy="50%" r="60%">
@@ -233,18 +376,42 @@ export function SkillTree() {
               ))}
             </g>
 
-            {segments.labels.map((segmentLabel) => (
-              <text
-                key={segmentLabel.id}
-                x={segmentLabel.x}
-                y={segmentLabel.y}
-                textAnchor="middle"
-                transform={`rotate(${segmentLabel.rotation} ${segmentLabel.x} ${segmentLabel.y})`}
-                className="select-none fill-slate-400 text-[12px] font-semibold uppercase tracking-[0.18em]"
-              >
-                {segmentLabel.text}
-              </text>
-            ))}
+            {segments.labels.map((segmentLabel) => {
+              const isSelected = segmentLabel.segmentId === selectedSegmentId
+              const labelWidth = Math.max(88, segmentLabel.text.length * 10)
+
+              return (
+                <g
+                  key={segmentLabel.id}
+                  transform={`translate(${segmentLabel.x} ${segmentLabel.y}) rotate(${segmentLabel.rotation})`}
+                  onMouseDown={(event) => event.stopPropagation()}
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    handleSelectSegment(segmentLabel.segmentId)
+                  }}
+                  className="cursor-pointer"
+                >
+                  <rect
+                    x={-(labelWidth / 2) - 10}
+                    y={-12}
+                    width={labelWidth + 20}
+                    height={24}
+                    rx={12}
+                    className={isSelected ? 'fill-cyan-400/10 stroke-cyan-300/60' : 'fill-transparent stroke-transparent'}
+                    strokeWidth="1.5"
+                  />
+                  <text
+                    x="0"
+                    y="1"
+                    textAnchor="middle"
+                    dominantBaseline="middle"
+                    className={isSelected ? 'select-none fill-cyan-200 text-[12px] font-semibold uppercase tracking-[0.18em]' : 'select-none fill-slate-400 text-[12px] font-semibold uppercase tracking-[0.18em]'}
+                  >
+                    {segmentLabel.text}
+                  </text>
+                </g>
+              )
+            })}
 
             {links.filter((link) => link.sourceDepth > 0).map((link) => (
               <path
@@ -286,6 +453,75 @@ export function SkillTree() {
                 >
                   +
                 </text>
+              </g>
+            )}
+
+            {emptySegmentAddControl && (
+              <g
+                transform={`translate(${emptySegmentAddControl.x}, ${emptySegmentAddControl.y})`}
+                onMouseDown={(event) => event.stopPropagation()}
+                onClick={(event) => {
+                  event.stopPropagation()
+                  handleAddInitialSegment()
+                }}
+                className="cursor-pointer"
+              >
+                <circle r="18" className="fill-slate-900/95 stroke-cyan-300" strokeWidth="2.5" />
+                <text
+                  x="0"
+                  y="1"
+                  textAnchor="middle"
+                  dominantBaseline="middle"
+                  className="select-none fill-cyan-200 text-[24px] font-semibold"
+                >
+                  +
+                </text>
+              </g>
+            )}
+
+            {selectedSegmentLabel && selectedSegmentControlGeometry && (
+              <g>
+                <g
+                  transform={`translate(${selectedSegmentControlGeometry.left.x}, ${selectedSegmentControlGeometry.left.y})`}
+                  onMouseDown={(event) => event.stopPropagation()}
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    handleAddSegmentNear(selectedSegmentLabel.segmentId, 'left')
+                  }}
+                  className="cursor-pointer"
+                >
+                  <circle r="16" className="fill-slate-900/95 stroke-cyan-300" strokeWidth="2.5" />
+                  <text
+                    x="0"
+                    y="1"
+                    textAnchor="middle"
+                    dominantBaseline="middle"
+                    className="select-none fill-cyan-200 text-[22px] font-semibold"
+                  >
+                    +
+                  </text>
+                </g>
+
+                <g
+                  transform={`translate(${selectedSegmentControlGeometry.right.x}, ${selectedSegmentControlGeometry.right.y})`}
+                  onMouseDown={(event) => event.stopPropagation()}
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    handleAddSegmentNear(selectedSegmentLabel.segmentId, 'right')
+                  }}
+                  className="cursor-pointer"
+                >
+                  <circle r="16" className="fill-slate-900/95 stroke-cyan-300" strokeWidth="2.5" />
+                  <text
+                    x="0"
+                    y="1"
+                    textAnchor="middle"
+                    dominantBaseline="middle"
+                    className="select-none fill-cyan-200 text-[22px] font-semibold"
+                  >
+                    +
+                  </text>
+                </g>
               </g>
             )}
 
@@ -372,14 +608,26 @@ export function SkillTree() {
         onLabelChange={handleLabelChange}
         onStatusChange={handleStatusChange}
         onLevelChange={handleLevelChange}
-        minLevel={levelInfo.minLevel}
-        maxLevel={levelInfo.maxLevel}
-        segments={roadmapData.segments ?? []}
-        onSegmentChange={(newSegmentId) => {
-          setRoadmapData((prev) => updateNodeSegment(prev, selectedNodeId, newSegmentId))
+        levelOptions={selectedNodeLevelOptions}
+        segmentOptions={selectedNodeSegmentOptions}
+        validationMessage={selectedNodeValidationMessage}
+        onSegmentChange={(nextSegmentKey) => {
+          const nextSegmentId = nextSegmentKey === UNASSIGNED_SEGMENT_ID ? null : nextSegmentKey
+
+          setRoadmapData((previousData) => {
+            const validation = validateNodeSegmentChange(previousData, selectedNodeId, nextSegmentId, TREE_CONFIG)
+            return validation.isAllowed ? validation.tree : previousData
+          })
         }}
         onDeleteNodeOnly={handleDeleteNodeOnly}
         onDeleteNodeBranch={handleDeleteNodeBranch}
+      />
+
+      <SegmentPanel
+        selectedSegment={selectedSegment}
+        onClose={() => setSelectedSegmentId(null)}
+        onLabelChange={handleSegmentLabelChange}
+        onDelete={handleDeleteSegment}
       />
     </main>
   )

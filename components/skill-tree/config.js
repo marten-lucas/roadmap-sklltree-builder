@@ -18,7 +18,7 @@ export const STATUS_STYLES = {
 
 export const TREE_CONFIG = {
   minAngleSpread: 140,
-  maxAngleSpread: 180,
+  maxAngleSpread: 270,
   nodeSize: 120,
   minArcGapFactor: 1.08,
   levelSpacing: 180,

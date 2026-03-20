@@ -1,0 +1,1 @@
+export const UNASSIGNED_SEGMENT_ID = '__unassigned__'
