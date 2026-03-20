@@ -1,4 +1,4 @@
-import { Paper, Text } from '@mantine/core'
+import { Paper, Text, Tooltip } from '@mantine/core'
 import { normalizeStatusKey, STATUS_STYLES } from './config'
 
 const getDisplayStatus = (node) => {
@@ -39,6 +39,22 @@ const getLevelStatusKeys = (node) => {
   return levels.map((level) => normalizeStatusKey(level.status))
 }
 
+const getTooltipReleaseNote = (node) => {
+  const levels = Array.isArray(node?.levels) ? node.levels : []
+  const preferredStatus = getDisplayStatus(node)
+  const preferredLevel = levels.find((level) => normalizeStatusKey(level.status) === preferredStatus)
+  const preferredNote = String(preferredLevel?.releaseNote ?? '').trim()
+
+  if (preferredNote) {
+    return preferredNote
+  }
+
+  const fallbackLevel = levels.find((level) => String(level?.releaseNote ?? '').trim())
+  const fallbackNote = String(fallbackLevel?.releaseNote ?? '').trim()
+
+  return fallbackNote || 'Keine Release Note hinterlegt.'
+}
+
 const buildSegmentConicStyle = (statusKeys, colorGetter) => {
   const segmentCount = Math.max(1, statusKeys.length)
   const slice = 360 / segmentCount
@@ -73,6 +89,7 @@ export function SkillNode({ node, nodeSize, isSelected, onSelect, onSelectLevel 
   const statusKey = getDisplayStatus(node)
   const statusStyles = STATUS_STYLES[statusKey] ?? STATUS_STYLES.later
   const shortName = getShortName(node)
+  const tooltipReleaseNote = getTooltipReleaseNote(node)
   const levelStatusKeys = getLevelStatusKeys(node)
   const levelRingStyle = buildSegmentConicStyle(
     levelStatusKeys,
@@ -122,32 +139,47 @@ export function SkillNode({ node, nodeSize, isSelected, onSelect, onSelectLevel 
         style={{ padding: `${glowPadding}px` }}
         onClick={(event) => event.stopPropagation()}
       >
-        <Paper
-          component="button"
-          type="button"
-          onClick={handleNodeClick}
-          className="skill-node-button"
-          radius="xl"
-          withBorder={false}
-          style={{
-            border: 'none',
-            boxShadow: 'none',
-            background: nodeBackground,
-            width: `${nodeSize}px`,
-            height: `${nodeSize}px`,
-          }}
+        <Tooltip
+          withArrow
+          multiline
+          openDelay={80}
+          closeDelay={40}
+          transitionProps={{ transition: 'fade', duration: 120 }}
+          classNames={{ tooltip: 'skill-node-tooltip', arrow: 'skill-node-tooltip__arrow' }}
+          label={(
+            <div>
+              <Text className="skill-node-tooltip__title">{node.label}</Text>
+              <Text className="skill-node-tooltip__note">{tooltipReleaseNote}</Text>
+            </div>
+          )}
         >
-          <div className="skill-node-level-glow" style={levelGlowStyle} />
-          <div className="skill-node-level-ring" style={levelRingStyle} />
-          <div className="skill-node-button__content">
-            <Text
-              className="skill-node-button__shortname"
-              style={{ color: statusStyles.textColor, fontWeight: statusKey === 'now' ? 900 : 800 }}
-            >
-              {shortName}
-            </Text>
-          </div>
-        </Paper>
+          <Paper
+            component="button"
+            type="button"
+            onClick={handleNodeClick}
+            className="skill-node-button"
+            radius="xl"
+            withBorder={false}
+            style={{
+              border: 'none',
+              boxShadow: 'none',
+              background: nodeBackground,
+              width: `${nodeSize}px`,
+              height: `${nodeSize}px`,
+            }}
+          >
+            <div className="skill-node-level-glow" style={levelGlowStyle} />
+            <div className="skill-node-level-ring" style={levelRingStyle} />
+            <div className="skill-node-button__content">
+              <Text
+                className="skill-node-button__shortname"
+                style={{ color: statusStyles.textColor, fontWeight: statusKey === 'now' ? 900 : 800 }}
+              >
+                {shortName}
+              </Text>
+            </div>
+          </Paper>
+        </Tooltip>
       </div>
     </foreignObject>
   )
