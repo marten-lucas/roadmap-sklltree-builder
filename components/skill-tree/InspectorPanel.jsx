@@ -24,7 +24,10 @@ export function InspectorPanel({
   onLevelChange,
   levelOptions,
   segmentOptions,
+  parentOptions,
+  selectedParentId,
   validationMessage,
+  onParentChange,
   onSegmentChange,
   onDeleteNodeOnly,
   onDeleteNodeBranch,
@@ -58,6 +61,12 @@ export function InspectorPanel({
     label: option.label,
     disabled: !option.isAllowed,
   }))
+  const parentData = (parentOptions ?? []).map((option) => ({
+    value: option.id,
+    label: option.label,
+    disabled: !option.isAllowed,
+  }))
+  const selectedParentKey = selectedParentId ?? '__root__'
 
   return (
     <Paper className="skill-panel skill-panel--inspector" radius={0} shadow="none">
@@ -132,6 +141,23 @@ export function InspectorPanel({
                 input: 'mantine-dark-input',
                 label: 'mantine-dark-label',
                 description: 'mantine-dark-description',
+                dropdown: 'mantine-dark-dropdown',
+                option: 'mantine-dark-option',
+              }}
+              comboboxProps={{ withinPortal: true, zIndex: 450 }}
+            />
+          )}
+
+          {parentOptions && parentOptions.length > 0 && (
+            <Select
+              label="Parent"
+              data={parentData}
+              value={selectedParentKey}
+              onChange={(value) => value && onParentChange(value)}
+              allowDeselect={false}
+              classNames={{
+                input: 'mantine-dark-input',
+                label: 'mantine-dark-label',
                 dropdown: 'mantine-dark-dropdown',
                 option: 'mantine-dark-option',
               }}

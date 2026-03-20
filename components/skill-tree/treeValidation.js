@@ -280,3 +280,51 @@ export const getLevelOptionsForNode = (tree, nodeId, config = TREE_CONFIG) => {
 
   return options
 }
+
+export const getParentOptionsForNode = (tree, nodeId) => {
+  if (!nodeId) {
+    return []
+  }
+
+  const nodes = []
+  const parentByNodeId = new Map()
+  const queue = [...(tree.children ?? []).map((node) => ({ node, parentId: null }))]
+
+  while (queue.length > 0) {
+    const current = queue.shift()
+    nodes.push(current.node)
+    parentByNodeId.set(current.node.id, current.parentId)
+
+    for (const child of current.node.children ?? []) {
+      queue.push({ node: child, parentId: current.node.id })
+    }
+  }
+
+  const subtreeIds = getNodeSubtreeIds(tree, nodeId)
+  const currentParentId = parentByNodeId.get(nodeId) ?? null
+  const options = [
+    {
+      id: '__root__',
+      label: 'Kein Parent (Root)',
+      isCurrent: currentParentId == null,
+      isAllowed: true,
+      reasons: [],
+    },
+  ]
+
+  for (const node of nodes) {
+    if (subtreeIds.has(node.id)) {
+      continue
+    }
+
+    options.push({
+      id: node.id,
+      label: node.label,
+      isCurrent: currentParentId === node.id,
+      isAllowed: true,
+      reasons: [],
+    })
+  }
+
+  return options
+}

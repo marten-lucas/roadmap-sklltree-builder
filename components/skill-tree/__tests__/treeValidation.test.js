@@ -5,6 +5,7 @@ import {
   validateNodeLevelChange,
   getSegmentOptionsForNode,
   getLevelOptionsForNode,
+  getParentOptionsForNode,
 } from '../treeValidation'
 import { TREE_CONFIG } from '../config'
 import { createSimpleTree, createCrossSegmentTree, findNodeInTree, SEGMENT_FRONTEND, SEGMENT_BACKEND } from './testUtils'
@@ -466,6 +467,23 @@ describe('treeValidation', () => {
         expect(opt.isAllowed).toBeDefined()
         expect(opt.reasons).toBeDefined()
       })
+    })
+  })
+
+  describe('getParentOptionsForNode', () => {
+    it('should exclude node descendants from parent candidates', () => {
+      const tree = createCrossSegmentTree()
+      const options = getParentOptionsForNode(tree, 'react')
+
+      expect(options.some((option) => option.id === 'api-consumption')).toBe(false)
+      expect(options.some((option) => option.id === 'react')).toBe(false)
+    })
+
+    it('should include root option', () => {
+      const tree = createSimpleTree()
+      const options = getParentOptionsForNode(tree, 'child-react')
+
+      expect(options.some((option) => option.id === '__root__')).toBe(true)
     })
   })
 })

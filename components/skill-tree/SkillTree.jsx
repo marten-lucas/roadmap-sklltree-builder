@@ -9,6 +9,7 @@ import { UNASSIGNED_SEGMENT_ID } from './layoutShared'
 import { SegmentPanel } from './SegmentPanel'
 import { SkillNode } from './SkillNode'
 import {
+  getParentOptionsForNode,
   getLevelOptionsForNode,
   getSegmentOptionsForNode,
   validateNodeLevelChange,
@@ -24,8 +25,10 @@ import {
   deleteSegment,
   deleteNodeBranch,
   deleteNodeOnly,
+  findParentNodeId,
   findNodeById,
   getNodeLevelInfo,
+  moveNodeToParent,
   removeNodeProgressLevel,
   updateNodeData as updateNodeDataInTree,
   updateNodeProgressLevel,
@@ -104,6 +107,16 @@ export function SkillTree() {
 
   const selectedNodeSegmentOptions = useMemo(
     () => (selectedNodeId ? getSegmentOptionsForNode(roadmapData, selectedNodeId, TREE_CONFIG) : []),
+    [roadmapData, selectedNodeId],
+  )
+
+  const selectedNodeParentOptions = useMemo(
+    () => (selectedNodeId ? getParentOptionsForNode(roadmapData, selectedNodeId) : []),
+    [roadmapData, selectedNodeId],
+  )
+
+  const selectedNodeParentId = useMemo(
+    () => (selectedNodeId ? findParentNodeId(roadmapData, selectedNodeId) : null),
     [roadmapData, selectedNodeId],
   )
 
@@ -720,7 +733,17 @@ export function SkillTree() {
         onLevelChange={handleLevelChange}
         levelOptions={selectedNodeLevelOptions}
         segmentOptions={selectedNodeSegmentOptions}
+        parentOptions={selectedNodeParentOptions}
+        selectedParentId={selectedNodeParentId}
         validationMessage={selectedNodeValidationMessage}
+        onParentChange={(nextParentKey) => {
+          if (!selectedNodeId) {
+            return
+          }
+
+          const nextParentId = nextParentKey === '__root__' ? null : nextParentKey
+          setRoadmapData((previousData) => moveNodeToParent(previousData, selectedNodeId, nextParentId))
+        }}
         onSegmentChange={(nextSegmentKey) => {
           const nextSegmentId = nextSegmentKey === UNASSIGNED_SEGMENT_ID ? null : nextSegmentKey
 

@@ -1,5 +1,12 @@
 import { describe, it, expect } from 'vitest'
-import { findNodeById, updateNodeData, updateNodeSegment, updateNodeLevel } from '../treeData'
+import {
+  findNodeById,
+  findParentNodeId,
+  moveNodeToParent,
+  updateNodeData,
+  updateNodeSegment,
+  updateNodeLevel,
+} from '../treeData'
 import { createSimpleTree, createCrossSegmentTree, SEGMENT_FRONTEND, SEGMENT_BACKEND } from './testUtils'
 
 describe('treeData', () => {
@@ -175,6 +182,23 @@ describe('treeData', () => {
 
       expect(level2.ebene).toBe(4)
       expect(level3.ebene).toBeGreaterThan(4) // Should adjust children
+    })
+  })
+
+  describe('moveNodeToParent', () => {
+    it('should move a node under another valid parent', () => {
+      const tree = createSimpleTree()
+      const moved = moveNodeToParent(tree, 'child-react', 'root-backend')
+
+      expect(findParentNodeId(moved, 'child-react')).toBe('root-backend')
+      expect(findNodeById(moved, 'root-frontend').children.some((child) => child.id === 'child-react')).toBe(false)
+    })
+
+    it('should prevent moving a node under its own descendant', () => {
+      const tree = createCrossSegmentTree()
+      const moved = moveNodeToParent(tree, 'react', 'api-consumption')
+
+      expect(moved).toEqual(tree)
     })
   })
 })

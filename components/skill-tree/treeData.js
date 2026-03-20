@@ -77,6 +77,28 @@ export const findNodeById = (node, targetId) => {
   return null
 }
 
+export const findParentNodeId = (tree, targetId) => {
+  if (!tree || !targetId) {
+    return null
+  }
+
+  const queue = [...(tree.children ?? []).map((child) => ({ node: child, parentId: null }))]
+
+  while (queue.length > 0) {
+    const current = queue.shift()
+
+    if (current.node.id === targetId) {
+      return current.parentId
+    }
+
+    for (const child of current.node.children ?? []) {
+      queue.push({ node: child, parentId: current.node.id })
+    }
+  }
+
+  return null
+}
+
 const updateNodeById = (node, targetId, updater) => {
   const nextChildren = (node.children ?? []).map((child) => updateNodeById(child, targetId, updater))
   const hasChildrenChange = nextChildren.some((child, index) => child !== (node.children ?? [])[index])
@@ -579,5 +601,160 @@ export const deleteSegment = (tree, segmentId) => {
   return {
     ...clearSegmentAssignments(tree),
     segments: (tree.segments ?? []).filter((segment) => segment.id !== segmentId),
+  }
+}
+
+const adjustMovedSubtreeLevels = (node, levelDiff, isRoot = true) => {
+  const nextNode = { ...node }
+
+  if (isRoot) {
+    const currentRootLevel = nextNode.ebene ?? 1
+    nextNode.ebene = Math.max(1, currentRootLevel + levelDiff)
+  } else if (nextNode.ebene !== undefined && nextNode.ebene !== null) {
+    nextNode.ebene = Math.max(1, nextNode.ebene + levelDiff)
+  }
+
+  if (node.children?.length) {
+    nextNode.children = node.children.map((child) => adjustMovedSubtreeLevels(child, levelDiff, false))
+  }
+
+  return nextNode
+}
+
+const subtreeContainsId = (node, targetId) => {
+  if (!node) {
+    return false
+  }
+
+  const queue = [node]
+  while (queue.length > 0) {
+    const current = queue.shift()
+
+    if (current.id === targetId) {
+      return true
+    }
+
+    queue.push(...(current.children ?? []))
+  }
+
+  return false
+}
+
+const removeNodeById = (children, targetId) => {
+  let extractedNode = null
+  let changed = false
+  const nextChildren = []
+
+  for (const child of children ?? []) {
+    if (child.id === targetId) {
+      extractedNode = child
+      changed = true
+      continue
+    }
+
+    const removal = removeNodeById(child.children ?? [], targetId)
+
+    if (removal.extractedNode) {
+      extractedNode = removal.extractedNode
+      changed = true
+      nextChildren.push({
+        ...child,
+        children: removal.children,
+      })
+      continue
+    }
+
+    nextChildren.push(child)
+    changed ||= removal.changed
+  }
+
+  return {
+    children: changed ? nextChildren : children,
+    extractedNode,
+    changed,
+  }
+}
+
+const insertNodeUnderParent = (children, parentId, nodeToInsert) => {
+  let changed = false
+  const nextChildren = (children ?? []).map((child) => {
+    if (child.id === parentId) {
+      changed = true
+      return {
+        ...child,
+        children: [...(child.children ?? []), nodeToInsert],
+      }
+    }
+
+    const nextNestedChildren = insertNodeUnderParent(child.children ?? [], parentId, nodeToInsert)
+    if (nextNestedChildren !== (child.children ?? [])) {
+      changed = true
+      return {
+        ...child,
+        children: nextNestedChildren,
+      }
+    }
+
+    return child
+  })
+
+  return changed ? nextChildren : children
+}
+
+export const moveNodeToParent = (tree, nodeId, parentId) => {
+  if (!tree || !nodeId || nodeId === parentId) {
+    return tree
+  }
+
+  const currentNode = findNodeById(tree, nodeId)
+  if (!currentNode) {
+    return tree
+  }
+
+  if (parentId && subtreeContainsId(currentNode, parentId)) {
+    return tree
+  }
+
+  const { children: treeWithoutNodeChildren, extractedNode } = removeNodeById(tree.children ?? [], nodeId)
+
+  if (!extractedNode) {
+    return tree
+  }
+
+  const treeWithoutNode = {
+    ...tree,
+    children: treeWithoutNodeChildren,
+  }
+
+  let targetLevel = 1
+  if (parentId) {
+    const parent = findNodeById(treeWithoutNode, parentId)
+    if (!parent) {
+      return tree
+    }
+
+    const parentLevelInfo = getNodeLevelInfo(treeWithoutNode, parentId)
+    targetLevel = parentLevelInfo.nodeLevel + 1
+  }
+
+  const currentLevelInfo = getNodeLevelInfo(tree, nodeId)
+  const levelDiff = targetLevel - currentLevelInfo.nodeLevel
+  const movedNode = adjustMovedSubtreeLevels(extractedNode, levelDiff, true)
+
+  if (!parentId) {
+    return {
+      ...treeWithoutNode,
+      children: [...(treeWithoutNode.children ?? []), movedNode],
+    }
+  }
+
+  const nextChildren = insertNodeUnderParent(treeWithoutNode.children ?? [], parentId, movedNode)
+  if (nextChildren === (treeWithoutNode.children ?? [])) {
+    return tree
+  }
+
+  return {
+    ...treeWithoutNode,
+    children: nextChildren,
   }
 }
