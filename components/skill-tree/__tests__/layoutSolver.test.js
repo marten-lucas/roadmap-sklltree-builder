@@ -155,6 +155,71 @@ describe('layoutSolver', () => {
       expect(denseEntry.requiredPixels).toBeGreaterThan(0)
       expect(denseEntry.neededRadius).toBeGreaterThan(0)
     })
+
+    it('should expose segment and ordering metadata', () => {
+      const tree = createSimpleTree()
+      const result = solveSkillTreeLayout(tree, TREE_CONFIG)
+
+      expect(Array.isArray(result.meta.segmentOrder)).toBe(true)
+      expect(result.meta.segmentOrder.length).toBeGreaterThan(0)
+      expect(result.meta.nodeOrderWithinLevelSegment).toBeDefined()
+      expect(result.meta.promotedByConflict).toBeDefined()
+      expect(Array.isArray(result.meta.promotedByConflict)).toBe(true)
+      expect(Array.isArray(result.meta.edgePromotionDetails)).toBe(true)
+    })
+
+    it('should include promotion metadata for non-adjacent segment edges', () => {
+      const tree = {
+        segments: [
+          { id: 'seg-a', label: 'A' },
+          { id: 'seg-b', label: 'B' },
+          { id: 'seg-c', label: 'C' },
+          { id: 'seg-d', label: 'D' },
+        ],
+        children: [
+          {
+            id: 'root-b',
+            label: 'Root B',
+            status: 'fertig',
+            ebene: 1,
+            segmentId: 'seg-b',
+            children: [
+              {
+                id: 'child-a',
+                label: 'Child A',
+                status: 'jetzt',
+                ebene: 2,
+                segmentId: 'seg-a',
+                children: [],
+              },
+              {
+                id: 'child-c',
+                label: 'Child C',
+                status: 'jetzt',
+                ebene: 2,
+                segmentId: 'seg-c',
+                children: [],
+              },
+              {
+                id: 'child-d',
+                label: 'Child D',
+                status: 'später',
+                ebene: 2,
+                segmentId: 'seg-d',
+                children: [],
+              },
+            ],
+          },
+        ],
+      }
+
+      const result = solveSkillTreeLayout(tree, TREE_CONFIG)
+
+      expect(result.meta.edgePromotionDetails.length).toBeGreaterThan(0)
+      const promoted = result.meta.promotedByConflict.find((entry) => entry.nodeId === 'child-a' || entry.nodeId === 'child-c' || entry.nodeId === 'child-d')
+      expect(promoted).toBeDefined()
+      expect(promoted.promotedBy).toBeGreaterThan(0)
+    })
   })
 
   describe('layoutSolver validation', () => {

@@ -22,7 +22,11 @@ export const solveSkillTreeLayout = (data, config) => {
     includeUnassigned: hasUnassignedNodes,
   })
   const segmentOrderIndexById = new Map(optimizedSegmentIds.map((segmentId, index) => [segmentId, index]))
-  const autoPromotedLevelById = buildAutoPromotedLevels({
+  const {
+    promotedLevelById: autoPromotedLevelById,
+    promotedByConflict,
+    edgePromotionDetails,
+  } = buildAutoPromotedLevels({
     root,
     segmentOrderIndexById,
   })
@@ -75,7 +79,72 @@ export const solveSkillTreeLayout = (data, config) => {
     const index = segmentOrderIndexById.get(groupedSegmentId)
     return index !== undefined ? index : optimizedSegmentIds.length + 1
   }
+
+  const subtreeSegmentCenterByNodeId = new Map()
+  const getSubtreeSegmentCenter = (node) => {
+    const cached = subtreeSegmentCenterByNodeId.get(node.data.id)
+    if (cached !== undefined) {
+      return cached
+    }
+
+    const ownIndex = getSegmentOrderIndex(node.data.segmentId ?? null)
+    const children = node.children ?? []
+
+    if (children.length === 0) {
+      subtreeSegmentCenterByNodeId.set(node.data.id, ownIndex)
+      return ownIndex
+    }
+
+    const childCenters = children.map((child) => getSubtreeSegmentCenter(child))
+    const center = (ownIndex + childCenters.reduce((sum, value) => sum + value, 0)) / (childCenters.length + 1)
+    subtreeSegmentCenterByNodeId.set(node.data.id, center)
+    return center
+  }
+
+  const getChildOrderCost = (parentNode, candidate) => {
+    const childSegmentIndex = getSegmentOrderIndex(candidate.data.segmentId ?? null)
+    const childSubtreeCenter = getSubtreeSegmentCenter(candidate)
+    const parentSegmentIndex = parentNode?.depth > 0
+      ? getSegmentOrderIndex(parentNode.data.segmentId ?? null)
+      : null
+
+    const parentDistancePenalty =
+      parentSegmentIndex === null ? 0 : Math.abs(childSegmentIndex - parentSegmentIndex) * 1.9
+    const subtreeDistancePenalty =
+      parentSegmentIndex === null ? 0 : Math.abs(childSubtreeCenter - parentSegmentIndex) * 1.35
+    const levelPenalty = getEffectiveLevel(candidate) * 0.02
+
+    return parentDistancePenalty + subtreeDistancePenalty + levelPenalty
+  }
+
+  const scoreChildOrder = (parentNode, orderedChildren) => {
+    if (!orderedChildren.length) {
+      return 0
+    }
+
+    let score = 0
+    for (let index = 0; index < orderedChildren.length; index += 1) {
+      const child = orderedChildren[index]
+      score += getChildOrderCost(parentNode, child)
+
+      if (index > 0) {
+        const previous = orderedChildren[index - 1]
+        const previousSegment = getSegmentOrderIndex(previous.data.segmentId ?? null)
+        const currentSegment = getSegmentOrderIndex(child.data.segmentId ?? null)
+        score += Math.abs(currentSegment - previousSegment) * 0.9
+      }
+    }
+
+    return score
+  }
   const compareNodesBySegment = (parentNode, leftNode, rightNode) => {
+    const leftCost = getChildOrderCost(parentNode, leftNode)
+    const rightCost = getChildOrderCost(parentNode, rightNode)
+
+    if (Math.abs(leftCost - rightCost) > 1e-6) {
+      return leftCost - rightCost
+    }
+
     const leftIndex = getSegmentOrderIndex(leftNode.data.segmentId ?? null)
     const rightIndex = getSegmentOrderIndex(rightNode.data.segmentId ?? null)
 
@@ -104,9 +173,35 @@ export const solveSkillTreeLayout = (data, config) => {
     return String(leftNode.data.label ?? '').localeCompare(String(rightNode.data.label ?? ''))
   }
   const sortChildrenForParent = (parentNode) => {
-    return [...(parentNode.children ?? [])].sort((leftNode, rightNode) =>
+    const sorted = [...(parentNode.children ?? [])].sort((leftNode, rightNode) =>
       compareNodesBySegment(parentNode, leftNode, rightNode),
     )
+
+    let best = sorted
+    let bestScore = scoreChildOrder(parentNode, best)
+    let improved = true
+    let safety = 0
+
+    while (improved && safety < 10) {
+      improved = false
+      safety += 1
+
+      for (let index = 0; index < best.length - 1; index += 1) {
+        const candidate = [...best]
+        const tmp = candidate[index]
+        candidate[index] = candidate[index + 1]
+        candidate[index + 1] = tmp
+        const candidateScore = scoreChildOrder(parentNode, candidate)
+
+        if (candidateScore < bestScore - 1e-6) {
+          best = candidate
+          bestScore = candidateScore
+          improved = true
+        }
+      }
+    }
+
+    return best
   }
 
   const getEffectiveLevel = (node) => {
@@ -905,8 +1000,11 @@ export const solveSkillTreeLayout = (data, config) => {
       orderedSegments: finalOrderedSegments,
       subtreeSpan,
       autoPromotedLevelById,
+      promotedByConflict: [...promotedByConflict.values()],
+      edgePromotionDetails,
       computedLevelByNodeId,
       nodeOrderWithinLevelSegment,
+      segmentOrder: optimizedSegmentIds,
       feasibility: {
         isFeasible: feasibilityAnalysis.isFeasible,
         nodeAngularWidthPx,
