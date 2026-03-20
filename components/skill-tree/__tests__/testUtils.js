@@ -3,6 +3,8 @@
  * Stellt Helper-Funktionen zum Erstellen von Test-Bäumen bereit
  */
 
+const uid = () => crypto.randomUUID()
+
 const SEGMENT_FRONTEND = 'segment-frontend'
 const SEGMENT_BACKEND = 'segment-backend'
 const SEGMENT_DB = 'segment-db'
@@ -167,14 +169,6 @@ export const createEmptyTree = () => ({
     { id: SEGMENT_FRONTEND, label: 'Frontend' },
     { id: SEGMENT_BACKEND, label: 'Backend' },
   ],
-  children: [],
-})
-
-/**
- * Erstellt einen wirklich leeren Baum (keine Segmente, keine Knoten)
- */
-export const createNodelessTree = () => ({
-  segments: [],
   children: [],
 })
 

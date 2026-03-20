@@ -31,7 +31,7 @@ components/skill-tree/
 ├── treeValidation.js         # Change validation & constraint checking
 ├── treeData.js              # Tree mutations & traversal
 ├── SkillTree.jsx            # Main visualization component
-├── InspectorPanel.jsx       # Node editing UI (Mantine-based)
+├── InspectorPanel.jsx       # Node editing UI (HeroUI-based)
 ├── SegmentPanel.jsx         # Segment management
 ├── config.js                # Configuration constants
 ├── data.js                  # Sample data
@@ -131,7 +131,7 @@ Allow/Block Decision
 ## Key Components
 
 ### InspectorPanel.jsx
-Mantine-based node editor with:
+HeroUI-based node editor with:
 - Textarea for name editing (flexible sizing)
 - Dropdown menus for Status/Ebene/Segment
 - Validation hints (compact, non-blocking)
@@ -159,12 +159,12 @@ Change validation pipeline:
 - ✅ Per-node segment independence
 - ✅ Segment-boundary issues filtered from validation
 - ✅ UI dropdown rendering fixed (no overlap)
-- ✅ Mantine standards compliance (Textarea, Select)
+- ✅ HeroUI standards compliance (Textarea, Dropdown)
 
 ### Earlier Phases
 - Phase 2: Segment/Child ordering optimization
 - Phase 1: Layout fundamentals with D3 hierarchy
-- Phase 0: React + Vite setup
+- Phase 0: React + Vite + HeroUI setup
 
 ## Testing Philosophy
 
@@ -198,7 +198,7 @@ See [/__tests__/README.md](components/skill-tree/__tests__/README.md) for detail
 - **React 19** - UI framework
 - **Vite 8** - Build tool
 - **D3-Hierarchy 3** - Tree layout
-- **Mantine 8** - Component library
+- **HeroUI 2** - Component library
 - **Tailwind CSS 3** - Styling
 - **Vitest** - Testing framework
 - **ESLint** - Code quality

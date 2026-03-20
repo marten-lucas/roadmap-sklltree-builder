@@ -30,8 +30,12 @@ const buildRadialEdgePath = (sourceAngle, sourceRadius, targetAngle, targetRadiu
     return `M ${source.x} ${source.y} L ${target.x} ${target.y}`
   }
 
-  const elbow = toCartesian(sourceAngle, targetRadius, origin)
-  const sweep = targetAngle > sourceAngle ? 1 : 0
+  // Nudge elbow angle toward the child so sibling links diverge earlier
+  // instead of sharing an identical radial segment from the parent.
+  const maxElbowOffsetDeg = 24
+  const elbowAngle = sourceAngle + clamp(targetAngle - sourceAngle, -maxElbowOffsetDeg, maxElbowOffsetDeg)
+  const elbow = toCartesian(elbowAngle, targetRadius, origin)
+  const sweep = targetAngle > elbowAngle ? 1 : 0
 
   return [
     `M ${source.x} ${source.y}`,

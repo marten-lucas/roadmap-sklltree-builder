@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { findNodeById, updateNodeData, updateNodeSegment, updateNodeLevel } from '../treeData'
-import { createSimpleTree, createCrossSegmentTree, SEGMENT_FRONTEND, SEGMENT_BACKEND } from './testUtils'
+import { createSimpleTree, createCrossSegmentTree, findNodeInTree, SEGMENT_FRONTEND, SEGMENT_BACKEND } from './testUtils'
 
 describe('treeData', () => {
   describe('findNodeById', () => {
@@ -75,16 +75,16 @@ describe('treeData', () => {
       expect(updatedNode.segmentId).toBeNull()
     })
 
-    it('should move entire subtree when parent segment changes (recursive)', () => {
+    it('should not affect other nodes in subtree', () => {
       const tree = createSimpleTree()
       const newTree = updateNodeSegment(tree, 'root-frontend', SEGMENT_BACKEND)
 
-      // Parent and ALL descendants should change (recursive behavior)
+      // Only the selected node should change
       const parent = findNodeById(newTree, 'root-frontend')
       const child = findNodeById(newTree, 'child-react')
 
       expect(parent.segmentId).toBe(SEGMENT_BACKEND)
-      expect(child.segmentId).toBe(SEGMENT_BACKEND) // Descendants move with parent
+      expect(child.segmentId).toBe(SEGMENT_FRONTEND) // Not affected
     })
 
     it('should preserve tree structure', () => {
