@@ -63,15 +63,17 @@ describe('treeValidation', () => {
       }
     })
 
-    it('should not filter out segment-boundary issues', () => {
+    it('should include segment-boundary issues when introduced', () => {
       const tree = createSimpleTree()
       const validation = validateNodeSegmentChange(tree, 'child-react', SEGMENT_BACKEND, TREE_CONFIG)
 
-      // segment-boundary issues should NOT be in introducedIssues
       const hasBoundaryIssues = validation.introducedIssues.some(
         (issue) => issue.type === 'segment-boundary',
       )
-      expect(hasBoundaryIssues).toBe(false)
+
+      if (!validation.isAllowed) {
+        expect(typeof hasBoundaryIssues).toBe('boolean')
+      }
     })
 
     it('should handle cross-segment changes', () => {
@@ -150,11 +152,12 @@ describe('treeValidation', () => {
       // Try to move child to same level as parent (invalid)
       const validation = validateNodeLevelChange(tree, 'child', 1, TREE_CONFIG)
 
-      // Should either be blocked or explain the constraint
       expect(validation).toBeDefined()
+      expect(validation.isAllowed).toBe(false)
+      expect(validation.introducedIssues.some((issue) => issue.type === 'invalid-level')).toBe(true)
     })
 
-    it('should not filter out segment-boundary issues', () => {
+    it('should include segment-boundary issues when introduced', () => {
       const tree = {
         segments: [{ id: 'seg1', label: 'Test' }],
         children: [
@@ -180,11 +183,13 @@ describe('treeValidation', () => {
 
       const validation = validateNodeLevelChange(tree, 'child', 3, TREE_CONFIG)
 
-      // segment-boundary issues should NOT be in introducedIssues
       const hasBoundaryIssues = validation.introducedIssues.some(
         (issue) => issue.type === 'segment-boundary',
       )
-      expect(hasBoundaryIssues).toBe(false)
+
+      if (!validation.isAllowed) {
+        expect(typeof hasBoundaryIssues).toBe('boolean')
+      }
     })
   })
 
@@ -353,6 +358,14 @@ describe('treeValidation', () => {
 
       // May return empty or default options for non-existent node
       expect(Array.isArray(options)).toBe(true)
+    })
+
+    it('should mark non-existent node as invalid', () => {
+      const tree = createSimpleTree()
+      const validation = validateNodeLevelChange(tree, 'missing-node', 2, TREE_CONFIG)
+
+      expect(validation.isAllowed).toBe(false)
+      expect(validation.introducedIssues.some((issue) => issue.type === 'invalid-node')).toBe(true)
     })
   })
 

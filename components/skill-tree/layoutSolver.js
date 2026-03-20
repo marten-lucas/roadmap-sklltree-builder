@@ -140,9 +140,16 @@ export const solveSkillTreeLayout = (data, config) => {
       explicitSegments.length > 1
         ? Math.min(config.maxAngleSpread, Math.max(60, (explicitSegments.length - 1) * 28))
         : 0
-    const segmentStep = explicitSegments.length > 1 ? emptySpread / (explicitSegments.length - 1) : 0
-    const emptySegmentLabels = explicitSegments.map((segment, index) => {
-      const anchorAngle = centerAngle - emptySpread / 2 + segmentStep * index
+    const emptySlots = computeSegmentSlots({
+      segmentIds: explicitSegments.map((segment) => segment.id),
+      statsById: new Map(explicitSegments.map((segment) => [segment.id, { count: 0 }])),
+      radius: segmentLabelRadius,
+      totalSpread: emptySpread,
+    })
+    const emptySlotBySegmentId = new Map(emptySlots.map((slot) => [slot.id, slot]))
+    const emptySegmentLabels = explicitSegments.map((segment) => {
+      const slot = emptySlotBySegmentId.get(segment.id)
+      const anchorAngle = slot?.center ?? centerAngle
       const point = toCartesian(anchorAngle, segmentLabelRadius, origin)
       let rotation = anchorAngle + 90
 
@@ -160,14 +167,14 @@ export const solveSkillTreeLayout = (data, config) => {
         anchorAngle,
       }
     })
-    const emptySegmentSeparators = emptySegmentLabels.slice(0, -1).map((segmentLabel, index) => {
-      const next = emptySegmentLabels[index + 1]
-      const angle = (segmentLabel.anchorAngle + next.anchorAngle) / 2
+    const emptySegmentSeparators = emptySlots.slice(0, -1).map((slot, index) => {
+      const next = emptySlots[index + 1]
+      const angle = (slot.max + next.min) / 2
       const from = toCartesian(angle, separatorInnerRadius, origin)
       const to = toCartesian(angle, separatorOuterRadius, origin)
 
       return {
-        id: `segment-separator-${segmentLabel.segmentId}-${next.segmentId}`,
+        id: `segment-separator-${slot.id}-${next.id}`,
         path: `M ${from.x} ${from.y} L ${to.x} ${to.y}`,
       }
     })
@@ -194,13 +201,21 @@ export const solveSkillTreeLayout = (data, config) => {
         issues: [],
       },
       meta: {
-        orderedSegments: explicitSegments.map((segment, index) => ({
+        orderedSegments: explicitSegments.map((segment, index) => {
+          const slot = emptySlotBySegmentId.get(segment.id)
+          return {
           id: segment.id,
           label: segment.label,
           index,
-          slotMin: centerAngle,
-          slotMax: centerAngle,
-        })),
+          min: slot?.min ?? centerAngle,
+          max: slot?.max ?? centerAngle,
+          wedgeMin: slot?.min ?? centerAngle,
+          wedgeMax: slot?.max ?? centerAngle,
+          wedgeCenter: slot?.center ?? centerAngle,
+          anchorAngle: slot?.center ?? centerAngle,
+          slotMin: slot?.min ?? centerAngle,
+          slotMax: slot?.max ?? centerAngle,
+        }}),
         subtreeSpan: 0,
       },
     }
@@ -567,8 +582,11 @@ export const solveSkillTreeLayout = (data, config) => {
       label: segment.label,
       isVirtual: segment.isVirtual ?? false,
       index,
-      min: null,
-      max: null,
+      min: slot.min,
+      max: slot.max,
+      wedgeMin: slot.min,
+      wedgeMax: slot.max,
+      wedgeCenter: slot.center,
       anchorAngle: slot.center,
       slotMin: slot.min,
       slotMax: slot.max,
@@ -685,16 +703,16 @@ export const solveSkillTreeLayout = (data, config) => {
     separatorInnerRadius + config.nodeSize * 0.7,
   )
 
-  const segmentRangesMap = new Map()
+  const observedSegmentRangesMap = new Map()
 
   for (const node of allNodes) {
     const segmentId = getGroupedSegmentId(node.data.segmentId ?? null)
 
     const angle = getAngleForNode(node)
-    const existing = segmentRangesMap.get(segmentId)
+    const existing = observedSegmentRangesMap.get(segmentId)
 
     if (!existing) {
-      segmentRangesMap.set(segmentId, {
+      observedSegmentRangesMap.set(segmentId, {
         id: segmentId,
         min: angle,
         max: angle,
@@ -707,11 +725,14 @@ export const solveSkillTreeLayout = (data, config) => {
   }
 
   const finalOrderedSegments = orderedSegments.map((segment) => {
-    const range = segmentRangesMap.get(segment.id)
+    const range = observedSegmentRangesMap.get(segment.id)
     return {
       ...segment,
-      min: range?.min ?? null,
-      max: range?.max ?? null,
+      min: segment.wedgeMin,
+      max: segment.wedgeMax,
+      observedMin: range?.min ?? null,
+      observedMax: range?.max ?? null,
+      anchorAngle: segment.wedgeCenter,
     }
   })
 
@@ -816,8 +837,8 @@ export const solveSkillTreeLayout = (data, config) => {
 
   const segmentSeparators = finalOrderedSegments.slice(0, -1).map((segment, index) => {
     const next = finalOrderedSegments[index + 1]
-    const leftBoundaryAngle = segment.max ?? segment.slotMax
-    const rightBoundaryAngle = next.min ?? next.slotMin
+    const leftBoundaryAngle = segment.wedgeMax ?? segment.slotMax
+    const rightBoundaryAngle = next.wedgeMin ?? next.slotMin
     const leftSafe = leftBoundaryAngle + boundarySafetyMarginDeg
     const rightSafe = rightBoundaryAngle - boundarySafetyMarginDeg
     const angle = leftSafe < rightSafe
@@ -835,8 +856,9 @@ export const solveSkillTreeLayout = (data, config) => {
   const segmentLabels = finalOrderedSegments
     .filter((segment) => !segment.isVirtual)
     .map((segment) => {
-      const point = toCartesian(segment.anchorAngle, segmentLabelRadius, origin)
-      let rotation = segment.anchorAngle + 90
+      const anchorAngle = segment.wedgeCenter ?? segment.anchorAngle
+      const point = toCartesian(anchorAngle, segmentLabelRadius, origin)
+      let rotation = anchorAngle + 90
 
       if (rotation > 90 && rotation < 270) {
         rotation += 180
@@ -849,7 +871,7 @@ export const solveSkillTreeLayout = (data, config) => {
         x: point.x,
         y: point.y,
         rotation,
-        anchorAngle: segment.anchorAngle,
+        anchorAngle,
       }
     })
 

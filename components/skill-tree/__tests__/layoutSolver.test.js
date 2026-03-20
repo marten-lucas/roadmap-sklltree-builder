@@ -108,6 +108,23 @@ describe('layoutSolver', () => {
       })
     })
 
+    it('should keep final segment geometry aligned with wedges', () => {
+      const tree = createSimpleTree()
+      const result = solveSkillTreeLayout(tree, TREE_CONFIG)
+
+      result.meta.orderedSegments.forEach((segment) => {
+        expect(segment.min).toBeCloseTo(segment.slotMin, 6)
+        expect(segment.max).toBeCloseTo(segment.slotMax, 6)
+        expect(segment.wedgeCenter).toBeCloseTo((segment.wedgeMin + segment.wedgeMax) / 2, 6)
+      })
+
+      result.layout.segments.labels.forEach((label) => {
+        const segment = result.meta.orderedSegments.find((entry) => entry.id === label.segmentId)
+        expect(segment).toBeDefined()
+        expect(label.anchorAngle).toBeCloseTo(segment.wedgeCenter, 6)
+      })
+    })
+
     it('should expose final feasibility metadata', () => {
       const tree = createSimpleTree()
       const result = solveSkillTreeLayout(tree, TREE_CONFIG)

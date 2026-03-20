@@ -1,7 +1,7 @@
 import { TREE_CONFIG } from './config'
 import { UNASSIGNED_SEGMENT_ID } from './layoutShared'
 import { solveSkillTreeLayout } from './layoutSolver'
-import { getNodeLevelInfo, updateNodeLevel, updateNodeSegment } from './treeData'
+import { findNodeById, getNodeLevelInfo, updateNodeLevel, updateNodeSegment } from './treeData'
 
 const DEFAULT_INVALID_REASON = 'Die Aenderung erzeugt einen ungueltigen Layout-Zustand.'
 
@@ -54,12 +54,8 @@ const issueToKey = (issue) => {
   return `${issue.type}|${segmentPart}|${nodePart}|${issue.message ?? ''}`
 }
 
-const filterRelevantIssues = (issues, impactedNodeIds, excludeTypes = new Set()) => {
+const filterRelevantIssues = (issues, impactedNodeIds) => {
   return issues.filter((issue) => {
-    if (excludeTypes.has(issue.type)) {
-      return false
-    }
-
     if (!issue.nodeIds || issue.nodeIds.length === 0) {
       return true
     }
@@ -68,30 +64,88 @@ const filterRelevantIssues = (issues, impactedNodeIds, excludeTypes = new Set())
   })
 }
 
-const buildChangeAssessment = ({ baseline, candidate, impactedNodeIds, excludeIssueTypes }) => {
-  const baselineRelevant = filterRelevantIssues(baseline.diagnostics.issues, impactedNodeIds, excludeIssueTypes)
-  const candidateRelevant = filterRelevantIssues(candidate.diagnostics.issues, impactedNodeIds, excludeIssueTypes)
+const buildChangeAssessment = ({ baseline, candidate, impactedNodeIds }) => {
+  const baselineRelevant = filterRelevantIssues(baseline.diagnostics.issues, impactedNodeIds)
+  const candidateRelevant = filterRelevantIssues(candidate.diagnostics.issues, impactedNodeIds)
   const baselineKeys = new Set(baselineRelevant.map(issueToKey))
   const introducedIssues = candidateRelevant.filter((issue) => !baselineKeys.has(issueToKey(issue)))
+  const isFeasible = candidate.meta?.feasibility?.isFeasible !== false
 
   return {
-    isAllowed: introducedIssues.length === 0,
+    isAllowed: introducedIssues.length === 0 && isFeasible,
     introducedIssues,
     baselineRelevant,
     candidateRelevant,
+    isFeasible,
   }
 }
 
+const getImpactedNodeIdsForSegmentChange = (tree, targetId) => {
+  if (!targetId) {
+    return new Set()
+  }
+
+  const queue = [...(tree.children ?? [])]
+  const parentByNodeId = new Map()
+  let targetNode = null
+
+  while (queue.length > 0) {
+    const node = queue.shift()
+    if (node.id === targetId) {
+      targetNode = node
+      break
+    }
+
+    for (const child of node.children ?? []) {
+      parentByNodeId.set(child.id, node.id)
+      queue.push(child)
+    }
+  }
+
+  if (!targetNode) {
+    return new Set([targetId])
+  }
+
+  const impacted = new Set([targetId])
+  let currentId = targetId
+
+  while (parentByNodeId.has(currentId)) {
+    const parentId = parentByNodeId.get(currentId)
+    impacted.add(parentId)
+    currentId = parentId
+  }
+
+  const subtreeIds = getNodeSubtreeIds(tree, targetId)
+  subtreeIds.forEach((id) => impacted.add(id))
+
+  return impacted
+}
+
 export const validateNodeSegmentChange = (tree, nodeId, segmentId, config = TREE_CONFIG) => {
+  if (!nodeId || !findNodeById(tree, nodeId)) {
+    return {
+      ...validateSkillTree(tree, config),
+      tree,
+      isAllowed: false,
+      introducedIssues: [
+        {
+          type: 'invalid-node',
+          severity: 'error',
+          nodeIds: nodeId ? [nodeId] : [],
+          message: DEFAULT_INVALID_REASON,
+        },
+      ],
+    }
+  }
+
   const baseline = validateSkillTree(tree, config)
   const nextTree = updateNodeSegment(tree, nodeId, segmentId)
   const candidate = validateSkillTree(nextTree, config)
-  const impactedNodeIds = new Set(nodeId ? [nodeId] : [])
+  const impactedNodeIds = getImpactedNodeIdsForSegmentChange(tree, nodeId)
   const assessment = buildChangeAssessment({
     baseline,
     candidate,
     impactedNodeIds,
-    excludeIssueTypes: new Set(['segment-boundary']),
   })
 
   return {
@@ -103,6 +157,40 @@ export const validateNodeSegmentChange = (tree, nodeId, segmentId, config = TREE
 }
 
 export const validateNodeLevelChange = (tree, nodeId, level, config = TREE_CONFIG) => {
+  const node = findNodeById(tree, nodeId)
+  if (!node) {
+    return {
+      ...validateSkillTree(tree, config),
+      tree,
+      isAllowed: false,
+      introducedIssues: [
+        {
+          type: 'invalid-node',
+          severity: 'error',
+          nodeIds: nodeId ? [nodeId] : [],
+          message: DEFAULT_INVALID_REASON,
+        },
+      ],
+    }
+  }
+
+  const levelInfo = getNodeLevelInfo(tree, nodeId)
+  if (level <= levelInfo.parentLevel) {
+    return {
+      ...validateSkillTree(tree, config),
+      tree,
+      isAllowed: false,
+      introducedIssues: [
+        {
+          type: 'invalid-level',
+          severity: 'error',
+          nodeIds: [nodeId],
+          message: 'Eine Node muss auf einer hoeheren Ebene als ihr Parent liegen.',
+        },
+      ],
+    }
+  }
+
   const baseline = validateSkillTree(tree, config)
   const nextTree = updateNodeLevel(tree, nodeId, level)
   const candidate = validateSkillTree(nextTree, config)
@@ -111,7 +199,6 @@ export const validateNodeLevelChange = (tree, nodeId, level, config = TREE_CONFI
     baseline,
     candidate,
     impactedNodeIds,
-    excludeIssueTypes: new Set(['segment-boundary']),
   })
 
   return {
