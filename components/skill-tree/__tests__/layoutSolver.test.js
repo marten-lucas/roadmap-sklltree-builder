@@ -220,6 +220,40 @@ describe('layoutSolver', () => {
       expect(promoted).toBeDefined()
       expect(promoted.promotedBy).toBeGreaterThan(0)
     })
+
+    it('should keep wedge boundaries contiguous and ordered', () => {
+      const tree = createSimpleTree()
+      const result = solveSkillTreeLayout(tree, TREE_CONFIG)
+      const segments = result.meta.orderedSegments
+
+      for (let index = 0; index < segments.length; index += 1) {
+        const segment = segments[index]
+        expect(segment.wedgeMin).toBeLessThanOrEqual(segment.wedgeMax)
+
+        if (index > 0) {
+          const previous = segments[index - 1]
+          expect(segment.wedgeMin).toBeCloseTo(previous.wedgeMax, 6)
+        }
+      }
+    })
+
+    it('should keep every node fully inside its assigned wedge', () => {
+      const tree = createSimpleTree()
+      const result = solveSkillTreeLayout(tree, TREE_CONFIG)
+      const segmentById = new Map(result.meta.orderedSegments.map((segment) => [segment.id, segment]))
+
+      result.layout.nodes.forEach((node) => {
+        const segment = segmentById.get(node.segmentId ?? '__unassigned__')
+        expect(segment).toBeDefined()
+
+        const angularHalfSpan = (TREE_CONFIG.nodeSize * 0.56 * 180) / (Math.PI * Math.max(node.radius, 1))
+        const minAngle = node.angle - angularHalfSpan
+        const maxAngle = node.angle + angularHalfSpan
+
+        expect(minAngle).toBeGreaterThanOrEqual((segment.wedgeMin ?? segment.slotMin) - 1e-6)
+        expect(maxAngle).toBeLessThanOrEqual((segment.wedgeMax ?? segment.slotMax) + 1e-6)
+      })
+    })
   })
 
   describe('layoutSolver validation', () => {

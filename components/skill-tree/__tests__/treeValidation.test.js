@@ -91,6 +91,14 @@ describe('treeValidation', () => {
       expect(validation).toBeDefined()
       expect(typeof validation.isAllowed).toBe('boolean')
     })
+
+    it('should reject segment changes for non-existent nodes', () => {
+      const tree = createSimpleTree()
+      const validation = validateNodeSegmentChange(tree, 'missing-node', SEGMENT_BACKEND, TREE_CONFIG)
+
+      expect(validation.isAllowed).toBe(false)
+      expect(validation.introducedIssues.some((issue) => issue.type === 'invalid-node')).toBe(true)
+    })
   })
 
   describe('validateNodeLevelChange', () => {
@@ -231,6 +239,24 @@ describe('treeValidation', () => {
       })
     })
 
+    it('should mirror validator decisions for each candidate segment', () => {
+      const tree = createSimpleTree()
+      const options = getSegmentOptionsForNode(tree, 'child-react', TREE_CONFIG)
+
+      options.forEach((option) => {
+        const targetSegmentId = option.id === '__unassigned__' ? null : option.id
+        const validation = validateNodeSegmentChange(tree, 'child-react', targetSegmentId, TREE_CONFIG)
+
+        if (!option.isCurrent) {
+          expect(option.isAllowed).toBe(validation.isAllowed)
+        }
+
+        if (!option.isAllowed) {
+          expect(option.reasons.length).toBeGreaterThan(0)
+        }
+      })
+    })
+
     it('should handle node with no segment', () => {
       const tree = {
         segments: [{ id: 'seg1', label: 'Test' }],
@@ -366,6 +392,45 @@ describe('treeValidation', () => {
 
       expect(validation.isAllowed).toBe(false)
       expect(validation.introducedIssues.some((issue) => issue.type === 'invalid-node')).toBe(true)
+    })
+
+    it('should mirror validator decisions for each candidate level', () => {
+      const tree = {
+        segments: [{ id: 'seg1', label: 'Test' }],
+        children: [
+          {
+            id: 'parent',
+            label: 'Parent',
+            status: 'fertig',
+            ebene: 1,
+            segmentId: 'seg1',
+            children: [
+              {
+                id: 'child',
+                label: 'Child',
+                status: 'fertig',
+                ebene: 2,
+                segmentId: 'seg1',
+                children: [],
+              },
+            ],
+          },
+        ],
+      }
+
+      const options = getLevelOptionsForNode(tree, 'child', TREE_CONFIG)
+
+      options.forEach((option) => {
+        const validation = validateNodeLevelChange(tree, 'child', option.value, TREE_CONFIG)
+
+        if (!option.isCurrent) {
+          expect(option.isAllowed).toBe(validation.isAllowed)
+        }
+
+        if (!option.isAllowed) {
+          expect(option.reasons.length).toBeGreaterThan(0)
+        }
+      })
     })
   })
 
