@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { solveSkillTreeLayout } from '../layoutSolver'
 import { TREE_CONFIG } from '../config'
-import { createSimpleTree, createCrossSegmentTree, createEmptyTree, countNodesInTree } from './testUtils'
+import { createSimpleTree, createCrossSegmentTree, createDenseTree, createEmptyTree, countNodesInTree } from './testUtils'
 
 describe('layoutSolver', () => {
   describe('solveSkillTreeLayout', () => {
@@ -92,6 +92,7 @@ describe('layoutSolver', () => {
       expect(result.meta).toBeDefined()
       expect(result.meta.computedLevelByNodeId).toBeDefined()
       expect(result.meta.orderedSegments).toBeDefined()
+      expect(result.meta.feasibility).toBeDefined()
     })
 
     it('should compute levels for all nodes', () => {
@@ -105,6 +106,37 @@ describe('layoutSolver', () => {
         expect(typeof level).toBe('number')
         expect(level).toBeGreaterThanOrEqual(1)
       })
+    })
+
+    it('should expose final feasibility metadata', () => {
+      const tree = createSimpleTree()
+      const result = solveSkillTreeLayout(tree, TREE_CONFIG)
+
+      expect(result.meta.feasibility.isFeasible).toBe(true)
+      expect(Array.isArray(result.meta.feasibility.segmentLevelEntries)).toBe(true)
+      expect(result.meta.feasibility.segmentLevelEntries.length).toBeGreaterThan(0)
+
+      result.meta.feasibility.segmentLevelEntries.forEach((entry) => {
+        expect(typeof entry.level).toBe('number')
+        expect(typeof entry.segmentId).toBe('string')
+        expect(typeof entry.nodeCount).toBe('number')
+        expect(typeof entry.requiredPixels).toBe('number')
+        expect(typeof entry.availableAngle).toBe('number')
+        expect(typeof entry.isFeasible).toBe('boolean')
+      })
+    })
+
+    it('should track capacity analysis for dense segment-level groups', () => {
+      const tree = createDenseTree()
+      const result = solveSkillTreeLayout(tree, TREE_CONFIG)
+
+      const denseEntry = result.meta.feasibility.segmentLevelEntries.find(
+        (entry) => entry.segmentId === 'segment-frontend' && entry.nodeCount >= 10,
+      )
+
+      expect(denseEntry).toBeDefined()
+      expect(denseEntry.requiredPixels).toBeGreaterThan(0)
+      expect(denseEntry.neededRadius).toBeGreaterThan(0)
     })
   })
 

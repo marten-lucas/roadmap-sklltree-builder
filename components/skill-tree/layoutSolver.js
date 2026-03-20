@@ -1,9 +1,9 @@
 import { buildLayoutDiagnostics } from './layoutDiagnostics'
+import { analyzeSegmentLevelFeasibility, buildSegmentLevelGroups } from './layoutFeasibility'
 import {
   buildRadialEdgePath,
   centerAngle,
   clamp,
-  setMapMax,
   toCartesian,
   toDegrees,
   toRadians,
@@ -580,64 +580,35 @@ export const solveSkillTreeLayout = (data, config) => {
   const nodeBoundaryMarginPx = config.nodeSize * 0.58
   const nodeOrderWithinLevelSegment = new Map()
   let capacityIssues = []
+  let feasibilityAnalysis = {
+    isFeasible: true,
+    segmentLevelEntries: [],
+    neededRadiusByLevel: new Map(),
+    issues: [],
+    entryByKey: new Map(),
+  }
 
   for (let attempt = 0; attempt < 8; attempt += 1) {
-    const boundaryBySegmentId = new Map(
-      orderedSegments.map((segment) => [
-        segment.id,
-        {
-          min: segment.slotMin,
-          max: segment.slotMax,
-        },
-      ]),
-    )
+    const groupedNodes = buildSegmentLevelGroups({
+      allNodes,
+      getEffectiveLevel,
+    })
+    feasibilityAnalysis = analyzeSegmentLevelFeasibility({
+      groupedNodes,
+      orderedSegments,
+      getRadiusForLevel,
+      nodeAngularWidthPx,
+      nodeBoundaryMarginPx,
+      minimumArcGap,
+    })
 
-    const groupedNodes = new Map()
-    for (const node of allNodes) {
-      const level = getEffectiveLevel(node)
-      const segmentId = getGroupedSegmentId(node.data.segmentId ?? null)
-      const key = `${level}|${segmentId}`
-
-      if (!groupedNodes.has(key)) {
-        groupedNodes.set(key, { level, segmentId, nodes: [node] })
-      } else {
-        groupedNodes.get(key).nodes.push(node)
-      }
-    }
-
-    const neededRadiusByLevel = new Map()
-    const iterationCapacityIssues = []
-
-    for (const { level, segmentId, nodes } of groupedNodes.values()) {
-      const boundary = boundaryBySegmentId.get(segmentId)
-      if (!boundary) {
+    for (const { key, level, segmentId, nodes } of groupedNodes.values()) {
+      const feasibilityEntry = feasibilityAnalysis.entryByKey.get(key)
+      if (!feasibilityEntry || !feasibilityEntry.isFeasible) {
         continue
       }
 
-      const radius = Math.max(getRadiusForLevel(level), 1)
-      const marginDeg = toDegrees(nodeBoundaryMarginPx / radius)
-      const spanDeg = toDegrees(nodeAngularWidthPx / radius)
-      const gapDeg = toDegrees(minimumArcGap / radius)
-      const leftCenter = boundary.min + marginDeg + spanDeg / 2
-      const rightCenter = boundary.max - marginDeg - spanDeg / 2
-      const availableCenterSpan = Math.max(0, rightCenter - leftCenter)
-      const centerGap = spanDeg + gapDeg
-      const requiredCenterSpan = Math.max(0, (nodes.length - 1) * centerGap)
-
-      if (requiredCenterSpan > availableCenterSpan + 0.0001) {
-        const availableAngle = Math.max(3, boundary.max - boundary.min - marginDeg * 2)
-        const requiredPixels = nodes.length * nodeAngularWidthPx + (nodes.length - 1) * minimumArcGap
-        const neededRadius = requiredPixels / toRadians(availableAngle)
-        setMapMax(neededRadiusByLevel, level, neededRadius)
-        iterationCapacityIssues.push({
-          type: 'segment-capacity',
-          severity: 'error',
-          segmentId,
-          nodeIds: nodes.map((node) => node.data.id),
-          message: 'Segmentkapazitaet auf dieser Ebene ist zu klein.',
-        })
-        continue
-      }
+      const { leftCenter, rightCenter, centerGap } = feasibilityEntry
 
       const sortedNodes = [...nodes].sort((leftNode, rightNode) =>
         getAngleForNode(leftNode) - getAngleForNode(rightNode),
@@ -681,18 +652,31 @@ export const solveSkillTreeLayout = (data, config) => {
       )
     }
 
-    if (neededRadiusByLevel.size === 0) {
+    if (feasibilityAnalysis.neededRadiusByLevel.size === 0) {
       capacityIssues = []
       break
     }
 
-    capacityIssues = iterationCapacityIssues
+    capacityIssues = feasibilityAnalysis.issues
 
-    neededRadiusByLevel.forEach((neededRadius, level) => {
+    feasibilityAnalysis.neededRadiusByLevel.forEach((neededRadius, level) => {
       const currentRadius = getRadiusForLevel(level)
       radiusByLevel.set(level, Math.max(currentRadius, neededRadius))
     })
   }
+
+  feasibilityAnalysis = analyzeSegmentLevelFeasibility({
+    groupedNodes: buildSegmentLevelGroups({
+      allNodes,
+      getEffectiveLevel,
+    }),
+    orderedSegments,
+    getRadiusForLevel,
+    nodeAngularWidthPx,
+    nodeBoundaryMarginPx,
+    minimumArcGap,
+  })
+  capacityIssues = feasibilityAnalysis.issues
 
   maxRadius = Math.max(config.levelSpacing, ...radiusByLevel.values())
   separatorOuterRadius = maxRadius + 120
@@ -901,6 +885,13 @@ export const solveSkillTreeLayout = (data, config) => {
       autoPromotedLevelById,
       computedLevelByNodeId,
       nodeOrderWithinLevelSegment,
+      feasibility: {
+        isFeasible: feasibilityAnalysis.isFeasible,
+        nodeAngularWidthPx,
+        nodeBoundaryMarginPx,
+        minimumArcGapPx: minimumArcGap,
+        segmentLevelEntries: feasibilityAnalysis.segmentLevelEntries,
+      },
       capacityIssues,
     },
   }
