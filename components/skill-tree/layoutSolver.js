@@ -1,331 +1,21 @@
-import { hierarchy } from 'd3-hierarchy'
-import { UNASSIGNED_SEGMENT_ID } from './layoutShared'
-
-const toRadians = (angleDeg) => (angleDeg * Math.PI) / 180
-const toDegrees = (angleRad) => (angleRad * 180) / Math.PI
-const centerAngle = -90
-const clamp = (value, min, max) => Math.max(min, Math.min(max, value))
-
-const setMapMax = (map, key, value) => {
-  const current = map.get(key)
-  if (current === undefined || value > current) {
-    map.set(key, value)
-  }
-}
-
-const toCartesian = (angleDeg, radius, origin) => {
-  const radians = (angleDeg * Math.PI) / 180
-
-  return {
-    x: origin.x + radius * Math.cos(radians),
-    y: origin.y + radius * Math.sin(radians),
-  }
-}
-
-const buildRadialEdgePath = (sourceAngle, sourceRadius, targetAngle, targetRadius, origin) => {
-  const source = toCartesian(sourceAngle, sourceRadius, origin)
-  const target = toCartesian(targetAngle, targetRadius, origin)
-
-  if (sourceRadius < 1 || Math.abs(sourceAngle - targetAngle) < 0.01) {
-    return `M ${source.x} ${source.y} L ${target.x} ${target.y}`
-  }
-
-  // Nudge elbow angle toward the child so sibling links diverge earlier
-  // instead of sharing an identical radial segment from the parent.
-  const maxElbowOffsetDeg = 24
-  const elbowAngle = sourceAngle + clamp(targetAngle - sourceAngle, -maxElbowOffsetDeg, maxElbowOffsetDeg)
-  const elbow = toCartesian(elbowAngle, targetRadius, origin)
-  const sweep = targetAngle > elbowAngle ? 1 : 0
-
-  return [
-    `M ${source.x} ${source.y}`,
-    `L ${elbow.x} ${elbow.y}`,
-    `A ${targetRadius} ${targetRadius} 0 0 ${sweep} ${target.x} ${target.y}`,
-  ].join(' ')
-}
-
-const getNodePairKey = (leftId, rightId) => [leftId, rightId].sort().join(':')
-const getGroupedSegmentId = (segmentId) => segmentId ?? UNASSIGNED_SEGMENT_ID
-
-const getPairWeightKey = (leftSegmentId, rightSegmentId) =>
-  leftSegmentId < rightSegmentId
-    ? `${leftSegmentId}::${rightSegmentId}`
-    : `${rightSegmentId}::${leftSegmentId}`
-
-const getPairWeight = (pairWeights, leftSegmentId, rightSegmentId) => {
-  if (leftSegmentId === rightSegmentId) {
-    return 0
-  }
-
-  return pairWeights.get(getPairWeightKey(leftSegmentId, rightSegmentId)) ?? 0
-}
-
-const buildOptimizedSegmentIdOrder = ({ root, explicitSegments, includeUnassigned }) => {
-  const explicitOrderById = new Map(explicitSegments.map((segment, index) => [segment.id, index]))
-  const segmentIds = includeUnassigned
-    ? [...explicitSegments.map((segment) => segment.id), UNASSIGNED_SEGMENT_ID]
-    : explicitSegments.map((segment) => segment.id)
-
-  if (segmentIds.length <= 2) {
-    return segmentIds
-  }
-
-  const pairWeights = new Map()
-  const totalWeightBySegmentId = new Map(segmentIds.map((segmentId) => [segmentId, 0]))
-  const links = root.links().filter((link) => link.source.depth > 0)
-
-  for (const link of links) {
-    const sourceSegmentId = getGroupedSegmentId(link.source.data.segmentId ?? null)
-    const targetSegmentId = getGroupedSegmentId(link.target.data.segmentId ?? null)
-
-    if (!totalWeightBySegmentId.has(sourceSegmentId) || !totalWeightBySegmentId.has(targetSegmentId)) {
-      continue
-    }
-
-    if (sourceSegmentId === targetSegmentId) {
-      totalWeightBySegmentId.set(sourceSegmentId, (totalWeightBySegmentId.get(sourceSegmentId) ?? 0) + 0.4)
-      continue
-    }
-
-    const key = getPairWeightKey(sourceSegmentId, targetSegmentId)
-    const nextWeight = (pairWeights.get(key) ?? 0) + 1
-    pairWeights.set(key, nextWeight)
-    totalWeightBySegmentId.set(sourceSegmentId, (totalWeightBySegmentId.get(sourceSegmentId) ?? 0) + 1)
-    totalWeightBySegmentId.set(targetSegmentId, (totalWeightBySegmentId.get(targetSegmentId) ?? 0) + 1)
-  }
-
-  const remaining = new Set(segmentIds)
-  const order = []
-  const pickByExplicitOrder = (ids) => {
-    return [...ids].sort((leftId, rightId) => {
-      const leftOrder = explicitOrderById.get(leftId) ?? Number.MAX_SAFE_INTEGER
-      const rightOrder = explicitOrderById.get(rightId) ?? Number.MAX_SAFE_INTEGER
-      return leftOrder - rightOrder
-    })[0]
-  }
-
-  const seed = [...remaining].sort((leftId, rightId) => {
-    const leftWeight = totalWeightBySegmentId.get(leftId) ?? 0
-    const rightWeight = totalWeightBySegmentId.get(rightId) ?? 0
-
-    if (Math.abs(rightWeight - leftWeight) > 1e-6) {
-      return rightWeight - leftWeight
-    }
-
-    const leftOrder = explicitOrderById.get(leftId) ?? Number.MAX_SAFE_INTEGER
-    const rightOrder = explicitOrderById.get(rightId) ?? Number.MAX_SAFE_INTEGER
-    return leftOrder - rightOrder
-  })[0]
-
-  order.push(seed)
-  remaining.delete(seed)
-
-  while (remaining.size > 0) {
-    const leftEdgeId = order[0]
-    const rightEdgeId = order[order.length - 1]
-
-    const rankedCandidates = [...remaining].map((candidateId) => {
-      const leftGain = getPairWeight(pairWeights, candidateId, leftEdgeId)
-      const rightGain = getPairWeight(pairWeights, candidateId, rightEdgeId)
-      const bestGain = Math.max(leftGain, rightGain)
-      const preferredSide = leftGain > rightGain ? 'left' : rightGain > leftGain ? 'right' : 'auto'
-
-      return {
-        candidateId,
-        bestGain,
-        leftGain,
-        rightGain,
-        preferredSide,
-      }
-    })
-
-    rankedCandidates.sort((left, right) => {
-      if (Math.abs(right.bestGain - left.bestGain) > 1e-6) {
-        return right.bestGain - left.bestGain
-      }
-
-      const leftOrder = explicitOrderById.get(left.candidateId) ?? Number.MAX_SAFE_INTEGER
-      const rightOrder = explicitOrderById.get(right.candidateId) ?? Number.MAX_SAFE_INTEGER
-      return leftOrder - rightOrder
-    })
-
-    const winner = rankedCandidates[0] ?? { candidateId: pickByExplicitOrder(remaining), preferredSide: 'auto' }
-    const winnerId = winner.candidateId
-    const appendToLeft =
-      winner.preferredSide === 'left'
-        ? true
-        : winner.preferredSide === 'right'
-          ? false
-          : (explicitOrderById.get(winnerId) ?? Number.MAX_SAFE_INTEGER) <
-            (explicitOrderById.get(rightEdgeId) ?? Number.MAX_SAFE_INTEGER)
-
-    if (appendToLeft) {
-      order.unshift(winnerId)
-    } else {
-      order.push(winnerId)
-    }
-
-    remaining.delete(winnerId)
-  }
-
-  const scoreOrder = (ids) => {
-    let score = 0
-    for (let index = 0; index < ids.length; index += 1) {
-      for (let inner = index + 1; inner < ids.length; inner += 1) {
-        const pairScore = getPairWeight(pairWeights, ids[index], ids[inner])
-        const distance = inner - index
-        score += pairScore / Math.max(1, distance)
-      }
-    }
-
-    return score
-  }
-
-  let best = [...order]
-  let bestScore = scoreOrder(best)
-  let improved = true
-  let safety = 0
-
-  while (improved && safety < 24) {
-    improved = false
-    safety += 1
-
-    for (let index = 0; index < best.length - 1; index += 1) {
-      const candidate = [...best]
-      const left = candidate[index]
-      candidate[index] = candidate[index + 1]
-      candidate[index + 1] = left
-      const candidateScore = scoreOrder(candidate)
-
-      if (candidateScore > bestScore + 1e-6) {
-        best = candidate
-        bestScore = candidateScore
-        improved = true
-      }
-    }
-  }
-
-  return best
-}
-
-const buildAutoPromotedLevels = ({ root, segmentOrderIndexById }) => {
-  const promotedLevelById = new Map()
-  const baseLevelById = new Map()
-  const hierarchyNodes = root.descendants().filter((node) => node.depth > 0)
-
-  for (const node of hierarchyNodes) {
-    const baseLevel = node.data.ebene !== undefined && node.data.ebene !== null ? node.data.ebene : node.depth
-    baseLevelById.set(node.data.id, baseLevel)
-    promotedLevelById.set(node.data.id, baseLevel)
-  }
-
-  const links = root.links().filter((link) => link.source.depth > 0)
-  links.sort((left, right) => left.source.depth - right.source.depth)
-
-  for (const link of links) {
-    const sourceId = link.source.data.id
-    const targetId = link.target.data.id
-    const sourceSegmentId = getGroupedSegmentId(link.source.data.segmentId ?? null)
-    const targetSegmentId = getGroupedSegmentId(link.target.data.segmentId ?? null)
-    const sourceSegmentOrder = segmentOrderIndexById.get(sourceSegmentId)
-    const targetSegmentOrder = segmentOrderIndexById.get(targetSegmentId)
-
-    if (sourceSegmentOrder === undefined || targetSegmentOrder === undefined) {
-      continue
-    }
-
-    const segmentDistance = Math.abs(sourceSegmentOrder - targetSegmentOrder)
-    if (segmentDistance <= 1) {
-      continue
-    }
-
-    const sourceLevel = promotedLevelById.get(sourceId) ?? baseLevelById.get(sourceId) ?? link.source.depth
-    const baseTargetLevel = baseLevelById.get(targetId) ?? link.target.depth
-    const requiredTargetLevel = sourceLevel + 1 + (segmentDistance - 1)
-    const nextTargetLevel = Math.max(baseTargetLevel, requiredTargetLevel)
-
-    if ((promotedLevelById.get(targetId) ?? baseTargetLevel) < nextTargetLevel) {
-      promotedLevelById.set(targetId, nextTargetLevel)
-    }
-  }
-
-  return promotedLevelById
-}
-
-const buildLayoutDiagnostics = ({ nodes, orderedSegments, config, subtreeSpan, additionalIssues = [] }) => {
-  const issues = [...additionalIssues]
-  const seenOverlapPairs = new Set()
-  const minimumNodeDistance = config.nodeSize * 0.94
-  const segmentById = new Map(orderedSegments.map((segment) => [segment.id, segment]))
-
-  if (subtreeSpan > config.maxAngleSpread + 0.5) {
-    issues.push({
-      type: 'angle-spread',
-      severity: 'error',
-      message: 'Der Skilltree ueberschreitet die maximale Spreizung.',
-    })
-  }
-
-  for (let index = 0; index < nodes.length; index += 1) {
-    const node = nodes[index]
-    const segmentId = node.segmentId ?? UNASSIGNED_SEGMENT_ID
-    const segment = segmentById.get(segmentId)
-
-    if (segment) {
-      const angularHalfSpan = toDegrees((config.nodeSize * 0.56) / Math.max(node.radius, 1))
-      const minAngle = node.angle - angularHalfSpan
-      const maxAngle = node.angle + angularHalfSpan
-
-      const leftBoundary = segment.min ?? segment.slotMin
-      const rightBoundary = segment.max ?? segment.slotMax
-
-      if (minAngle < leftBoundary || maxAngle > rightBoundary) {
-        issues.push({
-          type: 'segment-boundary',
-          severity: 'error',
-          nodeIds: [node.id],
-          segmentId,
-          message: 'Ein Skill wuerde eine Segmentgrenze schneiden.',
-        })
-      }
-    }
-
-    for (let otherIndex = index + 1; otherIndex < nodes.length; otherIndex += 1) {
-      const other = nodes[otherIndex]
-      const dx = node.x - other.x
-      const dy = node.y - other.y
-      const distance = Math.hypot(dx, dy)
-
-      if (distance >= minimumNodeDistance) {
-        continue
-      }
-
-      const pairKey = getNodePairKey(node.id, other.id)
-      if (seenOverlapPairs.has(pairKey)) {
-        continue
-      }
-
-      seenOverlapPairs.add(pairKey)
-      issues.push({
-        type: 'node-overlap',
-        severity: 'error',
-        nodeIds: [node.id, other.id],
-        message: 'Zwei Skills wuerden sich ueberlappen.',
-      })
-    }
-  }
-
-  return {
-    isValid: issues.length === 0,
-    issues,
-  }
-}
+import { buildLayoutDiagnostics } from './layoutDiagnostics'
+import {
+  buildRadialEdgePath,
+  centerAngle,
+  clamp,
+  setMapMax,
+  toCartesian,
+  toDegrees,
+  toRadians,
+} from './layoutMath'
+import { buildLayoutModel } from './layoutModel'
+import { buildAutoPromotedLevels } from './levelAssignment'
+import { computeWeightedSegmentSlots } from './radialPacker'
+import { UNASSIGNED_SEGMENT_ID, getGroupedSegmentId } from './layoutShared'
+import { buildOptimizedSegmentIdOrder } from './segmentOptimizer'
 
 export const solveSkillTreeLayout = (data, config) => {
-  const root = hierarchy(data)
-  const explicitSegments = data.segments ?? []
-  const allHierarchyNodes = root.descendants().filter((node) => node.depth > 0)
-  const hasUnassignedNodes = allHierarchyNodes.some((node) => !node.data.segmentId)
+  const { root, explicitSegments, allHierarchyNodes, hasUnassignedNodes } = buildLayoutModel(data)
   const optimizedSegmentIds = buildOptimizedSegmentIdOrder({
     root,
     explicitSegments,
@@ -355,47 +45,29 @@ export const solveSkillTreeLayout = (data, config) => {
     return toDegrees(pixelWidth / Math.max(radius, 1))
   }
   const computeSegmentSlots = ({ segmentIds, statsById, radius, totalSpread }) => {
-    if (segmentIds.length === 0) {
-      return []
-    }
+    return computeWeightedSegmentSlots({
+      segmentIds,
+      statsById,
+      radius,
+      totalSpread,
+      centerAngle,
+      getMinimumWidth: (segmentId, currentRadius, stats) => {
+        const segmentStats = stats ?? { count: 0 }
+        const labelWidth = toAngleSpan(
+          getEstimatedSegmentLabelWidthPx(segmentId) + config.nodeSize * 0.28,
+          currentRadius,
+        )
 
-    const domainStart = centerAngle - totalSpread / 2
-    const rawMinWidths = segmentIds.map((segmentId) => {
-      const stats = statsById.get(segmentId) ?? { count: 0 }
-      const labelWidth = toAngleSpan(getEstimatedSegmentLabelWidthPx(segmentId) + config.nodeSize * 0.28, radius)
+        if (segmentStats.count > 0) {
+          return Math.max(labelWidth, toAngleSpan(config.nodeSize * 0.9, currentRadius))
+        }
 
-      if (stats.count > 0) {
-        return Math.max(labelWidth, toAngleSpan(config.nodeSize * 0.9, radius))
-      }
-
-      return labelWidth
-    })
-
-    const minWidthSum = rawMinWidths.reduce((sum, width) => sum + width, 0)
-    const minWidthScale = minWidthSum > totalSpread && minWidthSum > 0 ? totalSpread / minWidthSum : 1
-    const minWidths = rawMinWidths.map((width) => width * minWidthScale)
-    const scaledMinWidthSum = minWidths.reduce((sum, width) => sum + width, 0)
-    const weights = segmentIds.map((segmentId) => {
-      const stats = statsById.get(segmentId) ?? { count: 0 }
-      return stats.count > 0 ? Math.max(1, stats.count) : 0.02
-    })
-    const weightSum = weights.reduce((sum, weight) => sum + weight, 0) || 1
-    const remaining = Math.max(0, totalSpread - scaledMinWidthSum)
-
-    let cursor = domainStart
-    return segmentIds.map((segmentId, index) => {
-      const width = minWidths[index] + (remaining * weights[index]) / weightSum
-      const min = cursor
-      const max = cursor + width
-      cursor = max
-
-      return {
-        id: segmentId,
-        min,
-        max,
-        center: (min + max) / 2,
-        width,
-      }
+        return labelWidth
+      },
+      getWeight: (_segmentId, stats) => {
+        const segmentStats = stats ?? { count: 0 }
+        return segmentStats.count > 0 ? Math.max(1, segmentStats.count) : 0.02
+      },
     })
   }
   const getSegmentOrderIndex = (segmentId) => {
