@@ -166,6 +166,9 @@ describe('layoutSolver', () => {
       expect(result.meta.promotedByConflict).toBeDefined()
       expect(Array.isArray(result.meta.promotedByConflict)).toBe(true)
       expect(Array.isArray(result.meta.edgePromotionDetails)).toBe(true)
+      expect(result.meta.edgeRouting).toBeDefined()
+      expect(Array.isArray(result.meta.edgeRouting.trunkGroups)).toBe(true)
+      expect(Array.isArray(result.meta.edgeRouting.edgePlans)).toBe(true)
     })
 
     it('should include promotion metadata for non-adjacent segment edges', () => {
@@ -219,6 +222,64 @@ describe('layoutSolver', () => {
       const promoted = result.meta.promotedByConflict.find((entry) => entry.nodeId === 'child-a' || entry.nodeId === 'child-c' || entry.nodeId === 'child-d')
       expect(promoted).toBeDefined()
       expect(promoted.promotedBy).toBeGreaterThan(0)
+    })
+
+    it('should assign every hierarchy edge to a trunk group', () => {
+      const tree = createSimpleTree()
+      const result = solveSkillTreeLayout(tree, TREE_CONFIG)
+      const hierarchyEdgeCount = result.layout.nodes.filter((node) => node.parentId !== null).length
+
+      expect(result.meta.edgeRouting.edgePlans.length).toBe(hierarchyEdgeCount)
+      result.meta.edgeRouting.edgePlans.forEach((plan) => {
+        expect(plan.groupId).toBeDefined()
+        expect(plan.parentId).toBeDefined()
+        expect(plan.childId).toBeDefined()
+        expect(typeof plan.segmentDistance).toBe('number')
+      })
+    })
+
+    it('should group siblings into shared trunk rays when close', () => {
+      const tree = {
+        segments: [
+          { id: 'seg-a', label: 'A' },
+          { id: 'seg-b', label: 'B' },
+        ],
+        children: [
+          {
+            id: 'root-a',
+            label: 'Root',
+            status: 'fertig',
+            ebene: 1,
+            segmentId: 'seg-a',
+            children: [
+              {
+                id: 'child-a1',
+                label: 'Child A1',
+                status: 'jetzt',
+                ebene: 2,
+                segmentId: 'seg-a',
+                children: [],
+              },
+              {
+                id: 'child-a2',
+                label: 'Child A2',
+                status: 'jetzt',
+                ebene: 2,
+                segmentId: 'seg-a',
+                children: [],
+              },
+            ],
+          },
+        ],
+      }
+
+      const result = solveSkillTreeLayout(tree, TREE_CONFIG)
+      const parentGroups = result.meta.edgeRouting.trunkGroups.filter((group) => group.parentId === 'root-a' && group.targetLevel === 2)
+      const groupedChildCount = parentGroups.reduce((sum, group) => sum + group.childIds.length, 0)
+
+      expect(parentGroups.length).toBeGreaterThan(0)
+      expect(groupedChildCount).toBe(2)
+      expect(parentGroups.some((group) => group.childIds.length >= 2)).toBe(true)
     })
 
     it('should keep wedge boundaries contiguous and ordered', () => {
@@ -409,6 +470,336 @@ describe('layoutSolver', () => {
       const result = solveSkillTreeLayout(tree, TREE_CONFIG)
 
       expect(result.layout.nodes.length).toBe(11)
+    })
+  })
+
+  describe('buildRoutedEdgeLinks', () => {
+    it('should produce one link per non-root hierarchy edge', () => {
+      const tree = createSimpleTree()
+      const result = solveSkillTreeLayout(tree, TREE_CONFIG)
+      const { links } = result.layout
+
+      // createSimpleTree: root(2 level-1) + 2 children each = 6 edges total, but root edges excluded
+      // Edges with parent depth > 0: 4 (children of the two level-1 nodes)
+      // Plus the 2 level-1 nodes are children of root (depth 0) — excluded
+      // So edgePlans covers depth>0 parents only → 4 plans
+      // But links includes all routedLinks (all have sourceDepth>=1)
+      const hierarchyEdgeCount = result.layout.nodes.filter((n) => n.parentId !== null && n.depth > 1).length
+      const ringArcsCount = result.layout.nodes.filter((n) => n.level === 1).length - 1
+      const hierarchyLinks = links.filter((l) => l.linkKind !== 'ring')
+      expect(hierarchyLinks.length).toBe(hierarchyEdgeCount)
+      expect(links.length).toBe(hierarchyEdgeCount + Math.max(0, ringArcsCount))
+    })
+
+    it('each link should have required fields with valid values', () => {
+      const tree = createSimpleTree()
+      const result = solveSkillTreeLayout(tree, TREE_CONFIG)
+
+      for (const link of result.layout.links) {
+        expect(typeof link.id).toBe('string')
+        expect(typeof link.path).toBe('string')
+        expect(typeof link.sourceDepth).toBe('number')
+        expect(link.sourceDepth).toBeGreaterThan(0)
+        expect(['direct', 'routed', 'ring']).toContain(link.linkKind)
+        expect(link.path).not.toMatch(/NaN/)
+      }
+    })
+
+    it('single-child trunk groups should produce direct links', () => {
+      // A tree where each parent has exactly one child → no shared trunks
+      const tree = {
+        segments: [{ id: 'seg', label: 'Seg' }],
+        children: [
+          {
+            id: 'l1',
+            label: 'L1',
+            status: 'fertig',
+            ebene: 1,
+            segmentId: 'seg',
+            children: [
+              {
+                id: 'l2',
+                label: 'L2',
+                status: 'fertig',
+                ebene: 2,
+                segmentId: 'seg',
+                children: [],
+              },
+            ],
+          },
+        ],
+      }
+      const result = solveSkillTreeLayout(tree, TREE_CONFIG)
+      const links = result.layout.links
+
+      expect(links.length).toBe(1)
+      expect(links[0].linkKind).toBe('direct')
+    })
+
+    it('multi-child trunk groups within same segment should produce routed links', () => {
+      // One parent with multiple same-segment children at same level → shared trunk
+      const tree = {
+        segments: [{ id: 'seg', label: 'Seg' }],
+        children: [
+          {
+            id: 'l1',
+            label: 'L1',
+            status: 'fertig',
+            ebene: 1,
+            segmentId: 'seg',
+            children: [
+              { id: 'c1', label: 'C1', status: 'fertig', ebene: 2, segmentId: 'seg', children: [] },
+              { id: 'c2', label: 'C2', status: 'fertig', ebene: 2, segmentId: 'seg', children: [] },
+              { id: 'c3', label: 'C3', status: 'fertig', ebene: 2, segmentId: 'seg', children: [] },
+            ],
+          },
+        ],
+      }
+      const result = solveSkillTreeLayout(tree, TREE_CONFIG)
+      const links = result.layout.links
+
+      expect(links.length).toBe(3)
+      expect(links.every((l) => l.linkKind === 'routed')).toBe(true)
+    })
+
+    it('routed paths should contain an arc command', () => {
+      const tree = {
+        segments: [{ id: 'seg', label: 'Seg' }],
+        children: [
+          {
+            id: 'l1',
+            label: 'L1',
+            status: 'fertig',
+            ebene: 1,
+            segmentId: 'seg',
+            children: [
+              { id: 'c1', label: 'C1', status: 'fertig', ebene: 2, segmentId: 'seg', children: [] },
+              { id: 'c2', label: 'C2', status: 'fertig', ebene: 2, segmentId: 'seg', children: [] },
+            ],
+          },
+        ],
+      }
+      const result = solveSkillTreeLayout(tree, TREE_CONFIG)
+      const routedLinks = result.layout.links.filter((l) => l.linkKind === 'routed')
+
+      expect(routedLinks.length).toBeGreaterThan(0)
+      for (const link of routedLinks) {
+        expect(link.path).toMatch(/A /)
+      }
+    })
+
+    it('should connect all level-1 nodes with upward ring arcs', () => {
+      const tree = createSimpleTree()
+      const result = solveSkillTreeLayout(tree, TREE_CONFIG)
+
+      const levelOneCount = result.layout.nodes.filter((node) => node.level === 1).length
+      const ringLinks = result.layout.links.filter((link) => link.linkKind === 'ring')
+
+      expect(ringLinks.length).toBe(Math.max(0, levelOneCount - 1))
+      ringLinks.forEach((link) => {
+        // sweep flag 1 keeps the ring on the upper half in our angular ordering
+        expect(link.path).toMatch(/A\s+[^\s]+\s+[^\s]+\s+0\s+0\s+1\s+/)
+      })
+    })
+
+    it('should exclude promoted depth-1 nodes from level-1 ring and give them elbow bridge links', () => {
+      const tree = {
+        segments: [
+          { id: 'seg-a', label: 'A' },
+          { id: 'seg-b', label: 'B' },
+        ],
+        children: [
+          {
+            id: 'root-a',
+            label: 'Root A',
+            status: 'fertig',
+            ebene: 1,
+            segmentId: 'seg-a',
+            children: [],
+          },
+          {
+            id: 'root-b-promoted',
+            label: 'Root B Promoted',
+            status: 'jetzt',
+            ebene: 2,
+            segmentId: 'seg-b',
+            children: [],
+          },
+        ],
+      }
+
+      const result = solveSkillTreeLayout(tree, TREE_CONFIG)
+      const ringLinks = result.layout.links.filter((link) => link.linkKind === 'ring')
+      const promotedNode = result.layout.nodes.find((node) => node.id === 'root-b-promoted')
+      const bridge = result.layout.links.find((link) => link.id === 'root-bridge-root-b-promoted')
+
+      expect(promotedNode).toBeDefined()
+      expect(promotedNode.level).toBe(2)
+      expect(ringLinks.length).toBe(0)
+      expect(bridge).toBeDefined()
+      expect(bridge.path).toMatch(/ A /)
+    })
+
+    it('should place shared-trunk connector between odd child angles', () => {
+      const tree = {
+        segments: [{ id: 'seg', label: 'Seg' }],
+        children: [
+          {
+            id: 'root',
+            label: 'Root',
+            status: 'fertig',
+            ebene: 1,
+            segmentId: 'seg',
+            children: [
+              { id: 'c1', label: 'C1', status: 'fertig', ebene: 2, segmentId: 'seg', children: [] },
+              { id: 'c2', label: 'C2', status: 'fertig', ebene: 2, segmentId: 'seg', children: [] },
+              { id: 'c3', label: 'C3', status: 'fertig', ebene: 2, segmentId: 'seg', children: [] },
+            ],
+          },
+        ],
+      }
+
+      const result = solveSkillTreeLayout(tree, TREE_CONFIG)
+      const groups = result.meta.edgeRouting.trunkGroups.filter((group) => group.parentId === 'root' && group.childIds.length === 3)
+
+      expect(groups.length).toBe(1)
+
+      const group = groups[0]
+      const childAngles = group.childIds
+        .map((id) => result.layout.nodes.find((node) => node.id === id)?.angle)
+        .filter((value) => value !== undefined)
+        .sort((a, b) => a - b)
+
+      expect(childAngles.length).toBe(3)
+      // must not coincide with any child angle
+      childAngles.forEach((angle) => {
+        expect(Math.abs(group.trunkAngle - angle)).toBeGreaterThan(1e-6)
+      })
+
+      const midpointA = (childAngles[0] + childAngles[1]) / 2
+      const midpointB = (childAngles[1] + childAngles[2]) / 2
+      const onAllowedMidpoint =
+        Math.abs(group.trunkAngle - midpointA) < 1e-6 || Math.abs(group.trunkAngle - midpointB) < 1e-6
+
+      expect(onAllowedMidpoint).toBe(true)
+    })
+
+    it('should render single-child connections as center-radial path geometry', () => {
+      const tree = {
+        segments: [{ id: 'seg', label: 'Seg' }],
+        children: [
+          {
+            id: 'l1',
+            label: 'L1',
+            status: 'fertig',
+            ebene: 1,
+            segmentId: 'seg',
+            children: [
+              {
+                id: 'l2',
+                label: 'L2',
+                status: 'fertig',
+                ebene: 2,
+                segmentId: 'seg',
+                children: [],
+              },
+            ],
+          },
+        ],
+      }
+
+      const result = solveSkillTreeLayout(tree, TREE_CONFIG)
+      const directLinks = result.layout.links.filter((link) => link.linkKind === 'direct')
+
+      expect(directLinks.length).toBe(1)
+      expect(directLinks[0].path).toMatch(/^M\s+[^\s]+\s+[^\s]+\s+L\s+[^\s]+\s+[^\s]+/)
+    })
+
+    it('should keep shared-trunk links on a radial trunk ray from center', () => {
+      const tree = {
+        segments: [{ id: 'seg', label: 'Seg' }],
+        children: [
+          {
+            id: 'root',
+            label: 'Root',
+            status: 'fertig',
+            ebene: 1,
+            segmentId: 'seg',
+            children: [
+              { id: 'c1', label: 'C1', status: 'fertig', ebene: 2, segmentId: 'seg', children: [] },
+              { id: 'c2', label: 'C2', status: 'fertig', ebene: 2, segmentId: 'seg', children: [] },
+              { id: 'c3', label: 'C3', status: 'fertig', ebene: 2, segmentId: 'seg', children: [] },
+            ],
+          },
+        ],
+      }
+
+      const result = solveSkillTreeLayout(tree, TREE_CONFIG)
+      const groups = result.meta.edgeRouting.trunkGroups.filter((group) => group.parentId === 'root')
+      expect(groups.length).toBeGreaterThan(0)
+
+      const byId = new Map(result.layout.nodes.map((node) => [node.id, node]))
+      const expectedRadius = result.meta.computedLevelByNodeId.get('c1') * TREE_CONFIG.levelSpacing
+
+      groups.forEach((group) => {
+        const trunkX = result.layout.canvas.origin.x + group.targetRadius * Math.cos((group.trunkAngle * Math.PI) / 180)
+        const trunkY = result.layout.canvas.origin.y + group.targetRadius * Math.sin((group.trunkAngle * Math.PI) / 180)
+
+        group.childIds.forEach((childId) => {
+          const link = result.layout.links.find((entry) => entry.id === `root=>${childId}`)
+          expect(link).toBeDefined()
+          expect(link.path).toContain(`L ${trunkX} ${trunkY}`)
+          const child = byId.get(childId)
+          expect(child.radius).toBeGreaterThan(0)
+        })
+      })
+
+      expect(expectedRadius).toBeGreaterThan(0)
+    })
+
+    it('should cascade expanded lower-level radius to outer child levels', () => {
+      const denseChildren = Array.from({ length: 20 }).map((_, index) => ({
+        id: `l2-${index}`,
+        label: `L2 ${index}`,
+        status: 'fertig',
+        ebene: null,
+        segmentId: 'seg',
+        children: index === 0
+          ? [
+              {
+                id: 'l3-only',
+                label: 'L3',
+                status: 'jetzt',
+                ebene: null,
+                segmentId: 'seg',
+                children: [],
+              },
+            ]
+          : [],
+      }))
+
+      const tree = {
+        segments: [{ id: 'seg', label: 'Seg' }],
+        children: [
+          {
+            id: 'l1',
+            label: 'L1',
+            status: 'fertig',
+            ebene: null,
+            segmentId: 'seg',
+            children: denseChildren,
+          },
+        ],
+      }
+
+      const result = solveSkillTreeLayout(tree, TREE_CONFIG)
+      const level2Node = result.layout.nodes.find((node) => node.id === 'l2-0')
+      const level3Node = result.layout.nodes.find((node) => node.id === 'l3-only')
+
+      expect(level2Node).toBeDefined()
+      expect(level3Node).toBeDefined()
+      expect(level2Node.radius).toBeGreaterThan(TREE_CONFIG.levelSpacing * 2)
+      expect(level3Node.radius).toBeGreaterThanOrEqual(level2Node.radius + TREE_CONFIG.levelSpacing)
     })
   })
 })

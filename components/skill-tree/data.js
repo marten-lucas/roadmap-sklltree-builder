@@ -1,4 +1,10 @@
 const uid = () => crypto.randomUUID()
+const level = (status, releaseNote = '') => ({
+  id: uid(),
+  label: 'Level 1',
+  status,
+  releaseNote,
+})
 const SEGMENT_FRONTEND = 'segment-frontend'
 const SEGMENT_BACKEND = 'segment-backend'
 
@@ -12,23 +18,63 @@ export const initialData = {
     {
       id: uid(),
       label: 'Frontend',
-      status: 'fertig',
+      shortName: 'FND',
+      status: 'done',
+      levels: [level('done', 'Landing page and design system are live for all customers.')],
       ebene: null,
       segmentId: SEGMENT_FRONTEND,
       children: [
-        { id: uid(), label: 'React Core', status: 'fertig', ebene: null, segmentId: SEGMENT_FRONTEND, children: [] },
-        { id: uid(), label: 'Tailwind UI', status: 'später', ebene: null, segmentId: SEGMENT_FRONTEND, children: [] },
+        {
+          id: uid(),
+          label: 'React Core',
+          shortName: 'RCT',
+          status: 'done',
+          levels: [level('done', 'Core components have passed usability validation.')],
+          ebene: null,
+          segmentId: SEGMENT_FRONTEND,
+          children: [],
+        },
+        {
+          id: uid(),
+          label: 'Tailwind UI',
+          shortName: 'TWD',
+          status: 'next',
+          levels: [level('next', 'UI polish is queued for the next delivery window.')],
+          ebene: null,
+          segmentId: SEGMENT_FRONTEND,
+          children: [],
+        },
       ],
     },
     {
       id: uid(),
       label: 'Backend',
-      status: 'jetzt',
+      shortName: 'BCK',
+      status: 'now',
+      levels: [level('now', 'Service hardening is in active implementation.')],
       ebene: null,
       segmentId: SEGMENT_BACKEND,
       children: [
-        { id: uid(), label: 'API Design', status: 'jetzt', ebene: null, segmentId: SEGMENT_BACKEND, children: [] },
-        { id: uid(), label: 'DB Modeling', status: 'später', ebene: null, segmentId: SEGMENT_BACKEND, children: [] },
+        {
+          id: uid(),
+          label: 'API Design',
+          shortName: 'API',
+          status: 'now',
+          levels: [level('now', 'New API contracts are being validated with pilot customers.')],
+          ebene: null,
+          segmentId: SEGMENT_BACKEND,
+          children: [],
+        },
+        {
+          id: uid(),
+          label: 'DB Modeling',
+          shortName: 'DBM',
+          status: 'later',
+          levels: [level('later', 'Data model refactoring is parked for a later phase.')],
+          ebene: null,
+          segmentId: SEGMENT_BACKEND,
+          children: [],
+        },
       ],
     },
   ],

@@ -1,7 +1,7 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { TransformComponent, TransformWrapper } from 'react-zoom-pan-pinch'
 import './skillTree.css'
-import { TREE_CONFIG } from './config'
+import { TREE_CONFIG, normalizeStatusKey, STATUS_STYLES } from './config'
 import { initialData } from './data'
 import { InspectorPanel } from './InspectorPanel'
 import { solveSkillTreeLayout } from './layoutSolver'
@@ -16,6 +16,7 @@ import {
 } from './treeValidation'
 import {
   addChildNodeWithResult,
+  addNodeProgressLevel,
   addInitialRootNodeWithResult,
   addInitialSegmentWithResult,
   addRootNodeNearWithResult,
@@ -25,13 +26,17 @@ import {
   deleteNodeOnly,
   findNodeById,
   getNodeLevelInfo,
+  removeNodeProgressLevel,
   updateNodeData as updateNodeDataInTree,
+  updateNodeProgressLevel,
+  updateNodeShortName,
   updateSegmentLabel,
 } from './treeData'
 
 export function SkillTree() {
   const [roadmapData, setRoadmapData] = useState(initialData)
   const [selectedNodeId, setSelectedNodeId] = useState(null)
+  const [selectedProgressLevelId, setSelectedProgressLevelId] = useState(null)
   const [selectedSegmentId, setSelectedSegmentId] = useState(null)
   const centerSize = TREE_CONFIG.nodeSize * 2
   const addControlOffset = TREE_CONFIG.nodeSize * 0.82
@@ -51,6 +56,39 @@ export function SkillTree() {
     () => (roadmapData.segments ?? []).find((segment) => segment.id === selectedSegmentId) ?? null,
     [roadmapData, selectedSegmentId],
   )
+
+  const selectedNodeLevels = useMemo(() => {
+    if (!selectedNode) {
+      return []
+    }
+
+    if (Array.isArray(selectedNode.levels) && selectedNode.levels.length > 0) {
+      return selectedNode.levels
+    }
+
+    return [
+      {
+        id: 'level-1',
+        label: 'Level 1',
+        status: selectedNode.status,
+        releaseNote: '',
+      },
+    ]
+  }, [selectedNode])
+
+  useEffect(() => {
+    if (!selectedNode) {
+      setSelectedProgressLevelId(null)
+      return
+    }
+
+    const fallbackLevelId = selectedNodeLevels[0]?.id ?? null
+    const stillExists = selectedNodeLevels.some((entry) => entry.id === selectedProgressLevelId)
+
+    if (!stillExists) {
+      setSelectedProgressLevelId(fallbackLevelId)
+    }
+  }, [selectedNode, selectedNodeLevels, selectedProgressLevelId])
 
   const levelInfo = useMemo(() => {
     if (!selectedNodeId) return { nodeLevel: 1, minLevel: 1, maxLevel: 2 }
@@ -266,12 +304,52 @@ export function SkillTree() {
     updateNodeData(selectedNodeId, newLabel, selectedNode.status)
   }
 
-  const handleStatusChange = (newStatus) => {
-    if (!selectedNodeId || !selectedNode) {
+  const handleShortNameChange = (newShortName) => {
+    if (!selectedNodeId) {
       return
     }
 
-    updateNodeData(selectedNodeId, selectedNode.label, newStatus)
+    setRoadmapData((previousData) => updateNodeShortName(previousData, selectedNodeId, newShortName))
+  }
+
+  const handleStatusChange = (newStatus) => {
+    if (!selectedNodeId || !selectedProgressLevelId) {
+      return
+    }
+
+    setRoadmapData((previousData) =>
+      updateNodeProgressLevel(previousData, selectedNodeId, selectedProgressLevelId, {
+        status: newStatus,
+      }),
+    )
+  }
+
+  const handleReleaseNoteChange = (releaseNote) => {
+    if (!selectedNodeId || !selectedProgressLevelId) {
+      return
+    }
+
+    setRoadmapData((previousData) =>
+      updateNodeProgressLevel(previousData, selectedNodeId, selectedProgressLevelId, {
+        releaseNote,
+      }),
+    )
+  }
+
+  const handleAddProgressLevel = () => {
+    if (!selectedNodeId) {
+      return
+    }
+
+    setRoadmapData((previousData) => addNodeProgressLevel(previousData, selectedNodeId))
+  }
+
+  const handleDeleteProgressLevel = (levelId) => {
+    if (!selectedNodeId) {
+      return
+    }
+
+    setRoadmapData((previousData) => removeNodeProgressLevel(previousData, selectedNodeId, levelId))
   }
 
   const handleLevelChange = (newLevel) => {
@@ -415,15 +493,42 @@ export function SkillTree() {
               )
             })}
 
-            {links.filter((link) => link.sourceDepth > 0).map((link) => (
-              <path
-                key={link.id}
-                d={link.path}
-                className="skill-tree-link"
-                strokeWidth="4"
-                strokeLinecap="round"
-              />
-            ))}
+            {links.filter((link) => link.linkKind === 'ring').map((link) => {
+              const segmentNode = nodes.find((node) => node.id === link.id.split('-')[2])
+              const nodeStatus = segmentNode ? normalizeStatusKey(segmentNode.status) : 'later'
+              const statusStyle = STATUS_STYLES[nodeStatus] ?? STATUS_STYLES.later
+
+              return (
+                <path
+                  key={link.id}
+                  d={link.path}
+                  stroke={statusStyle.linkStroke}
+                  strokeWidth="4"
+                  strokeOpacity={statusStyle.linkOpacity}
+                  strokeLinecap="round"
+                  fill="none"
+                />
+              )
+            })}
+            {links.filter((link) => link.sourceDepth > 0 && link.linkKind !== 'ring').map((link) => {
+              const childNodeId = link.id.split('=>')[1]
+              const childNode = nodes.find((node) => node.id === childNodeId)
+              const nodeStatus = childNode ? normalizeStatusKey(childNode.status) : 'later'
+              const statusStyle = STATUS_STYLES[nodeStatus] ?? STATUS_STYLES.later
+
+              return (
+                <path
+                  key={link.id}
+                  d={link.path}
+                  stroke={statusStyle.linkStroke}
+                  strokeWidth={statusStyle.linkStrokeWidth}
+                  strokeOpacity={statusStyle.linkOpacity}
+                  strokeDasharray={statusStyle.linkStrokeDasharray || 'none'}
+                  strokeLinecap="round"
+                  fill="none"
+                />
+              )
+            })}
 
             {nodes.map((node) => (
               <SkillNode
@@ -604,11 +709,17 @@ export function SkillTree() {
       <InspectorPanel
         selectedNode={selectedNode}
         currentLevel={levelInfo.nodeLevel}
+        selectedProgressLevelId={selectedProgressLevelId}
         onClose={() => {
           setSelectedNodeId(null)
         }}
         onLabelChange={handleLabelChange}
+        onShortNameChange={handleShortNameChange}
         onStatusChange={handleStatusChange}
+        onReleaseNoteChange={handleReleaseNoteChange}
+        onSelectProgressLevel={setSelectedProgressLevelId}
+        onAddProgressLevel={handleAddProgressLevel}
+        onDeleteProgressLevel={handleDeleteProgressLevel}
         onLevelChange={handleLevelChange}
         levelOptions={selectedNodeLevelOptions}
         segmentOptions={selectedNodeSegmentOptions}

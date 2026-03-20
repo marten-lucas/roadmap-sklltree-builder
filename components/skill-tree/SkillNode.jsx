@@ -1,40 +1,150 @@
 import { Paper, Text } from '@mantine/core'
-import { STATUS_STYLES } from './config'
+import { normalizeStatusKey, STATUS_STYLES } from './config'
 
-export function SkillNode({ node, nodeSize, isSelected, onSelect }) {
-  const statusStyles = STATUS_STYLES[node.status] ?? STATUS_STYLES.später
+const getDisplayStatus = (node) => {
+  const levels = Array.isArray(node?.levels) ? node.levels : []
+
+  if (levels.length > 0) {
+    const normalizedLevels = levels.map((level) => normalizeStatusKey(level.status))
+    if (normalizedLevels.includes('now')) return 'now'
+    if (normalizedLevels.includes('next')) return 'next'
+    if (normalizedLevels.includes('later')) return 'later'
+    return normalizedLevels[0]
+  }
+
+  return normalizeStatusKey(node?.status)
+}
+
+const getShortName = (node) => {
+  const explicitShortName = String(node?.shortName ?? '').trim().toUpperCase().slice(0, 3)
+  if (explicitShortName) {
+    return explicitShortName
+  }
+
+  const letters = String(node?.label ?? '')
+    .replace(/[^A-Za-z0-9]/g, '')
+    .toUpperCase()
+    .slice(0, 3)
+
+  return letters || 'SKL'
+}
+
+const getLevelStatusKeys = (node) => {
+  const levels = Array.isArray(node?.levels) ? node.levels : []
+
+  if (levels.length === 0) {
+    return [normalizeStatusKey(node?.status)]
+  }
+
+  return levels.map((level) => normalizeStatusKey(level.status))
+}
+
+const buildSegmentConicStyle = (statusKeys, colorGetter) => {
+  const segmentCount = Math.max(1, statusKeys.length)
+  const slice = 360 / segmentCount
+  const gapDegrees = segmentCount > 1 ? Math.min(3.2, slice * 0.16) : 0
+  const gradientParts = []
+
+  for (let index = 0; index < segmentCount; index += 1) {
+    const key = statusKeys[index] ?? 'later'
+    const color = colorGetter(key)
+    const start = index * slice
+    const end = (index + 1) * slice
+
+    if (gapDegrees > 0) {
+      const colorStart = start + gapDegrees / 2
+      const colorEnd = end - gapDegrees / 2
+      gradientParts.push(`transparent ${start}deg ${colorStart}deg`)
+      gradientParts.push(`${color} ${colorStart}deg ${colorEnd}deg`)
+      gradientParts.push(`transparent ${colorEnd}deg ${end}deg`)
+    } else {
+      gradientParts.push(`${color} ${start}deg ${end}deg`)
+    }
+  }
+
+  return {
+    background: `conic-gradient(${gradientParts.join(', ')})`,
+  }
+}
+
+export function SkillNode({ node, nodeSize, isSelected, onSelect, onSelectLevel }) {
+  const glowPadding = 18
+  const renderSize = nodeSize + glowPadding * 2
+  const statusKey = getDisplayStatus(node)
+  const statusStyles = STATUS_STYLES[statusKey] ?? STATUS_STYLES.later
+  const shortName = getShortName(node)
+  const levelStatusKeys = getLevelStatusKeys(node)
+  const levelRingStyle = buildSegmentConicStyle(
+    levelStatusKeys,
+    (key) => STATUS_STYLES[key]?.ringBand ?? STATUS_STYLES.later.ringBand,
+  )
+  const levelGlowStyle = buildSegmentConicStyle(
+    levelStatusKeys,
+    (key) => STATUS_STYLES[key]?.glowSegment ?? 'transparent',
+  )
+  const nodeBackground = isSelected
+    ? statusKey === 'done'
+      ? 'radial-gradient(circle at 32% 28%, rgb(100, 118, 140), rgb(45, 62, 85) 58%, rgb(15, 22, 40) 100%)'
+      : 'radial-gradient(circle at 35% 30%, rgb(28, 88, 195), rgb(14, 28, 84) 56%, rgb(2, 6, 26) 100%)'
+    : statusKey === 'done'
+      ? 'radial-gradient(circle at 32% 28%, rgb(83, 96, 117), rgb(29, 40, 60) 58%, rgb(10, 16, 31) 100%)'
+      : 'radial-gradient(circle at 32% 28%, rgb(21, 45, 94), rgb(15, 23, 42) 58%, rgb(2, 6, 23) 100%)'
+
+  const handleNodeClick = (event) => {
+    onSelect(node.id)
+    const levels = Array.isArray(node?.levels) ? node.levels : []
+    if (onSelectLevel && levels.length > 0) {
+      const rect = event.currentTarget.getBoundingClientRect()
+      const cx = rect.left + rect.width / 2
+      const cy = rect.top + rect.height / 2
+      const dx = event.clientX - cx
+      const dy = event.clientY - cy
+      const dist = Math.sqrt(dx * dx + dy * dy)
+      if (dist >= (nodeSize / 2) * 0.74) {
+        const angle = (Math.atan2(dy, dx) * 180 / Math.PI + 90 + 360) % 360
+        const index = Math.min(Math.floor(angle / (360 / levels.length)), levels.length - 1)
+        const levelId = levels[index]?.id
+        if (levelId) onSelectLevel(levelId)
+      }
+    }
+  }
 
   return (
     <foreignObject
-      x={node.x - nodeSize / 2}
-      y={node.y - nodeSize / 2}
-      width={nodeSize}
-      height={nodeSize}
+      x={node.x - nodeSize / 2 - glowPadding}
+      y={node.y - nodeSize / 2 - glowPadding}
+      width={renderSize}
+      height={renderSize}
     >
       <div
         xmlns="http://www.w3.org/1999/xhtml"
         className="skill-node-foreign"
+        style={{ padding: `${glowPadding}px` }}
         onClick={(event) => event.stopPropagation()}
       >
         <Paper
           component="button"
           type="button"
-          onClick={() => onSelect(node.id)}
+          onClick={handleNodeClick}
           className="skill-node-button"
           radius="xl"
-          withBorder
+          withBorder={false}
           style={{
-            borderColor: isSelected ? '#67e8f9' : 'rgba(71, 85, 105, 0.8)',
-            boxShadow: isSelected ? '0 0 28px rgba(34, 211, 238, 0.65)' : statusStyles.glow,
-            outline: `1px solid ${statusStyles.ring}`,
+            border: 'none',
+            boxShadow: 'none',
+            background: nodeBackground,
+            width: `${nodeSize}px`,
+            height: `${nodeSize}px`,
           }}
         >
+          <div className="skill-node-level-glow" style={levelGlowStyle} />
+          <div className="skill-node-level-ring" style={levelRingStyle} />
           <div className="skill-node-button__content">
-            <Text className="skill-node-button__label">
-              {node.label}
-            </Text>
-            <Text className="skill-node-button__status" style={{ color: statusStyles.badge }}>
-              {node.status}
+            <Text
+              className="skill-node-button__shortname"
+              style={{ color: statusStyles.textColor, fontWeight: statusKey === 'now' ? 900 : 800 }}
+            >
+              {shortName}
             </Text>
           </div>
         </Paper>

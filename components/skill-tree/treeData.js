@@ -1,3 +1,62 @@
+import { normalizeStatusKey } from './config'
+
+const DEFAULT_NODE_LABEL = 'Neuer Skill'
+const DEFAULT_NODE_STATUS = 'later'
+
+const toNodeLevel = (levelLike, fallbackLabel = 'Level 1') => ({
+  id: levelLike?.id ?? crypto.randomUUID(),
+  label: levelLike?.label ?? fallbackLabel,
+  status: normalizeStatusKey(levelLike?.status ?? DEFAULT_NODE_STATUS),
+  releaseNote: levelLike?.releaseNote ?? '',
+})
+
+const shortNameFromLabel = (label) => {
+  const text = String(label ?? '').trim()
+  const words = text.split(/\s+/).filter(Boolean)
+
+  if (words.length > 1) {
+    return words.slice(0, 3).map((word) => word[0]).join('').toUpperCase().padEnd(3, 'X').slice(0, 3)
+  }
+
+  const compact = text.replace(/[^A-Za-z0-9]/g, '').toUpperCase()
+  if (compact.length >= 3) {
+    return compact.slice(0, 3)
+  }
+
+  return compact.padEnd(3, 'X').slice(0, 3) || 'NEW'
+}
+
+const sanitizeShortName = (value, fallbackLabel = DEFAULT_NODE_LABEL) => {
+  const compact = String(value ?? '')
+    .replace(/[^A-Za-z0-9]/g, '')
+    .toUpperCase()
+    .slice(0, 3)
+
+  if (compact.length > 0) {
+    return compact
+  }
+
+  return shortNameFromLabel(fallbackLabel)
+}
+
+export const ensureNodeLevels = (node) => {
+  if (Array.isArray(node?.levels) && node.levels.length > 0) {
+    return node.levels.map((entry, index) => toNodeLevel(entry, `Level ${index + 1}`))
+  }
+
+  return [
+    toNodeLevel(
+      {
+        id: crypto.randomUUID(),
+        label: 'Level 1',
+        status: node?.status,
+        releaseNote: node?.releaseNote,
+      },
+      'Level 1',
+    ),
+  ]
+}
+
 export const findNodeById = (node, targetId) => {
   if (!node) {
     return null
@@ -41,10 +100,97 @@ const updateNodeById = (node, targetId, updater) => {
 }
 
 export const updateNodeData = (treeData, id, newLabel, newStatus) =>
-  updateNodeById(treeData, id, () => ({
-    label: newLabel,
-    status: newStatus,
+  updateNodeById(treeData, id, (node) => {
+    const levels = ensureNodeLevels(node)
+    const nextStatus = newStatus ?? levels[0]?.status ?? DEFAULT_NODE_STATUS
+
+    return {
+      label: newLabel,
+      shortName: sanitizeShortName(node.shortName, newLabel),
+      status: nextStatus,
+      levels: [
+        {
+          ...levels[0],
+          status: nextStatus,
+        },
+        ...levels.slice(1),
+      ],
+    }
+  })
+
+export const updateNodeShortName = (treeData, id, shortName) =>
+  updateNodeById(treeData, id, (node) => ({
+    shortName: sanitizeShortName(shortName, node.label),
   }))
+
+export const updateNodeProgressLevel = (treeData, id, levelId, updates) =>
+  updateNodeById(treeData, id, (node) => {
+    const levels = ensureNodeLevels(node)
+    const nextLevels = levels.map((level) => {
+      if (level.id !== levelId) {
+        return level
+      }
+
+      return {
+        ...level,
+        ...updates,
+        status: updates?.status ?? level.status,
+        releaseNote: updates?.releaseNote ?? level.releaseNote ?? '',
+      }
+    })
+
+    return {
+      levels: nextLevels,
+      status: nextLevels[0]?.status ?? DEFAULT_NODE_STATUS,
+    }
+  })
+
+export const addNodeProgressLevel = (treeData, id, newLevelId) =>
+  updateNodeById(treeData, id, (node) => {
+    const levels = ensureNodeLevels(node)
+    const nextIndex = levels.length + 1
+    const nextLevel = toNodeLevel(
+      {
+        id: newLevelId ?? crypto.randomUUID(),
+        label: `Level ${nextIndex}`,
+        status: DEFAULT_NODE_STATUS,
+        releaseNote: '',
+      },
+      `Level ${nextIndex}`,
+    )
+
+    return {
+      levels: [...levels, nextLevel],
+    }
+  })
+
+export const removeNodeProgressLevel = (treeData, id, levelId) =>
+  updateNodeById(treeData, id, (node) => {
+    const levels = ensureNodeLevels(node)
+    if (levels.length <= 1) {
+      return {
+        levels,
+      }
+    }
+
+    const nextLevels = levels
+      .filter((level) => level.id !== levelId)
+      .map((level, index) => ({
+        ...level,
+        label: `Level ${index + 1}`,
+      }))
+
+    if (nextLevels.length === 0) {
+      return {
+        levels,
+      }
+    }
+
+    return {
+      levels: nextLevels,
+      status: nextLevels[0].status,
+    }
+  })
 
 export const updateNodeSegment = (treeData, id, newSegmentId) => {
   const nextChildren = (treeData.children ?? []).map((child) =>
@@ -161,8 +307,17 @@ export const updateNodeLevel = (tree, nodeId, newLevel) => {
 
 const createNewNode = (level, segmentId = null) => ({
   id: crypto.randomUUID(),
-  label: 'Neuer Skill',
-  status: 'später',
+  label: DEFAULT_NODE_LABEL,
+  shortName: shortNameFromLabel(DEFAULT_NODE_LABEL),
+  status: DEFAULT_NODE_STATUS,
+  levels: [
+    {
+      id: crypto.randomUUID(),
+      label: 'Level 1',
+      status: DEFAULT_NODE_STATUS,
+      releaseNote: '',
+    },
+  ],
   ebene: level,
   segmentId,
   children: [],

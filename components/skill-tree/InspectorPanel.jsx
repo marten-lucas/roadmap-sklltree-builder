@@ -1,16 +1,49 @@
-import { ActionIcon, Alert, Button, Paper, Select, Stack, Text, Textarea } from '@mantine/core'
+import { ActionIcon, Alert, Button, Paper, Select, Stack, Tabs, Text, TextInput, Textarea } from '@mantine/core'
+import { normalizeStatusKey, STATUS_LABELS } from './config'
 import { UNASSIGNED_SEGMENT_ID } from './layoutShared'
 
 const STATUS_OPTIONS = [
-  { value: 'fertig', label: 'Fertig' },
-  { value: 'jetzt', label: 'Jetzt' },
-  { value: 'später', label: 'Später' },
+  { value: 'done', label: STATUS_LABELS.done },
+  { value: 'now', label: STATUS_LABELS.now },
+  { value: 'next', label: STATUS_LABELS.next },
+  { value: 'later', label: STATUS_LABELS.later },
 ]
 
-export function InspectorPanel({ selectedNode, currentLevel, onClose, onLabelChange, onStatusChange, onLevelChange, levelOptions, segmentOptions, validationMessage, onSegmentChange, onDeleteNodeOnly, onDeleteNodeBranch }) {
+export function InspectorPanel({
+  selectedNode,
+  currentLevel,
+  selectedProgressLevelId,
+  onClose,
+  onLabelChange,
+  onShortNameChange,
+  onStatusChange,
+  onReleaseNoteChange,
+  onSelectProgressLevel,
+  onAddProgressLevel,
+  onDeleteProgressLevel,
+  onLevelChange,
+  levelOptions,
+  segmentOptions,
+  validationMessage,
+  onSegmentChange,
+  onDeleteNodeOnly,
+  onDeleteNodeBranch,
+}) {
   if (!selectedNode) {
     return null
   }
+
+  const nodeLevels = Array.isArray(selectedNode.levels) && selectedNode.levels.length > 0
+    ? selectedNode.levels.map((level, index) => ({
+      id: level.id,
+      label: level.label ?? `Level ${index + 1}`,
+      status: normalizeStatusKey(level.status),
+      releaseNote: level.releaseNote ?? '',
+    }))
+    : [{ id: 'level-1', label: 'Level 1', status: normalizeStatusKey(selectedNode.status), releaseNote: '' }]
+
+  const activeProgressLevelId = selectedProgressLevelId ?? nodeLevels[0].id
+  const activeProgressLevel = nodeLevels.find((level) => level.id === activeProgressLevelId) ?? nodeLevels[0]
 
   const selectedSegmentKey = selectedNode.segmentId ?? UNASSIGNED_SEGMENT_ID
   const blockedLevelHint = levelOptions.find((option) => !option.isAllowed)?.reasons?.[0] ?? null
@@ -51,26 +84,23 @@ export function InspectorPanel({ selectedNode, currentLevel, onClose, onLabelCha
             value={selectedNode.label}
             onChange={(event) => onLabelChange(event.currentTarget.value)}
             minRows={2}
-            maxRows={5}
+            maxRows={4}
             classNames={{
               input: 'mantine-dark-input',
               label: 'mantine-dark-label',
             }}
           />
 
-          <Select
-            label="Status"
-            data={STATUS_OPTIONS}
-            value={selectedNode.status}
-            onChange={(value) => value && onStatusChange(value)}
-            allowDeselect={false}
+          <TextInput
+            label="Shortname"
+            placeholder="z.B. API"
+            value={selectedNode.shortName ?? ''}
+            onChange={(event) => onShortNameChange(event.currentTarget.value)}
+            maxLength={3}
             classNames={{
               input: 'mantine-dark-input',
               label: 'mantine-dark-label',
-              dropdown: 'mantine-dark-dropdown',
-              option: 'mantine-dark-option',
             }}
-            comboboxProps={{ withinPortal: true, zIndex: 450 }}
           />
 
           <Select
@@ -108,6 +138,70 @@ export function InspectorPanel({ selectedNode, currentLevel, onClose, onLabelCha
               comboboxProps={{ withinPortal: true, zIndex: 450 }}
             />
           )}
+
+          <div>
+            <Text className="mantine-dark-label" size="sm" mb="xs">Ausbaustufen</Text>
+            <Tabs value={activeProgressLevelId} onChange={(value) => value && onSelectProgressLevel(value)}>
+              <Tabs.List className="skill-panel__level-tabs">
+                {nodeLevels.map((level, index) => (
+                  <div key={level.id} className="skill-panel__level-tab-item">
+                    <Tabs.Tab value={level.id}>{`L${index + 1}`}</Tabs.Tab>
+                    <ActionIcon
+                      size="sm"
+                      variant="subtle"
+                      color="gray"
+                      onClick={(event) => {
+                        event.preventDefault()
+                        event.stopPropagation()
+                        onDeleteProgressLevel(level.id)
+                      }}
+                      aria-label={`Level ${index + 1} löschen`}
+                      disabled={nodeLevels.length <= 1}
+                    >
+                      ✕
+                    </ActionIcon>
+                  </div>
+                ))}
+                <ActionIcon
+                  size="sm"
+                  variant="filled"
+                  color="cyan"
+                  onClick={onAddProgressLevel}
+                  aria-label="Level hinzufügen"
+                >
+                  +
+                </ActionIcon>
+              </Tabs.List>
+            </Tabs>
+          </div>
+
+          <Select
+            label="Status"
+            data={STATUS_OPTIONS}
+            value={activeProgressLevel.status}
+            onChange={(value) => value && onStatusChange(value)}
+            allowDeselect={false}
+            classNames={{
+              input: 'mantine-dark-input',
+              label: 'mantine-dark-label',
+              dropdown: 'mantine-dark-dropdown',
+              option: 'mantine-dark-option',
+            }}
+            comboboxProps={{ withinPortal: true, zIndex: 450 }}
+          />
+
+          <Textarea
+            label="Release Note"
+            placeholder="Beschreibe aus Kundensicht, was in dieser Ausbaustufe geliefert wurde oder als Nächstes kommt ..."
+            value={activeProgressLevel.releaseNote}
+            onChange={(event) => onReleaseNoteChange(event.currentTarget.value)}
+            minRows={5}
+            autosize
+            classNames={{
+              input: 'mantine-dark-input',
+              label: 'mantine-dark-label',
+            }}
+          />
 
           {validationMessage && (
             <Alert color="yellow" variant="light" className="skill-panel__alert">

@@ -1,4 +1,5 @@
 import { buildLayoutDiagnostics } from './layoutDiagnostics'
+import { buildEdgeRoutingModel, buildRoutedEdgeLinks } from './edgeRouter'
 import { analyzeSegmentLevelFeasibility, buildSegmentLevelGroups } from './layoutFeasibility'
 import {
   buildRadialEdgePath,
@@ -701,6 +702,20 @@ export const solveSkillTreeLayout = (data, config) => {
     entryByKey: new Map(),
   }
 
+  const enforceMonotonicRadii = () => {
+    for (let i = 1; i < sortedLevels.length; i += 1) {
+      const prev = sortedLevels[i - 1]
+      const curr = sortedLevels[i]
+      const prevRadius = radiusByLevel.get(prev) ?? prev * config.levelSpacing
+      const currRadius = radiusByLevel.get(curr) ?? curr * config.levelSpacing
+      const minRequired = prevRadius + config.levelSpacing
+
+      if (currRadius < minRequired) {
+        radiusByLevel.set(curr, minRequired)
+      }
+    }
+  }
+
   for (let attempt = 0; attempt < 8; attempt += 1) {
     const groupedNodes = buildSegmentLevelGroups({
       allNodes,
@@ -776,7 +791,11 @@ export const solveSkillTreeLayout = (data, config) => {
       const currentRadius = getRadiusForLevel(level)
       radiusByLevel.set(level, Math.max(currentRadius, neededRadius))
     })
+
+    enforceMonotonicRadii()
   }
+
+  enforceMonotonicRadii()
 
   feasibilityAnalysis = analyzeSegmentLevelFeasibility({
     groupedNodes: buildSegmentLevelGroups({
@@ -852,7 +871,9 @@ export const solveSkillTreeLayout = (data, config) => {
     return {
       id: node.data.id,
       label: node.data.label,
+      shortName: node.data.shortName,
       status: node.data.status,
+      levels: node.data.levels,
       segmentId: node.data.segmentId ?? null,
       depth: node.depth,
       level: effectiveLevel,
@@ -864,69 +885,48 @@ export const solveSkillTreeLayout = (data, config) => {
     }
   })
 
-  const links = root.links().map((link) => {
-    const sourceAngle = getAngleForNode(link.source)
-    const targetAngle = getAngleForNode(link.target)
-    const getEffectiveLevelForLink = (node) => {
-      if (node.data.ebene !== undefined && node.data.ebene !== null) {
-        return node.data.ebene
-      }
-      return node.depth
-    }
-    const sourceRadius = getRadiusForLevel(getEffectiveLevelForLink(link.source))
-    const targetRadius = getRadiusForLevel(getEffectiveLevelForLink(link.target))
-
-    return {
-      id: `${link.source.data.id}-${link.target.data.id}`,
-      sourceDepth: link.source.depth,
-      path: buildRadialEdgePath(
-        sourceAngle,
-        sourceRadius,
-        targetAngle,
-        targetRadius,
-        origin,
-      ),
-    }
+  const edgeRouting = buildEdgeRoutingModel({
+    root,
+    config,
+    getEffectiveLevel,
+    getAngleForNode,
+    getRadiusForLevel,
+    getSegmentOrderIndex,
   })
 
-  const depthOneNodes = [...(root.children ?? [])]
-  depthOneNodes.sort((a, b) => getAngleForNode(a) - getAngleForNode(b))
+  const nodesById = new Map(nodes.map((node) => [node.id, node]))
+  const routedLinks = buildRoutedEdgeLinks({
+    edgeRouting,
+    nodesById,
+    origin,
+  })
+
   const levelOneRadius = getRadiusForLevel(1)
 
-  const siblingArcs = depthOneNodes.slice(0, -1).map((node, index) => {
-    const next = depthOneNodes[index + 1]
-    const fromAngle = getAngleForNode(node)
-    const toAngle = getAngleForNode(next)
-    const from = toCartesian(fromAngle, levelOneRadius, origin)
-    const to = toCartesian(toAngle, levelOneRadius, origin)
-    const sweep = toAngle > fromAngle ? 1 : 0
-
-    return {
-      id: `sibling-${node.data.id}-${next.data.id}`,
+  const rootLevelBridges = nodes
+    .filter((node) => node.depth === 1 && node.level > 1)
+    .map((node) => ({
+      id: `root-bridge-${node.id}`,
+      linkKind: 'direct',
       sourceDepth: 1,
-      path: `M ${from.x} ${from.y} A ${levelOneRadius} ${levelOneRadius} 0 0 ${sweep} ${to.x} ${to.y}`,
-    }
-  })
+      path: buildRadialEdgePath(centerAngle, levelOneRadius, node.angle, node.radius, origin),
+    }))
 
-  const levelOneBridges = depthOneNodes
-    .map((node) => {
-      const angle = getAngleForNode(node)
-      const nodeRadius = getRadiusForLevel(getEffectiveLevel(node))
-
-      if (Math.abs(nodeRadius - levelOneRadius) < 0.01) {
-        return null
-      }
-
-      const from = toCartesian(angle, levelOneRadius, origin)
-      const to = toCartesian(angle, nodeRadius, origin)
-
-      return {
-        id: `bridge-level1-${node.data.id}`,
-        sourceDepth: 1,
-        path: `M ${from.x} ${from.y} L ${to.x} ${to.y}`,
-      }
+  const levelOneNodes = nodes
+    .filter((node) => node.level === 1)
+    .sort((a, b) => a.angle - b.angle)
+  const levelOneRingArcs = []
+  for (let i = 0; i < levelOneNodes.length - 1; i += 1) {
+    const a = levelOneNodes[i]
+    const b = levelOneNodes[i + 1]
+    const r = a.radius
+    levelOneRingArcs.push({
+      id: `level1-ring-${a.id}-${b.id}`,
+      linkKind: 'ring',
+      sourceDepth: 1,
+      path: `M ${a.x} ${a.y} A ${r} ${r} 0 0 1 ${b.x} ${b.y}`,
     })
-    .filter(Boolean)
+  }
 
   const boundarySafetyMarginDeg = toDegrees((config.nodeSize * 0.58) / Math.max(levelOneRadius, config.levelSpacing))
 
@@ -972,7 +972,7 @@ export const solveSkillTreeLayout = (data, config) => {
 
   const layout = {
     nodes,
-    links: [...links, ...siblingArcs, ...levelOneBridges],
+    links: [...routedLinks, ...rootLevelBridges, ...levelOneRingArcs],
     segments: {
       separators: segmentSeparators,
       labels: segmentLabels,
@@ -1005,6 +1005,7 @@ export const solveSkillTreeLayout = (data, config) => {
       computedLevelByNodeId,
       nodeOrderWithinLevelSegment,
       segmentOrder: optimizedSegmentIds,
+      edgeRouting,
       feasibility: {
         isFeasible: feasibilityAnalysis.isFeasible,
         nodeAngularWidthPx,
