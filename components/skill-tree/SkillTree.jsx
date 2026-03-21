@@ -1,9 +1,10 @@
 import { Text, Tooltip } from '@mantine/core'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useReducer, useState } from 'react'
 import { TransformComponent, TransformWrapper } from 'react-zoom-pan-pinch'
 import './skillTree.css'
 import { TREE_CONFIG, normalizeStatusKey, STATUS_STYLES } from './config'
 import { initialData } from './data'
+import { createDocumentHistoryState, createEmptyDocument, documentHistoryReducer } from './documentState'
 import { InspectorPanel } from './InspectorPanel'
 import { solveSkillTreeLayout } from './layoutSolver'
 import { UNASSIGNED_SEGMENT_ID } from './layoutShared'
@@ -55,8 +56,23 @@ const isAngleNear = (candidate, blocked, thresholdDeg) => {
   return Math.abs(getAngleDelta(candidate, blocked)) < thresholdDeg
 }
 
+const isEditableElement = (target) => {
+  if (!(target instanceof HTMLElement)) {
+    return false
+  }
+
+  return target.isContentEditable || target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT'
+}
+
 export function SkillTree() {
-  const [roadmapData, setRoadmapData] = useState(initialData)
+  const [documentHistory, dispatchDocument] = useReducer(
+    documentHistoryReducer,
+    initialData,
+    createDocumentHistoryState,
+  )
+  const roadmapData = documentHistory.present
+  const canUndo = documentHistory.past.length > 0
+  const canRedo = documentHistory.future.length > 0
   const [selectedNodeId, setSelectedNodeId] = useState(null)
   const [selectedProgressLevelId, setSelectedProgressLevelId] = useState(null)
   const [selectedSegmentId, setSelectedSegmentId] = useState(null)
@@ -387,14 +403,63 @@ export function SkillTree() {
     }
   }, [roadmapData.segments, canvas.origin.x, canvas.origin.y, canvas.maxRadius])
 
-  const handleAddChild = (parentId) => {
-    let createdNodeId = null
+  const commitDocument = (nextDocument) => {
+    if (!nextDocument || nextDocument === roadmapData) {
+      return
+    }
 
-    setRoadmapData((previousData) => {
-      const result = addChildNodeWithResult(previousData, parentId)
-      createdNodeId = result.createdNodeId
-      return result.tree
-    })
+    dispatchDocument({ type: 'apply', document: nextDocument })
+  }
+
+  useEffect(() => {
+    const handleKeyDown = (event) => {
+      if (isEditableElement(event.target)) {
+        return
+      }
+
+      const hasPrimaryModifier = event.ctrlKey || event.metaKey
+      if (!hasPrimaryModifier) {
+        return
+      }
+
+      const key = event.key.toLowerCase()
+
+      if (key === 'z') {
+        event.preventDefault()
+        if (event.shiftKey && canRedo) {
+          dispatchDocument({ type: 'redo' })
+        } else if (canUndo) {
+          dispatchDocument({ type: 'undo' })
+        }
+        return
+      }
+
+      if (key === 'y') {
+        event.preventDefault()
+        if (canRedo) {
+          dispatchDocument({ type: 'redo' })
+        }
+        return
+      }
+
+      if (event.shiftKey && key === 'backspace') {
+        event.preventDefault()
+        dispatchDocument({ type: 'apply', document: createEmptyDocument() })
+        setSelectedNodeId(null)
+        setSelectedSegmentId(null)
+        setSelectedPortalKey(null)
+        setSelectedProgressLevelId(null)
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [canRedo, canUndo])
+
+  const handleAddChild = (parentId) => {
+    const result = addChildNodeWithResult(roadmapData, parentId)
+    const createdNodeId = result.createdNodeId
+    commitDocument(result.tree)
 
     if (createdNodeId) {
       setSelectedNodeId(createdNodeId)
@@ -403,13 +468,9 @@ export function SkillTree() {
   }
 
   const handleAddRootNear = (anchorRootId, side) => {
-    let createdNodeId = null
-
-    setRoadmapData((previousData) => {
-      const result = addRootNodeNearWithResult(previousData, anchorRootId, side)
-      createdNodeId = result.createdNodeId
-      return result.tree
-    })
+    const result = addRootNodeNearWithResult(roadmapData, anchorRootId, side)
+    const createdNodeId = result.createdNodeId
+    commitDocument(result.tree)
 
     if (createdNodeId) {
       setSelectedNodeId(createdNodeId)
@@ -418,13 +479,9 @@ export function SkillTree() {
   }
 
   const handleAddSegmentNear = (anchorSegmentId, side) => {
-    let createdSegmentId = null
-
-    setRoadmapData((previousData) => {
-      const result = addSegmentNearWithResult(previousData, anchorSegmentId, side)
-      createdSegmentId = result.createdSegmentId
-      return result.tree
-    })
+    const result = addSegmentNearWithResult(roadmapData, anchorSegmentId, side)
+    const createdSegmentId = result.createdSegmentId
+    commitDocument(result.tree)
 
     if (createdSegmentId) {
       setSelectedNodeId(null)
@@ -434,13 +491,9 @@ export function SkillTree() {
   }
 
   const handleAddInitialSegment = () => {
-    let createdSegmentId = null
-
-    setRoadmapData((previousData) => {
-      const result = addInitialSegmentWithResult(previousData)
-      createdSegmentId = result.createdSegmentId
-      return result.tree
-    })
+    const result = addInitialSegmentWithResult(roadmapData)
+    const createdSegmentId = result.createdSegmentId
+    commitDocument(result.tree)
 
     if (createdSegmentId) {
       setSelectedNodeId(null)
@@ -450,13 +503,9 @@ export function SkillTree() {
   }
 
   const handleAddInitialRoot = () => {
-    let createdNodeId = null
-
-    setRoadmapData((previousData) => {
-      const result = addInitialRootNodeWithResult(previousData)
-      createdNodeId = result.createdNodeId
-      return result.tree
-    })
+    const result = addInitialRootNodeWithResult(roadmapData)
+    const createdNodeId = result.createdNodeId
+    commitDocument(result.tree)
 
     if (createdNodeId) {
       setSelectedNodeId(createdNodeId)
@@ -486,7 +535,7 @@ export function SkillTree() {
   }
 
   const updateNodeData = (id, newLabel, newStatus) => {
-    setRoadmapData((previousData) => updateNodeDataInTree(previousData, id, newLabel, newStatus))
+    commitDocument(updateNodeDataInTree(roadmapData, id, newLabel, newStatus))
   }
 
   const handleLabelChange = (newLabel) => {
@@ -502,7 +551,7 @@ export function SkillTree() {
       return
     }
 
-    setRoadmapData((previousData) => updateNodeShortName(previousData, selectedNodeId, newShortName))
+    commitDocument(updateNodeShortName(roadmapData, selectedNodeId, newShortName))
   }
 
   const handleStatusChange = (newStatus) => {
@@ -510,8 +559,8 @@ export function SkillTree() {
       return
     }
 
-    setRoadmapData((previousData) =>
-      updateNodeProgressLevel(previousData, selectedNodeId, activeSelectedProgressLevelId, {
+    commitDocument(
+      updateNodeProgressLevel(roadmapData, selectedNodeId, activeSelectedProgressLevelId, {
         status: newStatus,
       }),
     )
@@ -522,8 +571,8 @@ export function SkillTree() {
       return
     }
 
-    setRoadmapData((previousData) =>
-      updateNodeProgressLevel(previousData, selectedNodeId, activeSelectedProgressLevelId, {
+    commitDocument(
+      updateNodeProgressLevel(roadmapData, selectedNodeId, activeSelectedProgressLevelId, {
         releaseNote,
       }),
     )
@@ -534,8 +583,8 @@ export function SkillTree() {
       return
     }
 
-    setRoadmapData((previousData) =>
-      setNodeAdditionalDependencies(previousData, selectedNodeId, nextDependencyIds),
+    commitDocument(
+      setNodeAdditionalDependencies(roadmapData, selectedNodeId, nextDependencyIds),
     )
   }
 
@@ -544,7 +593,7 @@ export function SkillTree() {
       return
     }
 
-    setRoadmapData((previousData) => addNodeProgressLevel(previousData, selectedNodeId))
+    commitDocument(addNodeProgressLevel(roadmapData, selectedNodeId))
   }
 
   const handleDeleteProgressLevel = (levelId) => {
@@ -552,7 +601,7 @@ export function SkillTree() {
       return
     }
 
-    setRoadmapData((previousData) => removeNodeProgressLevel(previousData, selectedNodeId, levelId))
+    commitDocument(removeNodeProgressLevel(roadmapData, selectedNodeId, levelId))
   }
 
   const handleLevelChange = (newLevel) => {
@@ -560,10 +609,8 @@ export function SkillTree() {
       return
     }
 
-    setRoadmapData((previousData) => {
-      const validation = validateNodeLevelChange(previousData, selectedNodeId, newLevel, TREE_CONFIG)
-      return validation.isAllowed ? validation.tree : previousData
-    })
+    const validation = validateNodeLevelChange(roadmapData, selectedNodeId, newLevel, TREE_CONFIG)
+    commitDocument(validation.isAllowed ? validation.tree : roadmapData)
   }
 
   const handleDeleteNodeOnly = () => {
@@ -571,7 +618,7 @@ export function SkillTree() {
       return
     }
 
-    setRoadmapData((previousData) => deleteNodeOnly(previousData, selectedNodeId))
+    commitDocument(deleteNodeOnly(roadmapData, selectedNodeId))
     setSelectedNodeId(null)
     setSelectedPortalKey(null)
   }
@@ -581,7 +628,7 @@ export function SkillTree() {
       return
     }
 
-    setRoadmapData((previousData) => deleteNodeBranch(previousData, selectedNodeId))
+    commitDocument(deleteNodeBranch(roadmapData, selectedNodeId))
     setSelectedNodeId(null)
     setSelectedPortalKey(null)
   }
@@ -591,7 +638,7 @@ export function SkillTree() {
       return
     }
 
-    setRoadmapData((previousData) => updateSegmentLabel(previousData, selectedSegmentId, newLabel))
+    commitDocument(updateSegmentLabel(roadmapData, selectedSegmentId, newLabel))
   }
 
   const handleDeleteSegment = () => {
@@ -599,7 +646,7 @@ export function SkillTree() {
       return
     }
 
-    setRoadmapData((previousData) => deleteSegment(previousData, selectedSegmentId))
+    commitDocument(deleteSegment(roadmapData, selectedSegmentId))
     setSelectedSegmentId(null)
     setSelectedPortalKey(null)
   }
@@ -994,15 +1041,13 @@ export function SkillTree() {
           }
 
           const nextParentId = nextParentKey === '__root__' ? null : nextParentKey
-          setRoadmapData((previousData) => moveNodeToParent(previousData, selectedNodeId, nextParentId))
+          commitDocument(moveNodeToParent(roadmapData, selectedNodeId, nextParentId))
         }}
         onSegmentChange={(nextSegmentKey) => {
           const nextSegmentId = nextSegmentKey === UNASSIGNED_SEGMENT_ID ? null : nextSegmentKey
 
-          setRoadmapData((previousData) => {
-            const validation = validateNodeSegmentChange(previousData, selectedNodeId, nextSegmentId, TREE_CONFIG)
-            return validation.isAllowed ? validation.tree : previousData
-          })
+          const validation = validateNodeSegmentChange(roadmapData, selectedNodeId, nextSegmentId, TREE_CONFIG)
+          commitDocument(validation.isAllowed ? validation.tree : roadmapData)
         }}
         onAdditionalDependenciesChange={handleAdditionalDependenciesChange}
         onDeleteNodeOnly={handleDeleteNodeOnly}
