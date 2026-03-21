@@ -14,6 +14,7 @@ import { createDocumentHistoryState, createEmptyDocument, documentHistoryReducer
 import { InspectorPanel } from './InspectorPanel'
 import { solveSkillTreeLayout } from './layoutSolver'
 import { UNASSIGNED_SEGMENT_ID } from './layoutShared'
+import { exportPdfFromSkillTree } from './pdfExport'
 import { SegmentPanel } from './SegmentPanel'
 import { SkillNode } from './SkillNode'
 import { exportSvgFromElement } from './svgExport'
@@ -477,6 +478,26 @@ export function SkillTree() {
     setIsExportPanelOpen(false)
   }
 
+  const handleExportPdf = () => {
+    if (!canvasSvgRef.current) {
+      window.alert('PDF-Export derzeit nicht verfuegbar.')
+      return
+    }
+
+    const exported = exportPdfFromSkillTree({
+      svgElement: canvasSvgRef.current,
+      roadmapDocument: roadmapData,
+      title: 'Skill Tree Roadmap',
+    })
+
+    if (!exported) {
+      window.alert('PDF-Export fehlgeschlagen. Bitte Popups erlauben.')
+      return
+    }
+
+    setIsExportPanelOpen(false)
+  }
+
   const handleDocumentFileSelected = async (event) => {
     const file = event.target.files?.[0]
 
@@ -832,7 +853,7 @@ export function SkillTree() {
             <Button variant="light" onClick={() => handleExportPlaceholder('HTML')}>
               HTML (Viewer)
             </Button>
-            <Button variant="light" onClick={() => handleExportPlaceholder('PDF')}>
+            <Button variant="light" onClick={handleExportPdf}>
               PDF (statisch)
             </Button>
             <Button variant="light" onClick={handleExportSvg}>
@@ -1012,7 +1033,7 @@ export function SkillTree() {
                   )}
                 >
                   <g
-                    className={portalClassName}
+                    className={`${portalClassName} skill-tree-export-exclude`}
                     transform={`translate(${portal.x} ${portal.y})`}
                     onMouseDown={(event) => event.stopPropagation()}
                     onClick={(event) => {
@@ -1041,13 +1062,13 @@ export function SkillTree() {
 
             {emptyStateAddControl && (
               <g
+                className="skill-tree-clickable skill-tree-export-exclude"
                 transform={`translate(${emptyStateAddControl.x}, ${emptyStateAddControl.y})`}
                 onMouseDown={(event) => event.stopPropagation()}
                 onClick={(event) => {
                   event.stopPropagation()
                   handleAddInitialRoot()
                 }}
-                className="skill-tree-clickable"
               >
                 <circle r="22" className="skill-tree-add-circle" strokeWidth="2.5" />
                 <text
@@ -1064,13 +1085,13 @@ export function SkillTree() {
 
             {emptySegmentAddControl && (
               <g
+                className="skill-tree-clickable skill-tree-export-exclude"
                 transform={`translate(${emptySegmentAddControl.x}, ${emptySegmentAddControl.y})`}
                 onMouseDown={(event) => event.stopPropagation()}
                 onClick={(event) => {
                   event.stopPropagation()
                   handleAddInitialSegment()
                 }}
-                className="skill-tree-clickable"
               >
                 <circle r="18" className="skill-tree-add-circle" strokeWidth="2.5" />
                 <text
@@ -1086,7 +1107,7 @@ export function SkillTree() {
             )}
 
             {selectedSegmentLabel && selectedSegmentControlGeometry && (
-              <g>
+              <g className="skill-tree-export-exclude">
                 <g
                   transform={`translate(${selectedSegmentControlGeometry.left.x}, ${selectedSegmentControlGeometry.left.y})`}
                   onMouseDown={(event) => event.stopPropagation()}
@@ -1132,7 +1153,7 @@ export function SkillTree() {
             )}
 
             {selectedLayoutNode && selectedControlGeometry && (
-              <g>
+              <g className="skill-tree-export-exclude">
                 <g
                   transform={`translate(${selectedControlGeometry.child.x}, ${selectedControlGeometry.child.y})`}
                   onMouseDown={(event) => event.stopPropagation()}
