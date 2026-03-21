@@ -5,12 +5,11 @@ import './skillTree.css'
 import { TREE_CONFIG, normalizeStatusKey, STATUS_STYLES } from './config'
 import { initialData } from './data'
 import {
-  downloadDocumentJson,
   loadDocumentFromLocalStorage,
-  readDocumentFromJsonText,
   saveDocumentToLocalStorage,
 } from './documentPersistence'
 import { createDocumentHistoryState, createEmptyDocument, documentHistoryReducer } from './documentState'
+import { exportHtmlFromSkillTree, readDocumentFromHtmlText } from './htmlExport'
 import { InspectorPanel } from './InspectorPanel'
 import { solveSkillTreeLayout } from './layoutSolver'
 import { UNASSIGNED_SEGMENT_ID } from './layoutShared'
@@ -459,10 +458,6 @@ export function SkillTree() {
     resetSelections()
   }
 
-  const handleExportPlaceholder = (format) => {
-    window.alert(`${format}-Export folgt in PR4.`)
-  }
-
   const handleExportSvg = () => {
     if (!canvasSvgRef.current) {
       window.alert('SVG-Export derzeit nicht verfuegbar.')
@@ -472,6 +467,26 @@ export function SkillTree() {
     const exported = exportSvgFromElement(canvasSvgRef.current)
     if (!exported) {
       window.alert('SVG-Export fehlgeschlagen.')
+      return
+    }
+
+    setIsExportPanelOpen(false)
+  }
+
+  const handleExportHtml = () => {
+    if (!canvasSvgRef.current) {
+      window.alert('HTML-Export derzeit nicht verfuegbar.')
+      return
+    }
+
+    const exported = exportHtmlFromSkillTree({
+      svgElement: canvasSvgRef.current,
+      roadmapDocument: roadmapData,
+      title: 'Skill Tree Roadmap',
+    })
+
+    if (!exported) {
+      window.alert('HTML-Export fehlgeschlagen.')
       return
     }
 
@@ -507,7 +522,7 @@ export function SkillTree() {
 
     try {
       const rawText = await file.text()
-      const nextDocument = readDocumentFromJsonText(rawText)
+      const nextDocument = readDocumentFromHtmlText(rawText)
       dispatchDocument({ type: 'replace', document: nextDocument })
       resetSelections()
     } catch (error) {
@@ -562,7 +577,20 @@ export function SkillTree() {
 
       if (key === 's') {
         event.preventDefault()
-        downloadDocumentJson(roadmapData)
+        if (!canvasSvgRef.current) {
+          window.alert('HTML-Export derzeit nicht verfuegbar.')
+          return
+        }
+
+        const exported = exportHtmlFromSkillTree({
+          svgElement: canvasSvgRef.current,
+          roadmapDocument: roadmapData,
+          title: 'Skill Tree Roadmap',
+        })
+
+        if (!exported) {
+          window.alert('HTML-Export fehlgeschlagen.')
+        }
         return
       }
 
@@ -790,7 +818,7 @@ export function SkillTree() {
       <input
         ref={documentFileInputRef}
         type="file"
-        accept="application/json,.json"
+        accept="text/html,.html"
         style={{ display: 'none' }}
         onChange={handleDocumentFileSelected}
       />
@@ -798,7 +826,7 @@ export function SkillTree() {
       <Paper className="skill-tree-toolbar" radius="xl" shadow="xl" withBorder>
         <Group gap="xs" wrap="nowrap">
           <Text size="sm" className="skill-tree-toolbar__status">{autosaveLabel}</Text>
-          <Button size="xs" variant="light" onClick={() => downloadDocumentJson(roadmapData)}>
+          <Button size="xs" variant="light" onClick={handleExportHtml}>
             Speichern
           </Button>
           <Button size="xs" variant="default" onClick={handleOpenDocumentPicker}>
@@ -850,7 +878,7 @@ export function SkillTree() {
             </ActionIcon>
           </div>
           <Stack gap="xs">
-            <Button variant="light" onClick={() => handleExportPlaceholder('HTML')}>
+            <Button variant="light" onClick={handleExportHtml}>
               HTML (Viewer)
             </Button>
             <Button variant="light" onClick={handleExportPdf}>
