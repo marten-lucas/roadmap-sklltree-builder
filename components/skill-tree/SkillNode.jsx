@@ -136,6 +136,9 @@ export function SkillNode({ node, nodeSize, isSelected, onSelect, onSelectLevel 
       y={node.y - nodeSize / 2 - glowPadding}
       width={renderSize}
       height={renderSize}
+      className="skill-node-export-anchor"
+      data-export-label={node.label}
+      data-export-note={tooltipReleaseNote}
     >
       <div
         xmlns="http://www.w3.org/1999/xhtml"

@@ -18,6 +18,46 @@
     overflow: visible;
 }
 
+.skill-tree-toolbar {
+    position: absolute;
+    top: 1rem;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 80;
+    padding: 0.55rem 0.7rem;
+    color: #f8fafc;
+    background: rgba(2, 6, 23, 0.84);
+    border-color: rgba(51, 65, 85, 0.82);
+    backdrop-filter: blur(14px);
+}
+
+.skill-tree-toolbar__status {
+    color: #94a3b8;
+    min-width: 120px;
+    text-align: center;
+}
+
+.skill-tree-export-panel {
+    position: absolute;
+    top: 4.3rem;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 79;
+    width: 18rem;
+    padding: 0.75rem;
+    color: #f8fafc;
+    background: rgba(2, 6, 23, 0.9);
+    border-color: rgba(51, 65, 85, 0.84);
+    backdrop-filter: blur(12px);
+}
+
+.skill-tree-export-panel__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 0.5rem;
+}
+
 .skill-tree-canvas {
     display: block;
     background: radial-gradient(circle at 50% 60%, rgba(30, 41, 59, 0.45), rgba(2, 6, 23, 1) 55%);

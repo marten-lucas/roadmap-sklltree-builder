@@ -1,4 +1,4 @@
-import { Text, Tooltip } from '@mantine/core'
+import { ActionIcon, Button, Group, Paper, Stack, Text, Tooltip } from '@mantine/core'
 import { useEffect, useMemo, useReducer, useRef, useState } from 'react'
 import { TransformComponent, TransformWrapper } from 'react-zoom-pan-pinch'
 import './skillTree.css'
@@ -16,6 +16,7 @@ import { solveSkillTreeLayout } from './layoutSolver'
 import { UNASSIGNED_SEGMENT_ID } from './layoutShared'
 import { SegmentPanel } from './SegmentPanel'
 import { SkillNode } from './SkillNode'
+import { exportSvgFromElement } from './svgExport'
 import {
   getAdditionalDependencyOptionsForNode,
   getParentOptionsForNode,
@@ -84,6 +85,9 @@ export function SkillTree() {
   const canUndo = documentHistory.past.length > 0
   const canRedo = documentHistory.future.length > 0
   const documentFileInputRef = useRef(null)
+  const canvasSvgRef = useRef(null)
+  const [isExportPanelOpen, setIsExportPanelOpen] = useState(false)
+  const [lastSavedAt, setLastSavedAt] = useState(null)
   const [selectedNodeId, setSelectedNodeId] = useState(null)
   const [selectedProgressLevelId, setSelectedProgressLevelId] = useState(null)
   const [selectedSegmentId, setSelectedSegmentId] = useState(null)
@@ -433,6 +437,46 @@ export function SkillTree() {
     documentFileInputRef.current?.click()
   }
 
+  const handleUndo = () => {
+    if (!canUndo) {
+      return
+    }
+
+    dispatchDocument({ type: 'undo' })
+  }
+
+  const handleRedo = () => {
+    if (!canRedo) {
+      return
+    }
+
+    dispatchDocument({ type: 'redo' })
+  }
+
+  const handleReset = () => {
+    dispatchDocument({ type: 'apply', document: createEmptyDocument() })
+    resetSelections()
+  }
+
+  const handleExportPlaceholder = (format) => {
+    window.alert(`${format}-Export folgt in PR4.`)
+  }
+
+  const handleExportSvg = () => {
+    if (!canvasSvgRef.current) {
+      window.alert('SVG-Export derzeit nicht verfuegbar.')
+      return
+    }
+
+    const exported = exportSvgFromElement(canvasSvgRef.current)
+    if (!exported) {
+      window.alert('SVG-Export fehlgeschlagen.')
+      return
+    }
+
+    setIsExportPanelOpen(false)
+  }
+
   const handleDocumentFileSelected = async (event) => {
     const file = event.target.files?.[0]
 
@@ -456,6 +500,7 @@ export function SkillTree() {
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
       saveDocumentToLocalStorage(roadmapData)
+      setLastSavedAt(new Date())
     }, AUTOSAVE_DEBOUNCE_MS)
 
     return () => window.clearTimeout(timeoutId)
@@ -476,8 +521,10 @@ export function SkillTree() {
 
       if (key === 'z') {
         event.preventDefault()
-        if (event.shiftKey && canRedo) {
-          dispatchDocument({ type: 'redo' })
+        if (event.shiftKey) {
+          if (canRedo) {
+            dispatchDocument({ type: 'redo' })
+          }
         } else if (canUndo) {
           dispatchDocument({ type: 'undo' })
         }
@@ -517,6 +564,10 @@ export function SkillTree() {
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [canRedo, canUndo, roadmapData])
+
+  const autosaveLabel = lastSavedAt
+    ? `Autosave ${lastSavedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}`
+    : 'Autosave aktiv'
 
   const handleAddChild = (parentId) => {
     const result = addChildNodeWithResult(roadmapData, parentId)
@@ -723,6 +774,77 @@ export function SkillTree() {
         onChange={handleDocumentFileSelected}
       />
 
+      <Paper className="skill-tree-toolbar" radius="xl" shadow="xl" withBorder>
+        <Group gap="xs" wrap="nowrap">
+          <Text size="sm" className="skill-tree-toolbar__status">{autosaveLabel}</Text>
+          <Button size="xs" variant="light" onClick={() => downloadDocumentJson(roadmapData)}>
+            Speichern
+          </Button>
+          <Button size="xs" variant="default" onClick={handleOpenDocumentPicker}>
+            Laden
+          </Button>
+          <ActionIcon
+            size="md"
+            variant="default"
+            aria-label="Undo"
+            onClick={handleUndo}
+            disabled={!canUndo}
+          >
+            ↶
+          </ActionIcon>
+          <ActionIcon
+            size="md"
+            variant="default"
+            aria-label="Redo"
+            onClick={handleRedo}
+            disabled={!canRedo}
+          >
+            ↷
+          </ActionIcon>
+          <Button size="xs" color="red" variant="subtle" onClick={handleReset}>
+            Reset
+          </Button>
+          <Button
+            size="xs"
+            variant={isExportPanelOpen ? 'filled' : 'default'}
+            color={isExportPanelOpen ? 'cyan' : 'gray'}
+            onClick={() => setIsExportPanelOpen((open) => !open)}
+          >
+            Export
+          </Button>
+        </Group>
+      </Paper>
+
+      {isExportPanelOpen && (
+        <Paper className="skill-tree-export-panel" radius="xl" shadow="xl" withBorder>
+          <div className="skill-tree-export-panel__header">
+            <Text fw={600}>Export</Text>
+            <ActionIcon
+              variant="subtle"
+              color="gray"
+              aria-label="Export-Panel schließen"
+              onClick={() => setIsExportPanelOpen(false)}
+            >
+              ✕
+            </ActionIcon>
+          </div>
+          <Stack gap="xs">
+            <Button variant="light" onClick={() => handleExportPlaceholder('HTML')}>
+              HTML (Viewer)
+            </Button>
+            <Button variant="light" onClick={() => handleExportPlaceholder('PDF')}>
+              PDF (statisch)
+            </Button>
+            <Button variant="light" onClick={handleExportSvg}>
+              SVG (Skilltree)
+            </Button>
+            <Text size="xs" c="dimmed">
+              Export-Implementierung folgt im naechsten PR.
+            </Text>
+          </Stack>
+        </Paper>
+      )}
+
       <TransformWrapper
         minScale={0.2}
         maxScale={2.2}
@@ -736,6 +858,7 @@ export function SkillTree() {
           contentClass="skill-tree-transform-content"
         >
           <svg
+            ref={canvasSvgRef}
             width={canvas.width}
             height={canvas.height}
             viewBox={`0 0 ${canvas.width} ${canvas.height}`}
