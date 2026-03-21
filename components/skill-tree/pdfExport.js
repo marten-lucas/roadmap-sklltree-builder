@@ -115,8 +115,25 @@ const buildReleaseNotesMarkup = (entries) => {
   return parts.join('\n')
 }
 
-export const buildPdfExportHtml = ({ svgMarkup, releaseNoteEntries, styleText, title = 'Skill Tree Roadmap' }) => {
+export const buildPdfExportHtml = ({
+  svgMarkup,
+  releaseNoteEntries,
+  styleText,
+  title = 'Skill Tree Roadmap',
+  metadata = {},
+}) => {
   const exportDate = new Date().toLocaleDateString()
+  const exportOwner = String(metadata.author ?? '').trim()
+  const exportBrand = String(metadata.brandName ?? '').trim()
+  const subtitleBits = [`Exportiert am ${exportDate}`]
+
+  if (exportOwner) {
+    subtitleBits.push(`Autor: ${exportOwner}`)
+  }
+
+  if (exportBrand) {
+    subtitleBits.push(exportBrand)
+  }
 
   return `<!DOCTYPE html>
 <html lang="de">
@@ -285,7 +302,7 @@ export const buildPdfExportHtml = ({ svgMarkup, releaseNoteEntries, styleText, t
     <header class="pdf-export__header">
       <div>
         <h1 class="pdf-export__title">${escapeHtml(title)}</h1>
-        <p class="pdf-export__subtitle">Exportiert am ${escapeHtml(exportDate)}</p>
+        <p class="pdf-export__subtitle">${escapeHtml(subtitleBits.join(' · '))}</p>
       </div>
       <div class="pdf-export__legend">
         <span class="pdf-export__legend-item"><span class="pdf-export__dot pdf-export__dot--done"></span>Done</span>
@@ -316,19 +333,33 @@ export const buildPdfExportHtml = ({ svgMarkup, releaseNoteEntries, styleText, t
 </html>`
 }
 
-export const exportPdfFromSkillTree = ({ svgElement, roadmapDocument, title = 'Skill Tree Roadmap' }) => {
+export const tryExportPdfFromSkillTree = ({
+  svgElement,
+  roadmapDocument,
+  title = 'Skill Tree Roadmap',
+  metadata = {},
+}) => {
   if (typeof window === 'undefined' || typeof window.document === 'undefined') {
-    return false
+    return {
+      ok: false,
+      errorCode: 'missing-window',
+    }
   }
 
   const svgMarkup = sanitizeSvgCloneForPrint(svgElement)
   if (!svgMarkup) {
-    return false
+    return {
+      ok: false,
+      errorCode: 'invalid-svg',
+    }
   }
 
   const popup = window.open('', '_blank', 'noopener,noreferrer')
   if (!popup) {
-    return false
+    return {
+      ok: false,
+      errorCode: 'popup-blocked',
+    }
   }
 
   const styleText = collectStyleText(window.document)
@@ -338,11 +369,17 @@ export const exportPdfFromSkillTree = ({ svgElement, roadmapDocument, title = 'S
     releaseNoteEntries,
     styleText,
     title,
+    metadata,
   })
 
   popup.document.open()
   popup.document.write(html)
   popup.document.close()
 
-  return true
+  return {
+    ok: true,
+    errorCode: null,
+  }
 }
+
+export const exportPdfFromSkillTree = (options) => tryExportPdfFromSkillTree(options).ok

@@ -77,6 +77,35 @@ const buildViewerScript = () => `
       const svgRoot = document.querySelector('.html-export__tree-shell svg')
       const printButton = document.getElementById('html-export-print')
       const svgButton = document.getElementById('html-export-svg')
+      const cleanSvgButton = document.getElementById('html-export-svg-clean')
+
+      const downloadSvg = (sourceSvg, fileName, { clean = false } = {}) => {
+        if (!sourceSvg) {
+          return
+        }
+
+        const clone = sourceSvg.cloneNode(true)
+        if (clean) {
+          clone.querySelectorAll('.export-tooltip-layer').forEach((node) => node.remove())
+          clone.querySelectorAll('style').forEach((style) => {
+            if (style.textContent && style.textContent.includes('.export-tooltip-trigger')) {
+              style.remove()
+            }
+          })
+        }
+
+        const svgMarkup = '<?xml version="1.0" encoding="UTF-8"?>\n' + clone.outerHTML
+        const blob = new Blob([svgMarkup], { type: 'image/svg+xml;charset=utf-8' })
+        const objectUrl = URL.createObjectURL(blob)
+        const anchor = document.createElement('a')
+        anchor.href = objectUrl
+        anchor.download = fileName
+        anchor.style.display = 'none'
+        document.body.appendChild(anchor)
+        anchor.click()
+        document.body.removeChild(anchor)
+        URL.revokeObjectURL(objectUrl)
+      }
 
       const activateTab = (tabName) => {
         tabButtons.forEach((button) => {
@@ -101,21 +130,11 @@ const buildViewerScript = () => `
       })
 
       svgButton?.addEventListener('click', () => {
-        if (!svgRoot) {
-          return
-        }
+        downloadSvg(svgRoot, 'skilltree-roadmap.svg')
+      })
 
-        const svgMarkup = '<?xml version="1.0" encoding="UTF-8"?>\n' + svgRoot.outerHTML
-        const blob = new Blob([svgMarkup], { type: 'image/svg+xml;charset=utf-8' })
-        const objectUrl = URL.createObjectURL(blob)
-        const anchor = document.createElement('a')
-        anchor.href = objectUrl
-        anchor.download = 'skilltree-roadmap.svg'
-        anchor.style.display = 'none'
-        document.body.appendChild(anchor)
-        anchor.click()
-        document.body.removeChild(anchor)
-        URL.revokeObjectURL(objectUrl)
+      cleanSvgButton?.addEventListener('click', () => {
+        downloadSvg(svgRoot, 'skilltree-roadmap-clean.svg', { clean: true })
       })
 
       activateTab('skilltree')
@@ -131,9 +150,21 @@ export const buildHtmlExportDocument = ({
   roadmapDocument,
   styleText,
   title = 'Skill Tree Roadmap',
+  metadata = {},
 }) => {
   const releaseNoteEntries = collectReleaseNoteEntries(roadmapDocument)
   const exportDate = new Date().toLocaleDateString()
+  const exportOwner = String(metadata.author ?? '').trim()
+  const exportBrand = String(metadata.brandName ?? '').trim()
+  const subtitleBits = [`Exportiert am ${exportDate}`]
+
+  if (exportOwner) {
+    subtitleBits.push(`Autor: ${exportOwner}`)
+  }
+
+  if (exportBrand) {
+    subtitleBits.push(exportBrand)
+  }
   const payloadJson = escapeJsonForScriptTag(JSON.stringify(buildPersistedDocumentPayload(roadmapDocument), null, 2))
 
   return `<!DOCTYPE html>
@@ -202,6 +233,18 @@ export const buildHtmlExportDocument = ({
       margin: 6px 0 0;
       color: var(--export-muted);
       font-size: 0.95rem;
+    }
+
+    .html-export__brand {
+      display: inline-flex;
+      margin-top: 10px;
+      padding: 6px 10px;
+      border-radius: 999px;
+      border: 1px solid rgba(103, 232, 249, 0.35);
+      color: #cffafe;
+      font-size: 0.78rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
     }
 
     .html-export__actions {
@@ -375,11 +418,13 @@ export const buildHtmlExportDocument = ({
     <section class="html-export__header">
       <div>
         <h1 class="html-export__title">${escapeHtml(title)}</h1>
-        <p class="html-export__subtitle">Exportiert am ${escapeHtml(exportDate)}</p>
+        <p class="html-export__subtitle">${escapeHtml(subtitleBits.join(' · '))}</p>
+        ${exportBrand ? `<span class="html-export__brand">${escapeHtml(exportBrand)}</span>` : ''}
       </div>
       <div class="html-export__actions">
         <button id="html-export-print" class="html-export__action" type="button">PDF drucken</button>
         <button id="html-export-svg" class="html-export__action" type="button">SVG herunterladen</button>
+        <button id="html-export-svg-clean" class="html-export__action" type="button">SVG clean</button>
       </div>
     </section>
 
@@ -411,13 +456,20 @@ export const extractDocumentPayloadFromHtml = (htmlText) => {
     }
   }
 
+  if (!/<html[\s>]/i.test(htmlText)) {
+    return {
+      ok: false,
+      error: 'Die Datei ist kein gueltiges HTML-Dokument. Bitte eine HTML-Exportdatei importieren.',
+    }
+  }
+
   const pattern = new RegExp(`<script[^>]*id=["']${HTML_EXPORT_DATA_SCRIPT_ID}["'][^>]*>([\\s\\S]*?)<\\/script>`, 'i')
   const match = pattern.exec(htmlText)
 
   if (!match) {
     return {
       ok: false,
-      error: 'Die HTML-Datei enthaelt keine eingebetteten Skilltree-Daten.',
+      error: 'Die HTML-Datei enthaelt keine eingebetteten Skilltree-Daten. Bitte eine Datei verwenden, die ueber "HTML exportieren" erzeugt wurde.',
     }
   }
 
@@ -438,6 +490,7 @@ export const exportHtmlFromSkillTree = ({
   svgElement,
   roadmapDocument,
   title = 'Skill Tree Roadmap',
+  metadata = {},
   sourceDocument = globalThis?.document,
 }) => {
   if (typeof window === 'undefined' || typeof window.document === 'undefined') {
@@ -455,6 +508,7 @@ export const exportHtmlFromSkillTree = ({
     roadmapDocument,
     styleText: collectStyleText(sourceDocument),
     title,
+    metadata,
   })
 
   const blob = new Blob([html], { type: 'text/html;charset=utf-8' })

@@ -1,6 +1,6 @@
 import { ActionIcon, Button, Paper, Stack, Text, TextInput } from '@mantine/core'
 
-export function SegmentPanel({ selectedSegment, onClose, onLabelChange, onDelete }) {
+export function SegmentPanel({ selectedSegment, onClose, onCollapse, onLabelChange, onDelete }) {
   if (!selectedSegment) {
     return null
   }
@@ -12,9 +12,14 @@ export function SegmentPanel({ selectedSegment, onClose, onLabelChange, onDelete
           <Text className="skill-panel__eyebrow">Segment</Text>
           <Text className="skill-panel__title">Segment bearbeiten</Text>
         </div>
-        <ActionIcon variant="subtle" color="gray" onClick={onClose} aria-label="Segment-Editor schließen">
-          ✕
-        </ActionIcon>
+        <div className="skill-panel__header-actions">
+          <ActionIcon variant="subtle" color="gray" onClick={onCollapse} aria-label="Segment-Editor einklappen">
+            ⇤
+          </ActionIcon>
+          <ActionIcon variant="subtle" color="gray" onClick={onClose} aria-label="Segment-Editor schließen">
+            ✕
+          </ActionIcon>
+        </div>
       </div>
 
       <Stack gap="md" className="skill-panel__body">

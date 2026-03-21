@@ -232,17 +232,23 @@ export const normalizeSvgMarkup = (rawMarkup) => {
   return markup
 }
 
-export const serializeSvgElementForExport = (svgElement) => {
+export const serializeSvgElementForExport = (svgElement, options = {}) => {
   if (!svgElement || typeof XMLSerializer === 'undefined') {
     return null
   }
+
+  const {
+    includeTooltips = true,
+  } = options
 
   const clone = svgElement.cloneNode(true)
   clone.removeAttribute('class')
   clone.setAttribute('xmlns', SVG_NS)
   clone.setAttribute('xmlns:xlink', SVG_XLINK_NS)
-  injectExportTooltipStyles(clone)
-  appendAnimatedTooltips(clone)
+  if (includeTooltips) {
+    injectExportTooltipStyles(clone)
+    appendAnimatedTooltips(clone)
+  }
 
   const serialized = new XMLSerializer().serializeToString(clone)
   return normalizeSvgMarkup(serialized)
@@ -274,8 +280,13 @@ export const downloadSvgMarkup = (markup, fileName = 'skilltree-roadmap.svg') =>
   return true
 }
 
-export const exportSvgFromElement = (svgElement, fileName = 'skilltree-roadmap.svg') => {
-  const markup = serializeSvgElementForExport(svgElement)
+export const exportSvgFromElement = (svgElement, options = {}) => {
+  const {
+    fileName = 'skilltree-roadmap.svg',
+    includeTooltips = true,
+  } = options
+
+  const markup = serializeSvgElementForExport(svgElement, { includeTooltips })
 
   if (!markup) {
     return false

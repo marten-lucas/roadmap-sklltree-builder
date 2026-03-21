@@ -14,6 +14,7 @@ export function InspectorPanel({
   currentLevel,
   selectedProgressLevelId,
   onClose,
+  onCollapse,
   onLabelChange,
   onShortNameChange,
   onStatusChange,
@@ -84,9 +85,14 @@ export function InspectorPanel({
           <Text className="skill-panel__eyebrow">Inspector</Text>
           <Text className="skill-panel__title skill-panel__title--large">Skill bearbeiten</Text>
         </div>
-        <ActionIcon variant="subtle" color="gray" onClick={onClose} aria-label="Inspector schließen">
-          ✕
-        </ActionIcon>
+        <div className="skill-panel__header-actions">
+          <ActionIcon variant="subtle" color="gray" onClick={onCollapse} aria-label="Inspector einklappen">
+            ⇤
+          </ActionIcon>
+          <ActionIcon variant="subtle" color="gray" onClick={onClose} aria-label="Inspector schließen">
+            ✕
+          </ActionIcon>
+        </div>
       </div>
 
       <div className="skill-panel__body skill-panel__body--scrollable">

@@ -58,6 +58,18 @@
     margin-bottom: 0.5rem;
 }
 
+.skill-tree-control-toggle {
+    position: absolute;
+    top: 5.2rem;
+    right: 1rem;
+    z-index: 81;
+    padding: 0.35rem 0.45rem;
+    color: #f8fafc;
+    background: rgba(2, 6, 23, 0.92);
+    border-color: rgba(51, 65, 85, 0.84);
+    backdrop-filter: blur(12px);
+}
+
 .skill-tree-canvas {
     display: block;
     background: radial-gradient(circle at 50% 60%, rgba(30, 41, 59, 0.45), rgba(2, 6, 23, 1) 55%);
@@ -243,6 +255,12 @@
     justify-content: space-between;
     padding: 1.25rem 1.5rem;
     border-bottom: 1px solid rgba(30, 41, 59, 0.9);
+}
+
+.skill-panel__header-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
 }
 
 .skill-panel__body {

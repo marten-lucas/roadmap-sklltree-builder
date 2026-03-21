@@ -9,14 +9,12 @@ import {
   saveDocumentToLocalStorage,
 } from './documentPersistence'
 import { createDocumentHistoryState, createEmptyDocument, documentHistoryReducer } from './documentState'
-import { exportHtmlFromSkillTree, readDocumentFromHtmlText } from './htmlExport'
 import { InspectorPanel } from './InspectorPanel'
 import { solveSkillTreeLayout } from './layoutSolver'
 import { UNASSIGNED_SEGMENT_ID } from './layoutShared'
-import { exportPdfFromSkillTree } from './pdfExport'
+import { getSkillTreeShortcutAction } from './keyboardShortcuts'
 import { SegmentPanel } from './SegmentPanel'
 import { SkillNode } from './SkillNode'
-import { exportSvgFromElement } from './svgExport'
 import {
   getAdditionalDependencyOptionsForNode,
   getParentOptionsForNode,
@@ -64,6 +62,8 @@ const isAngleNear = (candidate, blocked, thresholdDeg) => {
 }
 
 const AUTOSAVE_DEBOUNCE_MS = 450
+const EXPORT_BRAND_NAME = 'Roadmap Skilltree Builder'
+const EXPORT_AUTHOR = 'Skilltree Team'
 
 const getInitialRoadmapDocument = () => loadDocumentFromLocalStorage() ?? initialData
 
@@ -73,6 +73,14 @@ const isEditableElement = (target) => {
   }
 
   return target.isContentEditable || target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT'
+}
+
+const getHtmlImportErrorMessage = (error) => {
+  if (error instanceof Error && error.message) {
+    return error.message
+  }
+
+  return 'Die Datei konnte nicht importiert werden. Bitte eine gueltige HTML-Exportdatei verwenden.'
 }
 
 export function SkillTree() {
@@ -92,6 +100,7 @@ export function SkillTree() {
   const [selectedProgressLevelId, setSelectedProgressLevelId] = useState(null)
   const [selectedSegmentId, setSelectedSegmentId] = useState(null)
   const [selectedPortalKey, setSelectedPortalKey] = useState(null)
+  const [isControlPanelCollapsed, setIsControlPanelCollapsed] = useState(false)
   const centerSize = TREE_CONFIG.nodeSize * 2
   const addControlOffset = TREE_CONFIG.nodeSize * 0.82
 
@@ -458,59 +467,116 @@ export function SkillTree() {
     resetSelections()
   }
 
-  const handleExportSvg = () => {
+  const handleExportSvg = async () => {
     if (!canvasSvgRef.current) {
       window.alert('SVG-Export derzeit nicht verfuegbar.')
       return
     }
 
-    const exported = exportSvgFromElement(canvasSvgRef.current)
-    if (!exported) {
+    try {
+      const { exportSvgFromElement } = await import('./svgExport')
+      const exported = exportSvgFromElement(canvasSvgRef.current, {
+        fileName: 'skilltree-roadmap.svg',
+        includeTooltips: true,
+      })
+      if (!exported) {
+        window.alert('SVG-Export fehlgeschlagen.')
+        return
+      }
+
+      setIsExportPanelOpen(false)
+    } catch (error) {
+      console.error('SVG export failed', error)
       window.alert('SVG-Export fehlgeschlagen.')
+    }
+  }
+
+  const handleExportCleanSvg = async () => {
+    if (!canvasSvgRef.current) {
+      window.alert('SVG-Export derzeit nicht verfuegbar.')
       return
     }
 
-    setIsExportPanelOpen(false)
+    try {
+      const { exportSvgFromElement } = await import('./svgExport')
+      const exported = exportSvgFromElement(canvasSvgRef.current, {
+        fileName: 'skilltree-roadmap-clean.svg',
+        includeTooltips: false,
+      })
+      if (!exported) {
+        window.alert('Clean-SVG-Export fehlgeschlagen.')
+        return
+      }
+
+      setIsExportPanelOpen(false)
+    } catch (error) {
+      console.error('Clean SVG export failed', error)
+      window.alert('Clean-SVG-Export fehlgeschlagen.')
+    }
   }
 
-  const handleExportHtml = () => {
+  const handleExportHtml = async () => {
     if (!canvasSvgRef.current) {
       window.alert('HTML-Export derzeit nicht verfuegbar.')
       return
     }
 
-    const exported = exportHtmlFromSkillTree({
-      svgElement: canvasSvgRef.current,
-      roadmapDocument: roadmapData,
-      title: 'Skill Tree Roadmap',
-    })
+    try {
+      const { exportHtmlFromSkillTree } = await import('./htmlExport')
+      const exported = exportHtmlFromSkillTree({
+        svgElement: canvasSvgRef.current,
+        roadmapDocument: roadmapData,
+        title: 'Skill Tree Roadmap',
+        metadata: {
+          brandName: EXPORT_BRAND_NAME,
+          author: EXPORT_AUTHOR,
+        },
+      })
 
-    if (!exported) {
+      if (!exported) {
+        window.alert('HTML-Export fehlgeschlagen.')
+        return
+      }
+
+      setIsExportPanelOpen(false)
+    } catch (error) {
+      console.error('HTML export failed', error)
       window.alert('HTML-Export fehlgeschlagen.')
-      return
     }
-
-    setIsExportPanelOpen(false)
   }
 
-  const handleExportPdf = () => {
+  const handleExportPdf = async () => {
     if (!canvasSvgRef.current) {
       window.alert('PDF-Export derzeit nicht verfuegbar.')
       return
     }
 
-    const exported = exportPdfFromSkillTree({
-      svgElement: canvasSvgRef.current,
-      roadmapDocument: roadmapData,
-      title: 'Skill Tree Roadmap',
-    })
+    try {
+      const { tryExportPdfFromSkillTree } = await import('./pdfExport')
+      const exported = tryExportPdfFromSkillTree({
+        svgElement: canvasSvgRef.current,
+        roadmapDocument: roadmapData,
+        title: 'Skill Tree Roadmap',
+        metadata: {
+          brandName: EXPORT_BRAND_NAME,
+          author: EXPORT_AUTHOR,
+        },
+      })
 
-    if (!exported) {
-      window.alert('PDF-Export fehlgeschlagen. Bitte Popups erlauben.')
-      return
+      if (!exported.ok) {
+        if (exported.errorCode === 'popup-blocked') {
+          window.alert('PDF-Fenster wurde blockiert. Bitte Popups fuer diese Seite erlauben und den Export erneut starten.')
+        } else {
+          window.alert('PDF-Export fehlgeschlagen. Bitte erneut versuchen.')
+        }
+        return
+      }
+
+      setIsExportPanelOpen(false)
+    } catch (error) {
+      console.error('PDF export failed', error)
+      window.alert('PDF-Export fehlgeschlagen. Bitte erneut versuchen.')
     }
-
-    setIsExportPanelOpen(false)
   }
 
   const handleDocumentFileSelected = async (event) => {
@@ -522,11 +588,13 @@ export function SkillTree() {
 
     try {
       const rawText = await file.text()
+      const { readDocumentFromHtmlText } = await import('./htmlExport')
       const nextDocument = readDocumentFromHtmlText(rawText)
       dispatchDocument({ type: 'replace', document: nextDocument })
       resetSelections()
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Die Datei konnte nicht geladen werden.'
+      console.error('HTML import failed', error)
+      const message = getHtmlImportErrorMessage(error)
       window.alert(message)
     } finally {
       event.target.value = ''
@@ -544,30 +612,23 @@ export function SkillTree() {
 
   useEffect(() => {
     const handleKeyDown = (event) => {
-      if (isEditableElement(event.target)) {
-        return
-      }
+      const action = getSkillTreeShortcutAction({
+        key: event.key,
+        ctrlKey: event.ctrlKey,
+        metaKey: event.metaKey,
+        shiftKey: event.shiftKey,
+        isEditableTarget: isEditableElement(event.target),
+      })
 
-      const hasPrimaryModifier = event.ctrlKey || event.metaKey
-      if (!hasPrimaryModifier) {
-        return
-      }
-
-      const key = event.key.toLowerCase()
-
-      if (key === 'z') {
+      if (action === 'undo') {
         event.preventDefault()
-        if (event.shiftKey) {
-          if (canRedo) {
-            dispatchDocument({ type: 'redo' })
-          }
-        } else if (canUndo) {
+        if (canUndo) {
           dispatchDocument({ type: 'undo' })
         }
         return
       }
 
-      if (key === 'y') {
+      if (action === 'redo') {
         event.preventDefault()
         if (canRedo) {
           dispatchDocument({ type: 'redo' })
@@ -575,32 +636,44 @@ export function SkillTree() {
         return
       }
 
-      if (key === 's') {
+      if (action === 'export-html') {
         event.preventDefault()
-        if (!canvasSvgRef.current) {
-          window.alert('HTML-Export derzeit nicht verfuegbar.')
-          return
-        }
+        void (async () => {
+          try {
+            if (!canvasSvgRef.current) {
+              window.alert('HTML-Export derzeit nicht verfuegbar.')
+              return
+            }
 
-        const exported = exportHtmlFromSkillTree({
-          svgElement: canvasSvgRef.current,
-          roadmapDocument: roadmapData,
-          title: 'Skill Tree Roadmap',
-        })
+            const { exportHtmlFromSkillTree } = await import('./htmlExport')
+            const exported = exportHtmlFromSkillTree({
+              svgElement: canvasSvgRef.current,
+              roadmapDocument: roadmapData,
+              title: 'Skill Tree Roadmap',
+              metadata: {
+                brandName: EXPORT_BRAND_NAME,
+                author: EXPORT_AUTHOR,
+              },
+            })
 
-        if (!exported) {
-          window.alert('HTML-Export fehlgeschlagen.')
-        }
+            if (!exported) {
+              window.alert('HTML-Export fehlgeschlagen.')
+            }
+          } catch (error) {
+            console.error('HTML export shortcut failed', error)
+            window.alert('HTML-Export fehlgeschlagen.')
+          }
+        })()
         return
       }
 
-      if (key === 'o') {
+      if (action === 'import-html') {
         event.preventDefault()
         handleOpenDocumentPicker()
         return
       }
 
-      if (event.shiftKey && key === 'backspace') {
+      if (action === 'reset') {
         event.preventDefault()
         dispatchDocument({ type: 'apply', document: createEmptyDocument() })
         setSelectedNodeId(null)
@@ -617,6 +690,8 @@ export function SkillTree() {
   const autosaveLabel = lastSavedAt
     ? `Autosave ${lastSavedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}`
     : 'Autosave aktiv'
+
+  const isControlPanelVisible = Boolean(selectedNode || selectedSegment)
 
   const handleAddChild = (parentId) => {
     const result = addChildNodeWithResult(roadmapData, parentId)
@@ -826,11 +901,11 @@ export function SkillTree() {
       <Paper className="skill-tree-toolbar" radius="xl" shadow="xl" withBorder>
         <Group gap="xs" wrap="nowrap">
           <Text size="sm" className="skill-tree-toolbar__status">{autosaveLabel}</Text>
-          <Button size="xs" variant="light" onClick={handleExportHtml}>
-            Speichern
+          <Button size="xs" variant="light" onClick={() => void handleExportHtml()}>
+            HTML exportieren
           </Button>
           <Button size="xs" variant="default" onClick={handleOpenDocumentPicker}>
-            Laden
+            HTML importieren
           </Button>
           <ActionIcon
             size="md"
@@ -861,6 +936,15 @@ export function SkillTree() {
           >
             Export
           </Button>
+          {isControlPanelVisible && (
+            <Button
+              size="xs"
+              variant="default"
+              onClick={() => setIsControlPanelCollapsed((collapsed) => !collapsed)}
+            >
+              {isControlPanelCollapsed ? 'Panel aufklappen' : 'Panel einklappen'}
+            </Button>
+          )}
         </Group>
       </Paper>
 
@@ -878,19 +962,31 @@ export function SkillTree() {
             </ActionIcon>
           </div>
           <Stack gap="xs">
-            <Button variant="light" onClick={handleExportHtml}>
+            <Button variant="light" onClick={() => void handleExportHtml()}>
               HTML (Viewer)
             </Button>
-            <Button variant="light" onClick={handleExportPdf}>
+            <Button variant="light" onClick={() => void handleExportPdf()}>
               PDF (statisch)
             </Button>
-            <Button variant="light" onClick={handleExportSvg}>
-              SVG (Skilltree)
+            <Button variant="light" onClick={() => void handleExportSvg()}>
+              SVG (interaktiv)
             </Button>
-            <Text size="xs" c="dimmed">
-              Export-Implementierung folgt im naechsten PR.
-            </Text>
+            <Button variant="light" onClick={() => void handleExportCleanSvg()}>
+              SVG (clean)
+            </Button>
           </Stack>
+        </Paper>
+      )}
+
+      {isControlPanelVisible && isControlPanelCollapsed && (
+        <Paper className="skill-tree-control-toggle" radius="xl" shadow="xl" withBorder>
+          <Button
+            size="xs"
+            variant="subtle"
+            onClick={() => setIsControlPanelCollapsed(false)}
+          >
+            Control Panel aufklappen
+          </Button>
         </Paper>
       )}
 
@@ -1254,54 +1350,60 @@ export function SkillTree() {
         </TransformComponent>
       </TransformWrapper>
 
-      <InspectorPanel
-        selectedNode={selectedNode}
-        currentLevel={levelInfo.nodeLevel}
-        selectedProgressLevelId={activeSelectedProgressLevelId}
-        onClose={() => {
-          setSelectedNodeId(null)
-        }}
-        onLabelChange={handleLabelChange}
-        onShortNameChange={handleShortNameChange}
-        onStatusChange={handleStatusChange}
-        onReleaseNoteChange={handleReleaseNoteChange}
-        onSelectProgressLevel={setSelectedProgressLevelId}
-        onAddProgressLevel={handleAddProgressLevel}
-        onDeleteProgressLevel={handleDeleteProgressLevel}
-        onLevelChange={handleLevelChange}
-        levelOptions={selectedNodeLevelOptions}
-        segmentOptions={selectedNodeSegmentOptions}
-        parentOptions={selectedNodeParentOptions}
-        selectedParentId={selectedNodeParentId}
-        additionalDependencyOptions={selectedNodeAdditionalDependencyOptions}
-        selectedAdditionalDependencyIds={selectedNodeAdditionalDependencies.outgoingIds}
-        incomingDependencyLabels={selectedNodeIncomingDependencyLabels}
-        validationMessage={selectedNodeValidationMessage}
-        onParentChange={(nextParentKey) => {
-          if (!selectedNodeId) {
-            return
-          }
+      {!isControlPanelCollapsed && (
+        <>
+          <InspectorPanel
+            selectedNode={selectedNode}
+            currentLevel={levelInfo.nodeLevel}
+            selectedProgressLevelId={activeSelectedProgressLevelId}
+            onClose={() => {
+              setSelectedNodeId(null)
+            }}
+            onCollapse={() => setIsControlPanelCollapsed(true)}
+            onLabelChange={handleLabelChange}
+            onShortNameChange={handleShortNameChange}
+            onStatusChange={handleStatusChange}
+            onReleaseNoteChange={handleReleaseNoteChange}
+            onSelectProgressLevel={setSelectedProgressLevelId}
+            onAddProgressLevel={handleAddProgressLevel}
+            onDeleteProgressLevel={handleDeleteProgressLevel}
+            onLevelChange={handleLevelChange}
+            levelOptions={selectedNodeLevelOptions}
+            segmentOptions={selectedNodeSegmentOptions}
+            parentOptions={selectedNodeParentOptions}
+            selectedParentId={selectedNodeParentId}
+            additionalDependencyOptions={selectedNodeAdditionalDependencyOptions}
+            selectedAdditionalDependencyIds={selectedNodeAdditionalDependencies.outgoingIds}
+            incomingDependencyLabels={selectedNodeIncomingDependencyLabels}
+            validationMessage={selectedNodeValidationMessage}
+            onParentChange={(nextParentKey) => {
+              if (!selectedNodeId) {
+                return
+              }
 
-          const nextParentId = nextParentKey === '__root__' ? null : nextParentKey
-          commitDocument(moveNodeToParent(roadmapData, selectedNodeId, nextParentId))
-        }}
-        onSegmentChange={(nextSegmentKey) => {
-          const nextSegmentId = nextSegmentKey === UNASSIGNED_SEGMENT_ID ? null : nextSegmentKey
+              const nextParentId = nextParentKey === '__root__' ? null : nextParentKey
+              commitDocument(moveNodeToParent(roadmapData, selectedNodeId, nextParentId))
+            }}
+            onSegmentChange={(nextSegmentKey) => {
+              const nextSegmentId = nextSegmentKey === UNASSIGNED_SEGMENT_ID ? null : nextSegmentKey
 
-          const validation = validateNodeSegmentChange(roadmapData, selectedNodeId, nextSegmentId, TREE_CONFIG)
-          commitDocument(validation.isAllowed ? validation.tree : roadmapData)
-        }}
-        onAdditionalDependenciesChange={handleAdditionalDependenciesChange}
-        onDeleteNodeOnly={handleDeleteNodeOnly}
-        onDeleteNodeBranch={handleDeleteNodeBranch}
-      />
+              const validation = validateNodeSegmentChange(roadmapData, selectedNodeId, nextSegmentId, TREE_CONFIG)
+              commitDocument(validation.isAllowed ? validation.tree : roadmapData)
+            }}
+            onAdditionalDependenciesChange={handleAdditionalDependenciesChange}
+            onDeleteNodeOnly={handleDeleteNodeOnly}
+            onDeleteNodeBranch={handleDeleteNodeBranch}
+          />
 
-      <SegmentPanel
-        selectedSegment={selectedSegment}
-        onClose={() => setSelectedSegmentId(null)}
-        onLabelChange={handleSegmentLabelChange}
-        onDelete={handleDeleteSegment}
-      />
+          <SegmentPanel
+            selectedSegment={selectedSegment}
+            onClose={() => setSelectedSegmentId(null)}
+            onCollapse={() => setIsControlPanelCollapsed(true)}
+            onLabelChange={handleSegmentLabelChange}
+            onDelete={handleDeleteSegment}
+          />
+        </>
+      )}
     </main>
   )
 }

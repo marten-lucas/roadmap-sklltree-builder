@@ -33,6 +33,10 @@ describe('htmlExport', () => {
       roadmapDocument: document,
       styleText: '.skill-tree-canvas { color: red; }',
       title: 'Skill Tree Viewer',
+      metadata: {
+        brandName: 'Roadmap Studio',
+        author: 'QA Team',
+      },
     })
 
     expect(html).toContain('Skill Tree Viewer')
@@ -42,6 +46,9 @@ describe('htmlExport', () => {
     expect(html).toContain(`id="${HTML_EXPORT_DATA_SCRIPT_ID}"`)
     expect(html).toContain('PDF drucken')
     expect(html).toContain('SVG herunterladen')
+    expect(html).toContain('SVG clean')
+    expect(html).toContain('Roadmap Studio')
+    expect(html).toContain('Autor: QA Team')
   })
 
   it('extracts and reads embedded document payload from exported html', () => {
@@ -62,6 +69,13 @@ describe('htmlExport', () => {
     const result = extractDocumentPayloadFromHtml('<html><body>Missing data</body></html>')
 
     expect(result.ok).toBe(false)
-    expect(result.error).toMatch(/Skilltree-Daten/)
+    expect(result.error).toMatch(/HTML exportieren/)
+  })
+
+  it('rejects non-html content early', () => {
+    const result = extractDocumentPayloadFromHtml('{"schemaVersion":1}')
+
+    expect(result.ok).toBe(false)
+    expect(result.error).toMatch(/kein gueltiges HTML/)
   })
 })

@@ -58,6 +58,10 @@ describe('pdfExport', () => {
       releaseNoteEntries: collectReleaseNoteEntries(createDocument()),
       styleText: '.skill-tree-canvas { color: red; }',
       title: 'Roadmap Export',
+      metadata: {
+        brandName: 'Roadmap Studio',
+        author: 'QA Team',
+      },
     })
 
     expect(html).toContain('Roadmap Export')
@@ -65,6 +69,8 @@ describe('pdfExport', () => {
     expect(html).toContain('<svg viewBox="0 0 100 100"></svg>')
     expect(html).toContain('React Platform')
     expect(html).toContain('API Design')
+    expect(html).toContain('Autor: QA Team')
+    expect(html).toContain('Roadmap Studio')
     expect(html).toContain('window.print()')
   })
 })
