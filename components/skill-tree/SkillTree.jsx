@@ -1,9 +1,15 @@
 import { Text, Tooltip } from '@mantine/core'
-import { useEffect, useMemo, useReducer, useState } from 'react'
+import { useEffect, useMemo, useReducer, useRef, useState } from 'react'
 import { TransformComponent, TransformWrapper } from 'react-zoom-pan-pinch'
 import './skillTree.css'
 import { TREE_CONFIG, normalizeStatusKey, STATUS_STYLES } from './config'
 import { initialData } from './data'
+import {
+  downloadDocumentJson,
+  loadDocumentFromLocalStorage,
+  readDocumentFromJsonText,
+  saveDocumentToLocalStorage,
+} from './documentPersistence'
 import { createDocumentHistoryState, createEmptyDocument, documentHistoryReducer } from './documentState'
 import { InspectorPanel } from './InspectorPanel'
 import { solveSkillTreeLayout } from './layoutSolver'
@@ -56,6 +62,10 @@ const isAngleNear = (candidate, blocked, thresholdDeg) => {
   return Math.abs(getAngleDelta(candidate, blocked)) < thresholdDeg
 }
 
+const AUTOSAVE_DEBOUNCE_MS = 450
+
+const getInitialRoadmapDocument = () => loadDocumentFromLocalStorage() ?? initialData
+
 const isEditableElement = (target) => {
   if (!(target instanceof HTMLElement)) {
     return false
@@ -67,12 +77,13 @@ const isEditableElement = (target) => {
 export function SkillTree() {
   const [documentHistory, dispatchDocument] = useReducer(
     documentHistoryReducer,
-    initialData,
-    createDocumentHistoryState,
+    null,
+    () => createDocumentHistoryState(getInitialRoadmapDocument()),
   )
   const roadmapData = documentHistory.present
   const canUndo = documentHistory.past.length > 0
   const canRedo = documentHistory.future.length > 0
+  const documentFileInputRef = useRef(null)
   const [selectedNodeId, setSelectedNodeId] = useState(null)
   const [selectedProgressLevelId, setSelectedProgressLevelId] = useState(null)
   const [selectedSegmentId, setSelectedSegmentId] = useState(null)
@@ -411,6 +422,45 @@ export function SkillTree() {
     dispatchDocument({ type: 'apply', document: nextDocument })
   }
 
+  const resetSelections = () => {
+    setSelectedNodeId(null)
+    setSelectedSegmentId(null)
+    setSelectedPortalKey(null)
+    setSelectedProgressLevelId(null)
+  }
+
+  const handleOpenDocumentPicker = () => {
+    documentFileInputRef.current?.click()
+  }
+
+  const handleDocumentFileSelected = async (event) => {
+    const file = event.target.files?.[0]
+
+    if (!file) {
+      return
+    }
+
+    try {
+      const rawText = await file.text()
+      const nextDocument = readDocumentFromJsonText(rawText)
+      dispatchDocument({ type: 'replace', document: nextDocument })
+      resetSelections()
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Die Datei konnte nicht geladen werden.'
+      window.alert(message)
+    } finally {
+      event.target.value = ''
+    }
+  }
+
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      saveDocumentToLocalStorage(roadmapData)
+    }, AUTOSAVE_DEBOUNCE_MS)
+
+    return () => window.clearTimeout(timeoutId)
+  }, [roadmapData])
+
   useEffect(() => {
     const handleKeyDown = (event) => {
       if (isEditableElement(event.target)) {
@@ -442,6 +492,18 @@ export function SkillTree() {
         return
       }
 
+      if (key === 's') {
+        event.preventDefault()
+        downloadDocumentJson(roadmapData)
+        return
+      }
+
+      if (key === 'o') {
+        event.preventDefault()
+        handleOpenDocumentPicker()
+        return
+      }
+
       if (event.shiftKey && key === 'backspace') {
         event.preventDefault()
         dispatchDocument({ type: 'apply', document: createEmptyDocument() })
@@ -454,7 +516,7 @@ export function SkillTree() {
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [canRedo, canUndo])
+  }, [canRedo, canUndo, roadmapData])
 
   const handleAddChild = (parentId) => {
     const result = addChildNodeWithResult(roadmapData, parentId)
@@ -653,6 +715,14 @@ export function SkillTree() {
 
   return (
     <main className="skill-tree-shell">
+      <input
+        ref={documentFileInputRef}
+        type="file"
+        accept="application/json,.json"
+        style={{ display: 'none' }}
+        onChange={handleDocumentFileSelected}
+      />
+
       <TransformWrapper
         minScale={0.2}
         maxScale={2.2}
