@@ -39,6 +39,172 @@ const sanitizeShortName = (value, fallbackLabel = DEFAULT_NODE_LABEL) => {
   return shortNameFromLabel(fallbackLabel)
 }
 
+const uniqueStringArray = (value) => {
+  if (!Array.isArray(value)) {
+    return []
+  }
+
+  const seen = new Set()
+  const result = []
+
+  for (const entry of value) {
+    if (typeof entry !== 'string' || entry.length === 0 || seen.has(entry)) {
+      continue
+    }
+
+    seen.add(entry)
+    result.push(entry)
+  }
+
+  return result
+}
+
+const collectNodeIds = (tree) => {
+  const ids = new Set()
+  const queue = [...(tree?.children ?? [])]
+
+  while (queue.length > 0) {
+    const current = queue.shift()
+    ids.add(current.id)
+    queue.push(...(current.children ?? []))
+  }
+
+  return ids
+}
+
+const buildParentByNodeId = (tree) => {
+  const parentByNodeId = new Map()
+  const queue = [...(tree?.children ?? []).map((child) => ({ node: child, parentId: null }))]
+
+  while (queue.length > 0) {
+    const current = queue.shift()
+    parentByNodeId.set(current.node.id, current.parentId)
+
+    for (const child of current.node.children ?? []) {
+      queue.push({ node: child, parentId: current.node.id })
+    }
+  }
+
+  return parentByNodeId
+}
+
+const buildDescendantsByNodeId = (tree) => {
+  const descendantsByNodeId = new Map()
+
+  const visit = (node) => {
+    const descendants = new Set()
+
+    for (const child of node.children ?? []) {
+      descendants.add(child.id)
+      const childDescendants = visit(child)
+      childDescendants.forEach((id) => descendants.add(id))
+    }
+
+    descendantsByNodeId.set(node.id, descendants)
+    return descendants
+  }
+
+  for (const root of tree?.children ?? []) {
+    visit(root)
+  }
+
+  return descendantsByNodeId
+}
+
+const buildAncestorsByNodeId = (parentByNodeId) => {
+  const ancestorsByNodeId = new Map()
+
+  const getAncestors = (nodeId) => {
+    if (ancestorsByNodeId.has(nodeId)) {
+      return ancestorsByNodeId.get(nodeId)
+    }
+
+    const ancestors = new Set()
+    let currentId = parentByNodeId.get(nodeId) ?? null
+
+    while (currentId) {
+      ancestors.add(currentId)
+      currentId = parentByNodeId.get(currentId) ?? null
+    }
+
+    ancestorsByNodeId.set(nodeId, ancestors)
+    return ancestors
+  }
+
+  for (const nodeId of parentByNodeId.keys()) {
+    getAncestors(nodeId)
+  }
+
+  return ancestorsByNodeId
+}
+
+const normalizeAdditionalDependencies = (tree) => {
+  if (!tree) {
+    return tree
+  }
+
+  const nodeIds = collectNodeIds(tree)
+  const parentByNodeId = buildParentByNodeId(tree)
+  const descendantsByNodeId = buildDescendantsByNodeId(tree)
+  const ancestorsByNodeId = buildAncestorsByNodeId(parentByNodeId)
+  const incomingByTargetId = new Map([...nodeIds].map((id) => [id, []]))
+
+  const normalizeNode = (node) => {
+    const ownId = node.id
+    const descendants = descendantsByNodeId.get(ownId) ?? new Set()
+    const ancestors = ancestorsByNodeId.get(ownId) ?? new Set()
+    const parentId = parentByNodeId.get(ownId) ?? null
+    const siblingIds = new Set()
+
+    if (parentId) {
+      const parentNode = findNodeById(tree, parentId)
+      for (const sibling of parentNode?.children ?? []) {
+        if (sibling.id !== ownId) {
+          siblingIds.add(sibling.id)
+        }
+      }
+    }
+
+    const normalizedOutgoing = uniqueStringArray(node.additionalDependencyIds).filter((targetId) => {
+      if (!nodeIds.has(targetId) || targetId === ownId) {
+        return false
+      }
+
+      if (ancestors.has(targetId) || descendants.has(targetId) || siblingIds.has(targetId)) {
+        return false
+      }
+
+      return true
+    })
+
+    for (const targetId of normalizedOutgoing) {
+      incomingByTargetId.get(targetId)?.push(ownId)
+    }
+
+    return {
+      ...node,
+      additionalDependencyIds: normalizedOutgoing,
+      additionalDependentIds: [],
+      children: (node.children ?? []).map(normalizeNode),
+    }
+  }
+
+  const normalizedRoots = (tree.children ?? []).map(normalizeNode)
+
+  const applyIncoming = (node) => ({
+    ...node,
+    additionalDependentIds: uniqueStringArray(incomingByTargetId.get(node.id) ?? []),
+    children: (node.children ?? []).map(applyIncoming),
+  })
+
+  return {
+    ...tree,
+    children: normalizedRoots.map(applyIncoming),
+  }
+}
+
+const withNormalizedDependencies = (tree) => normalizeAdditionalDependencies(tree)
+
 export const ensureNodeLevels = (node) => {
   if (Array.isArray(node?.levels) && node.levels.length > 0) {
     return node.levels.map((entry, index) => toNodeLevel(entry, `Level ${index + 1}`))
@@ -122,7 +288,7 @@ const updateNodeById = (node, targetId, updater) => {
 }
 
 export const updateNodeData = (treeData, id, newLabel, newStatus) =>
-  updateNodeById(treeData, id, (node) => {
+  withNormalizedDependencies(updateNodeById(treeData, id, (node) => {
     const levels = ensureNodeLevels(node)
     const nextStatus = newStatus ?? levels[0]?.status ?? DEFAULT_NODE_STATUS
 
@@ -138,15 +304,42 @@ export const updateNodeData = (treeData, id, newLabel, newStatus) =>
         ...levels.slice(1),
       ],
     }
-  })
-
-export const updateNodeShortName = (treeData, id, shortName) =>
-  updateNodeById(treeData, id, (node) => ({
-    shortName: sanitizeShortName(shortName, node.label),
   }))
 
+export const updateNodeShortName = (treeData, id, shortName) =>
+  withNormalizedDependencies(updateNodeById(treeData, id, (node) => ({
+    shortName: sanitizeShortName(shortName, node.label),
+  })))
+
+export const getNodeAdditionalDependencies = (treeData, id) => {
+  const node = findNodeById(treeData, id)
+  if (!node) {
+    return {
+      outgoingIds: [],
+      incomingIds: [],
+    }
+  }
+
+  return {
+    outgoingIds: uniqueStringArray(node.additionalDependencyIds),
+    incomingIds: uniqueStringArray(node.additionalDependentIds),
+  }
+}
+
+export const setNodeAdditionalDependencies = (treeData, sourceNodeId, nextTargetIds) => {
+  if (!sourceNodeId || !findNodeById(treeData, sourceNodeId)) {
+    return treeData
+  }
+
+  const nextTree = updateNodeById(treeData, sourceNodeId, () => ({
+    additionalDependencyIds: uniqueStringArray(nextTargetIds),
+  }))
+
+  return withNormalizedDependencies(nextTree)
+}
+
 export const updateNodeProgressLevel = (treeData, id, levelId, updates) =>
-  updateNodeById(treeData, id, (node) => {
+  withNormalizedDependencies(updateNodeById(treeData, id, (node) => {
     const levels = ensureNodeLevels(node)
     const nextLevels = levels.map((level) => {
       if (level.id !== levelId) {
@@ -165,10 +358,10 @@ export const updateNodeProgressLevel = (treeData, id, levelId, updates) =>
       levels: nextLevels,
       status: nextLevels[0]?.status ?? DEFAULT_NODE_STATUS,
     }
-  })
+  }))
 
 export const addNodeProgressLevel = (treeData, id, newLevelId) =>
-  updateNodeById(treeData, id, (node) => {
+  withNormalizedDependencies(updateNodeById(treeData, id, (node) => {
     const levels = ensureNodeLevels(node)
     const nextIndex = levels.length + 1
     const nextLevel = toNodeLevel(
@@ -184,10 +377,10 @@ export const addNodeProgressLevel = (treeData, id, newLevelId) =>
     return {
       levels: [...levels, nextLevel],
     }
-  })
+  }))
 
 export const removeNodeProgressLevel = (treeData, id, levelId) =>
-  updateNodeById(treeData, id, (node) => {
+  withNormalizedDependencies(updateNodeById(treeData, id, (node) => {
     const levels = ensureNodeLevels(node)
     if (levels.length <= 1) {
       return {
@@ -212,7 +405,7 @@ export const removeNodeProgressLevel = (treeData, id, levelId) =>
       levels: nextLevels,
       status: nextLevels[0].status,
     }
-  })
+  }))
 
 export const updateNodeSegment = (treeData, id, newSegmentId) => {
   const nextChildren = (treeData.children ?? []).map((child) =>
@@ -228,10 +421,10 @@ export const updateNodeSegment = (treeData, id, newSegmentId) => {
     return treeData
   }
 
-  return {
+  return withNormalizedDependencies({
     ...treeData,
     children: nextChildren,
-  }
+  })
 }
 
 export const updateSegmentLabel = (treeData, segmentId, newLabel) => ({
@@ -296,7 +489,7 @@ export const getNodeLevelInfo = (tree, nodeId) => {
  */
 export const updateNodeLevel = (tree, nodeId, newLevel) => {
   const currentNode = findNodeById(tree, nodeId)
-  if (!currentNode) return tree
+  if (!currentNode) return withNormalizedDependencies(tree)
 
   const { nodeLevel: oldLevel } = getNodeLevelInfo(tree, nodeId)
   const levelDiff = newLevel - oldLevel
@@ -324,7 +517,7 @@ export const updateNodeLevel = (tree, nodeId, newLevel) => {
     return updated
   }
 
-  return adjustDescendants(tree, 0, false)
+  return withNormalizedDependencies(adjustDescendants(tree, 0, false))
 }
 
 const createNewNode = (level, segmentId = null) => ({
@@ -342,6 +535,8 @@ const createNewNode = (level, segmentId = null) => ({
   ],
   ebene: level,
   segmentId,
+  additionalDependencyIds: [],
+  additionalDependentIds: [],
   children: [],
 })
 
@@ -402,13 +597,13 @@ export const deleteNodeBranch = (tree, nodeId) => {
   const { children: nextRoots, changed } = removeFromChildren(tree.children ?? [])
 
   if (!changed) {
-    return tree
+    return withNormalizedDependencies(tree)
   }
 
-  return {
+  return withNormalizedDependencies({
     ...tree,
     children: nextRoots,
-  }
+  })
 }
 
 export const deleteNodeOnly = (tree, nodeId) => {
@@ -451,13 +646,13 @@ export const deleteNodeOnly = (tree, nodeId) => {
   const { children: nextRoots, changed } = replaceInChildren(tree.children ?? [])
 
   if (!changed) {
-    return tree
+    return withNormalizedDependencies(tree)
   }
 
-  return {
+  return withNormalizedDependencies({
     ...tree,
     children: nextRoots,
-  }
+  })
 }
 
 export const addChildNode = (tree, parentId) => {
@@ -497,7 +692,7 @@ export const addChildNodeWithResult = (tree, parentId) => {
   }
 
   return {
-    tree: addToParent(tree),
+    tree: withNormalizedDependencies(addToParent(tree)),
     createdNodeId,
   }
 }
@@ -510,10 +705,10 @@ export const addInitialSegmentWithResult = (tree) => {
   const newSegment = createNewSegment()
 
   return {
-    tree: {
+    tree: withNormalizedDependencies({
       ...tree,
       segments: [...(tree.segments ?? []), newSegment],
-    },
+    }),
     createdSegmentId: newSegment.id,
   }
 }
@@ -535,10 +730,10 @@ export const addSegmentNearWithResult = (tree, anchorSegmentId, side = 'right') 
   nextSegments.splice(insertIndex, 0, newSegment)
 
   return {
-    tree: {
+    tree: withNormalizedDependencies({
       ...tree,
       segments: nextSegments,
-    },
+    }),
     createdSegmentId: newSegment.id,
   }
 }
@@ -550,10 +745,10 @@ export const addInitialRootNodeWithResult = (tree) => {
   nextRoots.push(newNode)
 
   return {
-    tree: {
+    tree: withNormalizedDependencies({
       ...tree,
       children: nextRoots,
-    },
+    }),
     createdNodeId: newNode.id,
   }
 }
@@ -576,10 +771,10 @@ export const addRootNodeNearWithResult = (tree, anchorRootId, side = 'right') =>
   nextRoots.splice(insertIndex, 0, newNode)
 
   return {
-    tree: {
+    tree: withNormalizedDependencies({
       ...tree,
       children: nextRoots,
-    },
+    }),
     createdNodeId: newNode.id,
   }
 }
@@ -598,10 +793,10 @@ export const deleteSegment = (tree, segmentId) => {
     return nextNode
   }
 
-  return {
+  return withNormalizedDependencies({
     ...clearSegmentAssignments(tree),
     segments: (tree.segments ?? []).filter((segment) => segment.id !== segmentId),
-  }
+  })
 }
 
 const adjustMovedSubtreeLevels = (node, levelDiff, isRoot = true) => {
@@ -703,22 +898,22 @@ const insertNodeUnderParent = (children, parentId, nodeToInsert) => {
 
 export const moveNodeToParent = (tree, nodeId, parentId) => {
   if (!tree || !nodeId || nodeId === parentId) {
-    return tree
+    return withNormalizedDependencies(tree)
   }
 
   const currentNode = findNodeById(tree, nodeId)
   if (!currentNode) {
-    return tree
+    return withNormalizedDependencies(tree)
   }
 
   if (parentId && subtreeContainsId(currentNode, parentId)) {
-    return tree
+    return withNormalizedDependencies(tree)
   }
 
   const { children: treeWithoutNodeChildren, extractedNode } = removeNodeById(tree.children ?? [], nodeId)
 
   if (!extractedNode) {
-    return tree
+    return withNormalizedDependencies(tree)
   }
 
   const treeWithoutNode = {
@@ -730,7 +925,7 @@ export const moveNodeToParent = (tree, nodeId, parentId) => {
   if (parentId) {
     const parent = findNodeById(treeWithoutNode, parentId)
     if (!parent) {
-      return tree
+      return withNormalizedDependencies(tree)
     }
 
     const parentLevelInfo = getNodeLevelInfo(treeWithoutNode, parentId)
@@ -742,19 +937,19 @@ export const moveNodeToParent = (tree, nodeId, parentId) => {
   const movedNode = adjustMovedSubtreeLevels(extractedNode, levelDiff, true)
 
   if (!parentId) {
-    return {
+    return withNormalizedDependencies({
       ...treeWithoutNode,
       children: [...(treeWithoutNode.children ?? []), movedNode],
-    }
+    })
   }
 
   const nextChildren = insertNodeUnderParent(treeWithoutNode.children ?? [], parentId, movedNode)
   if (nextChildren === (treeWithoutNode.children ?? [])) {
-    return tree
+    return withNormalizedDependencies(tree)
   }
 
-  return {
+  return withNormalizedDependencies({
     ...treeWithoutNode,
     children: nextChildren,
-  }
+  })
 }

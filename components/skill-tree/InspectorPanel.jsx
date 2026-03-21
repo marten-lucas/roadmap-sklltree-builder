@@ -1,4 +1,4 @@
-import { ActionIcon, Alert, Button, Paper, Select, Stack, Tabs, Text, TextInput, Textarea } from '@mantine/core'
+import { ActionIcon, Alert, Button, MultiSelect, Paper, Select, Stack, Tabs, Text, TextInput, Textarea } from '@mantine/core'
 import { normalizeStatusKey, STATUS_LABELS } from './config'
 import { UNASSIGNED_SEGMENT_ID } from './layoutShared'
 
@@ -26,8 +26,12 @@ export function InspectorPanel({
   segmentOptions,
   parentOptions,
   selectedParentId,
+  additionalDependencyOptions,
+  selectedAdditionalDependencyIds,
+  incomingDependencyLabels,
   validationMessage,
   onParentChange,
+  onAdditionalDependenciesChange,
   onSegmentChange,
   onDeleteNodeOnly,
   onDeleteNodeBranch,
@@ -67,6 +71,11 @@ export function InspectorPanel({
     disabled: !option.isAllowed,
   }))
   const selectedParentKey = selectedParentId ?? '__root__'
+  const additionalDependencyData = (additionalDependencyOptions ?? []).map((option) => ({
+    value: option.id,
+    label: option.shortName ? `${option.label} (${option.shortName})` : option.label,
+    disabled: !option.isAllowed,
+  }))
 
   return (
     <Paper className="skill-panel skill-panel--inspector" radius={0} shadow="none">
@@ -164,6 +173,40 @@ export function InspectorPanel({
               comboboxProps={{ withinPortal: true, zIndex: 450 }}
             />
           )}
+
+          {additionalDependencyData.length > 0 && (
+            <MultiSelect
+              label="Additional Dependencies"
+              data={additionalDependencyData}
+              value={selectedAdditionalDependencyIds ?? []}
+              onChange={onAdditionalDependenciesChange}
+              searchable
+              clearable
+              classNames={{
+                input: 'mantine-dark-input',
+                label: 'mantine-dark-label',
+                dropdown: 'mantine-dark-dropdown',
+                option: 'mantine-dark-option',
+                pill: 'mantine-dark-pill',
+              }}
+              comboboxProps={{ withinPortal: true, zIndex: 450 }}
+            />
+          )}
+
+          <div>
+            <Text className="mantine-dark-label" size="sm" mb="xs">Incoming Dependencies</Text>
+            {incomingDependencyLabels && incomingDependencyLabels.length > 0 ? (
+              <Stack gap={6}>
+                {incomingDependencyLabels.map((entry) => (
+                  <Paper key={entry.id} radius="md" px="sm" py={6} className="skill-panel__incoming-item" withBorder>
+                    <Text size="sm">{entry.shortName ? `${entry.label} (${entry.shortName})` : entry.label}</Text>
+                  </Paper>
+                ))}
+              </Stack>
+            ) : (
+              <Text size="sm" c="dimmed">Keine eingehenden Dependencies.</Text>
+            )}
+          </div>
 
           <div>
             <Text className="mantine-dark-label" size="sm" mb="xs">Ausbaustufen</Text>

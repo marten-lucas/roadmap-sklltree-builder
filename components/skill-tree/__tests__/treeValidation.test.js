@@ -6,6 +6,7 @@ import {
   getSegmentOptionsForNode,
   getLevelOptionsForNode,
   getParentOptionsForNode,
+  getAdditionalDependencyOptionsForNode,
 } from '../treeValidation'
 import { TREE_CONFIG } from '../config'
 import { createSimpleTree, createCrossSegmentTree, findNodeInTree, SEGMENT_FRONTEND, SEGMENT_BACKEND } from './testUtils'
@@ -484,6 +485,27 @@ describe('treeValidation', () => {
       const options = getParentOptionsForNode(tree, 'child-react')
 
       expect(options.some((option) => option.id === '__root__')).toBe(true)
+    })
+  })
+
+  describe('getAdditionalDependencyOptionsForNode', () => {
+    it('should exclude self, parents, siblings and descendants', () => {
+      const tree = createSimpleTree()
+      const optionsForRoot = getAdditionalDependencyOptionsForNode(tree, 'root-frontend')
+      const optionIdsForRoot = new Set(optionsForRoot.map((option) => option.id))
+
+      expect(optionIdsForRoot.has('root-frontend')).toBe(false)
+      expect(optionIdsForRoot.has('child-react')).toBe(false)
+      expect(optionIdsForRoot.has('child-vue')).toBe(false)
+      expect(optionIdsForRoot.has('root-backend')).toBe(true)
+
+      const optionsForChild = getAdditionalDependencyOptionsForNode(tree, 'child-react')
+      const optionIdsForChild = new Set(optionsForChild.map((option) => option.id))
+
+      expect(optionIdsForChild.has('child-react')).toBe(false)
+      expect(optionIdsForChild.has('root-frontend')).toBe(false)
+      expect(optionIdsForChild.has('child-vue')).toBe(false)
+      expect(optionIdsForChild.has('child-db')).toBe(true)
     })
   })
 })

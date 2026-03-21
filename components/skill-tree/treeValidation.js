@@ -328,3 +328,63 @@ export const getParentOptionsForNode = (tree, nodeId) => {
 
   return options
 }
+
+export const getAdditionalDependencyOptionsForNode = (tree, nodeId) => {
+  if (!nodeId) {
+    return []
+  }
+
+  const nodes = []
+  const parentByNodeId = new Map()
+  const queue = [...(tree.children ?? []).map((node) => ({ node, parentId: null }))]
+
+  while (queue.length > 0) {
+    const current = queue.shift()
+    nodes.push(current.node)
+    parentByNodeId.set(current.node.id, current.parentId)
+
+    for (const child of current.node.children ?? []) {
+      queue.push({ node: child, parentId: current.node.id })
+    }
+  }
+
+  const selectedNode = nodes.find((node) => node.id === nodeId)
+  if (!selectedNode) {
+    return []
+  }
+
+  const blockedIds = new Set([nodeId])
+  const subtreeIds = getNodeSubtreeIds(tree, nodeId)
+  subtreeIds.forEach((id) => blockedIds.add(id))
+
+  let currentId = nodeId
+  while (parentByNodeId.has(currentId) && parentByNodeId.get(currentId) != null) {
+    const parentId = parentByNodeId.get(currentId)
+    blockedIds.add(parentId)
+    currentId = parentId
+  }
+
+  const directParentId = parentByNodeId.get(nodeId) ?? null
+  if (directParentId) {
+    const parentNode = nodes.find((node) => node.id === directParentId)
+    for (const sibling of parentNode?.children ?? []) {
+      if (sibling.id !== nodeId) {
+        blockedIds.add(sibling.id)
+      }
+    }
+  }
+
+  const currentOutgoingIds = new Set(selectedNode.additionalDependencyIds ?? [])
+
+  return nodes
+    .filter((node) => !blockedIds.has(node.id))
+    .map((node) => ({
+      id: node.id,
+      label: node.label,
+      shortName: node.shortName,
+      isCurrent: currentOutgoingIds.has(node.id),
+      isAllowed: true,
+      reasons: [],
+    }))
+    .sort((left, right) => String(left.label).localeCompare(String(right.label)))
+}

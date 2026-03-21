@@ -82,6 +82,97 @@
     fill: #bfdbfe;
 }
 
+.skill-tree-portal {
+    pointer-events: all;
+}
+
+.skill-tree-portal--interactive {
+    cursor: pointer;
+}
+
+.skill-tree-portal__hit {
+    fill: rgba(255, 255, 255, 0.001);
+    stroke: none;
+    pointer-events: all;
+}
+
+.skill-tree-portal__halo {
+    opacity: 0.28;
+    filter: blur(0.2px);
+    animation: skill-portal-pulse 4.8s ease-in-out infinite;
+}
+
+.skill-tree-portal__halo--source {
+    fill: rgba(56, 189, 248, 0.14);
+}
+
+.skill-tree-portal__halo--target {
+    fill: rgba(251, 191, 36, 0.14);
+}
+
+.skill-tree-portal__core {
+    stroke-width: 1.25;
+    transition: transform 140ms ease, stroke-width 140ms ease, opacity 140ms ease;
+}
+
+.skill-tree-portal__core--source {
+    fill: rgba(2, 132, 199, 0.95);
+    stroke: rgba(186, 230, 253, 0.9);
+}
+
+.skill-tree-portal__core--target {
+    fill: rgba(217, 119, 6, 0.95);
+    stroke: rgba(254, 240, 138, 0.92);
+}
+
+.skill-tree-portal__label {
+    fill: rgba(248, 250, 252, 0.95);
+    font-size: 7px;
+    font-weight: 400;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    paint-order: stroke;
+    stroke: rgba(2, 6, 23, 0.85);
+    stroke-width: 2px;
+    pointer-events: all;
+    cursor: inherit;
+}
+
+.skill-tree-portal__halo,
+.skill-tree-portal__core {
+    pointer-events: all;
+}
+
+.skill-tree-portal--interactive:hover .skill-tree-portal__core {
+    transform: scale(1.03);
+}
+
+.skill-tree-portal--selected .skill-tree-portal__halo {
+    opacity: 0.46;
+}
+
+.skill-tree-portal--selected .skill-tree-portal__core {
+    stroke-width: 2.4;
+}
+
+.skill-tree-portal--selected .skill-tree-portal__label {
+    fill: #ffffff;
+}
+
+@keyframes skill-portal-pulse {
+
+    0%,
+    100% {
+        opacity: 0.22;
+        transform: scale(0.99);
+    }
+
+    50% {
+        opacity: 0.32;
+        transform: scale(1.01);
+    }
+}
+
 .skill-panel {
     position: absolute;
     z-index: 50;
@@ -205,6 +296,18 @@
 
 .mantine-dark-option {
     color: #e2e8f0;
+}
+
+.mantine-dark-pill {
+    color: #e2e8f0;
+    background: rgba(14, 116, 144, 0.35);
+    border: 1px solid rgba(103, 232, 249, 0.35);
+}
+
+.skill-panel__incoming-item {
+    color: #e2e8f0;
+    background: rgba(15, 23, 42, 0.75);
+    border-color: rgba(51, 65, 85, 0.9);
 }
 
 .skill-node-foreign {

@@ -1,3 +1,4 @@
+import { Text, Tooltip } from '@mantine/core'
 import { useMemo, useState } from 'react'
 import { TransformComponent, TransformWrapper } from 'react-zoom-pan-pinch'
 import './skillTree.css'
@@ -9,6 +10,7 @@ import { UNASSIGNED_SEGMENT_ID } from './layoutShared'
 import { SegmentPanel } from './SegmentPanel'
 import { SkillNode } from './SkillNode'
 import {
+  getAdditionalDependencyOptionsForNode,
   getParentOptionsForNode,
   getLevelOptionsForNode,
   getSegmentOptionsForNode,
@@ -27,20 +29,38 @@ import {
   deleteNodeOnly,
   findParentNodeId,
   findNodeById,
+  getNodeAdditionalDependencies,
   getNodeLevelInfo,
   moveNodeToParent,
   removeNodeProgressLevel,
+  setNodeAdditionalDependencies,
   updateNodeData as updateNodeDataInTree,
   updateNodeProgressLevel,
   updateNodeShortName,
   updateSegmentLabel,
 } from './treeData'
+import { toDegrees, toRadians } from './layoutMath'
+
+const normalizeAngle = (angleDeg) => {
+  const normalized = angleDeg % 360
+  return normalized < 0 ? normalized + 360 : normalized
+}
+
+const getAngleDelta = (leftDeg, rightDeg) => {
+  const delta = normalizeAngle(leftDeg - rightDeg)
+  return delta > 180 ? delta - 360 : delta
+}
+
+const isAngleNear = (candidate, blocked, thresholdDeg) => {
+  return Math.abs(getAngleDelta(candidate, blocked)) < thresholdDeg
+}
 
 export function SkillTree() {
   const [roadmapData, setRoadmapData] = useState(initialData)
   const [selectedNodeId, setSelectedNodeId] = useState(null)
   const [selectedProgressLevelId, setSelectedProgressLevelId] = useState(null)
   const [selectedSegmentId, setSelectedSegmentId] = useState(null)
+  const [selectedPortalKey, setSelectedPortalKey] = useState(null)
   const centerSize = TREE_CONFIG.nodeSize * 2
   const addControlOffset = TREE_CONFIG.nodeSize * 0.82
 
@@ -120,6 +140,47 @@ export function SkillTree() {
     [roadmapData, selectedNodeId],
   )
 
+  const selectedNodeAdditionalDependencyOptions = useMemo(
+    () => (selectedNodeId ? getAdditionalDependencyOptionsForNode(roadmapData, selectedNodeId) : []),
+    [roadmapData, selectedNodeId],
+  )
+
+  const selectedNodeAdditionalDependencies = useMemo(() => {
+    if (!selectedNodeId) {
+      return {
+        outgoingIds: [],
+        incomingIds: [],
+      }
+    }
+
+    return getNodeAdditionalDependencies(roadmapData, selectedNodeId)
+  }, [roadmapData, selectedNodeId])
+
+  const allNodesById = useMemo(() => {
+    const map = new Map()
+    const queue = [...(roadmapData.children ?? [])]
+
+    while (queue.length > 0) {
+      const current = queue.shift()
+      map.set(current.id, current)
+      queue.push(...(current.children ?? []))
+    }
+
+    return map
+  }, [roadmapData])
+
+  const selectedNodeIncomingDependencyLabels = useMemo(() => {
+    const incomingIds = selectedNodeAdditionalDependencies.incomingIds ?? []
+    return incomingIds
+      .map((id) => allNodesById.get(id))
+      .filter(Boolean)
+      .map((node) => ({
+        id: node.id,
+        label: node.label,
+        shortName: node.shortName ?? '',
+      }))
+  }, [allNodesById, selectedNodeAdditionalDependencies])
+
   const selectedNodeValidationMessage = useMemo(() => {
     if (!selectedNodeId || diagnostics.isValid) {
       return null
@@ -192,6 +253,112 @@ export function SkillTree() {
     }
   }, [selectedSegmentLabel])
 
+  const dependencyPortals = useMemo(() => {
+    if (!nodes.length) {
+      return []
+    }
+
+    const layoutNodeById = new Map(nodes.map((node) => [node.id, node]))
+    const dependencies = []
+    const queue = [...(roadmapData.children ?? [])]
+
+    while (queue.length > 0) {
+      const current = queue.shift()
+      const outgoingIds = Array.isArray(current.additionalDependencyIds)
+        ? current.additionalDependencyIds
+        : []
+
+      for (const targetId of outgoingIds) {
+        if (layoutNodeById.has(current.id) && layoutNodeById.has(targetId)) {
+          dependencies.push({ sourceId: current.id, targetId })
+        }
+      }
+
+      queue.push(...(current.children ?? []))
+    }
+
+    const endpointsByNodeId = new Map()
+    const pushEndpoint = (nodeId, endpoint) => {
+      const list = endpointsByNodeId.get(nodeId) ?? []
+      list.push(endpoint)
+      endpointsByNodeId.set(nodeId, list)
+    }
+
+    for (const dependency of dependencies) {
+      const sourceNode = layoutNodeById.get(dependency.sourceId)
+      const targetNode = layoutNodeById.get(dependency.targetId)
+      const sourceLabel = allNodesById.get(dependency.sourceId)?.shortName ?? sourceNode.shortName ?? sourceNode.label
+      const targetLabel = allNodesById.get(dependency.targetId)?.shortName ?? targetNode.shortName ?? targetNode.label
+
+      pushEndpoint(dependency.sourceId, {
+        key: `${dependency.sourceId}->${dependency.targetId}:source`,
+        type: 'source',
+        sourceId: dependency.sourceId,
+        targetId: dependency.targetId,
+        tooltip: `Benoetigt ${targetNode.label}`,
+        isInteractive: true,
+        otherLabel: String(targetLabel).slice(0, 3).toUpperCase(),
+      })
+
+      pushEndpoint(dependency.targetId, {
+        key: `${dependency.sourceId}->${dependency.targetId}:target`,
+        type: 'target',
+        sourceId: dependency.sourceId,
+        targetId: dependency.targetId,
+        tooltip: `Wird benoetigt von ${sourceNode.label}`,
+        isInteractive: true,
+        otherLabel: String(sourceLabel).slice(0, 3).toUpperCase(),
+      })
+    }
+
+    const endpoints = []
+    const portalOrbit = TREE_CONFIG.nodeSize * 0.72
+    const portalAvoidance = 17
+    const spreadStep = 18
+
+    for (const [nodeId, nodeEndpoints] of endpointsByNodeId.entries()) {
+      const layoutNode = layoutNodeById.get(nodeId)
+      if (!layoutNode) {
+        continue
+      }
+
+      const childAngles = nodes
+        .filter((candidate) => candidate.parentId === nodeId)
+        .map((candidate) => toDegrees(Math.atan2(candidate.y - layoutNode.y, candidate.x - layoutNode.x)))
+      const blockedAngles = [...childAngles]
+      if (layoutNode.parentId) {
+        const parentNode = layoutNodeById.get(layoutNode.parentId)
+        if (parentNode) {
+          blockedAngles.push(toDegrees(Math.atan2(parentNode.y - layoutNode.y, parentNode.x - layoutNode.x)))
+        }
+      }
+
+      const inwardAngle = toDegrees(Math.atan2(canvas.origin.y - layoutNode.y, canvas.origin.x - layoutNode.x))
+      const offsetCenter = (nodeEndpoints.length - 1) / 2
+
+      nodeEndpoints.forEach((endpoint, index) => {
+        let candidateAngle = inwardAngle + (index - offsetCenter) * spreadStep
+        let safety = 0
+
+        while (blockedAngles.some((blocked) => isAngleNear(candidateAngle, blocked, portalAvoidance)) && safety < 8) {
+          const direction = index <= offsetCenter ? -1 : 1
+          candidateAngle += direction * 12
+          safety += 1
+        }
+
+        const radians = toRadians(candidateAngle)
+        endpoints.push({
+          ...endpoint,
+          nodeId,
+          x: layoutNode.x + Math.cos(radians) * portalOrbit,
+          y: layoutNode.y + Math.sin(radians) * portalOrbit,
+        })
+      })
+    }
+
+    return endpoints
+  }, [allNodesById, canvas.origin.x, canvas.origin.y, nodes, roadmapData.children])
+
   const emptyStateAddControl = useMemo(() => {
     if (nodes.length > 0) {
       return null
@@ -231,6 +398,7 @@ export function SkillTree() {
 
     if (createdNodeId) {
       setSelectedNodeId(createdNodeId)
+      setSelectedPortalKey(null)
     }
   }
 
@@ -245,6 +413,7 @@ export function SkillTree() {
 
     if (createdNodeId) {
       setSelectedNodeId(createdNodeId)
+      setSelectedPortalKey(null)
     }
   }
 
@@ -260,6 +429,7 @@ export function SkillTree() {
     if (createdSegmentId) {
       setSelectedNodeId(null)
       setSelectedSegmentId(createdSegmentId)
+      setSelectedPortalKey(null)
     }
   }
 
@@ -275,6 +445,7 @@ export function SkillTree() {
     if (createdSegmentId) {
       setSelectedNodeId(null)
       setSelectedSegmentId(createdSegmentId)
+      setSelectedPortalKey(null)
     }
   }
 
@@ -289,17 +460,29 @@ export function SkillTree() {
 
     if (createdNodeId) {
       setSelectedNodeId(createdNodeId)
+      setSelectedPortalKey(null)
     }
   }
 
   const handleSelectNode = (nodeId) => {
     setSelectedNodeId(nodeId)
     setSelectedSegmentId(null)
+    setSelectedPortalKey(null)
   }
 
   const handleSelectSegment = (segmentId) => {
     setSelectedSegmentId(segmentId)
     setSelectedNodeId(null)
+    setSelectedPortalKey(null)
+  }
+
+  const handleSelectPortal = (portal) => {
+    if (!portal?.isInteractive) {
+      return
+    }
+
+    const nextSelectedNodeId = portal.type === 'source' ? portal.targetId : portal.sourceId
+    handleSelectNode(nextSelectedNodeId)
   }
 
   const updateNodeData = (id, newLabel, newStatus) => {
@@ -346,6 +529,16 @@ export function SkillTree() {
     )
   }
 
+  const handleAdditionalDependenciesChange = (nextDependencyIds) => {
+    if (!selectedNodeId) {
+      return
+    }
+
+    setRoadmapData((previousData) =>
+      setNodeAdditionalDependencies(previousData, selectedNodeId, nextDependencyIds),
+    )
+  }
+
   const handleAddProgressLevel = () => {
     if (!selectedNodeId) {
       return
@@ -380,6 +573,7 @@ export function SkillTree() {
 
     setRoadmapData((previousData) => deleteNodeOnly(previousData, selectedNodeId))
     setSelectedNodeId(null)
+    setSelectedPortalKey(null)
   }
 
   const handleDeleteNodeBranch = () => {
@@ -389,6 +583,7 @@ export function SkillTree() {
 
     setRoadmapData((previousData) => deleteNodeBranch(previousData, selectedNodeId))
     setSelectedNodeId(null)
+    setSelectedPortalKey(null)
   }
 
   const handleSegmentLabelChange = (newLabel) => {
@@ -406,6 +601,7 @@ export function SkillTree() {
 
     setRoadmapData((previousData) => deleteSegment(previousData, selectedSegmentId))
     setSelectedSegmentId(null)
+    setSelectedPortalKey(null)
   }
 
   return (
@@ -430,6 +626,7 @@ export function SkillTree() {
             onClick={() => {
               setSelectedNodeId(null)
               setSelectedSegmentId(null)
+              setSelectedPortalKey(null)
             }}
           >
             <defs>
@@ -549,6 +746,58 @@ export function SkillTree() {
                 onSelect={handleSelectNode}
               />
             ))}
+
+            {dependencyPortals.map((portal) => {
+              const isPortalSelected = portal.key === selectedPortalKey
+              const portalClassName = [
+                'skill-tree-portal',
+                portal.isInteractive ? 'skill-tree-portal--interactive' : '',
+                isPortalSelected ? 'skill-tree-portal--selected' : '',
+              ].filter(Boolean).join(' ')
+
+              return (
+                <Tooltip
+                  key={portal.key}
+                  withArrow
+                  multiline
+                  openDelay={80}
+                  closeDelay={40}
+                  transitionProps={{ transition: 'fade', duration: 120 }}
+                  classNames={{ tooltip: 'skill-node-tooltip', arrow: 'skill-node-tooltip__arrow' }}
+                  label={(
+                    <div>
+                      <Text className="skill-node-tooltip__title">{portal.otherLabel}</Text>
+                      <Text className="skill-node-tooltip__note">{portal.tooltip}</Text>
+                    </div>
+                  )}
+                >
+                  <g
+                    className={portalClassName}
+                    transform={`translate(${portal.x} ${portal.y})`}
+                    onMouseDown={(event) => event.stopPropagation()}
+                    onClick={(event) => {
+                      event.stopPropagation()
+                      if (portal.isInteractive) {
+                        handleSelectPortal(portal)
+                      }
+                    }}
+                  >
+                    <circle className="skill-tree-portal__hit" r="30" />
+                    <circle className={`skill-tree-portal__halo skill-tree-portal__halo--${portal.type}`} r="26" />
+                    <circle className={`skill-tree-portal__core skill-tree-portal__core--${portal.type}`} r="16" />
+                    <text
+                      className="skill-tree-portal__label"
+                      x="0"
+                      y="0"
+                      textAnchor="middle"
+                      dominantBaseline="middle"
+                    >
+                      {portal.otherLabel}
+                    </text>
+                  </g>
+                </Tooltip>
+              )
+            })}
 
             {emptyStateAddControl && (
               <g
@@ -735,6 +984,9 @@ export function SkillTree() {
         segmentOptions={selectedNodeSegmentOptions}
         parentOptions={selectedNodeParentOptions}
         selectedParentId={selectedNodeParentId}
+        additionalDependencyOptions={selectedNodeAdditionalDependencyOptions}
+        selectedAdditionalDependencyIds={selectedNodeAdditionalDependencies.outgoingIds}
+        incomingDependencyLabels={selectedNodeIncomingDependencyLabels}
         validationMessage={selectedNodeValidationMessage}
         onParentChange={(nextParentKey) => {
           if (!selectedNodeId) {
@@ -752,6 +1004,7 @@ export function SkillTree() {
             return validation.isAllowed ? validation.tree : previousData
           })
         }}
+        onAdditionalDependenciesChange={handleAdditionalDependenciesChange}
         onDeleteNodeOnly={handleDeleteNodeOnly}
         onDeleteNodeBranch={handleDeleteNodeBranch}
       />
