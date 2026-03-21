@@ -43,7 +43,7 @@ export const STATUS_STYLES = {
     ringBand: '#ef4444',
     badge: '#ef4444',
     textColor: '#ffffff',
-    glowSegment: 'rgba(239, 68, 68, 0.85)',
+    glowSegment: 'rgba(239, 68, 68, 0.55)',
     linkStroke: '#dc2626',
     linkStrokeWidth: '4.5',
     linkOpacity: '1',

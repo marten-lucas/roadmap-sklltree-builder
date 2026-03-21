@@ -99,6 +99,10 @@ export function SkillNode({ node, nodeSize, isSelected, onSelect, onSelectLevel 
     levelStatusKeys,
     (key) => STATUS_STYLES[key]?.glowSegment ?? 'transparent',
   )
+  const nowLevelGlowStyle = buildSegmentConicStyle(
+    levelStatusKeys,
+    (key) => (key === 'now' ? STATUS_STYLES.now.glowSegment : 'transparent'),
+  )
   const nodeBackground = isSelected
     ? statusKey === 'done'
       ? 'radial-gradient(circle at 32% 28%, rgb(100, 118, 140), rgb(45, 62, 85) 58%, rgb(15, 22, 40) 100%)'
@@ -169,6 +173,7 @@ export function SkillNode({ node, nodeSize, isSelected, onSelect, onSelectLevel 
             }}
           >
             <div className="skill-node-level-glow" style={levelGlowStyle} />
+            <div className="skill-node-level-glow" style={{ ...nowLevelGlowStyle, filter: 'blur(24px)' }} />
             <div className="skill-node-level-ring" style={levelRingStyle} />
             <div className="skill-node-button__content">
               <Text
