@@ -78,7 +78,7 @@ export const TREE_CONFIG = {
   nodeSize: 120,
   minArcGapFactor: 1.08,
   levelSpacing: 180,
-  horizontalPadding: 260,
-  topPadding: 260,
-  bottomPadding: 320,
+  horizontalPadding: 600,
+  topPadding: 600,
+  bottomPadding: 600,
 }

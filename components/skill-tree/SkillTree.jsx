@@ -443,7 +443,7 @@ export function SkillTree() {
 
     return {
       x: canvas.origin.x,
-      y: canvas.origin.y - segmentLabelRadius * 1.15,
+      y: canvas.origin.y - segmentLabelRadius * 1.25,
     }
   }, [roadmapData.segments, canvas.origin.x, canvas.origin.y, canvas.maxRadius])
 
@@ -1071,7 +1071,7 @@ export function SkillTree() {
         maxScale={2.2}
         initialScale={0.7}
         wheel={{ step: 0.12 }}
-        limitToBounds={true}
+        limitToBounds={false}
         centerOnInit
       >
         <TransformComponent
