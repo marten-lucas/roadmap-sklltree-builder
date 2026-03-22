@@ -1,4 +1,4 @@
-import { ActionIcon, Button, Group, Paper, Stack, Text, Tooltip } from '@mantine/core'
+import { ActionIcon, Group, Menu, Paper, Text, Tooltip } from '@mantine/core'
 import { useEffect, useMemo, useReducer, useRef, useState } from 'react'
 import { TransformComponent, TransformWrapper } from 'react-zoom-pan-pinch'
 import './skillTree.css'
@@ -114,7 +114,6 @@ export function SkillTree() {
   const canRedo = documentHistory.future.length > 0
   const documentFileInputRef = useRef(null)
   const canvasSvgRef = useRef(null)
-  const [isExportPanelOpen, setIsExportPanelOpen] = useState(false)
   const [lastSavedAt, setLastSavedAt] = useState(null)
   const [selectedNodeId, setSelectedNodeId] = useState(null)
   const [selectedProgressLevelId, setSelectedProgressLevelId] = useState(null)
@@ -508,7 +507,6 @@ export function SkillTree() {
         return
       }
 
-      setIsExportPanelOpen(false)
     } catch (error) {
       console.error('SVG export failed', error)
       window.alert('SVG-Export fehlgeschlagen.')
@@ -532,7 +530,6 @@ export function SkillTree() {
         return
       }
 
-      setIsExportPanelOpen(false)
     } catch (error) {
       console.error('Clean SVG export failed', error)
       window.alert('Clean-SVG-Export fehlgeschlagen.')
@@ -562,7 +559,6 @@ export function SkillTree() {
         return
       }
 
-      setIsExportPanelOpen(false)
     } catch (error) {
       console.error('HTML export failed', error)
       window.alert('HTML-Export fehlgeschlagen.')
@@ -596,7 +592,6 @@ export function SkillTree() {
         return
       }
 
-      setIsExportPanelOpen(false)
     } catch (error) {
       console.error('PDF export failed', error)
       window.alert('PDF-Export fehlgeschlagen. Bitte erneut versuchen.')
@@ -930,10 +925,71 @@ export function SkillTree() {
         withBorder
       >
         <Group gap="xs" wrap="nowrap" className="skill-tree-toolbar__row">
-          <div className="skill-tree-toolbar__actions">
-            <Text size="xs" c="dimmed" className="skill-tree-toolbar__status">{autosaveLabel}</Text>
+          <Tooltip label={isToolbarCollapsed ? 'Menü aufklappen' : 'Menü einklappen'} withArrow openDelay={120}>
+            <ActionIcon
+              size="md"
+              variant="default"
+              aria-label={isToolbarCollapsed ? 'Menü aufklappen' : 'Menü einklappen'}
+              onClick={() => {
+                setIsToolbarCollapsed((prev) => !prev)
+              }}
+            >
+              <ToolbarIcon>
+                {isToolbarCollapsed ? (
+                  <path d="m9 6 6 6-6 6" />
+                ) : (
+                  <path d="m15 6-6 6 6 6" />
+                )}
+              </ToolbarIcon>
+            </ActionIcon>
+          </Tooltip>
 
+          <div className="skill-tree-toolbar__actions">
             <div className="skill-tree-toolbar__cluster">
+              <Menu
+                shadow="md"
+                width={200}
+                position="bottom-start"
+                withArrow
+                trigger="hover"
+                openDelay={100}
+                closeDelay={180}
+              >
+                <Menu.Target>
+                  <Tooltip
+                    label="Export (Klick: HTML, Hover: weitere Formate)"
+                    withArrow
+                    openDelay={120}
+                  >
+                    <ActionIcon
+                      size="md"
+                      variant="default"
+                      aria-label="Export"
+                      onClick={() => void handleExportHtml()}
+                    >
+                      <ToolbarIcon>
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                        <polyline points="7 10 12 15 17 10" />
+                        <line x1="12" y1="15" x2="12" y2="3" />
+                      </ToolbarIcon>
+                    </ActionIcon>
+                  </Tooltip>
+                </Menu.Target>
+
+                <Menu.Dropdown>
+                  <Menu.Label>Export</Menu.Label>
+                  <Menu.Item onClick={() => void handleExportPdf()}>
+                    PDF (statisch)
+                  </Menu.Item>
+                  <Menu.Item onClick={() => void handleExportSvg()}>
+                    SVG (interaktiv)
+                  </Menu.Item>
+                  <Menu.Item onClick={() => void handleExportCleanSvg()}>
+                    SVG (clean)
+                  </Menu.Item>
+                </Menu.Dropdown>
+              </Menu>
+
               <Tooltip label="HTML importieren (Ctrl+O)" withArrow openDelay={120}>
                 <ActionIcon
                   size="md"
@@ -943,23 +999,8 @@ export function SkillTree() {
                 >
                   <ToolbarIcon>
                     <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                    <polyline points="7 10 12 15 17 10" />
-                    <line x1="12" y1="15" x2="12" y2="3" />
-                  </ToolbarIcon>
-                </ActionIcon>
-              </Tooltip>
-              <Tooltip label="HTML exportieren (Ctrl+S)" withArrow openDelay={120}>
-                <ActionIcon
-                  size="md"
-                  variant="light"
-                  color="cyan"
-                  aria-label="HTML exportieren"
-                  onClick={() => void handleExportHtml()}
-                >
-                  <ToolbarIcon>
-                    <path d="M21 9v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9" />
-                    <polyline points="17 14 12 9 7 14" />
-                    <line x1="12" y1="9" x2="12" y2="21" />
+                    <polyline points="17 8 12 3 7 8" />
+                    <line x1="12" y1="3" x2="12" y2="15" />
                   </ToolbarIcon>
                 </ActionIcon>
               </Tooltip>
@@ -1018,77 +1059,11 @@ export function SkillTree() {
             </div>
 
             <div className="skill-tree-toolbar__cluster">
-              <Tooltip label="Export Optionen" withArrow openDelay={120}>
-                <ActionIcon
-                  size="md"
-                  variant={isExportPanelOpen ? 'filled' : 'default'}
-                  color={isExportPanelOpen ? 'cyan' : 'gray'}
-                  aria-label="Export"
-                  onClick={() => setIsExportPanelOpen((open) => !open)}
-                >
-                  <ToolbarIcon>
-                    <path d="M4 20h16" />
-                    <path d="M12 3v12" />
-                    <path d="m7 10 5 5 5-5" />
-                  </ToolbarIcon>
-                </ActionIcon>
-              </Tooltip>
+              <Text size="xs" c="dimmed" className="skill-tree-toolbar__status">{autosaveLabel}</Text>
             </div>
           </div>
-
-          <Tooltip label={isToolbarCollapsed ? 'Menü aufklappen' : 'Menü einklappen'} withArrow openDelay={120}>
-            <ActionIcon
-              size="md"
-              variant="default"
-              aria-label={isToolbarCollapsed ? 'Menü aufklappen' : 'Menü einklappen'}
-              onClick={() => {
-                setIsToolbarCollapsed((prev) => !prev)
-                if (!isToolbarCollapsed) {
-                  setIsExportPanelOpen(false)
-                }
-              }}
-            >
-              <ToolbarIcon>
-                {isToolbarCollapsed ? (
-                  <path d="m9 6 6 6-6 6" />
-                ) : (
-                  <path d="m15 6-6 6 6 6" />
-                )}
-              </ToolbarIcon>
-            </ActionIcon>
-          </Tooltip>
         </Group>
       </Paper>
-
-      {!isToolbarCollapsed && isExportPanelOpen && (
-        <Paper className="skill-tree-export-panel" radius="xl" shadow="xl" withBorder>
-          <div className="skill-tree-export-panel__header">
-            <Text fw={600}>Export</Text>
-            <ActionIcon
-              variant="subtle"
-              color="gray"
-              aria-label="Export-Panel schließen"
-              onClick={() => setIsExportPanelOpen(false)}
-            >
-              ✕
-            </ActionIcon>
-          </div>
-          <Stack gap="xs">
-            <Button variant="light" onClick={() => void handleExportHtml()}>
-              HTML (Viewer)
-            </Button>
-            <Button variant="light" onClick={() => void handleExportPdf()}>
-              PDF (statisch)
-            </Button>
-            <Button variant="light" onClick={() => void handleExportSvg()}>
-              SVG (interaktiv)
-            </Button>
-            <Button variant="light" onClick={() => void handleExportCleanSvg()}>
-              SVG (clean)
-            </Button>
-          </Stack>
-        </Paper>
-      )}
 
       <TransformWrapper
         minScale={0.2}

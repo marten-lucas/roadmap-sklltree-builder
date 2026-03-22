@@ -195,18 +195,23 @@ test.describe('HTML export – viewer page shows same content as builder', () =>
 // ---------------------------------------------------------------------------
 
 test.describe('SVG export modes', () => {
+  const openExportMenu = async (page) => {
+    await page.getByRole('button', { name: 'Export', exact: true }).hover()
+    await expect(page.getByRole('menuitem', { name: 'SVG (interaktiv)' })).toBeVisible()
+  }
+
   test.beforeEach(async ({ page }) => {
     await startFresh(page)
-      await page.getByRole('button', { name: 'Export', exact: true }).click()
-    await page.waitForSelector('.skill-tree-export-panel')
   })
 
   test('interactive svg export contains tooltip animations and has correct filename', async ({
     page,
   }) => {
+    await openExportMenu(page)
+
     const [download] = await Promise.all([
       page.waitForEvent('download'),
-      page.getByRole('button', { name: 'SVG (interaktiv)' }).click(),
+      page.getByRole('menuitem', { name: 'SVG (interaktiv)' }).click(),
     ])
     const svgContent = await readDownload(download)
 
@@ -219,9 +224,11 @@ test.describe('SVG export modes', () => {
   test('clean svg export has no tooltip animations and has correct filename', async ({
     page,
   }) => {
+    await openExportMenu(page)
+
     const [download] = await Promise.all([
       page.waitForEvent('download'),
-      page.getByRole('button', { name: 'SVG (clean)' }).click(),
+      page.getByRole('menuitem', { name: 'SVG (clean)' }).click(),
     ])
     const svgContent = await readDownload(download)
 
@@ -235,10 +242,11 @@ test.describe('SVG export modes', () => {
     page,
   }) => {
     const builderLabels = await getBuilderNodeLabels(page)
+    await openExportMenu(page)
 
     const [cleanDownload] = await Promise.all([
       page.waitForEvent('download'),
-      page.getByRole('button', { name: 'SVG (clean)' }).click(),
+      page.getByRole('menuitem', { name: 'SVG (clean)' }).click(),
     ])
     const cleanSvg = await readDownload(cleanDownload)
 
