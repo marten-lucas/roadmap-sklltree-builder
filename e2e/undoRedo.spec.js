@@ -1,6 +1,11 @@
 import { test, expect } from '@playwright/test'
 import { startFresh, getBuilderNodeLabels } from './helpers.js'
 
+const clickResetWithConfirm = async (page) => {
+  page.once('dialog', (dialog) => dialog.accept())
+  await page.getByRole('button', { name: 'Reset' }).click()
+}
+
 // ---------------------------------------------------------------------------
 // Initial state: buttons disabled, no history
 // ---------------------------------------------------------------------------
@@ -33,7 +38,7 @@ test.describe('Undo/Redo – keyboard shortcuts', () => {
       .locator('foreignObject.skill-node-export-anchor')
       .count()
 
-    await page.getByRole('button', { name: 'Reset' }).click()
+    await clickResetWithConfirm(page)
     await expect(page.locator('foreignObject.skill-node-export-anchor')).toHaveCount(0)
 
     await page.keyboard.press('Control+z')
@@ -41,7 +46,7 @@ test.describe('Undo/Redo – keyboard shortcuts', () => {
   })
 
   test('ctrl+y redoes after undo and empties canvas again', async ({ page }) => {
-    await page.getByRole('button', { name: 'Reset' }).click()
+    await clickResetWithConfirm(page)
     await page.keyboard.press('Control+z') // undo reset → nodes visible
 
     const afterUndoCount = await page
@@ -54,7 +59,7 @@ test.describe('Undo/Redo – keyboard shortcuts', () => {
   })
 
   test('ctrl+shift+z also triggers redo', async ({ page }) => {
-    await page.getByRole('button', { name: 'Reset' }).click()
+    await clickResetWithConfirm(page)
     await page.keyboard.press('Control+z') // undo
 
     const afterUndoCount = await page
@@ -101,7 +106,7 @@ test.describe('Undo/Redo – toolbar buttons', () => {
       .locator('foreignObject.skill-node-export-anchor')
       .count()
 
-    await page.getByRole('button', { name: 'Reset' }).click()
+    await clickResetWithConfirm(page)
     await expect(page.locator('foreignObject.skill-node-export-anchor')).toHaveCount(0)
 
     await page.getByRole('button', { name: 'Undo' }).click()
@@ -109,7 +114,7 @@ test.describe('Undo/Redo – toolbar buttons', () => {
   })
 
   test('clicking redo button re-applies reset after undo', async ({ page }) => {
-    await page.getByRole('button', { name: 'Reset' }).click()
+    await clickResetWithConfirm(page)
     await page.getByRole('button', { name: 'Undo' }).click()
 
     const afterUndoCount = await page
@@ -122,7 +127,7 @@ test.describe('Undo/Redo – toolbar buttons', () => {
   })
 
   test('redo button becomes disabled after exhausting redo history', async ({ page }) => {
-    await page.getByRole('button', { name: 'Reset' }).click()
+    await clickResetWithConfirm(page)
     await page.getByRole('button', { name: 'Undo' }).click()
     await page.getByRole('button', { name: 'Redo' }).click()
 
@@ -131,7 +136,7 @@ test.describe('Undo/Redo – toolbar buttons', () => {
 
   test('undo button becomes disabled after exhausting undo history', async ({ page }) => {
     // After reset, one undo is available. After clicking it, no more undo.
-    await page.getByRole('button', { name: 'Reset' }).click()
+    await clickResetWithConfirm(page)
     await page.getByRole('button', { name: 'Undo' }).click()
 
     await expect(page.getByRole('button', { name: 'Undo' })).toBeDisabled()
@@ -140,7 +145,7 @@ test.describe('Undo/Redo – toolbar buttons', () => {
   test('reset creates a new undo entry making undo available', async ({ page }) => {
     await expect(page.getByRole('button', { name: 'Undo' })).toBeDisabled()
 
-    await page.getByRole('button', { name: 'Reset' }).click()
+    await clickResetWithConfirm(page)
 
     await expect(page.getByRole('button', { name: 'Undo' })).not.toBeDisabled()
   })
@@ -158,7 +163,7 @@ test.describe('Undo/Redo – state correctness', () => {
   test('undo restores the exact same node labels as before the reset', async ({ page }) => {
     const labelsBefore = await getBuilderNodeLabels(page)
 
-    await page.getByRole('button', { name: 'Reset' }).click()
+    await clickResetWithConfirm(page)
     await expect(page.locator('foreignObject.skill-node-export-anchor')).toHaveCount(0)
 
     await page.keyboard.press('Control+z')
@@ -172,7 +177,7 @@ test.describe('Undo/Redo – state correctness', () => {
     const countBefore = labelsBefore.length
 
     // Reset → undo → redo → undo (back to pre-reset)
-    await page.getByRole('button', { name: 'Reset' }).click()
+    await clickResetWithConfirm(page)
     await page.keyboard.press('Control+z')
     await page.keyboard.press('Control+y')
     await page.keyboard.press('Control+z')
@@ -184,7 +189,7 @@ test.describe('Undo/Redo – state correctness', () => {
 
   test('undo does not affect unrelated state (canvas zoom remains)', async ({ page }) => {
     // This test verifies that non-document state (like zoom) is not affected by undo
-    await page.getByRole('button', { name: 'Reset' }).click()
+    await clickResetWithConfirm(page)
     await page.keyboard.press('Control+z')
 
     // Canvas should still be present and usable (zoom wrapper intact)
@@ -202,18 +207,17 @@ test.describe('Undo/Redo – control panel interaction', () => {
     await startFresh(page)
   })
 
-  test('collapsing inspector panel does not interfere with undo shortcut', async ({ page }) => {
+  test('collapsing toolbar menu does not interfere with undo shortcut', async ({ page }) => {
     const initialCount = await page
       .locator('foreignObject.skill-node-export-anchor')
       .count()
 
-    // Select a node to make inspector visible, then collapse it
-    await page.locator('foreignObject.skill-node-export-anchor').first().click()
-    await page.waitForSelector('.skill-panel--inspector')
-    await page.getByRole('button', { name: 'Panel einklappen' }).click()
+    // Collapse toolbar menu, then reopen it and perform reset/undo.
+    await page.getByRole('button', { name: 'Menü einklappen' }).click()
+    await page.getByRole('button', { name: 'Menü aufklappen' }).click()
 
-    // Now reset and undo while panel is collapsed
-    await page.getByRole('button', { name: 'Reset' }).click()
+    // Reset and undo must still work as before.
+    await clickResetWithConfirm(page)
     await page.keyboard.press('Control+z')
 
     await expect(page.locator('foreignObject.skill-node-export-anchor')).toHaveCount(initialCount)

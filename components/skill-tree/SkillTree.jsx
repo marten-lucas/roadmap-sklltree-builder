@@ -83,6 +83,26 @@ const getHtmlImportErrorMessage = (error) => {
   return 'Die Datei konnte nicht importiert werden. Bitte eine gueltige HTML-Exportdatei verwenden.'
 }
 
+const confirmResetDocument = () => window.confirm(
+  'Roadmap wirklich zuruecksetzen? Dieser Schritt kann per Undo rueckgaengig gemacht werden.',
+)
+
+const ToolbarIcon = ({ children }) => (
+  <svg
+    width="15"
+    height="15"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    aria-hidden="true"
+  >
+    {children}
+  </svg>
+)
+
 export function SkillTree() {
   const [documentHistory, dispatchDocument] = useReducer(
     documentHistoryReducer,
@@ -100,7 +120,7 @@ export function SkillTree() {
   const [selectedProgressLevelId, setSelectedProgressLevelId] = useState(null)
   const [selectedSegmentId, setSelectedSegmentId] = useState(null)
   const [selectedPortalKey, setSelectedPortalKey] = useState(null)
-  const [isControlPanelCollapsed, setIsControlPanelCollapsed] = useState(false)
+  const [isToolbarCollapsed, setIsToolbarCollapsed] = useState(false)
   const centerSize = TREE_CONFIG.nodeSize * 2
   const addControlOffset = TREE_CONFIG.nodeSize * 0.82
 
@@ -463,6 +483,10 @@ export function SkillTree() {
   }
 
   const handleReset = () => {
+    if (!confirmResetDocument()) {
+      return
+    }
+
     dispatchDocument({ type: 'apply', document: createEmptyDocument() })
     resetSelections()
   }
@@ -675,6 +699,9 @@ export function SkillTree() {
 
       if (action === 'reset') {
         event.preventDefault()
+        if (!confirmResetDocument()) {
+          return
+        }
         dispatchDocument({ type: 'apply', document: createEmptyDocument() })
         setSelectedNodeId(null)
         setSelectedSegmentId(null)
@@ -690,8 +717,6 @@ export function SkillTree() {
   const autosaveLabel = lastSavedAt
     ? `Autosave ${lastSavedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}`
     : 'Autosave aktiv'
-
-  const isControlPanelVisible = Boolean(selectedNode || selectedSegment)
 
   const handleAddChild = (parentId) => {
     const result = addChildNodeWithResult(roadmapData, parentId)
@@ -898,57 +923,144 @@ export function SkillTree() {
         onChange={handleDocumentFileSelected}
       />
 
-      <Paper className="skill-tree-toolbar" radius="xl" shadow="xl" withBorder>
-        <Group gap="xs" wrap="nowrap">
-          <Text size="sm" className="skill-tree-toolbar__status">{autosaveLabel}</Text>
-          <Button size="xs" variant="light" onClick={() => void handleExportHtml()}>
-            HTML exportieren
-          </Button>
-          <Button size="xs" variant="default" onClick={handleOpenDocumentPicker}>
-            HTML importieren
-          </Button>
-          <ActionIcon
-            size="md"
-            variant="default"
-            aria-label="Undo"
-            onClick={handleUndo}
-            disabled={!canUndo}
-          >
-            ↶
-          </ActionIcon>
-          <ActionIcon
-            size="md"
-            variant="default"
-            aria-label="Redo"
-            onClick={handleRedo}
-            disabled={!canRedo}
-          >
-            ↷
-          </ActionIcon>
-          <Button size="xs" color="red" variant="subtle" onClick={handleReset}>
-            Reset
-          </Button>
-          <Button
-            size="xs"
-            variant={isExportPanelOpen ? 'filled' : 'default'}
-            color={isExportPanelOpen ? 'cyan' : 'gray'}
-            onClick={() => setIsExportPanelOpen((open) => !open)}
-          >
-            Export
-          </Button>
-          {isControlPanelVisible && (
-            <Button
-              size="xs"
+      <Paper
+        className={isToolbarCollapsed ? 'skill-tree-toolbar skill-tree-toolbar--collapsed' : 'skill-tree-toolbar'}
+        radius="xl"
+        shadow="xl"
+        withBorder
+      >
+        <Group gap="xs" wrap="nowrap" className="skill-tree-toolbar__row">
+          <div className="skill-tree-toolbar__actions">
+            <Text size="xs" c="dimmed" className="skill-tree-toolbar__status">{autosaveLabel}</Text>
+
+            <div className="skill-tree-toolbar__cluster">
+              <Tooltip label="HTML importieren (Ctrl+O)" withArrow openDelay={120}>
+                <ActionIcon
+                  size="md"
+                  variant="default"
+                  aria-label="HTML importieren"
+                  onClick={handleOpenDocumentPicker}
+                >
+                  <ToolbarIcon>
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                    <polyline points="7 10 12 15 17 10" />
+                    <line x1="12" y1="15" x2="12" y2="3" />
+                  </ToolbarIcon>
+                </ActionIcon>
+              </Tooltip>
+              <Tooltip label="HTML exportieren (Ctrl+S)" withArrow openDelay={120}>
+                <ActionIcon
+                  size="md"
+                  variant="light"
+                  color="cyan"
+                  aria-label="HTML exportieren"
+                  onClick={() => void handleExportHtml()}
+                >
+                  <ToolbarIcon>
+                    <path d="M21 9v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9" />
+                    <polyline points="17 14 12 9 7 14" />
+                    <line x1="12" y1="9" x2="12" y2="21" />
+                  </ToolbarIcon>
+                </ActionIcon>
+              </Tooltip>
+            </div>
+
+            <div className="skill-tree-toolbar__cluster">
+              <Tooltip label="Undo (Ctrl+Z)" withArrow openDelay={120}>
+                <ActionIcon
+                  size="md"
+                  variant="default"
+                  aria-label="Undo"
+                  onClick={handleUndo}
+                  disabled={!canUndo}
+                >
+                  <ToolbarIcon>
+                    <path d="M3 7h7" />
+                    <path d="m3 7 3-3" />
+                    <path d="m3 7 3 3" />
+                    <path d="M21 14a7 7 0 0 0-7-7H9" />
+                  </ToolbarIcon>
+                </ActionIcon>
+              </Tooltip>
+              <Tooltip label="Redo (Ctrl+Y / Ctrl+Shift+Z)" withArrow openDelay={120}>
+                <ActionIcon
+                  size="md"
+                  variant="default"
+                  aria-label="Redo"
+                  onClick={handleRedo}
+                  disabled={!canRedo}
+                >
+                  <ToolbarIcon>
+                    <path d="M21 7h-7" />
+                    <path d="m21 7-3-3" />
+                    <path d="m21 7-3 3" />
+                    <path d="M3 14a7 7 0 0 1 7-7h5" />
+                  </ToolbarIcon>
+                </ActionIcon>
+              </Tooltip>
+            </div>
+
+            <div className="skill-tree-toolbar__cluster">
+              <Tooltip label="Reset (Ctrl+Shift+Backspace)" withArrow openDelay={120}>
+                <ActionIcon
+                  size="md"
+                  variant="subtle"
+                  color="red"
+                  aria-label="Reset"
+                  onClick={handleReset}
+                >
+                  <ToolbarIcon>
+                    <polyline points="1 4 1 10 7 10" />
+                    <path d="M3.51 15a9 9 0 1 0 2.13-8.87" />
+                  </ToolbarIcon>
+                </ActionIcon>
+              </Tooltip>
+            </div>
+
+            <div className="skill-tree-toolbar__cluster">
+              <Tooltip label="Export Optionen" withArrow openDelay={120}>
+                <ActionIcon
+                  size="md"
+                  variant={isExportPanelOpen ? 'filled' : 'default'}
+                  color={isExportPanelOpen ? 'cyan' : 'gray'}
+                  aria-label="Export"
+                  onClick={() => setIsExportPanelOpen((open) => !open)}
+                >
+                  <ToolbarIcon>
+                    <path d="M4 20h16" />
+                    <path d="M12 3v12" />
+                    <path d="m7 10 5 5 5-5" />
+                  </ToolbarIcon>
+                </ActionIcon>
+              </Tooltip>
+            </div>
+          </div>
+
+          <Tooltip label={isToolbarCollapsed ? 'Menü aufklappen' : 'Menü einklappen'} withArrow openDelay={120}>
+            <ActionIcon
+              size="md"
               variant="default"
-              onClick={() => setIsControlPanelCollapsed((collapsed) => !collapsed)}
+              aria-label={isToolbarCollapsed ? 'Menü aufklappen' : 'Menü einklappen'}
+              onClick={() => {
+                setIsToolbarCollapsed((prev) => !prev)
+                if (!isToolbarCollapsed) {
+                  setIsExportPanelOpen(false)
+                }
+              }}
             >
-              {isControlPanelCollapsed ? 'Panel aufklappen' : 'Panel einklappen'}
-            </Button>
-          )}
+              <ToolbarIcon>
+                {isToolbarCollapsed ? (
+                  <path d="m9 6 6 6-6 6" />
+                ) : (
+                  <path d="m15 6-6 6 6 6" />
+                )}
+              </ToolbarIcon>
+            </ActionIcon>
+          </Tooltip>
         </Group>
       </Paper>
 
-      {isExportPanelOpen && (
+      {!isToolbarCollapsed && isExportPanelOpen && (
         <Paper className="skill-tree-export-panel" radius="xl" shadow="xl" withBorder>
           <div className="skill-tree-export-panel__header">
             <Text fw={600}>Export</Text>
@@ -975,18 +1087,6 @@ export function SkillTree() {
               SVG (clean)
             </Button>
           </Stack>
-        </Paper>
-      )}
-
-      {isControlPanelVisible && isControlPanelCollapsed && (
-        <Paper className="skill-tree-control-toggle" radius="xl" shadow="xl" withBorder>
-          <Button
-            size="xs"
-            variant="subtle"
-            onClick={() => setIsControlPanelCollapsed(false)}
-          >
-            Control Panel aufklappen
-          </Button>
         </Paper>
       )}
 
@@ -1350,60 +1450,54 @@ export function SkillTree() {
         </TransformComponent>
       </TransformWrapper>
 
-      {!isControlPanelCollapsed && (
-        <>
-          <InspectorPanel
-            selectedNode={selectedNode}
-            currentLevel={levelInfo.nodeLevel}
-            selectedProgressLevelId={activeSelectedProgressLevelId}
-            onClose={() => {
-              setSelectedNodeId(null)
-            }}
-            onCollapse={() => setIsControlPanelCollapsed(true)}
-            onLabelChange={handleLabelChange}
-            onShortNameChange={handleShortNameChange}
-            onStatusChange={handleStatusChange}
-            onReleaseNoteChange={handleReleaseNoteChange}
-            onSelectProgressLevel={setSelectedProgressLevelId}
-            onAddProgressLevel={handleAddProgressLevel}
-            onDeleteProgressLevel={handleDeleteProgressLevel}
-            onLevelChange={handleLevelChange}
-            levelOptions={selectedNodeLevelOptions}
-            segmentOptions={selectedNodeSegmentOptions}
-            parentOptions={selectedNodeParentOptions}
-            selectedParentId={selectedNodeParentId}
-            additionalDependencyOptions={selectedNodeAdditionalDependencyOptions}
-            selectedAdditionalDependencyIds={selectedNodeAdditionalDependencies.outgoingIds}
-            incomingDependencyLabels={selectedNodeIncomingDependencyLabels}
-            validationMessage={selectedNodeValidationMessage}
-            onParentChange={(nextParentKey) => {
-              if (!selectedNodeId) {
-                return
-              }
+      <InspectorPanel
+        selectedNode={selectedNode}
+        currentLevel={levelInfo.nodeLevel}
+        selectedProgressLevelId={activeSelectedProgressLevelId}
+        onClose={() => {
+          setSelectedNodeId(null)
+        }}
+        onLabelChange={handleLabelChange}
+        onShortNameChange={handleShortNameChange}
+        onStatusChange={handleStatusChange}
+        onReleaseNoteChange={handleReleaseNoteChange}
+        onSelectProgressLevel={setSelectedProgressLevelId}
+        onAddProgressLevel={handleAddProgressLevel}
+        onDeleteProgressLevel={handleDeleteProgressLevel}
+        onLevelChange={handleLevelChange}
+        levelOptions={selectedNodeLevelOptions}
+        segmentOptions={selectedNodeSegmentOptions}
+        parentOptions={selectedNodeParentOptions}
+        selectedParentId={selectedNodeParentId}
+        additionalDependencyOptions={selectedNodeAdditionalDependencyOptions}
+        selectedAdditionalDependencyIds={selectedNodeAdditionalDependencies.outgoingIds}
+        incomingDependencyLabels={selectedNodeIncomingDependencyLabels}
+        validationMessage={selectedNodeValidationMessage}
+        onParentChange={(nextParentKey) => {
+          if (!selectedNodeId) {
+            return
+          }
 
-              const nextParentId = nextParentKey === '__root__' ? null : nextParentKey
-              commitDocument(moveNodeToParent(roadmapData, selectedNodeId, nextParentId))
-            }}
-            onSegmentChange={(nextSegmentKey) => {
-              const nextSegmentId = nextSegmentKey === UNASSIGNED_SEGMENT_ID ? null : nextSegmentKey
+          const nextParentId = nextParentKey === '__root__' ? null : nextParentKey
+          commitDocument(moveNodeToParent(roadmapData, selectedNodeId, nextParentId))
+        }}
+        onSegmentChange={(nextSegmentKey) => {
+          const nextSegmentId = nextSegmentKey === UNASSIGNED_SEGMENT_ID ? null : nextSegmentKey
 
-              const validation = validateNodeSegmentChange(roadmapData, selectedNodeId, nextSegmentId, TREE_CONFIG)
-              commitDocument(validation.isAllowed ? validation.tree : roadmapData)
-            }}
-            onAdditionalDependenciesChange={handleAdditionalDependenciesChange}
-            onDeleteNodeOnly={handleDeleteNodeOnly}
-            onDeleteNodeBranch={handleDeleteNodeBranch}
-          />
+          const validation = validateNodeSegmentChange(roadmapData, selectedNodeId, nextSegmentId, TREE_CONFIG)
+          commitDocument(validation.isAllowed ? validation.tree : roadmapData)
+        }}
+        onAdditionalDependenciesChange={handleAdditionalDependenciesChange}
+        onDeleteNodeOnly={handleDeleteNodeOnly}
+        onDeleteNodeBranch={handleDeleteNodeBranch}
+      />
 
-          <SegmentPanel
-            selectedSegment={selectedSegment}
-            onClose={() => setSelectedSegmentId(null)}
-            onCollapse={() => setIsControlPanelCollapsed(true)}
-            onLabelChange={handleSegmentLabelChange}
-            onDelete={handleDeleteSegment}
-          />
-        </>
-      )}
+      <SegmentPanel
+        selectedSegment={selectedSegment}
+        onClose={() => setSelectedSegmentId(null)}
+        onLabelChange={handleSegmentLabelChange}
+        onDelete={handleDeleteSegment}
+      />
     </main>
   )
 }
