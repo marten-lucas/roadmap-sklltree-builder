@@ -70,6 +70,7 @@ const isAngleNear = (candidate, blocked, thresholdDeg) => {
 const AUTOSAVE_DEBOUNCE_MS = 450
 const EXPORT_BRAND_NAME = 'Roadmap Skilltree Builder'
 const EXPORT_AUTHOR = 'Skilltree Team'
+const INITIAL_VIEW_SCALE = 0.7
 
 const getInitialRoadmapDocument = () => loadDocumentFromLocalStorage() ?? initialData
 
@@ -156,6 +157,7 @@ export function SkillTree() {
   const [selectedPortalKey, setSelectedPortalKey] = useState(null)
   const [isCenterIconPanelOpen, setIsCenterIconPanelOpen] = useState(false)
   const [isToolbarCollapsed, setIsToolbarCollapsed] = useState(false)
+  const [transformKey, setTransformKey] = useState(0)
   const addControlOffset = TREE_CONFIG.nodeSize * 0.82
 
   const { layout, diagnostics } = useMemo(
@@ -163,6 +165,10 @@ export function SkillTree() {
     [roadmapData],
   )
   const { nodes, links, segments, canvas } = layout
+  const viewportWidth = typeof window !== 'undefined' ? window.innerWidth : canvas.width
+  const viewportHeight = typeof window !== 'undefined' ? window.innerHeight : canvas.height
+  const initialPositionX = viewportWidth / 2 - canvas.origin.x * INITIAL_VIEW_SCALE
+  const initialPositionY = viewportHeight / 2 - canvas.origin.y * INITIAL_VIEW_SCALE
   const centerIconSource = roadmapData.centerIconSrc ?? DEFAULT_CENTER_ICON_SRC
 
   const centerIconSize = useMemo(() => {
@@ -581,7 +587,9 @@ export function SkillTree() {
     }
 
     dispatchDocument({ type: 'apply', document: createEmptyDocument() })
+    setTransformKey((current) => current + 1)
     resetSelections()
+    setIsCenterIconPanelOpen(false)
   }
 
   const handleExportSvg = async () => {
@@ -1160,12 +1168,15 @@ export function SkillTree() {
       </Paper>
 
       <TransformWrapper
+        key={transformKey}
         minScale={0.2}
         maxScale={2.2}
-        initialScale={0.7}
+        initialScale={INITIAL_VIEW_SCALE}
+        initialPositionX={initialPositionX}
+        initialPositionY={initialPositionY}
         wheel={{ step: 0.12 }}
         limitToBounds={false}
-        centerOnInit
+        centerOnInit={false}
       >
         <TransformComponent
           wrapperClass="skill-tree-transform-wrapper"
