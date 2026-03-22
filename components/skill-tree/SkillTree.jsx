@@ -31,11 +31,13 @@ import {
 } from './treeValidation'
 import {
   addChildNodeWithResult,
+  addScopeWithResult,
   addNodeProgressLevel,
   addInitialRootNodeWithResult,
   addInitialSegmentWithResult,
   addRootNodeNearWithResult,
   addSegmentNearWithResult,
+  deleteScopeWithResult,
   deleteSegment,
   deleteNodeBranch,
   deleteNodeOnly,
@@ -44,6 +46,7 @@ import {
   getNodeAdditionalDependencies,
   getNodeLevelInfo,
   moveNodeToParent,
+  renameScopeWithResult,
   removeNodeProgressLevel,
   setNodeAdditionalDependencies,
   updateNodeData as updateNodeDataInTree,
@@ -62,6 +65,8 @@ const getAngleDelta = (leftDeg, rightDeg) => {
   const delta = normalizeAngle(leftDeg - rightDeg)
   return delta > 180 ? delta - 360 : delta
 }
+
+const uniqueArray = (values) => [...new Set(values)]
 
 const isAngleNear = (candidate, blocked, thresholdDeg) => {
   return Math.abs(getAngleDelta(candidate, blocked)) < thresholdDeg
@@ -210,6 +215,7 @@ export function SkillTree() {
         label: 'Level 1',
         status: selectedNode.status,
         releaseNote: '',
+        scopeIds: [],
       },
     ]
   }, [selectedNode])
@@ -224,6 +230,19 @@ export function SkillTree() {
 
     return stillExists ? selectedProgressLevelId : fallbackLevelId
   }, [selectedNode, selectedNodeLevels, selectedProgressLevelId])
+
+  const activeSelectedProgressLevel = useMemo(
+    () => selectedNodeLevels.find((entry) => entry.id === activeSelectedProgressLevelId) ?? null,
+    [activeSelectedProgressLevelId, selectedNodeLevels],
+  )
+
+  const scopeOptions = useMemo(
+    () => (roadmapData.scopes ?? []).map((scope) => ({
+      value: scope.id,
+      label: scope.label,
+    })),
+    [roadmapData.scopes],
+  )
 
   const levelInfo = useMemo(() => {
     if (!selectedNodeId) return { nodeLevel: 1, minLevel: 1, maxLevel: 2 }
@@ -937,6 +956,83 @@ export function SkillTree() {
     )
   }
 
+  const handleLevelScopesChange = (scopeIds) => {
+    if (!selectedNodeId || !activeSelectedProgressLevelId) {
+      return
+    }
+
+    commitDocument(
+      updateNodeProgressLevel(roadmapData, selectedNodeId, activeSelectedProgressLevelId, {
+        scopeIds,
+      }),
+    )
+  }
+
+  const handleCreateScope = (scopeLabel) => {
+    const result = addScopeWithResult(roadmapData, scopeLabel)
+
+    if (!result.ok || !result.scope) {
+      return {
+        ok: false,
+        error: result.error,
+      }
+    }
+
+    const activeScopeIds = Array.isArray(activeSelectedProgressLevel?.scopeIds)
+      ? activeSelectedProgressLevel.scopeIds
+      : []
+    const nextScopeIds = uniqueArray([...activeScopeIds, result.scope.id])
+
+    const nextTree = selectedNodeId && activeSelectedProgressLevelId
+      ? updateNodeProgressLevel(result.tree, selectedNodeId, activeSelectedProgressLevelId, {
+          scopeIds: nextScopeIds,
+        })
+      : result.tree
+
+    commitDocument(nextTree)
+
+    return {
+      ok: true,
+      error: null,
+    }
+  }
+
+  const handleRenameScope = (scopeId, scopeLabel) => {
+    const result = renameScopeWithResult(roadmapData, scopeId, scopeLabel)
+
+    if (!result.ok) {
+      return {
+        ok: false,
+        error: result.error,
+      }
+    }
+
+    commitDocument(result.tree)
+
+    return {
+      ok: true,
+      error: null,
+    }
+  }
+
+  const handleDeleteScope = (scopeId) => {
+    const result = deleteScopeWithResult(roadmapData, scopeId)
+
+    if (!result.ok) {
+      return {
+        ok: false,
+        error: result.error,
+      }
+    }
+
+    commitDocument(result.tree)
+
+    return {
+      ok: true,
+      error: null,
+    }
+  }
+
   const handleAdditionalDependenciesChange = (nextDependencyIds) => {
     if (!selectedNodeId) {
       return
@@ -1572,6 +1668,11 @@ export function SkillTree() {
         onShortNameChange={handleShortNameChange}
         onStatusChange={handleStatusChange}
         onReleaseNoteChange={handleReleaseNoteChange}
+        onScopeIdsChange={handleLevelScopesChange}
+        scopeOptions={scopeOptions}
+        onCreateScope={handleCreateScope}
+        onRenameScope={handleRenameScope}
+        onDeleteScope={handleDeleteScope}
         onSelectProgressLevel={setSelectedProgressLevelId}
         onAddProgressLevel={handleAddProgressLevel}
         onDeleteProgressLevel={handleDeleteProgressLevel}

@@ -6,13 +6,23 @@ const ensureDocumentDefaults = (document) => {
     return createEmptyDocument()
   }
 
-  if (typeof document.centerIconSrc === 'string' && document.centerIconSrc.trim().length > 0) {
+  const nextScopes = Array.isArray(document.scopes) ? document.scopes : []
+
+  if (
+    typeof document.centerIconSrc === 'string'
+    && document.centerIconSrc.trim().length > 0
+    && Array.isArray(document.scopes)
+  ) {
     return document
   }
 
   return {
     ...document,
-    centerIconSrc: DEFAULT_CENTER_ICON_SRC,
+    centerIconSrc:
+      typeof document.centerIconSrc === 'string' && document.centerIconSrc.trim().length > 0
+        ? document.centerIconSrc
+        : DEFAULT_CENTER_ICON_SRC,
+    scopes: nextScopes,
   }
 }
 
@@ -26,6 +36,7 @@ const trimPast = (past) => {
 
 export const createEmptyDocument = () => ({
   segments: [],
+  scopes: [],
   children: [],
   centerIconSrc: DEFAULT_CENTER_ICON_SRC,
 })

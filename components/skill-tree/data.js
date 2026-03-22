@@ -14,6 +14,7 @@ export const initialData = {
     { id: SEGMENT_FRONTEND, label: 'Frontend' },
     { id: SEGMENT_BACKEND, label: 'Backend' },
   ],
+  scopes: [],
   children: [
     {
       id: uid(),

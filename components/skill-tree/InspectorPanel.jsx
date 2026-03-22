@@ -1,6 +1,64 @@
-import { ActionIcon, Alert, Button, MultiSelect, Paper, Select, Stack, Tabs, Text, TextInput, Textarea } from '@mantine/core'
+import { ActionIcon, Alert, Button, Divider, Group, MultiSelect, Paper, Select, Stack, Tabs, Text, TextInput, Textarea, Tooltip } from '@mantine/core'
+import { useState } from 'react'
 import { normalizeStatusKey, STATUS_LABELS } from './config'
 import { UNASSIGNED_SEGMENT_ID } from './layoutShared'
+
+const TablerInfoCircleIcon = ({ size = 16 }) => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    aria-hidden="true"
+  >
+    <path d="M12 9h.01" />
+    <path d="M11 12h1v4h1" />
+    <path d="M12 3a9 9 0 1 0 0 18a9 9 0 0 0 0 -18" />
+  </svg>
+)
+
+const TablerAdjustmentsIcon = ({ size = 16 }) => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    aria-hidden="true"
+  >
+    <path d="M4 6h16" />
+    <path d="M7 12h10" />
+    <path d="M10 18h4" />
+  </svg>
+)
+
+const TablerCirclePlusIcon = ({ size = 18 }) => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    aria-hidden="true"
+  >
+    <path d="M12 9v6" />
+    <path d="M9 12h6" />
+    <path d="M12 3a9 9 0 1 0 0 18a9 9 0 0 0 0 -18" />
+  </svg>
+)
 
 const STATUS_OPTIONS = [
   { value: 'done', label: STATUS_LABELS.done },
@@ -18,6 +76,11 @@ export function InspectorPanel({
   onShortNameChange,
   onStatusChange,
   onReleaseNoteChange,
+  onScopeIdsChange,
+  scopeOptions,
+  onCreateScope,
+  onRenameScope,
+  onDeleteScope,
   onSelectProgressLevel,
   onAddProgressLevel,
   onDeleteProgressLevel,
@@ -36,6 +99,12 @@ export function InspectorPanel({
   onDeleteNodeOnly,
   onDeleteNodeBranch,
 }) {
+  const [scopeManagerOpen, setScopeManagerOpen] = useState(false)
+  const [scopeDraft, setScopeDraft] = useState('')
+  const [scopeError, setScopeError] = useState(null)
+  const [editingScopeId, setEditingScopeId] = useState(null)
+  const [editingScopeLabel, setEditingScopeLabel] = useState('')
+
   if (!selectedNode) {
     return null
   }
@@ -46,11 +115,64 @@ export function InspectorPanel({
       label: level.label ?? `Level ${index + 1}`,
       status: normalizeStatusKey(level.status),
       releaseNote: level.releaseNote ?? '',
+      scopeIds: Array.isArray(level.scopeIds) ? level.scopeIds : [],
     }))
-    : [{ id: 'level-1', label: 'Level 1', status: normalizeStatusKey(selectedNode.status), releaseNote: '' }]
+    : [{ id: 'level-1', label: 'Level 1', status: normalizeStatusKey(selectedNode.status), releaseNote: '', scopeIds: [] }]
 
   const activeProgressLevelId = selectedProgressLevelId ?? nodeLevels[0].id
   const activeProgressLevel = nodeLevels.find((level) => level.id === activeProgressLevelId) ?? nodeLevels[0]
+  const scopeSelectData = (scopeOptions ?? []).map((scope) => ({
+    value: scope.value,
+    label: scope.label,
+  }))
+
+  const handleCreateScope = () => {
+    const result = onCreateScope?.(scopeDraft)
+
+    if (!result?.ok) {
+      setScopeError(result?.error ?? 'Scope konnte nicht angelegt werden.')
+      return
+    }
+
+    setScopeError(null)
+    setScopeDraft('')
+  }
+
+  const handleStartRenameScope = (scopeId, label) => {
+    setScopeError(null)
+    setEditingScopeId(scopeId)
+    setEditingScopeLabel(label)
+  }
+
+  const handleRenameScope = () => {
+    if (!editingScopeId) {
+      return
+    }
+
+    const result = onRenameScope?.(editingScopeId, editingScopeLabel)
+    if (!result?.ok) {
+      setScopeError(result?.error ?? 'Scope konnte nicht umbenannt werden.')
+      return
+    }
+
+    setScopeError(null)
+    setEditingScopeId(null)
+    setEditingScopeLabel('')
+  }
+
+  const handleDeleteScope = (scopeId) => {
+    const result = onDeleteScope?.(scopeId)
+    if (!result?.ok) {
+      setScopeError(result?.error ?? 'Scope konnte nicht gelöscht werden.')
+      return
+    }
+
+    setScopeError(null)
+    if (editingScopeId === scopeId) {
+      setEditingScopeId(null)
+      setEditingScopeLabel('')
+    }
+  }
 
   const selectedSegmentKey = selectedNode.segmentId ?? UNASSIGNED_SEGMENT_ID
   const blockedLevelHint = levelOptions.find((option) => !option.isAllowed)?.reasons?.[0] ?? null
@@ -260,6 +382,147 @@ export function InspectorPanel({
             }}
             comboboxProps={{ withinPortal: true, zIndex: 450 }}
           />
+
+          <div className="skill-panel__scope-block">
+            <Group justify="space-between" align="center" mb={6}>
+              <Text className="mantine-dark-label" size="sm">Scope</Text>
+              <Tooltip label="Ohne Zuordnung gilt die Ausbaustufe fuer alle Produktgruppen." withArrow>
+                <ActionIcon
+                  variant="subtle"
+                  color="gray"
+                  size="sm"
+                  aria-label="Scope-Hinweis"
+                >
+                  <TablerInfoCircleIcon size={15} />
+                </ActionIcon>
+              </Tooltip>
+            </Group>
+
+            <Group gap="xs" align="center" wrap="nowrap">
+              <MultiSelect
+                data={scopeSelectData}
+                value={activeProgressLevel.scopeIds ?? []}
+                onChange={onScopeIdsChange}
+                placeholder="Scopes"
+                searchable
+                clearable
+                flex={1}
+                classNames={{
+                  input: 'mantine-dark-input',
+                  dropdown: 'mantine-dark-dropdown',
+                  option: 'mantine-dark-option',
+                  pill: 'mantine-dark-pill',
+                }}
+                comboboxProps={{ withinPortal: true, zIndex: 450 }}
+              />
+
+              <ActionIcon
+                variant="light"
+                color="gray"
+                onClick={() => setScopeManagerOpen((open) => !open)}
+                aria-label="Scopes verwalten"
+                title="Scopes verwalten"
+              >
+                <TablerAdjustmentsIcon size={15} />
+              </ActionIcon>
+            </Group>
+
+            <div className={`skill-panel__scope-accordion ${scopeManagerOpen ? 'skill-panel__scope-accordion--open' : ''}`}>
+              <Stack gap="sm">
+                <Group align="flex-end" wrap="nowrap">
+                  <TextInput
+                    label="Scopes verwalten"
+                    placeholder="z.B. Serie A"
+                    value={scopeDraft}
+                    onChange={(event) => setScopeDraft(event.currentTarget.value)}
+                    style={{ flex: 1 }}
+                    classNames={{
+                      input: 'mantine-dark-input',
+                      label: 'mantine-dark-label',
+                    }}
+                  />
+                  <Tooltip label="Scope hinzufügen" withArrow>
+                    <ActionIcon
+                      variant="light"
+                      color="cyan"
+                      size="lg"
+                      onClick={handleCreateScope}
+                      aria-label="Scope hinzufügen"
+                    >
+                      <TablerCirclePlusIcon size={20} />
+                    </ActionIcon>
+                  </Tooltip>
+                </Group>
+
+                <Divider />
+
+                <Stack gap={8}>
+                  {scopeSelectData.length === 0 && (
+                    <Text size="sm" c="dimmed">Noch keine Scopes vorhanden.</Text>
+                  )}
+
+                  {scopeSelectData.map((scope) => (
+                    <Paper key={scope.value} withBorder radius="md" p="xs">
+                      {editingScopeId === scope.value ? (
+                        <Stack gap={8}>
+                          <TextInput
+                            value={editingScopeLabel}
+                            onChange={(event) => setEditingScopeLabel(event.currentTarget.value)}
+                            classNames={{
+                              input: 'mantine-dark-input',
+                            }}
+                          />
+                          <Group justify="space-between">
+                            <Button
+                              size="xs"
+                              variant="light"
+                              onClick={() => {
+                                setEditingScopeId(null)
+                                setEditingScopeLabel('')
+                              }}
+                            >
+                              Abbrechen
+                            </Button>
+                            <Button size="xs" onClick={handleRenameScope}>Speichern</Button>
+                          </Group>
+                        </Stack>
+                      ) : (
+                        <Group justify="space-between" wrap="nowrap">
+                          <Text size="sm" truncate>{scope.label}</Text>
+                          <Group gap={6} wrap="nowrap">
+                            <ActionIcon
+                              size="sm"
+                              variant="subtle"
+                              color="gray"
+                              onClick={() => handleStartRenameScope(scope.value, scope.label)}
+                              aria-label="Scope umbenennen"
+                            >
+                              ✎
+                            </ActionIcon>
+                            <ActionIcon
+                              size="sm"
+                              variant="subtle"
+                              color="red"
+                              onClick={() => handleDeleteScope(scope.value)}
+                              aria-label="Scope löschen"
+                            >
+                              ✕
+                            </ActionIcon>
+                          </Group>
+                        </Group>
+                      )}
+                    </Paper>
+                  ))}
+                </Stack>
+
+                {scopeError && (
+                  <Alert color="red" variant="light">
+                    {scopeError}
+                  </Alert>
+                )}
+              </Stack>
+            </div>
+          </div>
 
           <Textarea
             label="Release Note"

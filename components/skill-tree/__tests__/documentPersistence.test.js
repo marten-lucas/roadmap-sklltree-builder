@@ -12,6 +12,7 @@ import {
 
 const createDocument = () => ({
   segments: [{ id: 'segment-1', label: 'Frontend' }],
+  scopes: [],
   children: [{ id: 'node-1', label: 'Root', children: [] }],
 })
 

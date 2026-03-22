@@ -1,10 +1,14 @@
 import { describe, it, expect } from 'vitest'
 import {
+  addScopeWithResult,
+  deleteScopeWithResult,
   findNodeById,
   findParentNodeId,
   getNodeAdditionalDependencies,
   moveNodeToParent,
+  renameScopeWithResult,
   setNodeAdditionalDependencies,
+  updateNodeProgressLevel,
   updateNodeData,
   updateNodeSegment,
   updateNodeLevel,
@@ -260,6 +264,74 @@ describe('treeData', () => {
         expect(node.x).toBeCloseTo(previous.x, 6)
         expect(node.y).toBeCloseTo(previous.y, 6)
       })
+    })
+  })
+
+  describe('scopes', () => {
+    it('should create a scope and assign it to a level', () => {
+      const tree = createSimpleTree()
+      const withLevels = updateNodeData(tree, 'child-react', 'React', 'done')
+      const created = addScopeWithResult(withLevels, 'Serie A')
+
+      expect(created.ok).toBe(true)
+      expect(created.scope).toBeDefined()
+
+      const levelId = findNodeById(withLevels, 'child-react').levels[0].id
+
+      const assigned = updateNodeProgressLevel(created.tree, 'child-react', levelId, {
+        scopeIds: [created.scope.id],
+      })
+      const level = findNodeById(assigned, 'child-react').levels[0]
+
+      expect(level.scopeIds).toEqual([created.scope.id])
+    })
+
+    it('should reject blank and duplicate scope names', () => {
+      const tree = {
+        ...createSimpleTree(),
+        scopes: [{ id: 'scope-a', label: 'Serie A' }],
+      }
+
+      const blank = addScopeWithResult(tree, '   ')
+      expect(blank.ok).toBe(false)
+
+      const duplicate = addScopeWithResult(tree, ' serie a ')
+      expect(duplicate.ok).toBe(false)
+    })
+
+    it('should reject duplicate names on rename with trim+case-insensitive check', () => {
+      const tree = {
+        ...createSimpleTree(),
+        scopes: [
+          { id: 'scope-a', label: 'Serie A' },
+          { id: 'scope-b', label: 'Serie B' },
+        ],
+      }
+
+      const result = renameScopeWithResult(tree, 'scope-b', ' serie a ')
+      expect(result.ok).toBe(false)
+    })
+
+    it('should remove deleted scope references from all levels', () => {
+      const tree = {
+        ...createSimpleTree(),
+        scopes: [
+          { id: 'scope-a', label: 'Serie A' },
+          { id: 'scope-b', label: 'Serie B' },
+        ],
+      }
+      const withLevels = updateNodeData(tree, 'child-react', 'React', 'done')
+      const levelId = findNodeById(withLevels, 'child-react').levels[0].id
+
+      const withScopes = updateNodeProgressLevel(withLevels, 'child-react', levelId, {
+        scopeIds: ['scope-a', 'scope-b'],
+      })
+
+      const deleted = deleteScopeWithResult(withScopes, 'scope-a')
+      expect(deleted.ok).toBe(true)
+
+      const level = findNodeById(deleted.tree, 'child-react').levels[0]
+      expect(level.scopeIds).toEqual(['scope-b'])
     })
   })
 })

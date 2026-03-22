@@ -8,6 +8,7 @@ const toNodeLevel = (levelLike, fallbackLabel = 'Level 1') => ({
   label: levelLike?.label ?? fallbackLabel,
   status: normalizeStatusKey(levelLike?.status ?? DEFAULT_NODE_STATUS),
   releaseNote: levelLike?.releaseNote ?? '',
+  scopeIds: uniqueStringArray(levelLike?.scopeIds),
 })
 
 const shortNameFromLabel = (label) => {
@@ -57,6 +58,99 @@ const uniqueStringArray = (value) => {
   }
 
   return result
+}
+
+const normalizeScopeNameKey = (value) => String(value ?? '').trim().toLocaleLowerCase()
+
+const normalizeScopeEntries = (value) => {
+  if (!Array.isArray(value)) {
+    return []
+  }
+
+  const usedIds = new Set()
+  const usedNameKeys = new Set()
+  const scopes = []
+
+  for (const entry of value) {
+    const id = typeof entry?.id === 'string' ? entry.id : ''
+    const label = typeof entry?.label === 'string' ? entry.label : ''
+    const labelKey = normalizeScopeNameKey(label)
+
+    if (id.length === 0 || labelKey.length === 0 || usedIds.has(id) || usedNameKeys.has(labelKey)) {
+      continue
+    }
+
+    usedIds.add(id)
+    usedNameKeys.add(labelKey)
+    scopes.push({ id, label })
+  }
+
+  return scopes
+}
+
+const normalizeScopeAssignments = (tree) => {
+  if (!tree || typeof tree !== 'object') {
+    return tree
+  }
+
+  const scopes = normalizeScopeEntries(tree.scopes)
+  const allowedScopeIds = new Set(scopes.map((scope) => scope.id))
+
+  const sanitizeLevelScopeIds = (level) => uniqueStringArray(level?.scopeIds)
+    .filter((scopeId) => allowedScopeIds.has(scopeId))
+
+  const sanitizeNode = (node) => {
+    const normalizedLevels = Array.isArray(node.levels)
+      ? node.levels.map((entry) => ({
+          ...entry,
+          scopeIds: sanitizeLevelScopeIds(entry),
+        }))
+      : node.levels
+
+    return {
+      ...node,
+      levels: normalizedLevels,
+      children: (node.children ?? []).map(sanitizeNode),
+    }
+  }
+
+  return {
+    ...tree,
+    scopes,
+    children: (tree.children ?? []).map(sanitizeNode),
+  }
+}
+
+const validateScopeLabel = (treeData, label, excludedScopeId = null) => {
+  const nextLabel = String(label ?? '')
+  const key = normalizeScopeNameKey(nextLabel)
+
+  if (key.length === 0) {
+    return {
+      ok: false,
+      error: 'Scope-Name darf nicht leer sein.',
+    }
+  }
+
+  const duplicate = (treeData.scopes ?? []).find((scope) => {
+    if (scope.id === excludedScopeId) {
+      return false
+    }
+
+    return normalizeScopeNameKey(scope.label) === key
+  })
+
+  if (duplicate) {
+    return {
+      ok: false,
+      error: 'Scope-Name existiert bereits.',
+    }
+  }
+
+  return {
+    ok: true,
+    label: nextLabel,
+  }
 }
 
 const collectNodeIds = (tree) => {
@@ -203,7 +297,7 @@ const normalizeAdditionalDependencies = (tree) => {
   }
 }
 
-const withNormalizedDependencies = (tree) => normalizeAdditionalDependencies(tree)
+const withNormalizedDependencies = (tree) => normalizeScopeAssignments(normalizeAdditionalDependencies(tree))
 
 export const ensureNodeLevels = (node) => {
   if (Array.isArray(node?.levels) && node.levels.length > 0) {
@@ -351,6 +445,9 @@ export const updateNodeProgressLevel = (treeData, id, levelId, updates) =>
         ...updates,
         status: updates?.status ?? level.status,
         releaseNote: updates?.releaseNote ?? level.releaseNote ?? '',
+        scopeIds: updates?.scopeIds !== undefined
+          ? uniqueStringArray(updates.scopeIds)
+          : uniqueStringArray(level.scopeIds),
       }
     })
 
@@ -370,6 +467,7 @@ export const addNodeProgressLevel = (treeData, id, newLevelId) =>
         label: `Level ${nextIndex}`,
         status: DEFAULT_NODE_STATUS,
         releaseNote: '',
+        scopeIds: [],
       },
       `Level ${nextIndex}`,
     )
@@ -531,6 +629,7 @@ const createNewNode = (level, segmentId = null) => ({
       label: 'Level 1',
       status: DEFAULT_NODE_STATUS,
       releaseNote: '',
+      scopeIds: [],
     },
   ],
   ebene: level,
@@ -544,6 +643,96 @@ const createNewSegment = () => ({
   id: `segment-${crypto.randomUUID()}`,
   label: 'Neues Segment',
 })
+
+const createNewScope = (label) => ({
+  id: `scope-${crypto.randomUUID()}`,
+  label,
+})
+
+export const addScopeWithResult = (treeData, label) => {
+  const validation = validateScopeLabel(treeData, label)
+  if (!validation.ok) {
+    return {
+      ok: false,
+      error: validation.error,
+      tree: treeData,
+      scope: null,
+    }
+  }
+
+  const scope = createNewScope(validation.label)
+  const nextTree = withNormalizedDependencies({
+    ...treeData,
+    scopes: [...(treeData.scopes ?? []), scope],
+  })
+
+  return {
+    ok: true,
+    error: null,
+    tree: nextTree,
+    scope,
+  }
+}
+
+export const renameScopeWithResult = (treeData, scopeId, nextLabel) => {
+  const existingScope = (treeData.scopes ?? []).find((scope) => scope.id === scopeId)
+  if (!existingScope) {
+    return {
+      ok: false,
+      error: 'Scope wurde nicht gefunden.',
+      tree: treeData,
+    }
+  }
+
+  const validation = validateScopeLabel(treeData, nextLabel, scopeId)
+  if (!validation.ok) {
+    return {
+      ok: false,
+      error: validation.error,
+      tree: treeData,
+    }
+  }
+
+  const nextTree = withNormalizedDependencies({
+    ...treeData,
+    scopes: (treeData.scopes ?? []).map((scope) =>
+      scope.id === scopeId
+        ? {
+            ...scope,
+            label: validation.label,
+          }
+        : scope,
+    ),
+  })
+
+  return {
+    ok: true,
+    error: null,
+    tree: nextTree,
+  }
+}
+
+export const deleteScopeWithResult = (treeData, scopeId) => {
+  const exists = (treeData.scopes ?? []).some((scope) => scope.id === scopeId)
+  if (!exists) {
+    return {
+      ok: false,
+      error: 'Scope wurde nicht gefunden.',
+      tree: treeData,
+    }
+  }
+
+  const nextTree = withNormalizedDependencies({
+    ...treeData,
+    scopes: (treeData.scopes ?? []).filter((scope) => scope.id !== scopeId),
+  })
+
+  return {
+    ok: true,
+    error: null,
+    tree: nextTree,
+  }
+}
 
 const promoteSubtreeLevels = (node, levelDiff) => {
   const nextNode = { ...node }

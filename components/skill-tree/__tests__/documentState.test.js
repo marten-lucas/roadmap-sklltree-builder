@@ -8,6 +8,7 @@ import {
 
 const createDoc = (suffix) => ({
   segments: [{ id: `segment-${suffix}`, label: `Segment ${suffix}` }],
+  scopes: [],
   children: [{ id: `node-${suffix}`, label: `Node ${suffix}`, children: [] }],
   centerIconSrc: DEFAULT_CENTER_ICON_SRC,
 })
@@ -125,8 +126,20 @@ describe('documentState', () => {
   it('creates an empty document for reset flows', () => {
     expect(createEmptyDocument()).toEqual({
       segments: [],
+      scopes: [],
       children: [],
       centerIconSrc: DEFAULT_CENTER_ICON_SRC,
     })
+  })
+
+  it('defaults missing scopes without overriding existing center icon', () => {
+    const state = createDocumentHistoryState({
+      segments: [],
+      children: [],
+      centerIconSrc: '/custom.svg',
+    })
+
+    expect(state.present.scopes).toEqual([])
+    expect(state.present.centerIconSrc).toBe('/custom.svg')
   })
 })
