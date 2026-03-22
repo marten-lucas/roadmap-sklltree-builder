@@ -8,7 +8,13 @@ import {
   loadDocumentFromLocalStorage,
   saveDocumentToLocalStorage,
 } from './documentPersistence'
-import { createDocumentHistoryState, createEmptyDocument, documentHistoryReducer } from './documentState'
+import {
+  createDocumentHistoryState,
+  createEmptyDocument,
+  DEFAULT_CENTER_ICON_SRC,
+  documentHistoryReducer,
+} from './documentState'
+import { CenterIconPanel } from './CenterIconPanel'
 import { InspectorPanel } from './InspectorPanel'
 import { solveSkillTreeLayout } from './layoutSolver'
 import { UNASSIGNED_SEGMENT_ID } from './layoutShared'
@@ -87,6 +93,35 @@ const confirmResetDocument = () => window.confirm(
   'Roadmap wirklich zuruecksetzen? Dieser Schritt kann per Undo rueckgaengig gemacht werden.',
 )
 
+const readFileAsText = (file) => new Promise((resolve, reject) => {
+  const reader = new FileReader()
+  reader.onload = () => resolve(String(reader.result ?? ''))
+  reader.onerror = () => reject(new Error('Datei konnte nicht gelesen werden.'))
+  reader.readAsText(file)
+})
+
+const readFileAsDataUrl = (file) => new Promise((resolve, reject) => {
+  const reader = new FileReader()
+  reader.onload = () => resolve(String(reader.result ?? ''))
+  reader.onerror = () => reject(new Error('Datei konnte nicht gelesen werden.'))
+  reader.readAsDataURL(file)
+})
+
+const isValidSvgMarkup = (markup) => {
+  if (typeof markup !== 'string' || markup.trim().length === 0) {
+    return false
+  }
+
+  const parser = new DOMParser()
+  const parsed = parser.parseFromString(markup, 'image/svg+xml')
+
+  if (parsed.querySelector('parsererror')) {
+    return false
+  }
+
+  return parsed.documentElement?.tagName?.toLowerCase() === 'svg'
+}
+
 const ToolbarIcon = ({ children }) => (
   <svg
     width="15"
@@ -119,8 +154,8 @@ export function SkillTree() {
   const [selectedProgressLevelId, setSelectedProgressLevelId] = useState(null)
   const [selectedSegmentId, setSelectedSegmentId] = useState(null)
   const [selectedPortalKey, setSelectedPortalKey] = useState(null)
+  const [isCenterIconPanelOpen, setIsCenterIconPanelOpen] = useState(false)
   const [isToolbarCollapsed, setIsToolbarCollapsed] = useState(false)
-  const centerSize = TREE_CONFIG.nodeSize * 2
   const addControlOffset = TREE_CONFIG.nodeSize * 0.82
 
   const { layout, diagnostics } = useMemo(
@@ -128,6 +163,21 @@ export function SkillTree() {
     [roadmapData],
   )
   const { nodes, links, segments, canvas } = layout
+  const centerIconSource = roadmapData.centerIconSrc ?? DEFAULT_CENTER_ICON_SRC
+
+  const centerIconSize = useMemo(() => {
+    const firstLevelNode = nodes.find((node) => node.level === 1)
+    const firstLevelRadius = firstLevelNode?.radius ?? TREE_CONFIG.levelSpacing
+    const innerGap = TREE_CONFIG.nodeSize * 0.2
+    const minSize = TREE_CONFIG.nodeSize * 1.15
+    const preferredSize = firstLevelRadius * 1.16
+    const maxAllowedSize = Math.max(
+      minSize,
+      (firstLevelRadius - TREE_CONFIG.nodeSize / 2 - innerGap) * 2,
+    )
+
+    return Math.max(minSize, Math.min(preferredSize, maxAllowedSize))
+  }, [nodes])
 
   const selectedNode = useMemo(
     () => findNodeById(roadmapData, selectedNodeId),
@@ -423,12 +473,11 @@ export function SkillTree() {
       return null
     }
 
-    const centerSize = TREE_CONFIG.nodeSize * 2
     return {
       x: canvas.origin.x,
-      y: canvas.origin.y - centerSize / 2 - 60,
+      y: canvas.origin.y - centerIconSize / 2 - 72,
     }
-  }, [nodes.length, canvas.origin.x, canvas.origin.y])
+  }, [nodes.length, canvas.origin.x, canvas.origin.y, centerIconSize])
 
   const emptySegmentAddControl = useMemo(() => {
     if ((roadmapData.segments ?? []).length > 0) {
@@ -443,9 +492,53 @@ export function SkillTree() {
 
     return {
       x: canvas.origin.x,
-      y: canvas.origin.y - segmentLabelRadius * 1.25,
+      y: canvas.origin.y - segmentLabelRadius * 1.32,
     }
   }, [roadmapData.segments, canvas.origin.x, canvas.origin.y, canvas.maxRadius])
+
+  const handleOpenCenterIconPanel = (event) => {
+    event.stopPropagation()
+    setIsCenterIconPanelOpen(true)
+  }
+
+  const handleResetCenterIcon = () => {
+    commitDocument({
+      ...roadmapData,
+      centerIconSrc: DEFAULT_CENTER_ICON_SRC,
+    })
+  }
+
+  const handleCenterIconUpload = async (file) => {
+    if (!file) {
+      return
+    }
+
+    const isSvgFile = file.type.includes('svg') || file.name.toLowerCase().endsWith('.svg')
+    if (!isSvgFile) {
+      window.alert('Bitte eine gueltige SVG-Datei auswaehlen.')
+      return
+    }
+
+    try {
+      const [svgMarkup, svgDataUrl] = await Promise.all([
+        readFileAsText(file),
+        readFileAsDataUrl(file),
+      ])
+
+      if (!isValidSvgMarkup(svgMarkup)) {
+        window.alert('Die Datei ist kein gueltiges SVG.')
+        return
+      }
+
+      commitDocument({
+        ...roadmapData,
+        centerIconSrc: svgDataUrl,
+      })
+    } catch (error) {
+      console.error('Center icon upload failed', error)
+      window.alert('SVG-Datei konnte nicht geladen werden.')
+    }
+  }
 
   const commitDocument = (nextDocument) => {
     if (!nextDocument || nextDocument === roadmapData) {
@@ -1099,15 +1192,28 @@ export function SkillTree() {
 
             <circle cx={canvas.origin.x} cy={canvas.origin.y} r={canvas.maxRadius + 160} fill="url(#nodeHalo)" />
 
-            <image
-              href="/Kyana_Visual_final.svg"
-              x={canvas.origin.x - centerSize / 2}
-              y={canvas.origin.y - centerSize / 2}
-              width={centerSize}
-              height={centerSize}
-              preserveAspectRatio="xMidYMid meet"
-              opacity="0.95"
-            />
+            <g
+              className="skill-tree-center-icon skill-tree-clickable"
+              transform={`translate(${canvas.origin.x}, ${canvas.origin.y})`}
+              onMouseDown={(event) => event.stopPropagation()}
+              onClick={handleOpenCenterIconPanel}
+            >
+              <foreignObject
+                key={centerIconSource}
+                x={-centerIconSize / 2}
+                y={-centerIconSize / 2}
+                width={centerIconSize}
+                height={centerIconSize}
+                className="skill-tree-center-icon__foreign"
+              >
+                <img
+                  src={centerIconSource}
+                  alt="Center Icon"
+                  className="skill-tree-center-icon__image"
+                />
+              </foreignObject>
+              <circle r={centerIconSize / 2 + 8} className="skill-tree-center-icon__hit-area" />
+            </g>
 
             <g>
               {segments.separators.map((separator) => (
@@ -1491,6 +1597,14 @@ export function SkillTree() {
         onClose={() => setSelectedSegmentId(null)}
         onLabelChange={handleSegmentLabelChange}
         onDelete={handleDeleteSegment}
+      />
+
+      <CenterIconPanel
+        isOpen={isCenterIconPanelOpen}
+        iconSource={centerIconSource}
+        onClose={() => setIsCenterIconPanelOpen(false)}
+        onUpload={handleCenterIconUpload}
+        onResetDefault={handleResetCenterIcon}
       />
     </main>
   )

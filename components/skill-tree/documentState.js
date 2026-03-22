@@ -1,4 +1,20 @@
 const HISTORY_LIMIT = 100
+export const DEFAULT_CENTER_ICON_SRC = '/Kyana_Visual_final.svg'
+
+const ensureDocumentDefaults = (document) => {
+  if (!document || typeof document !== 'object') {
+    return createEmptyDocument()
+  }
+
+  if (typeof document.centerIconSrc === 'string' && document.centerIconSrc.trim().length > 0) {
+    return document
+  }
+
+  return {
+    ...document,
+    centerIconSrc: DEFAULT_CENTER_ICON_SRC,
+  }
+}
 
 const trimPast = (past) => {
   if (past.length <= HISTORY_LIMIT) {
@@ -11,6 +27,7 @@ const trimPast = (past) => {
 export const createEmptyDocument = () => ({
   segments: [],
   children: [],
+  centerIconSrc: DEFAULT_CENTER_ICON_SRC,
 })
 
 export const cloneDocument = (document) => {
@@ -18,7 +35,7 @@ export const cloneDocument = (document) => {
     return createEmptyDocument()
   }
 
-  return structuredClone(document)
+  return ensureDocumentDefaults(structuredClone(document))
 }
 
 export const createDocumentHistoryState = (initialDocument) => ({
@@ -30,7 +47,7 @@ export const createDocumentHistoryState = (initialDocument) => ({
 export const documentHistoryReducer = (state, action) => {
   switch (action.type) {
     case 'apply': {
-      const nextDocument = action.document
+      const nextDocument = ensureDocumentDefaults(action.document)
 
       if (!nextDocument || nextDocument === state.present) {
         return state
@@ -73,7 +90,7 @@ export const documentHistoryReducer = (state, action) => {
     }
 
     case 'replace': {
-      const replacementDocument = action.document
+      const replacementDocument = ensureDocumentDefaults(action.document)
 
       if (!replacementDocument) {
         return state

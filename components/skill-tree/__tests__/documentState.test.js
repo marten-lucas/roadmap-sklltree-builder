@@ -2,12 +2,14 @@ import { describe, expect, it } from 'vitest'
 import {
   createDocumentHistoryState,
   createEmptyDocument,
+  DEFAULT_CENTER_ICON_SRC,
   documentHistoryReducer,
 } from '../documentState'
 
 const createDoc = (suffix) => ({
   segments: [{ id: `segment-${suffix}`, label: `Segment ${suffix}` }],
   children: [{ id: `node-${suffix}`, label: `Node ${suffix}`, children: [] }],
+  centerIconSrc: DEFAULT_CENTER_ICON_SRC,
 })
 
 describe('documentState', () => {
@@ -124,6 +126,7 @@ describe('documentState', () => {
     expect(createEmptyDocument()).toEqual({
       segments: [],
       children: [],
+      centerIconSrc: DEFAULT_CENTER_ICON_SRC,
     })
   })
 })
