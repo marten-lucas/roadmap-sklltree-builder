@@ -1,0 +1,201 @@
+# Page snapshot
+
+```yaml
+- main [ref=e3]:
+  - generic [ref=e5]:
+    - button "Menü einklappen" [ref=e6] [cursor=pointer]:
+      - img [ref=e8]
+    - generic [ref=e10]:
+      - generic [ref=e11]:
+        - button "Export" [ref=e12] [cursor=pointer]:
+          - img [ref=e14]
+        - button "HTML importieren" [ref=e17] [cursor=pointer]:
+          - img [ref=e19]
+      - generic [ref=e22]:
+        - button "Undo" [ref=e23] [cursor=pointer]:
+          - img [ref=e25]
+        - button "Redo" [disabled] [ref=e29]:
+          - img [ref=e31]
+      - button "Reset" [ref=e36] [cursor=pointer]:
+        - img [ref=e38]
+      - paragraph [ref=e42]: Autosave 08:07:11 AM
+  - img [ref=e45]:
+    - generic [ref=e54] [cursor=pointer]: Kyana Data & Connect
+    - generic [ref=e57] [cursor=pointer]: Kyana Assist
+    - generic [ref=e60] [cursor=pointer]: Kyana Cases
+    - generic [ref=e63] [cursor=pointer]: myKyana Platform
+    - button "COD" [ref=e111]:
+      - paragraph [ref=e113]: COD
+    - button "ELD" [ref=e116]:
+      - paragraph [ref=e118]: ELD
+    - button "MFR" [ref=e121]:
+      - paragraph [ref=e123]: MFR
+    - button "CFL" [ref=e126]:
+      - paragraph [ref=e128]: CFL
+    - button "RJD" [ref=e131]:
+      - paragraph [ref=e133]: RJD
+    - button "CIT" [ref=e136]:
+      - paragraph [ref=e138]: CIT
+    - button "CLG" [ref=e141]:
+      - paragraph [ref=e143]: CLG
+    - button "LAN" [ref=e146]:
+      - paragraph [ref=e148]: LAN
+    - button "TNC" [ref=e151]:
+      - paragraph [ref=e153]: TNC
+    - button "CAN" [ref=e156]:
+      - paragraph [ref=e158]: CAN
+    - button "PPD" [ref=e161]:
+      - paragraph [ref=e163]: PPD
+    - button "RAD" [ref=e166]:
+      - paragraph [ref=e168]: RAD
+    - button "COK" [ref=e171]:
+      - paragraph [ref=e173]: COK
+    - button "CC" [ref=e176]:
+      - paragraph [ref=e178]: CC
+    - button "RCA" [ref=e181]:
+      - paragraph [ref=e183]: RCA
+    - button "FLK" [ref=e186]:
+      - paragraph [ref=e188]: FLK
+    - button "CPP" [ref=e191]:
+      - paragraph [ref=e193]: CPP
+    - button "PLT" [ref=e196]:
+      - paragraph [ref=e198]: PLT
+    - button "PLC" [ref=e201]:
+      - paragraph [ref=e203]: PLC
+    - button "LCT" [ref=e206]:
+      - paragraph [ref=e208]: LCT
+    - button "CRA" [ref=e211]:
+      - paragraph [ref=e213]: CRA
+    - button "FCA" [ref=e216]:
+      - paragraph [ref=e218]: FCA
+    - button "PPK" [ref=e221]:
+      - paragraph [ref=e223]: PPK
+    - button "RAK" [ref=e226]:
+      - paragraph [ref=e228]: RAK
+    - button "SA1" [ref=e231]:
+      - paragraph [ref=e233]: SA1
+    - button "CCC" [ref=e236]:
+      - paragraph [ref=e238]: CCC
+    - button "IVP" [ref=e241]:
+      - paragraph [ref=e243]: IVP
+    - button "R4P" [ref=e246]:
+      - paragraph [ref=e248]: R4P
+    - button "LKC" [ref=e251]:
+      - paragraph [ref=e253]: LKC
+    - button "PDB" [ref=e256]:
+      - paragraph [ref=e258]: PDB
+    - button "BMD" [ref=e261]:
+      - paragraph [ref=e263]: BMD
+    - button "CCP" [ref=e266]:
+      - paragraph [ref=e268]: CCP
+    - button "PCA" [ref=e271]:
+      - paragraph [ref=e273]: PCA
+    - button "DWC" [ref=e276]:
+      - paragraph [ref=e278]: DWC
+    - button "CC" [ref=e281]:
+      - paragraph [ref=e283]: CC
+    - button "MM" [ref=e286]:
+      - paragraph [ref=e288]: MM
+    - button "CCA" [ref=e291]:
+      - paragraph [ref=e293]: CCA
+    - button "NAH" [ref=e296]:
+      - paragraph [ref=e298]: NAH
+    - button "JFS" [ref=e301]:
+      - paragraph [ref=e303]: JFS
+    - button "SPA" [ref=e306]:
+      - paragraph [ref=e308]: SPA
+    - button "MPC" [ref=e311]:
+      - paragraph [ref=e313]: MPC
+    - button "UD" [ref=e316]:
+      - paragraph [ref=e318]: UD
+    - button "SEA" [ref=e321]:
+      - paragraph [ref=e323]: SEA
+    - button "SA" [ref=e326]:
+      - paragraph [ref=e328]: SA
+    - button "SHV" [ref=e331]:
+      - paragraph [ref=e333]: SHV
+    - button "JBE" [ref=e336]:
+      - paragraph [ref=e338]: JBE
+    - generic [ref=e339]:
+      - generic [ref=e342] [cursor=pointer]: +
+      - generic [ref=e343]:
+        - generic [ref=e346] [cursor=pointer]: +
+        - generic [ref=e349] [cursor=pointer]: +
+  - generic [ref=e350]:
+    - generic [ref=e351]:
+      - generic [ref=e352]:
+        - paragraph [ref=e353]: Inspector
+        - paragraph [ref=e354]: Skill bearbeiten
+      - button "Inspector schließen" [ref=e356] [cursor=pointer]:
+        - generic [ref=e357]: ✕
+    - generic [ref=e359]:
+      - generic [ref=e360]:
+        - paragraph [ref=e361]: Ausgewählt
+        - paragraph [ref=e362]: Local Area Network
+      - generic [ref=e363]:
+        - generic [ref=e364]: Name
+        - textbox "Name" [ref=e366]:
+          - /placeholder: Skill-Name eingeben …
+          - text: Local Area Network
+      - generic [ref=e367]:
+        - generic [ref=e368]: Shortname
+        - textbox "Shortname" [ref=e370]:
+          - /placeholder: z.B. API
+          - text: LAN
+      - generic [ref=e371]:
+        - generic [ref=e372]: Ebene
+        - generic [ref=e373]:
+          - textbox "Ebene" [ref=e374] [cursor=pointer]: Ebene 1
+          - generic:
+            - img
+      - generic [ref=e375]:
+        - generic [ref=e376]: Segment
+        - paragraph [ref=e377]: Ein Skill wuerde eine Segmentgrenze schneiden.
+        - generic [ref=e378]:
+          - textbox "Segment" [active] [ref=e379] [cursor=pointer]: Kyana Assist
+          - generic:
+            - img
+      - generic [ref=e380]:
+        - generic [ref=e381]: Parent
+        - generic [ref=e382]:
+          - textbox "Parent" [ref=e383] [cursor=pointer]: Kein Parent (Root)
+          - generic:
+            - img
+      - generic [ref=e384]:
+        - generic [ref=e385]: Additional Dependencies
+        - generic [ref=e386]:
+          - textbox "Additional Dependencies" [ref=e389]
+          - generic:
+            - img
+      - generic [ref=e390]:
+        - paragraph [ref=e391]: Incoming Dependencies
+        - paragraph [ref=e392]: Keine eingehenden Dependencies.
+      - generic [ref=e393]:
+        - paragraph [ref=e394]: Ausbaustufen
+        - tablist [ref=e396]:
+          - generic [ref=e397]:
+            - tab "L1" [selected] [ref=e398] [cursor=pointer]:
+              - generic [ref=e399]: L1
+            - button "Level 1 löschen" [disabled] [ref=e400]:
+              - generic [ref=e401]: ✕
+          - button "Level hinzufügen" [ref=e402] [cursor=pointer]:
+            - generic [ref=e403]: +
+      - generic [ref=e404]:
+        - generic [ref=e405]: Status
+        - generic [ref=e406]:
+          - textbox "Status" [ref=e407] [cursor=pointer]: Done
+          - generic:
+            - img
+      - generic [ref=e408]:
+        - generic [ref=e409]: Release Note
+        - textbox "Release Note" [ref=e411]:
+          - /placeholder: Beschreibe aus Kundensicht, was in dieser Ausbaustufe geliefert wurde oder als Nächstes kommt ...
+      - alert [ref=e412]:
+        - generic [ref=e415]: Ein Skill wuerde eine Segmentgrenze schneiden.
+      - generic [ref=e416]:
+        - paragraph [ref=e417]: Löschen
+        - button "Skill löschen" [ref=e418] [cursor=pointer]:
+          - generic [ref=e420]: Skill löschen
+        - button "Zweig löschen" [ref=e421] [cursor=pointer]:
+          - generic [ref=e423]: Zweig löschen
+```

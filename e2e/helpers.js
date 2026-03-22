@@ -1,4 +1,7 @@
 import { readFileSync } from 'node:fs'
+import { mkdirSync, writeFileSync } from 'node:fs'
+import { dirname, resolve } from 'node:path'
+import process from 'node:process'
 
 /**
  * Clears localStorage and reloads the app so it starts from initialData.
@@ -53,3 +56,369 @@ export const extractJsonPayload = (htmlText) => {
   if (!jsonMatch) throw new Error('No embedded JSON payload found in HTML')
   return JSON.parse(jsonMatch[1].trim())
 }
+
+const parseCsvLine = (line) => {
+  const values = []
+  let current = ''
+  let inQuotes = false
+
+  for (let i = 0; i < line.length; i += 1) {
+    const char = line[i]
+
+    if (char === '"') {
+      const nextChar = line[i + 1]
+      if (inQuotes && nextChar === '"') {
+        current += '"'
+        i += 1
+      } else {
+        inQuotes = !inQuotes
+      }
+      continue
+    }
+
+    if (char === ',' && !inQuotes) {
+      values.push(current)
+      current = ''
+      continue
+    }
+
+    current += char
+  }
+
+  values.push(current)
+  return values.map((value) => value.trim())
+}
+
+const normalizeStatus = (status) => {
+  const normalized = String(status ?? '').trim().toLowerCase()
+  if (normalized === 'done' || normalized === 'now' || normalized === 'next' || normalized === 'later') {
+    return normalized
+  }
+
+  throw new Error(`Unsupported status in CSV: ${status}`)
+}
+
+const normalizeParent = (parent) => {
+  const value = String(parent ?? '').trim()
+  if (!value || value === '-') {
+    return null
+  }
+  return value
+}
+
+const normalizeShortNameLikeApp = (value, fallbackLabel = 'Skill') => {
+  const compact = String(value ?? '')
+    .replace(/[^A-Za-z0-9]/g, '')
+    .toUpperCase()
+    .slice(0, 3)
+
+  if (compact.length > 0) {
+    return compact
+  }
+
+  const letters = String(fallbackLabel ?? '')
+    .replace(/[^A-Za-z0-9]/g, '')
+    .toUpperCase()
+    .slice(0, 3)
+
+  return letters || 'NEW'
+}
+
+const csvSortKey = (row) => `${String(row.level).padStart(4, '0')}-${String(row.order).padStart(4, '0')}`
+
+export const parseSkillTreeCsvTemplate = (csvText, options = {}) => {
+  const { strictParentValidation = false } = options
+  const lines = String(csvText)
+    .replace(/^\uFEFF/, '')
+    .split(/\r?\n/)
+    .filter((line) => line.trim().length > 0)
+
+  if (lines.length < 2) {
+    throw new Error('CSV is empty or missing data rows.')
+  }
+
+  const headers = parseCsvLine(lines[0])
+  const headerIndexByName = new Map(headers.map((name, index) => [name, index]))
+  const requiredHeaders = ['Node Short Name', 'Node Name', 'Ebene', 'Segment', 'Parent', 'Status']
+
+  for (const headerName of requiredHeaders) {
+    if (!headerIndexByName.has(headerName)) {
+      throw new Error(`CSV missing header: ${headerName}`)
+    }
+  }
+
+  const rows = []
+  for (let i = 1; i < lines.length; i += 1) {
+    const parsed = parseCsvLine(lines[i])
+    const shortName = parsed[headerIndexByName.get('Node Short Name')]?.trim()
+    const label = parsed[headerIndexByName.get('Node Name')]?.trim()
+    const levelText = parsed[headerIndexByName.get('Ebene')]?.trim()
+    const segment = parsed[headerIndexByName.get('Segment')]?.trim()
+    const parentShortName = normalizeParent(parsed[headerIndexByName.get('Parent')])
+    const status = normalizeStatus(parsed[headerIndexByName.get('Status')])
+
+    if (!shortName || !label || !levelText || !segment) {
+      throw new Error(`CSV row ${i + 1} is incomplete.`)
+    }
+
+    const level = Number.parseInt(levelText, 10)
+    if (!Number.isInteger(level) || level < 1) {
+      throw new Error(`CSV row ${i + 1} has invalid Ebene: ${levelText}`)
+    }
+
+    rows.push({
+      shortName,
+      label,
+      level,
+      segment,
+      parentShortName,
+      parentLabel: null,
+      status,
+      order: i,
+    })
+  }
+
+  const byShortName = new Map()
+  for (const row of rows) {
+    if (byShortName.has(row.shortName)) {
+      throw new Error(`Duplicate Node Short Name in CSV: ${row.shortName}`)
+    }
+    byShortName.set(row.shortName, row)
+  }
+
+  const warnings = []
+  for (const row of rows) {
+    if (row.parentShortName && !byShortName.has(row.parentShortName)) {
+      if (strictParentValidation) {
+        throw new Error(
+          `CSV row for ${row.shortName} references unknown parent ${row.parentShortName}.`,
+        )
+      }
+
+      warnings.push(
+        `Node ${row.shortName} references missing parent ${row.parentShortName}; treating as root for UI simulation.`,
+      )
+      row.parentShortName = null
+      row.parentLabel = null
+      continue
+    }
+
+    row.parentLabel = row.parentShortName ? byShortName.get(row.parentShortName).label : null
+  }
+
+  const segments = []
+  const segmentSet = new Set()
+  for (const row of rows) {
+    if (!segmentSet.has(row.segment)) {
+      segmentSet.add(row.segment)
+      segments.push(row.segment)
+    }
+  }
+
+  const roots = rows
+    .filter((row) => row.parentShortName === null)
+    .sort((left, right) => csvSortKey(left).localeCompare(csvSortKey(right)))
+
+  const children = rows
+    .filter((row) => row.parentShortName !== null)
+    .sort((left, right) => csvSortKey(left).localeCompare(csvSortKey(right)))
+
+  const childrenByParent = new Map()
+  for (const row of children) {
+    const current = childrenByParent.get(row.parentShortName) ?? []
+    current.push(row)
+    childrenByParent.set(row.parentShortName, current)
+  }
+
+  return {
+    rows,
+    segments,
+    roots,
+    children,
+    childrenByParent,
+    warnings,
+  }
+}
+
+export const ensureDirForFile = (filePath) => {
+  mkdirSync(dirname(filePath), { recursive: true })
+}
+
+export const persistTextFile = (filePath, text) => {
+  ensureDirForFile(filePath)
+  writeFileSync(filePath, text, 'utf-8')
+  return filePath
+}
+
+const getVisibleLocator = (locator) => locator.filter({ visible: true })
+
+export const confirmAndReset = async (page) => {
+  page.once('dialog', (dialog) => dialog.accept())
+  await page.getByRole('button', { name: 'Reset' }).click()
+}
+
+export const waitForInspector = async (page) => {
+  await page.waitForSelector('.skill-panel--inspector', { timeout: 10_000 })
+}
+
+export const selectNodeByShortName = async (page, shortName) => {
+  const node = page.locator('.skill-node-button__shortname', { hasText: shortName }).first()
+  await node.waitFor({ state: 'attached', timeout: 10_000 })
+  await node.dispatchEvent('click')
+  await waitForInspector(page)
+}
+
+const escapeCssAttribute = (value) => String(value).replace(/\\/g, '\\\\').replace(/"/g, '\\"')
+
+export const selectNodeByLabel = async (page, label) => {
+  const selector = `foreignObject.skill-node-export-anchor[data-export-label="${escapeCssAttribute(label)}"] .skill-node-button`
+  const node = page.locator(selector).first()
+  await node.waitFor({ state: 'attached', timeout: 10_000 })
+  await node.dispatchEvent('click')
+  await waitForInspector(page)
+}
+
+export const clickInitialSegmentAddControl = async (page) => {
+  const circle = getVisibleLocator(
+    page.locator('svg.skill-tree-canvas g.skill-tree-export-exclude circle.skill-tree-add-circle[r="18"]'),
+  ).first()
+  await circle.click({ force: true })
+  await page.waitForSelector('.skill-panel--segment', { timeout: 10_000 })
+}
+
+export const clickSegmentAddNearSelected = async (page) => {
+  const control = getVisibleLocator(
+    page.locator('svg.skill-tree-canvas g.skill-tree-export-exclude circle.skill-tree-add-circle[r="16"]'),
+  ).last()
+  await control.click({ force: true })
+  await page.waitForSelector('.skill-panel--segment', { timeout: 10_000 })
+}
+
+export const setSelectedSegmentName = async (page, name) => {
+  const panel = page.locator('.skill-panel--segment')
+  const field = panel.getByLabel('Name', { exact: true })
+  await field.fill(name)
+}
+
+export const selectSegmentByLabel = async (page, label) => {
+  const segment = page.locator('.skill-tree-segment-label', { hasText: label }).first()
+  await segment.waitFor({ state: 'attached', timeout: 10_000 })
+  await segment.dispatchEvent('click')
+  await page.waitForSelector('.skill-panel--segment', { timeout: 10_000 })
+}
+
+export const clickInitialRootAddControl = async (page) => {
+  const circle = getVisibleLocator(
+    page.locator('svg.skill-tree-canvas g.skill-tree-export-exclude circle.skill-tree-add-circle[r="22"]'),
+  ).first()
+  await circle.click({ force: true })
+  await waitForInspector(page)
+}
+
+export const clickRootAddNearSelected = async (page) => {
+  const control = getVisibleLocator(
+    page.locator('svg.skill-tree-canvas g.skill-tree-export-exclude circle.skill-tree-add-circle--secondary[r="18"]'),
+  ).last()
+  await control.click({ force: true })
+  await waitForInspector(page)
+}
+
+export const clickChildAddForSelectedNode = async (page) => {
+  const control = getVisibleLocator(
+    page.locator('svg.skill-tree-canvas g.skill-tree-export-exclude circle.skill-tree-add-circle[r="18"]:not(.skill-tree-add-circle--secondary)'),
+  ).first()
+  await control.click({ force: true })
+  await waitForInspector(page)
+}
+
+export const setSelectValueByLabel = async (page, label, option) => {
+  const inspector = page.locator('.skill-panel--inspector')
+  const field = inspector.getByLabel(label, { exact: true })
+  await field.click()
+  await page
+    .getByRole('option', { name: option, exact: true })
+    .filter({ visible: true })
+    .first()
+    .click({ force: true, timeout: 5_000 })
+}
+
+export const trySetSelectValueByLabel = async (page, label, option) => {
+  try {
+    await setSelectValueByLabel(page, label, option)
+    return true
+  } catch {
+    return false
+  }
+}
+
+export const applyNodeSettings = async (page, row) => {
+  await waitForInspector(page)
+  const inspector = page.locator('.skill-panel--inspector')
+  await inspector.getByLabel('Name', { exact: true }).fill(row.label)
+  await inspector.getByLabel('Shortname', { exact: true }).fill(row.shortName)
+  await page.locator(`foreignObject.skill-node-export-anchor[data-export-label="${escapeCssAttribute(row.label)}"]`).first().waitFor({
+    state: 'attached',
+    timeout: 10_000,
+  })
+  await setSelectValueByLabel(page, 'Parent', row.parentLabel ?? 'Kein Parent (Root)')
+  await setSelectValueByLabel(page, 'Ebene', `Ebene ${row.level}`)
+  await setSelectValueByLabel(page, 'Segment', row.segment)
+  await setSelectValueByLabel(page, 'Status', row.status[0].toUpperCase() + row.status.slice(1))
+}
+
+export const applyNodeIdentity = async (page, row) => {
+  await waitForInspector(page)
+  const inspector = page.locator('.skill-panel--inspector')
+  await inspector.getByLabel('Name', { exact: true }).fill(row.label)
+  await inspector.getByLabel('Shortname', { exact: true }).fill(row.shortName)
+  await page.locator(`foreignObject.skill-node-export-anchor[data-export-label="${escapeCssAttribute(row.label)}"]`).first().waitFor({
+    state: 'attached',
+    timeout: 10_000,
+  })
+}
+
+const walkNodes = (document, visitor, parentNode = null) => {
+  const nodes = Array.isArray(document?.children) ? document.children : []
+  for (const node of nodes) {
+    visitor(node, parentNode)
+    if (Array.isArray(node.children) && node.children.length > 0) {
+      walkNodes({ children: node.children }, visitor, node)
+    }
+  }
+}
+
+export const buildActualNodeMapFromDocument = (document) => {
+  const segmentsById = new Map((document.segments ?? []).map((segment) => [segment.id, segment.label]))
+  const nodes = new Map()
+
+  walkNodes(document, (node, parentNode) => {
+    const status = String(node.levels?.[0]?.status ?? node.status ?? 'later').trim().toLowerCase()
+    nodes.set(node.label, {
+      shortName: node.shortName,
+      label: node.label,
+      level: Number(node.ebene),
+      segment: segmentsById.get(node.segmentId ?? null) ?? null,
+      parentLabel: parentNode?.label ?? null,
+      status,
+    })
+  })
+
+  return nodes
+}
+
+export const buildExpectedNodeMapFromRows = (rows) => {
+  const result = new Map()
+  for (const row of rows) {
+    result.set(row.label, {
+      shortName: normalizeShortNameLikeApp(row.shortName, row.label),
+      label: row.label,
+      level: row.level,
+      segment: row.segment,
+      parentLabel: row.parentLabel,
+      status: row.status,
+    })
+  }
+  return result
+}
+
+export const resolveWorkspacePath = (...parts) => resolve(process.cwd(), ...parts)
