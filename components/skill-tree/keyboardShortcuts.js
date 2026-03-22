@@ -2,6 +2,7 @@ export const getSkillTreeShortcutAction = ({
   key,
   ctrlKey = false,
   metaKey = false,
+  altKey = false,
   shiftKey = false,
   isEditableTarget = false,
 }) => {
@@ -15,6 +16,10 @@ export const getSkillTreeShortcutAction = ({
   }
 
   const normalizedKey = String(key ?? '').toLowerCase()
+
+  if (altKey && normalizedKey === 's') {
+    return 'create-segment'
+  }
 
   if (normalizedKey === 'z') {
     return shiftKey ? 'redo' : 'undo'

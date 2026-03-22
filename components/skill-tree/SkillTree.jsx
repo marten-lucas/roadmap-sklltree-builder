@@ -348,8 +348,16 @@ export function SkillTree() {
       }
     }
 
+    // Segments with no nodes (e.g. freshly created) are always visible
+    const segmentIdsWithNodes = new Set(nodes.map((n) => n.segmentId).filter(Boolean))
+    for (const segment of roadmapData.segments ?? []) {
+      if (!segmentIdsWithNodes.has(segment.id)) {
+        ids.add(segment.id)
+      }
+    }
+
     return ids
-  }, [renderedNodes])
+  }, [renderedNodes, nodes, roadmapData.segments])
 
   const filteredSegmentLabels = useMemo(
     () => segments.labels.filter((segmentLabel) => visibleSegmentIds.has(segmentLabel.segmentId)),
@@ -416,13 +424,16 @@ export function SkillTree() {
       return
     }
 
-    if (visibleSegmentIdSet.has(selectedSegmentId)) {
+    // Keep selection as long as the segment still exists in the document.
+    // Deselect only when it was deleted (e.g. via the segment panel delete button).
+    const segmentStillExists = (roadmapData.segments ?? []).some((s) => s.id === selectedSegmentId)
+    if (segmentStillExists) {
       return
     }
 
     setSelectedSegmentId(null)
     setSelectedPortalKey(null)
-  }, [selectedSegmentId, visibleSegmentIdSet])
+  }, [selectedSegmentId, roadmapData.segments])
 
   const levelInfo = useMemo(() => {
     if (!selectedNodeId) return { nodeLevel: 1, minLevel: 1, maxLevel: 2 }
@@ -945,6 +956,7 @@ export function SkillTree() {
         key: event.key,
         ctrlKey: event.ctrlKey,
         metaKey: event.metaKey,
+        altKey: event.altKey,
         shiftKey: event.shiftKey,
         isEditableTarget: isEditableElement(event.target),
       })
@@ -1002,6 +1014,12 @@ export function SkillTree() {
         return
       }
 
+      if (action === 'create-segment') {
+        event.preventDefault()
+        handleCreateSegment()
+        return
+      }
+
       if (action === 'reset') {
         event.preventDefault()
         if (!confirmResetDocument()) {
@@ -1017,7 +1035,7 @@ export function SkillTree() {
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [canRedo, canUndo, roadmapData])
+  }, [canRedo, canUndo, roadmapData, selectedSegmentId])
 
   const autosaveLabel = lastSavedAt
     ? `Autosave ${lastSavedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}`
@@ -1067,6 +1085,22 @@ export function SkillTree() {
       setSelectedSegmentId(createdSegmentId)
       setSelectedPortalKey(null)
     }
+  }
+
+  const handleCreateSegment = () => {
+    const existingSegments = roadmapData.segments ?? []
+
+    if (existingSegments.length === 0) {
+      handleAddInitialSegment()
+      return
+    }
+
+    const anchorSegmentId = selectedSegmentId ?? existingSegments[existingSegments.length - 1]?.id
+    if (!anchorSegmentId) {
+      return
+    }
+
+    handleAddSegmentNear(anchorSegmentId, 'right')
   }
 
   const handleAddInitialRoot = () => {
