@@ -200,7 +200,12 @@ export function InspectorPanel({
   }))
 
   return (
-    <Paper className="skill-panel skill-panel--inspector" radius={0} shadow="none">
+    <Paper
+      className="skill-panel skill-panel--inspector"
+      radius={0}
+      shadow="none"
+      data-selected-node-id={selectedNode.id}
+    >
       <div className="skill-panel__header">
         <div>
           <Text className="skill-panel__eyebrow">Inspector</Text>

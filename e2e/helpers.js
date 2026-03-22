@@ -34,6 +34,12 @@ export const getBuilderNodeLabels = async (page) => {
     .evaluateAll((elements) => elements.map((el) => el.getAttribute('data-export-label')))
 }
 
+export const getBuilderNodeShortNames = async (page) => {
+  return page
+    .locator('foreignObject.skill-node-export-anchor')
+    .evaluateAll((elements) => elements.map((el) => el.getAttribute('data-short-name')))
+}
+
 /**
  * Triggers an HTML export via Ctrl+S and returns the downloaded file text.
  */
@@ -123,6 +129,10 @@ const normalizeShortNameLikeApp = (value, fallbackLabel = 'Skill') => {
 
   return letters || 'NEW'
 }
+
+export const normalizeShortNameForApp = (value, fallbackLabel = 'Skill') => (
+  normalizeShortNameLikeApp(value, fallbackLabel)
+)
 
 const csvSortKey = (row) => `${String(row.level).padStart(4, '0')}-${String(row.order).padStart(4, '0')}`
 
@@ -308,11 +318,43 @@ export const waitForInspector = async (page) => {
   await page.waitForSelector('.skill-panel--inspector', { timeout: 10_000 })
 }
 
+const waitForSelectedNodeId = async (page, nodeId) => {
+  await page.waitForFunction(
+    (expectedNodeId) => {
+      const inspector = document.querySelector('.skill-panel--inspector')
+      return inspector && inspector.getAttribute('data-selected-node-id') === expectedNodeId
+    },
+    nodeId,
+    { timeout: 10_000 },
+  )
+}
+
 export const selectNodeByShortName = async (page, shortName) => {
-  const node = page.locator('.skill-node-button__shortname', { hasText: shortName }).first()
+  const normalizedShortName = normalizeShortNameLikeApp(shortName, shortName)
+  const selector = `foreignObject.skill-node-export-anchor[data-short-name="${escapeCssAttribute(normalizedShortName)}"] .skill-node-button`
+  const node = page.locator(selector).first()
   await node.waitFor({ state: 'attached', timeout: 10_000 })
   await node.dispatchEvent('click')
   await waitForInspector(page)
+  const selectedNodeId = await getSelectedNodeId(page)
+  if (selectedNodeId) {
+    await waitForSelectedNodeId(page, selectedNodeId)
+  }
+}
+
+export const selectNodeById = async (page, nodeId) => {
+  const selector = `foreignObject.skill-node-export-anchor[data-node-id="${escapeCssAttribute(nodeId)}"] .skill-node-button`
+  const node = page.locator(selector).first()
+  await node.waitFor({ state: 'attached', timeout: 10_000 })
+  await node.dispatchEvent('click')
+  await waitForInspector(page)
+  await waitForSelectedNodeId(page, nodeId)
+}
+
+export const getSelectedNodeId = async (page) => {
+  const inspector = page.locator('.skill-panel--inspector').first()
+  await inspector.waitFor({ state: 'attached', timeout: 10_000 })
+  return inspector.getAttribute('data-selected-node-id')
 }
 
 const escapeCssAttribute = (value) => String(value).replace(/\\/g, '\\\\').replace(/"/g, '\\"')
@@ -326,18 +368,18 @@ export const selectNodeByLabel = async (page, label) => {
 }
 
 export const clickInitialSegmentAddControl = async (page) => {
-  const circle = getVisibleLocator(
-    page.locator('svg.skill-tree-canvas g.skill-tree-export-exclude circle.skill-tree-add-circle[r="18"]'),
+  const control = getVisibleLocator(
+    page.locator('svg.skill-tree-canvas g[data-add-control="segment-initial"]'),
   ).first()
-  await circle.click({ force: true })
+  await control.dispatchEvent('click')
   await page.waitForSelector('.skill-panel--segment', { timeout: 10_000 })
 }
 
 export const clickSegmentAddNearSelected = async (page) => {
   const control = getVisibleLocator(
-    page.locator('svg.skill-tree-canvas g.skill-tree-export-exclude circle.skill-tree-add-circle[r="16"]'),
-  ).last()
-  await control.click({ force: true })
+    page.locator('svg.skill-tree-canvas g[data-add-control="segment-near"][data-direction="right"]'),
+  ).first()
+  await control.dispatchEvent('click')
   await page.waitForSelector('.skill-panel--segment', { timeout: 10_000 })
 }
 
@@ -355,26 +397,32 @@ export const selectSegmentByLabel = async (page, label) => {
 }
 
 export const clickInitialRootAddControl = async (page) => {
-  const circle = getVisibleLocator(
-    page.locator('svg.skill-tree-canvas g.skill-tree-export-exclude circle.skill-tree-add-circle[r="22"]'),
+  const control = getVisibleLocator(
+    page.locator('svg.skill-tree-canvas g[data-add-control="root-initial"]'),
   ).first()
-  await circle.click({ force: true })
+  await control.dispatchEvent('click')
   await waitForInspector(page)
 }
 
 export const clickRootAddNearSelected = async (page) => {
+  const selectedNodeId = await getSelectedNodeId(page)
   const control = getVisibleLocator(
-    page.locator('svg.skill-tree-canvas g.skill-tree-export-exclude circle.skill-tree-add-circle--secondary[r="18"]'),
-  ).last()
-  await control.click({ force: true })
+    page.locator(
+      `svg.skill-tree-canvas g[data-add-control="root-near"][data-node-id="${escapeCssAttribute(selectedNodeId)}"][data-direction="right"]`,
+    ),
+  ).first()
+  await control.dispatchEvent('click')
   await waitForInspector(page)
 }
 
 export const clickChildAddForSelectedNode = async (page) => {
+  const selectedNodeId = await getSelectedNodeId(page)
   const control = getVisibleLocator(
-    page.locator('svg.skill-tree-canvas g.skill-tree-export-exclude circle.skill-tree-add-circle[r="18"]:not(.skill-tree-add-circle--secondary)'),
+    page.locator(
+      `svg.skill-tree-canvas g[data-add-control="child"][data-node-id="${escapeCssAttribute(selectedNodeId)}"]`,
+    ),
   ).first()
-  await control.click({ force: true })
+  await control.dispatchEvent('click')
   await waitForInspector(page)
 }
 
@@ -396,7 +444,8 @@ export const ensureScopesExist = async (page, scopeLabels) => {
   }
 
   const scopeBlock = page.locator('.skill-panel__scope-block')
-  await scopeBlock.getByRole('button', { name: 'Scopes verwalten' }).click()
+  const manageButton = scopeBlock.getByRole('button', { name: 'Scopes verwalten' })
+  await manageButton.click()
 
   for (const label of uniqueScopes) {
     const alreadyExists = await scopeBlock.locator('text=' + label).count()
@@ -407,6 +456,8 @@ export const ensureScopesExist = async (page, scopeLabels) => {
     await scopeBlock.getByRole('textbox', { name: 'Scopes verwalten', exact: true }).fill(label)
     await scopeBlock.getByRole('button', { name: 'Scope hinzufügen' }).click()
   }
+
+  await manageButton.click()
 }
 
 export const trySetScopeByLabel = async (page, scopeLabel) => {
@@ -444,7 +495,9 @@ export const applyNodeSettings = async (page, row, options = {}) => {
     state: 'attached',
     timeout: 10_000,
   })
-  await trySetSelectValueByLabel(page, 'Parent', row.parentLabel ?? 'Kein Parent (Root)')
+  // Parent is intentionally NOT set here — it was established during tree creation.
+  // Setting it via label is unsafe when multiple nodes share the same label and
+  // could silently move nodes to the wrong parent via moveNodeToParent.
   if (!ignoreManualLevels) {
     await trySetSelectValueByLabel(page, 'Ebene', `Ebene ${row.level}`)
   }
@@ -484,13 +537,14 @@ export const buildActualNodeMapFromDocument = (document) => {
     const primaryScopeId = Array.isArray(node.levels?.[0]?.scopeIds)
       ? node.levels[0].scopeIds[0] ?? null
       : null
-    nodes.set(node.label, {
+    nodes.set(node.shortName, {
       shortName: node.shortName,
       label: node.label,
       level: Number(node.ebene),
       segment: segmentsById.get(node.segmentId ?? null) ?? null,
       scope: primaryScopeId ? scopesById.get(primaryScopeId) ?? null : null,
       parentLabel: parentNode?.label ?? null,
+      parentShortName: parentNode?.shortName ?? null,
       status,
     })
   })
@@ -500,39 +554,49 @@ export const buildActualNodeMapFromDocument = (document) => {
 
 export const buildExpectedNodeMapFromRows = (rows, options = {}) => {
   const { ignoreManualLevels = false } = options
-  const rowsByLabel = new Map(rows.map((row) => [row.label, row]))
-  const computedLevelByLabel = new Map()
+  const rowsByShortName = new Map(
+    rows.map((row) => [normalizeShortNameLikeApp(row.shortName, row.label), row]),
+  )
+  const computedLevelByShortName = new Map()
 
   const computeLevelByParentChain = (row, stack = new Set()) => {
     if (!ignoreManualLevels) {
       return row.level
     }
 
-    if (computedLevelByLabel.has(row.label)) {
-      return computedLevelByLabel.get(row.label)
+    const shortName = normalizeShortNameLikeApp(row.shortName, row.label)
+
+    if (computedLevelByShortName.has(shortName)) {
+      return computedLevelByShortName.get(shortName)
     }
 
-    if (stack.has(row.label)) {
+    if (stack.has(shortName)) {
       return 1
     }
 
-    stack.add(row.label)
-    const parent = row.parentLabel ? rowsByLabel.get(row.parentLabel) : null
+    stack.add(shortName)
+    const parent = row.parentShortName
+      ? rowsByShortName.get(normalizeShortNameLikeApp(row.parentShortName, row.parentLabel))
+      : null
     const level = parent ? computeLevelByParentChain(parent, stack) + 1 : 1
-    stack.delete(row.label)
-    computedLevelByLabel.set(row.label, level)
+    stack.delete(shortName)
+    computedLevelByShortName.set(shortName, level)
     return level
   }
 
   const result = new Map()
   for (const row of rows) {
-    result.set(row.label, {
-      shortName: normalizeShortNameLikeApp(row.shortName, row.label),
+    const shortName = normalizeShortNameLikeApp(row.shortName, row.label)
+    result.set(shortName, {
+      shortName,
       label: row.label,
       level: computeLevelByParentChain(row),
       segment: row.segment,
       scope: row.scope,
       parentLabel: row.parentLabel,
+      parentShortName: row.parentShortName
+        ? normalizeShortNameLikeApp(row.parentShortName, row.parentLabel)
+        : null,
       status: row.status,
     })
   }

@@ -410,14 +410,14 @@ export function SkillTree() {
       return
     }
 
-    if ((nodeVisibilityModeById.get(selectedNodeId) ?? 'full') !== 'hidden') {
+    if (findNodeById(roadmapData, selectedNodeId)) {
       return
     }
 
     setSelectedNodeId(null)
     setSelectedProgressLevelId(null)
     setSelectedPortalKey(null)
-  }, [selectedNodeId, nodeVisibilityModeById])
+  }, [roadmapData, selectedNodeId])
 
   useEffect(() => {
     if (!selectedSegmentId) {
@@ -1788,6 +1788,7 @@ export function SkillTree() {
             {emptyStateAddControl && (
               <g
                 className="skill-tree-clickable skill-tree-export-exclude"
+                data-add-control="root-initial"
                 transform={`translate(${emptyStateAddControl.x}, ${emptyStateAddControl.y})`}
                 onMouseDown={(event) => event.stopPropagation()}
                 onClick={(event) => {
@@ -1820,6 +1821,7 @@ export function SkillTree() {
             {emptySegmentAddControl && (
               <g
                 className="skill-tree-clickable skill-tree-export-exclude"
+                data-add-control="segment-initial"
                 transform={`translate(${emptySegmentAddControl.x}, ${emptySegmentAddControl.y})`}
                 onMouseDown={(event) => event.stopPropagation()}
                 onClick={(event) => {
@@ -1852,6 +1854,9 @@ export function SkillTree() {
             {selectedSegmentLabel && selectedSegmentControlGeometry && (
               <g className="skill-tree-export-exclude">
                 <g
+                  data-add-control="segment-near"
+                  data-segment-id={selectedSegmentLabel.segmentId}
+                  data-direction="left"
                   transform={`translate(${selectedSegmentControlGeometry.left.x}, ${selectedSegmentControlGeometry.left.y})`}
                   onMouseDown={(event) => event.stopPropagation()}
                   onClick={(event) => {
@@ -1873,6 +1878,9 @@ export function SkillTree() {
                 </g>
 
                 <g
+                  data-add-control="segment-near"
+                  data-segment-id={selectedSegmentLabel.segmentId}
+                  data-direction="right"
                   transform={`translate(${selectedSegmentControlGeometry.right.x}, ${selectedSegmentControlGeometry.right.y})`}
                   onMouseDown={(event) => event.stopPropagation()}
                   onClick={(event) => {
@@ -1898,6 +1906,8 @@ export function SkillTree() {
             {selectedLayoutNode && selectedControlGeometry && (
               <g className="skill-tree-export-exclude">
                 <g
+                  data-add-control="child"
+                  data-node-id={selectedLayoutNode.id}
                   transform={`translate(${selectedControlGeometry.child.x}, ${selectedControlGeometry.child.y})`}
                   onMouseDown={(event) => event.stopPropagation()}
                   onClick={(event) => {
@@ -1921,6 +1931,9 @@ export function SkillTree() {
                 {selectedLayoutNode.depth === 1 && selectedLayoutNode.level === 1 && (
                   <g>
                     <g
+                      data-add-control="root-near"
+                      data-node-id={selectedLayoutNode.id}
+                      data-direction="left"
                       transform={`translate(${selectedControlGeometry.left.x}, ${selectedControlGeometry.left.y})`}
                       onMouseDown={(event) => event.stopPropagation()}
                       onClick={(event) => {
@@ -1942,6 +1955,9 @@ export function SkillTree() {
                     </g>
 
                     <g
+                      data-add-control="root-near"
+                      data-node-id={selectedLayoutNode.id}
+                      data-direction="right"
                       transform={`translate(${selectedControlGeometry.right.x}, ${selectedControlGeometry.right.y})`}
                       onMouseDown={(event) => event.stopPropagation()}
                       onClick={(event) => {

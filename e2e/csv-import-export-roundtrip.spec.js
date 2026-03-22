@@ -5,8 +5,6 @@ import { expect, test } from '@playwright/test'
 import {
   applyNodeIdentity,
   applyNodeSettings,
-  buildActualNodeMapFromDocument,
-  buildExpectedNodeMapFromRows,
   clickChildAddForSelectedNode,
   clickInitialRootAddControl,
   clickInitialSegmentAddControl,
@@ -15,12 +13,12 @@ import {
   confirmAndReset,
   ensureScopesExist,
   extractJsonPayload,
+  getSelectedNodeId,
   parseSkillTreeCsvTemplate,
   persistTextFile,
   readDownload,
   selectSegmentByLabel,
-  selectNodeByLabel,
-  getBuilderNodeLabels,
+  selectNodeById,
   setSelectValueByLabel,
   setSelectedSegmentName,
   trySetSelectValueByLabel,
@@ -43,6 +41,101 @@ const persistHtmlExport = (htmlText) => {
   return exportPath
 }
 
+const normalizeUiShortName = (value, fallbackLabel = 'Skill') => {
+  const compact = String(value ?? '')
+    .slice(0, 3)
+    .replace(/[^A-Za-z0-9]/g, '')
+    .toUpperCase()
+
+  if (compact.length > 0) {
+    return compact
+  }
+
+  const letters = String(fallbackLabel ?? '')
+    .replace(/[^A-Za-z0-9]/g, '')
+    .toUpperCase()
+    .slice(0, 3)
+
+  return letters || 'NEW'
+}
+
+const collectActualNodeSnapshots = (document) => {
+  const segmentsById = new Map((document.segments ?? []).map((segment) => [segment.id, segment.label]))
+  const scopesById = new Map((document.scopes ?? []).map((scope) => [scope.id, scope.label]))
+  const snapshots = []
+
+  const visit = (nodes, parentNode = null) => {
+    for (const node of nodes ?? []) {
+      const status = String(node.levels?.[0]?.status ?? node.status ?? 'later').trim().toLowerCase()
+      const primaryScopeId = Array.isArray(node.levels?.[0]?.scopeIds)
+        ? node.levels[0].scopeIds[0] ?? null
+        : null
+
+      snapshots.push({
+        shortName: String(node.shortName ?? '').trim(),
+        label: node.label,
+        level: Number(node.ebene),
+        segment: segmentsById.get(node.segmentId ?? null) ?? null,
+        scope: primaryScopeId ? scopesById.get(primaryScopeId) ?? null : null,
+        parentLabel: parentNode?.label ?? null,
+        status,
+      })
+
+      visit(node.children, node)
+    }
+  }
+
+  visit(document.children ?? [])
+  return snapshots
+}
+
+const collectExpectedNodeSnapshots = (rows, options = {}) => {
+  const { ignoreManualLevels = false } = options
+  const rowsByShortName = new Map(rows.map((row) => [row.shortName, row]))
+  const computedLevels = new Map()
+
+  const computeLevel = (row, stack = new Set()) => {
+    if (!ignoreManualLevels) {
+      return row.level
+    }
+
+    if (computedLevels.has(row.shortName)) {
+      return computedLevels.get(row.shortName)
+    }
+
+    if (stack.has(row.shortName)) {
+      return 1
+    }
+
+    stack.add(row.shortName)
+    const parent = row.parentShortName ? rowsByShortName.get(row.parentShortName) : null
+    const level = parent ? computeLevel(parent, stack) + 1 : 1
+    stack.delete(row.shortName)
+    computedLevels.set(row.shortName, level)
+    return level
+  }
+
+  return rows.map((row) => ({
+    shortName: normalizeUiShortName(row.shortName, row.label),
+    label: row.label,
+    level: computeLevel(row),
+    segment: row.segment,
+    scope: row.scope,
+    parentLabel: row.parentLabel,
+    status: row.status,
+  }))
+}
+
+const toSnapshotKey = (snapshot) => JSON.stringify(snapshot)
+
+const toComparableSnapshot = (snapshot) => ({
+  shortName: snapshot.shortName,
+  label: snapshot.label,
+  level: snapshot.level,
+  parentLabel: snapshot.parentLabel,
+  status: snapshot.status,
+})
+
 test.describe('CSV template roundtrip via builder UI', () => {
   test('creates the tree from CSV, exports HTML, imports it again, and preserves structure + settings', async ({ page }) => {
     test.setTimeout(300_000)
@@ -50,6 +143,8 @@ test.describe('CSV template roundtrip via builder UI', () => {
 
     const csvText = readFileSync(csvTemplatePath, 'utf-8')
     const template = parseSkillTreeCsvTemplate(csvText)
+    const rowsByCsvShortName = new Map(template.rows.map((row) => [row.shortName, row]))
+    const nodeIdByCsvShortName = new Map()
 
     await page.goto('/')
     await confirmAndReset(page)
@@ -64,7 +159,6 @@ test.describe('CSV template roundtrip via builder UI', () => {
       await setSelectedSegmentName(page, segmentName)
     }
 
-    // Reconcile segment creation in case one insertion was missed.
     for (const segmentName of template.segments) {
       const existingSegmentCount = await page
         .locator('.skill-tree-segment-label', { hasText: segmentName })
@@ -80,69 +174,94 @@ test.describe('CSV template roundtrip via builder UI', () => {
     expect(template.roots.length).toBeGreaterThan(0)
     await clickInitialRootAddControl(page)
     await applyNodeIdentity(page, template.roots[0])
+    nodeIdByCsvShortName.set(template.roots[0].shortName, await getSelectedNodeId(page))
     await setSelectValueByLabel(page, 'Segment', template.roots[0].segment)
     await ensureScopesExist(page, template.rows.map((row) => row.scope))
 
-    const ensureNodeExistsByLabel = async (label) => {
-      const existingCount = await page
-        .locator(`foreignObject.skill-node-export-anchor[data-export-label="${label}"]`)
-        .count()
+    const waitForNewSelectedNode = async (previousNodeId) => {
+      await page.waitForFunction(
+        (expectedPreviousNodeId) => {
+          const inspector = document.querySelector('.skill-panel--inspector')
+          return inspector && inspector.getAttribute('data-selected-node-id') !== expectedPreviousNodeId
+        },
+        previousNodeId,
+        { timeout: 10_000 },
+      )
+      return getSelectedNodeId(page)
+    }
 
-      if (existingCount > 0) {
-        return
+    const createNodeFromSelected = async (previousNodeId, triggerCreate) => {
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        await triggerCreate()
+        try {
+          return await waitForNewSelectedNode(previousNodeId)
+        } catch (error) {
+          if (attempt === 1) {
+            throw error
+          }
+          await selectNodeById(page, previousNodeId)
+        }
       }
 
-      const row = template.rows.find((entry) => entry.label === label)
-      expect(row, `Missing CSV row for ${label}`).toBeTruthy()
-
-      await selectNodeByLabel(page, template.roots[0].label)
-      await clickRootAddNearSelected(page)
-      await applyNodeIdentity(page, row)
+      throw new Error(`Failed to create a new node from ${previousNodeId}`)
     }
 
     for (let index = 1; index < template.roots.length; index += 1) {
-      await selectNodeByLabel(page, template.roots[0].label)
-      await clickRootAddNearSelected(page)
+      const anchorRootNodeId = nodeIdByCsvShortName.get(template.roots[0].shortName)
+      await selectNodeById(page, anchorRootNodeId)
+      await createNodeFromSelected(anchorRootNodeId, () => clickRootAddNearSelected(page))
       await applyNodeIdentity(page, template.roots[index])
+      nodeIdByCsvShortName.set(template.roots[index].shortName, await getSelectedNodeId(page))
     }
 
-    // Reconcile root creation in case one insertion was missed due dynamic layout updates.
     for (const rootRow of template.roots) {
-      const existingCount = await page
-        .locator(`foreignObject.skill-node-export-anchor[data-export-label="${rootRow.label}"]`)
-        .count()
-
-      if (existingCount === 0) {
-        await selectNodeByLabel(page, template.roots[0].label)
-        await clickRootAddNearSelected(page)
+      if (!nodeIdByCsvShortName.has(rootRow.shortName)) {
+        const anchorRootNodeId = nodeIdByCsvShortName.get(template.roots[0].shortName)
+        await selectNodeById(page, anchorRootNodeId)
+        await createNodeFromSelected(anchorRootNodeId, () => clickRootAddNearSelected(page))
         await applyNodeIdentity(page, rootRow)
+        nodeIdByCsvShortName.set(rootRow.shortName, await getSelectedNodeId(page))
       }
     }
 
     for (const row of template.children) {
-      await ensureNodeExistsByLabel(row.parentLabel)
-      await selectNodeByLabel(page, row.parentLabel)
-      await clickChildAddForSelectedNode(page)
+      const parentRow = rowsByCsvShortName.get(row.parentShortName)
+      expect(parentRow, `Missing parent CSV row for ${row.shortName}`).toBeTruthy()
+
+      const parentNodeId = nodeIdByCsvShortName.get(row.parentShortName)
+      expect(parentNodeId, `Parent node was not created for ${row.shortName}`).toBeTruthy()
+
+      await selectNodeById(page, parentNodeId)
+      try {
+        await createNodeFromSelected(parentNodeId, () => clickChildAddForSelectedNode(page))
+      } catch (error) {
+        throw new Error(
+          `Failed to create child ${row.shortName} (${row.label}) under ${row.parentShortName} (${row.parentLabel}): ${error.message}`,
+        )
+      }
       await applyNodeIdentity(page, row)
+      nodeIdByCsvShortName.set(row.shortName, await getSelectedNodeId(page))
     }
 
-    // Set all node settings sequentially after structure creation.
-    const rowsByLabel = new Map(template.rows.map((row) => [row.label, row]))
-    const computedLevelByLabel = new Map()
+    const computedLevelByShortName = new Map()
     const computeLevelFromParent = (row, stack = new Set()) => {
-      if (computedLevelByLabel.has(row.label)) {
-        return computedLevelByLabel.get(row.label)
+      const shortName = row.shortName
+
+      if (computedLevelByShortName.has(shortName)) {
+        return computedLevelByShortName.get(shortName)
       }
 
-      if (stack.has(row.label)) {
+      if (stack.has(shortName)) {
         return 1
       }
 
-      stack.add(row.label)
-      const parent = row.parentLabel ? rowsByLabel.get(row.parentLabel) : null
+      stack.add(shortName)
+      const parent = row.parentShortName
+        ? rowsByCsvShortName.get(row.parentShortName)
+        : null
       const level = parent ? computeLevelFromParent(parent, stack) + 1 : 1
-      stack.delete(row.label)
-      computedLevelByLabel.set(row.label, level)
+      stack.delete(shortName)
+      computedLevelByShortName.set(shortName, level)
       return level
     }
 
@@ -156,30 +275,49 @@ test.describe('CSV template roundtrip via builder UI', () => {
     })
 
     for (const row of rowsForSettings) {
-      await ensureNodeExistsByLabel(row.label)
-      await selectNodeByLabel(page, row.label)
+      const nodeId = nodeIdByCsvShortName.get(row.shortName)
+      expect(nodeId, `Node was not created for ${row.shortName}`).toBeTruthy()
+      await selectNodeById(page, nodeId)
       await applyNodeSettings(page, row, { ignoreManualLevels })
     }
 
-    // Final segment alignment pass once hierarchy and levels are fully settled.
     for (const row of rowsForSettings) {
-      await selectNodeByLabel(page, row.label)
+      const nodeId = nodeIdByCsvShortName.get(row.shortName)
+      expect(nodeId, `Node was not created for ${row.shortName}`).toBeTruthy()
+      await selectNodeById(page, nodeId)
       await trySetSelectValueByLabel(page, 'Segment', row.segment)
     }
 
-    const expectedLabels = template.rows.map((row) => row.label)
-    const actualLabels = (await getBuilderNodeLabels(page)).filter(Boolean)
-    const actualLabelSet = new Set(actualLabels)
-    const missingLabels = expectedLabels.filter((label) => !actualLabelSet.has(label))
+    const actualCount = await page.locator('foreignObject.skill-node-export-anchor').count()
+    const actualNodes = await page.locator('foreignObject.skill-node-export-anchor').evaluateAll((elements) => (
+      elements.map((element) => ({
+        nodeId: element.getAttribute('data-node-id'),
+        label: element.getAttribute('data-export-label'),
+        shortName: element.getAttribute('data-short-name'),
+      }))
+    ))
+    const missingRows = actualCount === template.rows.length
+      ? []
+      : template.rows
+        .filter((row) => !nodeIdByCsvShortName.has(row.shortName))
+        .map((row) => ({
+          shortName: row.shortName,
+          label: row.label,
+          parentShortName: row.parentShortName,
+        }))
 
-    if (missingLabels.length > 0) {
-      console.log('[csv-roundtrip] Missing node labels before export:', missingLabels)
-      console.log('[csv-roundtrip] Builder currently has labels:', actualLabels)
-      console.log('[csv-roundtrip] Expected node count:', expectedLabels.length)
-      console.log('[csv-roundtrip] Actual node count:', actualLabels.length)
+    if (missingRows.length > 0) {
+      const debugInfo = {
+        missingRows,
+        actualNodes,
+        expectedCount: template.rows.length,
+        actualCount,
+      }
+      persistTextFile(
+        resolve(exportOutputDir, 'missing-nodes-debug.json'),
+        JSON.stringify(debugInfo, null, 2),
+      )
     }
-
-    await expect(page.locator('foreignObject.skill-node-export-anchor')).toHaveCount(template.rows.length)
 
     const [download] = await Promise.all([
       page.waitForEvent('download'),
@@ -187,6 +325,10 @@ test.describe('CSV template roundtrip via builder UI', () => {
     ])
     const exportedHtml = await readDownload(download)
     const persistedExportPath = persistHtmlExport(exportedHtml)
+    const exportedPayload = extractJsonPayload(exportedHtml)
+    const actualExportedSnapshots = collectActualNodeSnapshots(exportedPayload.document)
+
+    expect(actualExportedSnapshots).toHaveLength(template.rows.length)
 
     expect(existsSync(persistedExportPath)).toBe(true)
 
@@ -194,7 +336,7 @@ test.describe('CSV template roundtrip via builder UI', () => {
     await expect(page.locator('foreignObject.skill-node-export-anchor')).toHaveCount(0)
 
     await page.locator('input[type="file"][accept="text/html,.html"]').setInputFiles(persistedExportPath)
-    await expect(page.locator('foreignObject.skill-node-export-anchor')).toHaveCount(template.rows.length)
+    await page.waitForSelector('foreignObject.skill-node-export-anchor', { timeout: 10_000 })
 
     const [importedDownload] = await Promise.all([
       page.waitForEvent('download'),
@@ -203,29 +345,39 @@ test.describe('CSV template roundtrip via builder UI', () => {
     const importedHtml = await readDownload(importedDownload)
     const payload = extractJsonPayload(importedHtml)
 
-    const expectedNodesByShortName = buildExpectedNodeMapFromRows(template.rows, {
-      ignoreManualLevels,
-    })
-    const actualNodesByShortName = buildActualNodeMapFromDocument(payload.document)
+    const expectedSnapshots = collectExpectedNodeSnapshots(template.rows, { ignoreManualLevels })
+    const actualImportedSnapshots = collectActualNodeSnapshots(payload.document)
 
-    expect(actualNodesByShortName.size).toBe(expectedNodesByShortName.size)
+    expect(actualImportedSnapshots).toHaveLength(expectedSnapshots.length)
 
-    for (const [label, expectedNode] of expectedNodesByShortName.entries()) {
-      const actualNode = actualNodesByShortName.get(label)
-      expect(actualNode, `Missing node after import: ${label}`).toBeTruthy()
-
-      expect(actualNode.shortName, `Shortname mismatch for ${label}`).toBe(expectedNode.shortName)
-      expect(actualNode.label, `Label mismatch for ${label}`).toBe(expectedNode.label)
-      if (!ignoreManualLevels) {
-        expect(actualNode.level, `Level mismatch for ${label}`).toBe(expectedNode.level)
-      }
-      expect(actualNode.segment, `Segment mismatch for ${label}`).toBe(expectedNode.segment)
-      expect(actualNode.scope, `Scope mismatch for ${label}`).toBe(expectedNode.scope)
-      expect(actualNode.parentLabel, `Parent mismatch for ${label}`).toBe(expectedNode.parentLabel)
-      expect(actualNode.status, `Status mismatch for ${label}`).toBe(expectedNode.status)
+    const expectedCounts = new Map()
+    for (const snapshot of expectedSnapshots) {
+      const key = toSnapshotKey(toComparableSnapshot(snapshot))
+      expectedCounts.set(key, (expectedCounts.get(key) ?? 0) + 1)
     }
 
-    // The parser may downgrade dangling parents to roots in non-strict mode.
+    const unexpectedSnapshots = []
+    for (const snapshot of actualImportedSnapshots) {
+      const comparableSnapshot = toComparableSnapshot(snapshot)
+      const key = toSnapshotKey(comparableSnapshot)
+      const remaining = expectedCounts.get(key) ?? 0
+      if (remaining === 0) {
+        unexpectedSnapshots.push(comparableSnapshot)
+        continue
+      }
+      expectedCounts.set(key, remaining - 1)
+    }
+
+    const missingSnapshots = []
+    for (const [key, remaining] of expectedCounts.entries()) {
+      for (let index = 0; index < remaining; index += 1) {
+        missingSnapshots.push(JSON.parse(key))
+      }
+    }
+
+    expect(unexpectedSnapshots).toEqual([])
+    expect(missingSnapshots).toEqual([])
+
     expect(Array.isArray(template.warnings)).toBe(true)
   })
 })

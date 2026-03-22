@@ -118,6 +118,8 @@ export function SkillNode({ node, nodeSize, isSelected, onSelect, onSelectLevel,
       className="skill-node-export-anchor"
       data-node-id={node.id}
       data-export-label={node.label}
+      data-short-name={shortName}
+      data-selected={isSelected ? 'true' : 'false'}
       data-export-note={tooltipReleaseNote}
     >
       <div
