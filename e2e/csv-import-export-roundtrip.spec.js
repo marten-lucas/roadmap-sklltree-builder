@@ -13,12 +13,14 @@ import {
   clickRootAddNearSelected,
   clickSegmentAddNearSelected,
   confirmAndReset,
+  ensureScopesExist,
   extractJsonPayload,
   parseSkillTreeCsvTemplate,
   persistTextFile,
   readDownload,
   selectSegmentByLabel,
   selectNodeByLabel,
+  getBuilderNodeLabels,
   setSelectValueByLabel,
   setSelectedSegmentName,
   trySetSelectValueByLabel,
@@ -79,6 +81,7 @@ test.describe('CSV template roundtrip via builder UI', () => {
     await clickInitialRootAddControl(page)
     await applyNodeIdentity(page, template.roots[0])
     await setSelectValueByLabel(page, 'Segment', template.roots[0].segment)
+    await ensureScopesExist(page, template.rows.map((row) => row.scope))
 
     const ensureNodeExistsByLabel = async (label) => {
       const existingCount = await page
@@ -164,6 +167,18 @@ test.describe('CSV template roundtrip via builder UI', () => {
       await trySetSelectValueByLabel(page, 'Segment', row.segment)
     }
 
+    const expectedLabels = template.rows.map((row) => row.label)
+    const actualLabels = (await getBuilderNodeLabels(page)).filter(Boolean)
+    const actualLabelSet = new Set(actualLabels)
+    const missingLabels = expectedLabels.filter((label) => !actualLabelSet.has(label))
+
+    if (missingLabels.length > 0) {
+      console.log('[csv-roundtrip] Missing node labels before export:', missingLabels)
+      console.log('[csv-roundtrip] Builder currently has labels:', actualLabels)
+      console.log('[csv-roundtrip] Expected node count:', expectedLabels.length)
+      console.log('[csv-roundtrip] Actual node count:', actualLabels.length)
+    }
+
     await expect(page.locator('foreignObject.skill-node-export-anchor')).toHaveCount(template.rows.length)
 
     const [download] = await Promise.all([
@@ -205,6 +220,7 @@ test.describe('CSV template roundtrip via builder UI', () => {
         expect(actualNode.level, `Level mismatch for ${label}`).toBe(expectedNode.level)
       }
       expect(actualNode.segment, `Segment mismatch for ${label}`).toBe(expectedNode.segment)
+      expect(actualNode.scope, `Scope mismatch for ${label}`).toBe(expectedNode.scope)
       expect(actualNode.parentLabel, `Parent mismatch for ${label}`).toBe(expectedNode.parentLabel)
       expect(actualNode.status, `Status mismatch for ${label}`).toBe(expectedNode.status)
     }

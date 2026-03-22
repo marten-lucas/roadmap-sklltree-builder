@@ -70,14 +70,273 @@ const buildReleaseNotesMarkup = (entries) => {
 
 const buildViewerScript = () => `
     (() => {
+      const RELEASE_FILTER = {
+        all: 'all',
+        now: 'now',
+        next: 'next',
+      }
+      const SCOPE_FILTER_ALL = '__all__'
+      const MINIMAL_NODE_SCALE = 0.32
+
+      const normalizeStatusKey = (status) => {
+        if (!status) {
+          return 'later'
+        }
+
+        const aliases = {
+          done: 'done',
+          now: 'now',
+          next: 'next',
+          later: 'later',
+          fertig: 'done',
+          jetzt: 'now',
+          spaeter: 'later',
+          später: 'later',
+        }
+
+        const normalized = String(status).trim().toLowerCase()
+        return aliases[normalized] ?? 'later'
+      }
+
+      const getDisplayStatusKey = (node) => {
+        const levels = Array.isArray(node?.levels) ? node.levels : []
+        const levelStatusKeys = levels.length > 0
+          ? levels.map((level) => normalizeStatusKey(level.status))
+          : [normalizeStatusKey(node?.status)]
+
+        if (levelStatusKeys.includes('now')) return 'now'
+        if (levelStatusKeys.includes('next')) return 'next'
+        if (levelStatusKeys.includes('later')) return 'later'
+
+        return levelStatusKeys[0] ?? 'later'
+      }
+
+      const getReleaseVisibilityMode = (statusKey, releaseFilter) => {
+        if (releaseFilter === RELEASE_FILTER.now) {
+          if (statusKey === 'now' || statusKey === 'next') {
+            return 'full'
+          }
+
+          if (statusKey === 'done') {
+            return 'minimal'
+          }
+
+          return 'hidden'
+        }
+
+        if (releaseFilter === RELEASE_FILTER.next) {
+          if (statusKey === 'now' || statusKey === 'next') {
+            return 'full'
+          }
+
+          return 'minimal'
+        }
+
+        return 'full'
+      }
+
+      const walkNodes = (node, visitor) => {
+        if (!node || !Array.isArray(node.children)) {
+          return
+        }
+
+        node.children.forEach((child) => {
+          visitor(child)
+          walkNodes(child, visitor)
+        })
+      }
+
       const tabButtons = Array.from(document.querySelectorAll('[data-export-tab-button]'))
       const tabPanels = Array.from(document.querySelectorAll('[data-export-tab-panel]'))
       const skillTreePanel = document.querySelector('[data-export-tab-panel="skilltree"]')
       const releaseNotesPanel = document.querySelector('[data-export-tab-panel="releasenotes"]')
       const svgRoot = document.querySelector('.html-export__tree-shell svg')
+      const scopeFilterSelect = document.getElementById('html-export-filter-scope')
+      const releaseFilterSelect = document.getElementById('html-export-filter-release')
       const printButton = document.getElementById('html-export-print')
       const svgButton = document.getElementById('html-export-svg')
       const cleanSvgButton = document.getElementById('html-export-svg-clean')
+      const exportDataScript = document.getElementById('${HTML_EXPORT_DATA_SCRIPT_ID}')
+
+      const nodeInfoById = new Map()
+      const allScopeIds = new Set()
+
+      if (exportDataScript?.textContent) {
+        try {
+          const payload = JSON.parse(exportDataScript.textContent)
+          const documentData = payload?.document ?? null
+          const scopes = Array.isArray(documentData?.scopes) ? documentData.scopes : []
+
+          scopes.forEach((scope) => {
+            if (scope?.id) {
+              allScopeIds.add(scope.id)
+            }
+          })
+
+          walkNodes(documentData ?? {}, (node) => {
+            const levels = Array.isArray(node?.levels) ? node.levels : []
+            const scopeIds = new Set()
+
+            levels.forEach((level) => {
+              if (!Array.isArray(level?.scopeIds)) {
+                return
+              }
+
+              level.scopeIds.forEach((scopeId) => {
+                if (scopeId) {
+                  scopeIds.add(scopeId)
+                  allScopeIds.add(scopeId)
+                }
+              })
+            })
+
+            nodeInfoById.set(node.id, {
+              id: node.id,
+              status: getDisplayStatusKey(node),
+              segmentId: node.segmentId ?? null,
+              scopeIds,
+            })
+          })
+        } catch {
+          // Keep viewer usable even when embedded payload is malformed.
+        }
+      }
+
+      const nodeAnchors = Array.from(document.querySelectorAll('foreignObject.skill-node-export-anchor[data-node-id]'))
+      const linkElements = Array.from(document.querySelectorAll('[data-link-source-id][data-link-target-id]'))
+      const segmentLabels = Array.from(document.querySelectorAll('[data-segment-id]'))
+      const segmentSeparators = Array.from(document.querySelectorAll('[data-segment-left][data-segment-right]'))
+      const portalElements = Array.from(document.querySelectorAll('[data-portal-node-id][data-portal-source-id][data-portal-target-id]'))
+      const tooltipNodeElements = Array.from(document.querySelectorAll('[data-tooltip-node-id]'))
+
+      const setNodeMode = (anchor, mode) => {
+        if (!anchor) {
+          return
+        }
+
+        const originalX = Number.parseFloat(anchor.dataset.origX ?? anchor.getAttribute('x') ?? '0')
+        const originalY = Number.parseFloat(anchor.dataset.origY ?? anchor.getAttribute('y') ?? '0')
+        const originalWidth = Number.parseFloat(anchor.dataset.origWidth ?? anchor.getAttribute('width') ?? '0')
+        const originalHeight = Number.parseFloat(anchor.dataset.origHeight ?? anchor.getAttribute('height') ?? '0')
+
+        if (!anchor.dataset.origX) {
+          anchor.dataset.origX = String(originalX)
+          anchor.dataset.origY = String(originalY)
+          anchor.dataset.origWidth = String(originalWidth)
+          anchor.dataset.origHeight = String(originalHeight)
+        }
+
+        if (mode === 'hidden') {
+          anchor.style.display = 'none'
+          return
+        }
+
+        anchor.style.display = ''
+
+        if (mode === 'minimal') {
+          const centerX = originalX + originalWidth / 2
+          const centerY = originalY + originalHeight / 2
+          const width = Math.max(30, originalWidth * MINIMAL_NODE_SCALE)
+          const height = Math.max(30, originalHeight * MINIMAL_NODE_SCALE)
+
+          anchor.setAttribute('x', String(centerX - width / 2))
+          anchor.setAttribute('y', String(centerY - height / 2))
+          anchor.setAttribute('width', String(width))
+          anchor.setAttribute('height', String(height))
+          anchor.classList.add('html-export__node--minimal')
+          return
+        }
+
+        anchor.setAttribute('x', String(originalX))
+        anchor.setAttribute('y', String(originalY))
+        anchor.setAttribute('width', String(originalWidth))
+        anchor.setAttribute('height', String(originalHeight))
+        anchor.classList.remove('html-export__node--minimal')
+      }
+
+      const applyTreeFilters = () => {
+        const selectedScopeId = scopeFilterSelect?.value || SCOPE_FILTER_ALL
+        const selectedReleaseFilter = releaseFilterSelect?.value || RELEASE_FILTER.all
+        const visibleNodeIds = new Set()
+        const visibleSegmentIds = new Set()
+
+        nodeAnchors.forEach((anchor) => {
+          const nodeId = anchor.dataset.nodeId
+          const nodeInfo = nodeInfoById.get(nodeId)
+
+          if (!nodeInfo) {
+            setNodeMode(anchor, 'full')
+            visibleNodeIds.add(nodeId)
+            return
+          }
+
+          const scopeVisible = selectedScopeId === SCOPE_FILTER_ALL || nodeInfo.scopeIds.has(selectedScopeId)
+
+          if (!scopeVisible) {
+            setNodeMode(anchor, 'hidden')
+            return
+          }
+
+          const visibilityMode = getReleaseVisibilityMode(nodeInfo.status, selectedReleaseFilter)
+          setNodeMode(anchor, visibilityMode)
+
+          if (visibilityMode !== 'hidden') {
+            visibleNodeIds.add(nodeId)
+            if (nodeInfo.segmentId) {
+              visibleSegmentIds.add(nodeInfo.segmentId)
+            }
+          }
+        })
+
+        linkElements.forEach((link) => {
+          const sourceId = link.getAttribute('data-link-source-id')
+          const targetId = link.getAttribute('data-link-target-id')
+          const isVisible = (!sourceId || visibleNodeIds.has(sourceId)) && (!targetId || visibleNodeIds.has(targetId))
+          link.style.display = isVisible ? '' : 'none'
+        })
+
+        portalElements.forEach((portal) => {
+          const nodeId = portal.getAttribute('data-portal-node-id')
+          const sourceId = portal.getAttribute('data-portal-source-id')
+          const targetId = portal.getAttribute('data-portal-target-id')
+          const isVisible = visibleNodeIds.has(nodeId) && visibleNodeIds.has(sourceId) && visibleNodeIds.has(targetId)
+          portal.style.display = isVisible ? '' : 'none'
+        })
+
+        segmentLabels.forEach((label) => {
+          const segmentId = label.getAttribute('data-segment-id')
+          const isVisible = !segmentId || visibleSegmentIds.has(segmentId)
+          label.style.display = isVisible ? '' : 'none'
+        })
+
+        segmentSeparators.forEach((separator) => {
+          const leftSegmentId = separator.getAttribute('data-segment-left')
+          const rightSegmentId = separator.getAttribute('data-segment-right')
+          const isVisible = (!leftSegmentId || visibleSegmentIds.has(leftSegmentId))
+            && (!rightSegmentId || visibleSegmentIds.has(rightSegmentId))
+          separator.style.display = isVisible ? '' : 'none'
+        })
+
+        tooltipNodeElements.forEach((tooltipNode) => {
+          const nodeId = tooltipNode.getAttribute('data-tooltip-node-id')
+          const isVisible = !!nodeId && visibleNodeIds.has(nodeId)
+          tooltipNode.style.display = isVisible ? '' : 'none'
+        })
+      }
+
+      if (scopeFilterSelect) {
+        const existingValues = new Set(Array.from(scopeFilterSelect.options).map((option) => option.value))
+        allScopeIds.forEach((scopeId) => {
+          if (existingValues.has(scopeId)) {
+            return
+          }
+
+          const option = document.createElement('option')
+          option.value = scopeId
+          option.textContent = scopeId
+          scopeFilterSelect.appendChild(option)
+        })
+      }
 
       const downloadSvg = (sourceSvg, fileName, { clean = false } = {}) => {
         if (!sourceSvg) {
@@ -137,7 +396,11 @@ const buildViewerScript = () => `
         downloadSvg(svgRoot, 'skilltree-roadmap-clean.svg', { clean: true })
       })
 
+      scopeFilterSelect?.addEventListener('change', applyTreeFilters)
+      releaseFilterSelect?.addEventListener('change', applyTreeFilters)
+
       activateTab('skilltree')
+      applyTreeFilters()
 
       if (skillTreePanel && releaseNotesPanel && window.location.hash === '#release-notes') {
         activateTab('releasenotes')
@@ -279,6 +542,53 @@ export const buildHtmlExportDocument = ({
 
     .html-export__panel {
       padding: 18px;
+    }
+
+    .html-export__filters {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-bottom: 12px;
+      padding: 10px 12px;
+      border-radius: 12px;
+      border: 1px solid rgba(71, 85, 105, 0.45);
+      background: rgba(15, 23, 42, 0.82);
+    }
+
+    .html-export__filter-group {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--export-muted);
+      font-size: 0.85rem;
+    }
+
+    .html-export__filter-select {
+      appearance: none;
+      border: 1px solid rgba(103, 232, 249, 0.25);
+      border-radius: 10px;
+      padding: 7px 10px;
+      background: rgba(8, 47, 73, 0.35);
+      color: #ecfeff;
+      min-width: 150px;
+      font-size: 0.88rem;
+    }
+
+    .html-export__node--minimal .skill-node-level-glow,
+    .html-export__node--minimal .skill-node-level-ring,
+    .html-export__node--minimal .skill-node-button__shortname,
+    .html-export__node--minimal .skill-node-button__name,
+    .html-export__node--minimal .skill-node-button__status {
+      display: none !important;
+    }
+
+    .html-export__node--minimal .skill-node-button__content {
+      padding: 0;
+    }
+
+    .html-export__node--minimal .skill-node-button {
+      box-shadow: 0 0 0 2px rgba(148, 163, 184, 0.28);
     }
 
     .html-export__tree-shell {
@@ -434,6 +744,25 @@ export const buildHtmlExportDocument = ({
     </section>
 
     <section class="html-export__panel" data-export-tab-panel="skilltree">
+      <div class="html-export__filters" aria-label="Skilltree Filter">
+        <label class="html-export__filter-group">
+          <span>Scope</span>
+          <select id="html-export-filter-scope" class="html-export__filter-select">
+            <option value="__all__">Alle Scopes</option>
+            ${(roadmapDocument.scopes ?? []).map((scope) => (
+              `<option value="${escapeHtml(scope.id)}">${escapeHtml(scope.label)}</option>`
+            )).join('')}
+          </select>
+        </label>
+        <label class="html-export__filter-group">
+          <span>Release</span>
+          <select id="html-export-filter-release" class="html-export__filter-select">
+            <option value="all">All</option>
+            <option value="now">Now</option>
+            <option value="next">Next</option>
+          </select>
+        </label>
+      </div>
       <div class="html-export__tree-shell">${svgMarkup}</div>
     </section>
 

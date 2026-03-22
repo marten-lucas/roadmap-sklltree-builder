@@ -280,6 +280,8 @@ export const buildRoutedEdgeLinks = ({ edgeRouting, nodesById, origin }) => {
       id: plan.id,
       linkKind: shared ? 'routed' : 'direct',
       sourceDepth: parent.depth,
+      sourceId: plan.parentId,
+      targetId: plan.childId,
       path,
     })
   }

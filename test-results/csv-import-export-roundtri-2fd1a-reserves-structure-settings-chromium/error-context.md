@@ -1,130 +1,33 @@
 # Page snapshot
 
 ```yaml
-- generic [ref=e1]:
-  - main [ref=e3]:
-    - generic [ref=e5]:
-      - button "Menü einklappen" [ref=e6] [cursor=pointer]:
-        - img [ref=e8]
-      - generic [ref=e10]:
-        - generic [ref=e11]:
-          - button "Export" [active] [ref=e12] [cursor=pointer]:
-            - img [ref=e14]
-          - button "HTML importieren" [ref=e17] [cursor=pointer]:
-            - img [ref=e19]
-        - generic [ref=e22]:
-          - button "Undo" [disabled] [ref=e23]:
-            - img [ref=e25]
-          - button "Redo" [disabled] [ref=e29]:
-            - img [ref=e31]
-        - button "Reset" [ref=e36] [cursor=pointer]:
-          - img [ref=e38]
-        - paragraph [ref=e42]: Autosave 10:03:21 AM
-    - img [ref=e45]:
-      - generic [ref=e54] [cursor=pointer]: Kyana Data & Connect
-      - generic [ref=e57] [cursor=pointer]: Kyana Assist
-      - generic [ref=e60] [cursor=pointer]: Kyana Cases
-      - generic [ref=e63] [cursor=pointer]: myKyana Platform
-      - button "COD" [ref=e115]:
-        - paragraph [ref=e117]: COD
-      - button "RAD" [ref=e120]:
-        - paragraph [ref=e122]: RAD
-      - button "MFR" [ref=e125]:
-        - paragraph [ref=e127]: MFR
-      - button "CFL" [ref=e130]:
-        - paragraph [ref=e132]: CFL
-      - button "CLG" [ref=e135]:
-        - paragraph [ref=e137]: CLG
-      - button "LAN" [ref=e140]:
-        - paragraph [ref=e142]: LAN
-      - button "TNC" [ref=e145]:
-        - paragraph [ref=e147]: TNC
-      - button "CAN" [ref=e150]:
-        - paragraph [ref=e152]: CAN
-      - button "FLD" [ref=e155]:
-        - paragraph [ref=e157]: FLD
-      - button "PPD" [ref=e160]:
-        - paragraph [ref=e162]: PPD
-      - button "COK" [ref=e165]:
-        - paragraph [ref=e167]: COK
-      - button "CC" [ref=e170]:
-        - paragraph [ref=e172]: CC
-      - button "RAK" [ref=e175]:
-        - paragraph [ref=e177]: RAK
-      - button "PFD" [ref=e180]:
-        - paragraph [ref=e182]: PFD
-      - button "PLC" [ref=e185]:
-        - paragraph [ref=e187]: PLC
-      - button "CCL" [ref=e190]:
-        - paragraph [ref=e192]: CCL
-      - button "LCT" [ref=e195]:
-        - paragraph [ref=e197]: LCT
-      - button "CRA" [ref=e200]:
-        - paragraph [ref=e202]: CRA
-      - button "FCA" [ref=e205]:
-        - paragraph [ref=e207]: FCA
-      - button "FLK" [ref=e210]:
-        - paragraph [ref=e212]: FLK
-      - button "RCA" [ref=e215]:
-        - paragraph [ref=e217]: RCA
-      - button "PPK" [ref=e220]:
-        - paragraph [ref=e222]: PPK
-      - button "SA1" [ref=e225]:
-        - paragraph [ref=e227]: SA1
-      - button "CLT" [ref=e230]:
-        - paragraph [ref=e232]: CLT
-      - button "MM" [ref=e235]:
-        - paragraph [ref=e237]: MM
-      - button "PDB" [ref=e240]:
-        - paragraph [ref=e242]: PDB
-      - button "BMD" [ref=e245]:
-        - paragraph [ref=e247]: BMD
-      - button "CCP" [ref=e250]:
-        - paragraph [ref=e252]: CCP
-      - button "PCA" [ref=e255]:
-        - paragraph [ref=e257]: PCA
-      - button "DWC" [ref=e260]:
-        - paragraph [ref=e262]: DWC
-      - button "IVP" [ref=e265]:
-        - paragraph [ref=e267]: IVP
-      - button "CCC" [ref=e270]:
-        - paragraph [ref=e272]: CCC
-      - button "CC" [ref=e275]:
-        - paragraph [ref=e277]: CC
-      - button "LKE" [ref=e280]:
-        - paragraph [ref=e282]: LKE
-      - button "CRJ" [ref=e285]:
-        - paragraph [ref=e287]: CRJ
-      - button "CPP" [ref=e290]:
-        - paragraph [ref=e292]: CPP
-      - button "PLT" [ref=e295]:
-        - paragraph [ref=e297]: PLT
-      - button "SEA" [ref=e300]:
-        - paragraph [ref=e302]: SEA
-      - button "SPA" [ref=e305]:
-        - paragraph [ref=e307]: SPA
-      - button "MPC" [ref=e310]:
-        - paragraph [ref=e312]: MPC
-      - button "NAH" [ref=e315]:
-        - paragraph [ref=e317]: NAH
-      - button "CCA" [ref=e320]:
-        - paragraph [ref=e322]: CCA
-      - button "UC" [ref=e325]:
-        - paragraph [ref=e327]: UC
-      - button "RJD" [ref=e330]:
-        - paragraph [ref=e332]: RJD
-      - button "PPD" [ref=e335]:
-        - paragraph [ref=e337]: PPD
-      - button "R4P" [ref=e340]:
-        - paragraph [ref=e342]: R4P
-      - button "SA" [ref=e345]:
-        - paragraph [ref=e347]: SA
-      - button "JFS" [ref=e350]:
-        - paragraph [ref=e352]: JFS
-      - button "SHV" [ref=e355]:
-        - paragraph [ref=e357]: SHV
-      - button "JBE" [ref=e360]:
-        - paragraph [ref=e362]: JBE
-  - generic:
-    - tooltip "Reset (Ctrl+Shift+Backspace)": Reset (Ctrl+Shift+Backspace)
+- main [ref=e3]:
+  - generic [ref=e5]:
+    - button "Menü einklappen" [ref=e6] [cursor=pointer]:
+      - img [ref=e8]
+    - generic [ref=e10]:
+      - generic [ref=e11]:
+        - button "Export" [ref=e12] [cursor=pointer]:
+          - img [ref=e14]
+        - button "HTML importieren" [ref=e17] [cursor=pointer]:
+          - img [ref=e19]
+      - generic [ref=e22]:
+        - button "Undo" [ref=e23] [cursor=pointer]:
+          - img [ref=e25]
+        - button "Redo" [disabled] [ref=e29]:
+          - img [ref=e31]
+      - button "Reset" [ref=e36] [cursor=pointer]:
+        - img [ref=e38]
+      - generic [ref=e41]:
+        - button "Scope Filter" [disabled] [ref=e42]:
+          - img [ref=e44]
+        - button "Release Filter" [ref=e45] [cursor=pointer]:
+          - img [ref=e47]
+      - paragraph [ref=e52]: Autosave 02:51:25 PM
+  - img [ref=e55]:
+    - generic [ref=e58] [cursor=pointer]:
+      - img "Center Icon"
+    - generic [ref=e60] [cursor=pointer]:
+      - generic [ref=e62]: +
+      - generic: Skill hinzufügen
 ```

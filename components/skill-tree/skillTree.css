@@ -520,6 +520,14 @@
     transform: translateY(-1px);
 }
 
+.skill-node-button--minimal {
+    box-shadow: 0 0 0 2px rgba(148, 163, 184, 0.28);
+}
+
+.skill-node-button--minimal .skill-node-button__content {
+    padding: 0;
+}
+
 .skill-node-tooltip {
     max-width: 20rem;
     padding: 0.7rem 0.8rem;

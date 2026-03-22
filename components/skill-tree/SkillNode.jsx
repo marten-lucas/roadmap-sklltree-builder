@@ -1,19 +1,6 @@
 import { Paper, Text, Tooltip } from '@mantine/core'
-import { normalizeStatusKey, STATUS_STYLES } from './config'
-
-const getDisplayStatus = (node) => {
-  const levels = Array.isArray(node?.levels) ? node.levels : []
-
-  if (levels.length > 0) {
-    const normalizedLevels = levels.map((level) => normalizeStatusKey(level.status))
-    if (normalizedLevels.includes('now')) return 'now'
-    if (normalizedLevels.includes('next')) return 'next'
-    if (normalizedLevels.includes('later')) return 'later'
-    return normalizedLevels[0]
-  }
-
-  return normalizeStatusKey(node?.status)
-}
+import { STATUS_STYLES } from './config'
+import { getDisplayStatusKey, getLevelStatusKeys } from './nodeStatus'
 
 const getShortName = (node) => {
   const explicitShortName = String(node?.shortName ?? '').trim().toUpperCase().slice(0, 3)
@@ -29,20 +16,11 @@ const getShortName = (node) => {
   return letters || 'SKL'
 }
 
-const getLevelStatusKeys = (node) => {
-  const levels = Array.isArray(node?.levels) ? node.levels : []
-
-  if (levels.length === 0) {
-    return [normalizeStatusKey(node?.status)]
-  }
-
-  return levels.map((level) => normalizeStatusKey(level.status))
-}
-
 const getTooltipReleaseNote = (node) => {
   const levels = Array.isArray(node?.levels) ? node.levels : []
-  const preferredStatus = getDisplayStatus(node)
-  const preferredLevel = levels.find((level) => normalizeStatusKey(level.status) === preferredStatus)
+  const levelStatusKeys = getLevelStatusKeys(node)
+  const preferredStatus = getDisplayStatusKey(node)
+  const preferredLevel = levels.find((level, index) => levelStatusKeys[index] === preferredStatus)
   const preferredNote = String(preferredLevel?.releaseNote ?? '').trim()
 
   if (preferredNote) {
@@ -83,10 +61,11 @@ const buildSegmentConicStyle = (statusKeys, colorGetter) => {
   }
 }
 
-export function SkillNode({ node, nodeSize, isSelected, onSelect, onSelectLevel }) {
-  const glowPadding = 18
+export function SkillNode({ node, nodeSize, isSelected, onSelect, onSelectLevel, displayMode = 'full' }) {
+  const isMinimal = displayMode === 'minimal'
+  const glowPadding = isMinimal ? 8 : 18
   const renderSize = nodeSize + glowPadding * 2
-  const statusKey = getDisplayStatus(node)
+  const statusKey = getDisplayStatusKey(node)
   const statusStyles = STATUS_STYLES[statusKey] ?? STATUS_STYLES.later
   const shortName = getShortName(node)
   const tooltipReleaseNote = getTooltipReleaseNote(node)
@@ -137,6 +116,7 @@ export function SkillNode({ node, nodeSize, isSelected, onSelect, onSelectLevel 
       width={renderSize}
       height={renderSize}
       className="skill-node-export-anchor"
+      data-node-id={node.id}
       data-export-label={node.label}
       data-export-note={tooltipReleaseNote}
     >
@@ -164,7 +144,7 @@ export function SkillNode({ node, nodeSize, isSelected, onSelect, onSelectLevel 
             component="button"
             type="button"
             onClick={handleNodeClick}
-            className="skill-node-button"
+            className={isMinimal ? 'skill-node-button skill-node-button--minimal' : 'skill-node-button'}
             radius="xl"
             withBorder={false}
             style={{
@@ -175,16 +155,18 @@ export function SkillNode({ node, nodeSize, isSelected, onSelect, onSelectLevel 
               height: `${nodeSize}px`,
             }}
           >
-            <div className="skill-node-level-glow" style={levelGlowStyle} />
-            <div className="skill-node-level-glow" style={{ ...nowLevelGlowStyle, filter: 'blur(24px)' }} />
-            <div className="skill-node-level-ring" style={levelRingStyle} />
+            {!isMinimal && <div className="skill-node-level-glow" style={levelGlowStyle} />}
+            {!isMinimal && <div className="skill-node-level-glow" style={{ ...nowLevelGlowStyle, filter: 'blur(24px)' }} />}
+            {!isMinimal && <div className="skill-node-level-ring" style={levelRingStyle} />}
             <div className="skill-node-button__content">
-              <Text
-                className="skill-node-button__shortname"
-                style={{ color: statusStyles.textColor, fontWeight: statusKey === 'now' ? 900 : 800 }}
-              >
-                {shortName}
-              </Text>
+              {!isMinimal && (
+                <Text
+                  className="skill-node-button__shortname"
+                  style={{ color: statusStyles.textColor, fontWeight: statusKey === 'now' ? 900 : 800 }}
+                >
+                  {shortName}
+                </Text>
+              )}
             </div>
           </Paper>
         </Tooltip>

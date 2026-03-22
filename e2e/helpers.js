@@ -169,6 +169,7 @@ export const parseSkillTreeCsvTemplate = (csvText, options = {}) => {
   const labelIndex = findHeaderIndex(headerIndexByName, ['Node Name', 'Name'])
   const levelIndex = findHeaderIndex(headerIndexByName, ['Ebene', 'Level'])
   const segmentIndex = findHeaderIndex(headerIndexByName, ['Segment'])
+  const scopeIndex = findHeaderIndex(headerIndexByName, ['Scope'])
   const parentIndex = findHeaderIndex(headerIndexByName, ['Parent'])
   const statusIndex = findHeaderIndex(headerIndexByName, ['Status'])
   const additionalDependenciesIndex = findHeaderIndex(
@@ -189,6 +190,7 @@ export const parseSkillTreeCsvTemplate = (csvText, options = {}) => {
     const label = parsed[labelIndex]?.trim()
     const levelText = parsed[levelIndex]?.trim()
     const segment = parsed[segmentIndex]?.trim()
+    const scope = parsed[scopeIndex]?.trim()
     const parentShortName = normalizeParent(parsed[parentIndex])
     const statusValue = hasCollapsedAdditionalDependency
       ? parsed[additionalDependenciesIndex]
@@ -200,7 +202,7 @@ export const parseSkillTreeCsvTemplate = (csvText, options = {}) => {
         hasCollapsedAdditionalDependency ? '' : parsed[additionalDependenciesIndex],
       )
 
-    if (!shortName || !label || !levelText || !segment) {
+    if (!shortName || !label || !levelText || !segment || !scope) {
       throw new Error(`CSV row ${i + 1} is incomplete.`)
     }
 
@@ -214,6 +216,7 @@ export const parseSkillTreeCsvTemplate = (csvText, options = {}) => {
       label,
       level,
       segment,
+      scope,
       parentShortName,
       parentLabel: null,
       additionalDependencies,
@@ -386,6 +389,42 @@ export const setSelectValueByLabel = async (page, label, option) => {
     .click({ force: true, timeout: 5_000 })
 }
 
+export const ensureScopesExist = async (page, scopeLabels) => {
+  const uniqueScopes = [...new Set(scopeLabels.map((entry) => String(entry ?? '').trim()).filter(Boolean))]
+  if (uniqueScopes.length === 0) {
+    return
+  }
+
+  const scopeBlock = page.locator('.skill-panel__scope-block')
+  await scopeBlock.getByRole('button', { name: 'Scopes verwalten' }).click()
+
+  for (const label of uniqueScopes) {
+    const alreadyExists = await scopeBlock.locator('text=' + label).count()
+    if (alreadyExists > 0) {
+      continue
+    }
+
+    await scopeBlock.getByRole('textbox', { name: 'Scopes verwalten', exact: true }).fill(label)
+    await scopeBlock.getByRole('button', { name: 'Scope hinzufügen' }).click()
+  }
+}
+
+export const trySetScopeByLabel = async (page, scopeLabel) => {
+  try {
+    const scopeBlock = page.locator('.skill-panel__scope-block')
+    const input = scopeBlock.getByPlaceholder('Scopes')
+    await input.click()
+    await page
+      .getByRole('option', { name: scopeLabel, exact: true })
+      .filter({ visible: true })
+      .first()
+      .click({ force: true, timeout: 3_000 })
+    return true
+  } catch {
+    return false
+  }
+}
+
 export const trySetSelectValueByLabel = async (page, label, option) => {
   try {
     await setSelectValueByLabel(page, label, option)
@@ -410,6 +449,7 @@ export const applyNodeSettings = async (page, row, options = {}) => {
     await trySetSelectValueByLabel(page, 'Ebene', `Ebene ${row.level}`)
   }
   await trySetSelectValueByLabel(page, 'Segment', row.segment)
+  await trySetScopeByLabel(page, row.scope)
   await setSelectValueByLabel(page, 'Status', row.status[0].toUpperCase() + row.status.slice(1))
 }
 
@@ -436,15 +476,20 @@ const walkNodes = (document, visitor, parentNode = null) => {
 
 export const buildActualNodeMapFromDocument = (document) => {
   const segmentsById = new Map((document.segments ?? []).map((segment) => [segment.id, segment.label]))
+  const scopesById = new Map((document.scopes ?? []).map((scope) => [scope.id, scope.label]))
   const nodes = new Map()
 
   walkNodes(document, (node, parentNode) => {
     const status = String(node.levels?.[0]?.status ?? node.status ?? 'later').trim().toLowerCase()
+    const primaryScopeId = Array.isArray(node.levels?.[0]?.scopeIds)
+      ? node.levels[0].scopeIds[0] ?? null
+      : null
     nodes.set(node.label, {
       shortName: node.shortName,
       label: node.label,
       level: Number(node.ebene),
       segment: segmentsById.get(node.segmentId ?? null) ?? null,
+      scope: primaryScopeId ? scopesById.get(primaryScopeId) ?? null : null,
       parentLabel: parentNode?.label ?? null,
       status,
     })
@@ -486,6 +531,7 @@ export const buildExpectedNodeMapFromRows = (rows, options = {}) => {
       label: row.label,
       level: computeLevelByParentChain(row),
       segment: row.segment,
+      scope: row.scope,
       parentLabel: row.parentLabel,
       status: row.status,
     })

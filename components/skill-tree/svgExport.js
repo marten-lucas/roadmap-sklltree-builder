@@ -179,11 +179,15 @@ const appendAnimatedTooltips = (svgRoot) => {
 
     const label = sanitizeText(anchor.getAttribute('data-export-label')) || 'Skill'
     const note = sanitizeText(anchor.getAttribute('data-export-note')) || 'Keine Release Note hinterlegt.'
+    const nodeId = sanitizeText(anchor.getAttribute('data-node-id'))
     const triggerId = `export-tooltip-trigger-${index + 1}`
 
     const trigger = createSvgElement('circle')
     trigger.setAttribute('id', triggerId)
     trigger.setAttribute('class', 'export-tooltip-trigger')
+    if (nodeId) {
+      trigger.setAttribute('data-tooltip-node-id', nodeId)
+    }
     trigger.setAttribute('cx', String(centerX))
     trigger.setAttribute('cy', String(centerY))
     trigger.setAttribute('r', String(Math.max(26, width * 0.28)))
@@ -192,13 +196,17 @@ const appendAnimatedTooltips = (svgRoot) => {
     title.textContent = `${label} - ${note}`
     trigger.appendChild(title)
 
-    overlayLayer.appendChild(buildTooltipGroup({
+    const tooltipGroup = buildTooltipGroup({
       id: triggerId,
       centerX,
       centerY,
       title: label,
       note,
-    }))
+    })
+    if (nodeId) {
+      tooltipGroup.setAttribute('data-tooltip-node-id', nodeId)
+    }
+    overlayLayer.appendChild(tooltipGroup)
     overlayLayer.appendChild(trigger)
   })
 

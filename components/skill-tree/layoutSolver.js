@@ -271,6 +271,8 @@ export const solveSkillTreeLayout = (data, config) => {
 
       return {
         id: `segment-separator-${slot.id}-${next.id}`,
+        leftSegmentId: slot.id,
+        rightSegmentId: next.id,
         path: `M ${from.x} ${from.y} L ${to.x} ${to.y}`,
       }
     })
@@ -983,6 +985,8 @@ export const solveSkillTreeLayout = (data, config) => {
       id: `root-bridge-${node.id}`,
       linkKind: 'direct',
       sourceDepth: 1,
+      sourceId: node.parentId ?? null,
+      targetId: node.id,
       path: buildRadialArcPath(centerAngle, levelOneRadius, node.angle, node.radius, origin),
     }))
 
@@ -998,6 +1002,8 @@ export const solveSkillTreeLayout = (data, config) => {
       id: `level1-ring-${a.id}-${b.id}`,
       linkKind: 'ring',
       sourceDepth: 1,
+      sourceId: a.id,
+      targetId: b.id,
       path: `M ${a.x} ${a.y} A ${r} ${r} 0 0 1 ${b.x} ${b.y}`,
     })
   }
@@ -1018,6 +1024,8 @@ export const solveSkillTreeLayout = (data, config) => {
 
     return {
       id: `segment-separator-${segment.id}-${next.id}`,
+      leftSegmentId: segment.id,
+      rightSegmentId: next.id,
       path: `M ${from.x} ${from.y} L ${to.x} ${to.y}`,
     }
   })

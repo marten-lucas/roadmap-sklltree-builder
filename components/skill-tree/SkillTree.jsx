@@ -21,6 +21,7 @@ import { UNASSIGNED_SEGMENT_ID } from './layoutShared'
 import { getSkillTreeShortcutAction } from './keyboardShortcuts'
 import { SegmentPanel } from './SegmentPanel'
 import { SkillNode } from './SkillNode'
+import { getDisplayStatusKey } from './nodeStatus'
 import {
   getAdditionalDependencyOptionsForNode,
   getParentOptionsForNode,
@@ -76,6 +77,54 @@ const AUTOSAVE_DEBOUNCE_MS = 450
 const EXPORT_BRAND_NAME = 'Roadmap Skilltree Builder'
 const EXPORT_AUTHOR = 'Skilltree Team'
 const INITIAL_VIEW_SCALE = 0.7
+const MINIMAL_NODE_SIZE = 36
+const SCOPE_FILTER_ALL = '__all__'
+
+const RELEASE_FILTER_OPTIONS = {
+  all: 'all',
+  now: 'now',
+  next: 'next',
+}
+
+const RELEASE_FILTER_LABELS = {
+  all: 'All',
+  now: 'Now',
+  next: 'Next',
+}
+
+const getReleaseVisibilityMode = (statusKey, releaseFilter) => {
+  if (releaseFilter === RELEASE_FILTER_OPTIONS.now) {
+    if (statusKey === 'now' || statusKey === 'next') {
+      return 'full'
+    }
+
+    if (statusKey === 'done') {
+      return 'minimal'
+    }
+
+    return 'hidden'
+  }
+
+  if (releaseFilter === RELEASE_FILTER_OPTIONS.next) {
+    if (statusKey === 'now' || statusKey === 'next') {
+      return 'full'
+    }
+
+    return 'minimal'
+  }
+
+  return 'full'
+}
+
+const nodeMatchesScopeFilter = (node, scopeId) => {
+  const levels = Array.isArray(node?.levels) ? node.levels : []
+
+  if (!scopeId || scopeId === SCOPE_FILTER_ALL) {
+    return true
+  }
+
+  return levels.some((level) => Array.isArray(level?.scopeIds) && level.scopeIds.includes(scopeId))
+}
 
 const getInitialRoadmapDocument = () => loadDocumentFromLocalStorage() ?? initialData
 
@@ -162,6 +211,8 @@ export function SkillTree() {
   const [selectedPortalKey, setSelectedPortalKey] = useState(null)
   const [isCenterIconPanelOpen, setIsCenterIconPanelOpen] = useState(false)
   const [isToolbarCollapsed, setIsToolbarCollapsed] = useState(false)
+  const [selectedScopeFilterId, setSelectedScopeFilterId] = useState(SCOPE_FILTER_ALL)
+  const [releaseFilter, setReleaseFilter] = useState(RELEASE_FILTER_OPTIONS.all)
   const [transformKey, setTransformKey] = useState(0)
   const addControlOffset = TREE_CONFIG.nodeSize * 0.82
 
@@ -243,6 +294,135 @@ export function SkillTree() {
     })),
     [roadmapData.scopes],
   )
+
+  useEffect(() => {
+    if (selectedScopeFilterId === SCOPE_FILTER_ALL) {
+      return
+    }
+
+    const scopeStillExists = scopeOptions.some((scope) => scope.value === selectedScopeFilterId)
+    if (!scopeStillExists) {
+      setSelectedScopeFilterId(SCOPE_FILTER_ALL)
+    }
+  }, [scopeOptions, selectedScopeFilterId])
+
+  const nodeVisibilityModeById = useMemo(() => {
+    const byId = new Map()
+
+    for (const node of nodes) {
+      const matchesScope = nodeMatchesScopeFilter(node, selectedScopeFilterId)
+
+      if (!matchesScope) {
+        byId.set(node.id, 'hidden')
+        continue
+      }
+
+      const statusKey = getDisplayStatusKey(node)
+      byId.set(node.id, getReleaseVisibilityMode(statusKey, releaseFilter))
+    }
+
+    return byId
+  }, [nodes, selectedScopeFilterId, releaseFilter])
+
+  const renderedNodes = useMemo(
+    () => nodes.filter((node) => (nodeVisibilityModeById.get(node.id) ?? 'full') !== 'hidden'),
+    [nodes, nodeVisibilityModeById],
+  )
+
+  const renderedNodeIds = useMemo(
+    () => new Set(renderedNodes.map((node) => node.id)),
+    [renderedNodes],
+  )
+
+  const layoutNodesById = useMemo(
+    () => new Map(nodes.map((node) => [node.id, node])),
+    [nodes],
+  )
+
+  const visibleSegmentIds = useMemo(() => {
+    const ids = new Set()
+
+    for (const node of renderedNodes) {
+      if (node.segmentId) {
+        ids.add(node.segmentId)
+      }
+    }
+
+    return ids
+  }, [renderedNodes])
+
+  const filteredSegmentLabels = useMemo(
+    () => segments.labels.filter((segmentLabel) => visibleSegmentIds.has(segmentLabel.segmentId)),
+    [segments.labels, visibleSegmentIds],
+  )
+
+  const filteredSegmentSeparators = useMemo(
+    () => segments.separators.filter((separator) => {
+      if (!separator.leftSegmentId || !separator.rightSegmentId) {
+        return true
+      }
+
+      return visibleSegmentIds.has(separator.leftSegmentId) && visibleSegmentIds.has(separator.rightSegmentId)
+    }),
+    [segments.separators, visibleSegmentIds],
+  )
+
+  const filteredLinks = useMemo(
+    () => links.filter((link) => {
+      if (link.sourceId && !renderedNodeIds.has(link.sourceId)) {
+        return false
+      }
+
+      if (link.targetId && !renderedNodeIds.has(link.targetId)) {
+        return false
+      }
+
+      return true
+    }),
+    [links, renderedNodeIds],
+  )
+
+  const visibleSegmentIdSet = useMemo(
+    () => new Set(filteredSegmentLabels.map((segmentLabel) => segmentLabel.segmentId)),
+    [filteredSegmentLabels],
+  )
+
+  const selectedScopeFilterLabel = useMemo(() => {
+    if (selectedScopeFilterId === SCOPE_FILTER_ALL) {
+      return 'Alle Scopes'
+    }
+
+    return scopeOptions.find((scope) => scope.value === selectedScopeFilterId)?.label ?? 'Alle Scopes'
+  }, [scopeOptions, selectedScopeFilterId])
+
+  const selectedReleaseFilterLabel = RELEASE_FILTER_LABELS[releaseFilter] ?? RELEASE_FILTER_LABELS.all
+
+  useEffect(() => {
+    if (!selectedNodeId) {
+      return
+    }
+
+    if ((nodeVisibilityModeById.get(selectedNodeId) ?? 'full') !== 'hidden') {
+      return
+    }
+
+    setSelectedNodeId(null)
+    setSelectedProgressLevelId(null)
+    setSelectedPortalKey(null)
+  }, [selectedNodeId, nodeVisibilityModeById])
+
+  useEffect(() => {
+    if (!selectedSegmentId) {
+      return
+    }
+
+    if (visibleSegmentIdSet.has(selectedSegmentId)) {
+      return
+    }
+
+    setSelectedSegmentId(null)
+    setSelectedPortalKey(null)
+  }, [selectedSegmentId, visibleSegmentIdSet])
 
   const levelInfo = useMemo(() => {
     if (!selectedNodeId) return { nodeLevel: 1, minLevel: 1, maxLevel: 2 }
@@ -326,13 +506,13 @@ export function SkillTree() {
   }, [diagnostics, selectedNodeId])
 
   const selectedLayoutNode = useMemo(
-    () => nodes.find((node) => node.id === selectedNodeId) ?? null,
-    [nodes, selectedNodeId],
+    () => renderedNodes.find((node) => node.id === selectedNodeId) ?? null,
+    [renderedNodes, selectedNodeId],
   )
 
   const selectedSegmentLabel = useMemo(
-    () => segments.labels.find((segmentLabel) => segmentLabel.segmentId === selectedSegmentId) ?? null,
-    [segments.labels, selectedSegmentId],
+    () => filteredSegmentLabels.find((segmentLabel) => segmentLabel.segmentId === selectedSegmentId) ?? null,
+    [filteredSegmentLabels, selectedSegmentId],
   )
 
   const selectedControlGeometry = useMemo(() => {
@@ -492,6 +672,15 @@ export function SkillTree() {
 
     return endpoints
   }, [allNodesById, canvas.origin.x, canvas.origin.y, nodes, roadmapData.children])
+
+  const visibleDependencyPortals = useMemo(
+    () => dependencyPortals.filter((portal) => (
+      renderedNodeIds.has(portal.nodeId)
+      && renderedNodeIds.has(portal.sourceId)
+      && renderedNodeIds.has(portal.targetId)
+    )),
+    [dependencyPortals, renderedNodeIds],
+  )
 
   const emptyStateAddControl = useMemo(() => {
     if (nodes.length > 0) {
@@ -1257,6 +1446,80 @@ export function SkillTree() {
             </div>
 
             <div className="skill-tree-toolbar__cluster">
+              <Menu shadow="md" width={220} position="bottom-start" withArrow>
+                <Menu.Target>
+                  <Tooltip
+                    label={scopeOptions.length > 0 ? `Scope Filter: ${selectedScopeFilterLabel}` : 'Keine Scopes vorhanden'}
+                    withArrow
+                    openDelay={120}
+                  >
+                    <ActionIcon
+                      size="md"
+                      variant="default"
+                      aria-label="Scope Filter"
+                      disabled={scopeOptions.length === 0}
+                    >
+                      <ToolbarIcon>
+                        <path d="M3 6h18" />
+                        <path d="M7 12h10" />
+                        <path d="M10 18h4" />
+                      </ToolbarIcon>
+                    </ActionIcon>
+                  </Tooltip>
+                </Menu.Target>
+
+                <Menu.Dropdown>
+                  <Menu.Label>Scope Filter</Menu.Label>
+                  <Menu.Item onClick={() => setSelectedScopeFilterId(SCOPE_FILTER_ALL)}>
+                    {selectedScopeFilterId === SCOPE_FILTER_ALL ? '● ' : ''}
+                    Alle Scopes
+                  </Menu.Item>
+                  <Menu.Divider />
+                  {scopeOptions.map((scope) => (
+                    <Menu.Item key={scope.value} onClick={() => setSelectedScopeFilterId(scope.value)}>
+                      {selectedScopeFilterId === scope.value ? '● ' : ''}
+                      {scope.label}
+                    </Menu.Item>
+                  ))}
+                </Menu.Dropdown>
+              </Menu>
+
+              <Menu shadow="md" width={220} position="bottom-start" withArrow>
+                <Menu.Target>
+                  <Tooltip label={`Release Filter: ${selectedReleaseFilterLabel}`} withArrow openDelay={120}>
+                    <ActionIcon
+                      size="md"
+                      variant="default"
+                      aria-label="Release Filter"
+                    >
+                      <ToolbarIcon>
+                        <path d="M4 4h16v5H4z" />
+                        <path d="M4 10h16v5H4z" />
+                        <path d="M4 16h16v4H4z" />
+                      </ToolbarIcon>
+                    </ActionIcon>
+                  </Tooltip>
+                </Menu.Target>
+
+                <Menu.Dropdown>
+                  <Menu.Label>Release Filter</Menu.Label>
+                  <Menu.Item onClick={() => setReleaseFilter(RELEASE_FILTER_OPTIONS.all)}>
+                    {releaseFilter === RELEASE_FILTER_OPTIONS.all ? '● ' : ''}
+                    All
+                  </Menu.Item>
+                  <Menu.Item onClick={() => setReleaseFilter(RELEASE_FILTER_OPTIONS.now)}>
+                    {releaseFilter === RELEASE_FILTER_OPTIONS.now ? '● ' : ''}
+                    Now (Done minimal, Later ausgeblendet)
+                  </Menu.Item>
+                  <Menu.Item onClick={() => setReleaseFilter(RELEASE_FILTER_OPTIONS.next)}>
+                    {releaseFilter === RELEASE_FILTER_OPTIONS.next ? '● ' : ''}
+                    Next (Done/Later minimal)
+                  </Menu.Item>
+                </Menu.Dropdown>
+              </Menu>
+            </div>
+
+            <div className="skill-tree-toolbar__cluster">
               <Text size="xs" c="dimmed" className="skill-tree-toolbar__status">{autosaveLabel}</Text>
             </div>
           </div>
@@ -1323,10 +1586,12 @@ export function SkillTree() {
             </g>
 
             <g>
-              {segments.separators.map((separator) => (
+              {filteredSegmentSeparators.map((separator) => (
                 <path
                   key={separator.id}
                   d={separator.path}
+                  data-segment-left={separator.leftSegmentId ?? ''}
+                  data-segment-right={separator.rightSegmentId ?? ''}
                   fill="none"
                   stroke="#1e3a8a"
                   strokeOpacity="0.7"
@@ -1336,13 +1601,14 @@ export function SkillTree() {
               ))}
             </g>
 
-            {segments.labels.map((segmentLabel) => {
+            {filteredSegmentLabels.map((segmentLabel) => {
               const isSelected = segmentLabel.segmentId === selectedSegmentId
               const labelWidth = Math.max(88, segmentLabel.text.length * 10)
 
               return (
                 <g
                   key={segmentLabel.id}
+                  data-segment-id={segmentLabel.segmentId}
                   transform={`translate(${segmentLabel.x} ${segmentLabel.y}) rotate(${segmentLabel.rotation})`}
                   onMouseDown={(event) => event.stopPropagation()}
                   onClick={(event) => {
@@ -1374,8 +1640,8 @@ export function SkillTree() {
               )
             })}
 
-            {links.filter((link) => link.linkKind === 'ring').map((link) => {
-              const segmentNode = nodes.find((node) => node.id === link.id.split('-')[2])
+            {filteredLinks.filter((link) => link.linkKind === 'ring').map((link) => {
+              const segmentNode = link.targetId ? layoutNodesById.get(link.targetId) : null
               const nodeStatus = segmentNode ? normalizeStatusKey(segmentNode.status) : 'later'
               const statusStyle = STATUS_STYLES[nodeStatus] ?? STATUS_STYLES.later
 
@@ -1383,6 +1649,8 @@ export function SkillTree() {
                 <path
                   key={link.id}
                   d={link.path}
+                  data-link-source-id={link.sourceId ?? ''}
+                  data-link-target-id={link.targetId ?? ''}
                   stroke={statusStyle.linkStroke}
                   strokeWidth="4"
                   strokeOpacity={statusStyle.linkOpacity}
@@ -1391,9 +1659,8 @@ export function SkillTree() {
                 />
               )
             })}
-            {links.filter((link) => link.sourceDepth > 0 && link.linkKind !== 'ring').map((link) => {
-              const childNodeId = link.id.split('=>')[1]
-              const childNode = nodes.find((node) => node.id === childNodeId)
+            {filteredLinks.filter((link) => link.sourceDepth > 0 && link.linkKind !== 'ring').map((link) => {
+              const childNode = link.targetId ? layoutNodesById.get(link.targetId) : null
               const nodeStatus = childNode ? normalizeStatusKey(childNode.status) : 'later'
               const statusStyle = STATUS_STYLES[nodeStatus] ?? STATUS_STYLES.later
 
@@ -1401,6 +1668,8 @@ export function SkillTree() {
                 <path
                   key={link.id}
                   d={link.path}
+                  data-link-source-id={link.sourceId ?? ''}
+                  data-link-target-id={link.targetId ?? ''}
                   stroke={statusStyle.linkStroke}
                   strokeWidth={statusStyle.linkStrokeWidth}
                   strokeOpacity={statusStyle.linkOpacity}
@@ -1411,17 +1680,23 @@ export function SkillTree() {
               )
             })}
 
-            {nodes.map((node) => (
-              <SkillNode
-                key={node.id}
-                node={node}
-                nodeSize={TREE_CONFIG.nodeSize}
-                isSelected={node.id === selectedNodeId}
-                onSelect={handleSelectNode}
-              />
-            ))}
+            {renderedNodes.map((node) => {
+              const visibilityMode = nodeVisibilityModeById.get(node.id) ?? 'full'
+              const nodeSize = visibilityMode === 'minimal' ? MINIMAL_NODE_SIZE : TREE_CONFIG.nodeSize
 
-            {dependencyPortals.map((portal) => {
+              return (
+                <SkillNode
+                  key={node.id}
+                  node={node}
+                  nodeSize={nodeSize}
+                  displayMode={visibilityMode}
+                  isSelected={node.id === selectedNodeId}
+                  onSelect={handleSelectNode}
+                />
+              )
+            })}
+
+            {visibleDependencyPortals.map((portal) => {
               const isPortalSelected = portal.key === selectedPortalKey
               const portalClassName = [
                 'skill-tree-portal',
@@ -1447,6 +1722,9 @@ export function SkillTree() {
                 >
                   <g
                     className={`${portalClassName} skill-tree-export-exclude`}
+                    data-portal-node-id={portal.nodeId}
+                    data-portal-source-id={portal.sourceId}
+                    data-portal-target-id={portal.targetId}
                     transform={`translate(${portal.x} ${portal.y})`}
                     onMouseDown={(event) => event.stopPropagation()}
                     onClick={(event) => {
