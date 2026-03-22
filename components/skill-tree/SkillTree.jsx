@@ -423,11 +423,12 @@ export function SkillTree() {
       return null
     }
 
+    const centerSize = TREE_CONFIG.nodeSize * 2
     return {
       x: canvas.origin.x,
-      y: canvas.origin.y - canvas.maxRadius,
+      y: canvas.origin.y - centerSize / 2 - 60,
     }
-  }, [nodes.length, canvas.origin.x, canvas.origin.y, canvas.maxRadius])
+  }, [nodes.length, canvas.origin.x, canvas.origin.y])
 
   const emptySegmentAddControl = useMemo(() => {
     if ((roadmapData.segments ?? []).length > 0) {
@@ -442,7 +443,7 @@ export function SkillTree() {
 
     return {
       x: canvas.origin.x,
-      y: canvas.origin.y - segmentLabelRadius,
+      y: canvas.origin.y - segmentLabelRadius * 1.15,
     }
   }, [roadmapData.segments, canvas.origin.x, canvas.origin.y, canvas.maxRadius])
 
@@ -1070,7 +1071,7 @@ export function SkillTree() {
         maxScale={2.2}
         initialScale={0.7}
         wheel={{ step: 0.12 }}
-        limitToBounds={false}
+        limitToBounds={true}
         centerOnInit
       >
         <TransformComponent
@@ -1279,6 +1280,15 @@ export function SkillTree() {
                 >
                   +
                 </text>
+                <text
+                  x="0"
+                  y="42"
+                  textAnchor="middle"
+                  dominantBaseline="middle"
+                  className="skill-tree-empty-state-label"
+                >
+                  Skill hinzufügen
+                </text>
               </g>
             )}
 
@@ -1292,15 +1302,24 @@ export function SkillTree() {
                   handleAddInitialSegment()
                 }}
               >
-                <circle r="18" className="skill-tree-add-circle" strokeWidth="2.5" />
+                <circle r="18" className="skill-tree-add-circle skill-tree-add-circle--segment" strokeWidth="2.5" />
                 <text
                   x="0"
                   y="1"
                   textAnchor="middle"
                   dominantBaseline="middle"
-                  className="skill-tree-add-text"
+                  className="skill-tree-add-text skill-tree-add-text--secondary"
                 >
                   +
+                </text>
+                <text
+                  x="0"
+                  y="36"
+                  textAnchor="middle"
+                  dominantBaseline="middle"
+                  className="skill-tree-empty-state-label"
+                >
+                  Segment hinzufügen
                 </text>
               </g>
             )}
@@ -1316,13 +1335,13 @@ export function SkillTree() {
                   }}
                   className="skill-tree-clickable"
                 >
-                  <circle r="16" className="skill-tree-add-circle" strokeWidth="2.5" />
+                  <circle r="16" className="skill-tree-add-circle skill-tree-add-circle--segment" strokeWidth="2.5" />
                   <text
                     x="0"
                     y="1"
                     textAnchor="middle"
                     dominantBaseline="middle"
-                    className="skill-tree-add-text skill-tree-add-text--small"
+                    className="skill-tree-add-text skill-tree-add-text--small skill-tree-add-text--secondary"
                   >
                     +
                   </text>
@@ -1337,13 +1356,13 @@ export function SkillTree() {
                   }}
                   className="skill-tree-clickable"
                 >
-                  <circle r="16" className="skill-tree-add-circle" strokeWidth="2.5" />
+                  <circle r="16" className="skill-tree-add-circle skill-tree-add-circle--segment" strokeWidth="2.5" />
                   <text
                     x="0"
                     y="1"
                     textAnchor="middle"
                     dominantBaseline="middle"
-                    className="skill-tree-add-text skill-tree-add-text--small"
+                    className="skill-tree-add-text skill-tree-add-text--small skill-tree-add-text--secondary"
                   >
                     +
                   </text>

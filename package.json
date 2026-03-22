@@ -11,6 +11,10 @@
     "test:ui": "vitest --ui",
     "preview": "vite preview",
     "test:e2e": "playwright test",
+    "test:e2e:csv": "playwright test e2e/csv-import-export-roundtrip.spec.js --project=chromium",
+    "test:e2e:csv:headed": "playwright test e2e/csv-import-export-roundtrip.spec.js --project=chromium --headed",
+    "test:e2e:csv:ignore-levels": "SKILLTREE_E2E_IGNORE_MANUAL_LEVELS=1 playwright test e2e/csv-import-export-roundtrip.spec.js --project=chromium",
+    "test:e2e:csv:headed:ignore-levels": "SKILLTREE_E2E_IGNORE_MANUAL_LEVELS=1 playwright test e2e/csv-import-export-roundtrip.spec.js --project=chromium --headed",
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:update-snapshots": "playwright test --update-snapshots"
   },

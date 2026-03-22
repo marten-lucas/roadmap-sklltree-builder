@@ -126,6 +126,32 @@ const normalizeShortNameLikeApp = (value, fallbackLabel = 'Skill') => {
 
 const csvSortKey = (row) => `${String(row.level).padStart(4, '0')}-${String(row.order).padStart(4, '0')}`
 
+const findHeaderIndex = (headerIndexByName, aliases, isRequired = true) => {
+  for (const alias of aliases) {
+    if (headerIndexByName.has(alias)) {
+      return headerIndexByName.get(alias)
+    }
+  }
+
+  if (!isRequired) {
+    return null
+  }
+
+  throw new Error(`CSV missing header. Expected one of: ${aliases.join(', ')}`)
+}
+
+const parseAdditionalDependencies = (value) => {
+  const raw = String(value ?? '').trim()
+  if (!raw) {
+    return []
+  }
+
+  return raw
+    .split(',')
+    .map((entry) => entry.trim())
+    .filter(Boolean)
+}
+
 export const parseSkillTreeCsvTemplate = (csvText, options = {}) => {
   const { strictParentValidation = false } = options
   const lines = String(csvText)
@@ -139,23 +165,40 @@ export const parseSkillTreeCsvTemplate = (csvText, options = {}) => {
 
   const headers = parseCsvLine(lines[0])
   const headerIndexByName = new Map(headers.map((name, index) => [name, index]))
-  const requiredHeaders = ['Node Short Name', 'Node Name', 'Ebene', 'Segment', 'Parent', 'Status']
-
-  for (const headerName of requiredHeaders) {
-    if (!headerIndexByName.has(headerName)) {
-      throw new Error(`CSV missing header: ${headerName}`)
-    }
-  }
+  const shortNameIndex = findHeaderIndex(headerIndexByName, ['Node Short Name', 'ShortName'])
+  const labelIndex = findHeaderIndex(headerIndexByName, ['Node Name', 'Name'])
+  const levelIndex = findHeaderIndex(headerIndexByName, ['Ebene', 'Level'])
+  const segmentIndex = findHeaderIndex(headerIndexByName, ['Segment'])
+  const parentIndex = findHeaderIndex(headerIndexByName, ['Parent'])
+  const statusIndex = findHeaderIndex(headerIndexByName, ['Status'])
+  const additionalDependenciesIndex = findHeaderIndex(
+    headerIndexByName,
+    ['AdditionalDependency', 'Additional Dependency'],
+    false,
+  )
 
   const rows = []
   for (let i = 1; i < lines.length; i += 1) {
     const parsed = parseCsvLine(lines[i])
-    const shortName = parsed[headerIndexByName.get('Node Short Name')]?.trim()
-    const label = parsed[headerIndexByName.get('Node Name')]?.trim()
-    const levelText = parsed[headerIndexByName.get('Ebene')]?.trim()
-    const segment = parsed[headerIndexByName.get('Segment')]?.trim()
-    const parentShortName = normalizeParent(parsed[headerIndexByName.get('Parent')])
-    const status = normalizeStatus(parsed[headerIndexByName.get('Status')])
+    const hasCollapsedAdditionalDependency =
+      additionalDependenciesIndex != null
+      && statusIndex >= parsed.length
+      && additionalDependenciesIndex < parsed.length
+
+    const shortName = parsed[shortNameIndex]?.trim()
+    const label = parsed[labelIndex]?.trim()
+    const levelText = parsed[levelIndex]?.trim()
+    const segment = parsed[segmentIndex]?.trim()
+    const parentShortName = normalizeParent(parsed[parentIndex])
+    const statusValue = hasCollapsedAdditionalDependency
+      ? parsed[additionalDependenciesIndex]
+      : parsed[statusIndex]
+    const status = normalizeStatus(statusValue)
+    const additionalDependencies = additionalDependenciesIndex == null
+      ? []
+      : parseAdditionalDependencies(
+        hasCollapsedAdditionalDependency ? '' : parsed[additionalDependenciesIndex],
+      )
 
     if (!shortName || !label || !levelText || !segment) {
       throw new Error(`CSV row ${i + 1} is incomplete.`)
@@ -173,6 +216,7 @@ export const parseSkillTreeCsvTemplate = (csvText, options = {}) => {
       segment,
       parentShortName,
       parentLabel: null,
+      additionalDependencies,
       status,
       order: i,
     })
@@ -351,7 +395,8 @@ export const trySetSelectValueByLabel = async (page, label, option) => {
   }
 }
 
-export const applyNodeSettings = async (page, row) => {
+export const applyNodeSettings = async (page, row, options = {}) => {
+  const { ignoreManualLevels = false } = options
   await waitForInspector(page)
   const inspector = page.locator('.skill-panel--inspector')
   await inspector.getByLabel('Name', { exact: true }).fill(row.label)
@@ -360,9 +405,11 @@ export const applyNodeSettings = async (page, row) => {
     state: 'attached',
     timeout: 10_000,
   })
-  await setSelectValueByLabel(page, 'Parent', row.parentLabel ?? 'Kein Parent (Root)')
-  await setSelectValueByLabel(page, 'Ebene', `Ebene ${row.level}`)
-  await setSelectValueByLabel(page, 'Segment', row.segment)
+  await trySetSelectValueByLabel(page, 'Parent', row.parentLabel ?? 'Kein Parent (Root)')
+  if (!ignoreManualLevels) {
+    await trySetSelectValueByLabel(page, 'Ebene', `Ebene ${row.level}`)
+  }
+  await trySetSelectValueByLabel(page, 'Segment', row.segment)
   await setSelectValueByLabel(page, 'Status', row.status[0].toUpperCase() + row.status.slice(1))
 }
 
@@ -406,13 +453,38 @@ export const buildActualNodeMapFromDocument = (document) => {
   return nodes
 }
 
-export const buildExpectedNodeMapFromRows = (rows) => {
+export const buildExpectedNodeMapFromRows = (rows, options = {}) => {
+  const { ignoreManualLevels = false } = options
+  const rowsByLabel = new Map(rows.map((row) => [row.label, row]))
+  const computedLevelByLabel = new Map()
+
+  const computeLevelByParentChain = (row, stack = new Set()) => {
+    if (!ignoreManualLevels) {
+      return row.level
+    }
+
+    if (computedLevelByLabel.has(row.label)) {
+      return computedLevelByLabel.get(row.label)
+    }
+
+    if (stack.has(row.label)) {
+      return 1
+    }
+
+    stack.add(row.label)
+    const parent = row.parentLabel ? rowsByLabel.get(row.parentLabel) : null
+    const level = parent ? computeLevelByParentChain(parent, stack) + 1 : 1
+    stack.delete(row.label)
+    computedLevelByLabel.set(row.label, level)
+    return level
+  }
+
   const result = new Map()
   for (const row of rows) {
     result.set(row.label, {
       shortName: normalizeShortNameLikeApp(row.shortName, row.label),
       label: row.label,
-      level: row.level,
+      level: computeLevelByParentChain(row),
       segment: row.segment,
       parentLabel: row.parentLabel,
       status: row.status,

@@ -32,6 +32,8 @@ const exportOutputDir = process.env.SKILLTREE_E2E_EXPORT_DIR
   ? resolve(process.env.SKILLTREE_E2E_EXPORT_DIR)
   : resolve(process.cwd(), 'tmp/e2e-exports')
 
+const ignoreManualLevels = process.env.SKILLTREE_E2E_IGNORE_MANUAL_LEVELS === '1'
+
 const persistHtmlExport = (htmlText) => {
   const fileName = `skilltree-roundtrip-${Date.now()}.html`
   const exportPath = resolve(exportOutputDir, fileName)
@@ -122,9 +124,30 @@ test.describe('CSV template roundtrip via builder UI', () => {
     }
 
     // Set all node settings sequentially after structure creation.
+    const rowsByLabel = new Map(template.rows.map((row) => [row.label, row]))
+    const computedLevelByLabel = new Map()
+    const computeLevelFromParent = (row, stack = new Set()) => {
+      if (computedLevelByLabel.has(row.label)) {
+        return computedLevelByLabel.get(row.label)
+      }
+
+      if (stack.has(row.label)) {
+        return 1
+      }
+
+      stack.add(row.label)
+      const parent = row.parentLabel ? rowsByLabel.get(row.parentLabel) : null
+      const level = parent ? computeLevelFromParent(parent, stack) + 1 : 1
+      stack.delete(row.label)
+      computedLevelByLabel.set(row.label, level)
+      return level
+    }
+
     const rowsForSettings = [...template.rows].sort((left, right) => {
-      if (left.level !== right.level) {
-        return left.level - right.level
+      const leftLevel = ignoreManualLevels ? computeLevelFromParent(left) : left.level
+      const rightLevel = ignoreManualLevels ? computeLevelFromParent(right) : right.level
+      if (leftLevel !== rightLevel) {
+        return leftLevel - rightLevel
       }
       return left.order - right.order
     })
@@ -132,7 +155,7 @@ test.describe('CSV template roundtrip via builder UI', () => {
     for (const row of rowsForSettings) {
       await ensureNodeExistsByLabel(row.label)
       await selectNodeByLabel(page, row.label)
-      await applyNodeSettings(page, row)
+      await applyNodeSettings(page, row, { ignoreManualLevels })
     }
 
     // Final segment alignment pass once hierarchy and levels are fully settled.
@@ -165,7 +188,9 @@ test.describe('CSV template roundtrip via builder UI', () => {
     const importedHtml = await readDownload(importedDownload)
     const payload = extractJsonPayload(importedHtml)
 
-    const expectedNodesByShortName = buildExpectedNodeMapFromRows(template.rows)
+    const expectedNodesByShortName = buildExpectedNodeMapFromRows(template.rows, {
+      ignoreManualLevels,
+    })
     const actualNodesByShortName = buildActualNodeMapFromDocument(payload.document)
 
     expect(actualNodesByShortName.size).toBe(expectedNodesByShortName.size)
@@ -176,7 +201,9 @@ test.describe('CSV template roundtrip via builder UI', () => {
 
       expect(actualNode.shortName, `Shortname mismatch for ${label}`).toBe(expectedNode.shortName)
       expect(actualNode.label, `Label mismatch for ${label}`).toBe(expectedNode.label)
-      expect(actualNode.level, `Level mismatch for ${label}`).toBe(expectedNode.level)
+      if (!ignoreManualLevels) {
+        expect(actualNode.level, `Level mismatch for ${label}`).toBe(expectedNode.level)
+      }
       expect(actualNode.segment, `Segment mismatch for ${label}`).toBe(expectedNode.segment)
       expect(actualNode.parentLabel, `Parent mismatch for ${label}`).toBe(expectedNode.parentLabel)
       expect(actualNode.status, `Status mismatch for ${label}`).toBe(expectedNode.status)
