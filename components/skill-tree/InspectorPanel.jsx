@@ -174,6 +174,27 @@ export function InspectorPanel({
     }
   }
 
+  const handleScopeIdsChange = (nextScopeIds) => {
+    const prevScopeIds = activeProgressLevel.scopeIds ?? []
+    onScopeIdsChange?.(nextScopeIds)
+
+    try {
+      const key = 'roadmap-skilltree.e2e.scopeTrace'
+      const raw = localStorage.getItem(key)
+      const trace = raw ? JSON.parse(raw) : []
+      trace.push({
+        ts: Date.now(),
+        nodeId: selectedNode.id,
+        shortName: selectedNode.shortName ?? null,
+        prev: prevScopeIds,
+        next: nextScopeIds,
+      })
+      localStorage.setItem(key, JSON.stringify(trace))
+    } catch (err) {
+      // ignore tracing errors during normal runtime
+    }
+  }
+
   const selectedSegmentKey = selectedNode.segmentId ?? UNASSIGNED_SEGMENT_ID
   const blockedLevelHint = levelOptions.find((option) => !option.isAllowed)?.reasons?.[0] ?? null
   const blockedSegmentHint = segmentOptions?.find((option) => !option.isAllowed)?.reasons?.[0] ?? null
@@ -407,7 +428,7 @@ export function InspectorPanel({
               <MultiSelect
                 data={scopeSelectData}
                 value={activeProgressLevel.scopeIds ?? []}
-                onChange={onScopeIdsChange}
+                onChange={handleScopeIdsChange}
                 placeholder="Scopes"
                 searchable
                 clearable

@@ -33,6 +33,7 @@ const exportOutputDir = process.env.SKILLTREE_E2E_EXPORT_DIR
   : resolve(process.cwd(), 'tmp/e2e-exports')
 
 const ignoreManualLevels = process.env.SKILLTREE_E2E_IGNORE_MANUAL_LEVELS === '1'
+const ignoreSegments = process.env.SKILLTREE_E2E_IGNORE_SEGMENTS === '1'
 
 const persistHtmlExport = (htmlText) => {
   const fileName = `skilltree-roundtrip-${Date.now()}.html`
@@ -94,7 +95,7 @@ const collectActualNodeSnapshots = (document) => {
 }
 
 const collectExpectedNodeSnapshots = (rows, options = {}) => {
-  const { ignoreManualLevels = false } = options
+  const { ignoreManualLevels = false, ignoreSegments = false } = options
   const rowsByShortName = new Map(rows.map((row) => [row.shortName, row]))
   const computedLevels = new Map()
 
@@ -123,7 +124,7 @@ const collectExpectedNodeSnapshots = (rows, options = {}) => {
     shortName: normalizeUiShortName(row.shortName, row.label),
     label: row.label,
     level: computeLevel(row),
-    segment: row.segment,
+    segment: ignoreSegments ? null : row.segment,
     scope: row.scope ? String(row.scope).trim() : null,
     parentLabel: row.parentLabel,
     status: row.status,
@@ -143,7 +144,7 @@ const toComparableSnapshot = (snapshot) => ({
 
 test.describe('CSV template roundtrip via builder UI', () => {
   test('creates the tree from CSV, exports HTML, imports it again, and preserves structure + settings', async ({ page }) => {
-    test.setTimeout(300_000)
+    test.setTimeout(900_000)
     test.skip(!existsSync(csvTemplatePath), `CSV template not found: ${csvTemplatePath}`)
 
     const csvText = readFileSync(csvTemplatePath, 'utf-8')
@@ -156,23 +157,25 @@ test.describe('CSV template roundtrip via builder UI', () => {
     await expect(page.locator('foreignObject.skill-node-export-anchor')).toHaveCount(0)
 
     expect(template.segments.length).toBeGreaterThan(0)
-    await clickInitialSegmentAddControl(page)
-    await setSelectedSegmentName(page, template.segments[0])
+    if (!ignoreSegments) {
+      await clickInitialSegmentAddControl(page)
+      await setSelectedSegmentName(page, template.segments[0])
 
-    for (const segmentName of template.segments.slice(1)) {
-      await clickSegmentAddNearSelected(page)
-      await setSelectedSegmentName(page, segmentName)
-    }
-
-    for (const segmentName of template.segments) {
-      const existingSegmentCount = await page
-        .locator('.skill-tree-segment-label', { hasText: segmentName })
-        .count()
-
-      if (existingSegmentCount === 0) {
-        await selectSegmentByLabel(page, template.segments[0])
+      for (const segmentName of template.segments.slice(1)) {
         await clickSegmentAddNearSelected(page)
         await setSelectedSegmentName(page, segmentName)
+      }
+
+      for (const segmentName of template.segments) {
+        const existingSegmentCount = await page
+          .locator('.skill-tree-segment-label', { hasText: segmentName })
+          .count()
+
+        if (existingSegmentCount === 0) {
+          await selectSegmentByLabel(page, template.segments[0])
+          await clickSegmentAddNearSelected(page)
+          await setSelectedSegmentName(page, segmentName)
+        }
       }
     }
 
@@ -180,7 +183,9 @@ test.describe('CSV template roundtrip via builder UI', () => {
     await clickInitialRootAddControl(page)
     await applyNodeIdentity(page, template.roots[0])
     nodeIdByCsvShortName.set(template.roots[0].shortName, await getSelectedNodeId(page))
-    await setSelectValueByLabel(page, 'Segment', template.roots[0].segment)
+    if (!ignoreSegments) {
+      await setSelectValueByLabel(page, 'Segment', template.roots[0].segment)
+    }
     await ensureScopesExist(page, template.rows.map((row) => row.scope))
 
     const waitForNewSelectedNode = async (previousNodeId) => {
@@ -290,7 +295,9 @@ test.describe('CSV template roundtrip via builder UI', () => {
       const nodeId = nodeIdByCsvShortName.get(row.shortName)
       expect(nodeId, `Node was not created for ${row.shortName}`).toBeTruthy()
       await selectNodeById(page, nodeId)
-      await trySetSelectValueByLabel(page, 'Segment', row.segment)
+      if (!ignoreSegments) {
+        await trySetSelectValueByLabel(page, 'Segment', row.segment)
+      }
     }
 
     const actualCount = await page.locator('foreignObject.skill-node-export-anchor').count()

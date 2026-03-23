@@ -115,10 +115,41 @@ const normalizeScopeAssignments = (tree) => {
     }
   }
 
-  return {
+  const canonical = {
     ...tree,
     scopes,
     children: (tree.children ?? []).map(sanitizeNode),
+  }
+
+  try {
+    const collect = (node, out = []) => {
+      const firstLevel = Array.isArray(node.levels) && node.levels[0] ? node.levels[0].scopeIds ?? [] : []
+      out.push({ nodeId: node.id, scopeIds: Array.from(firstLevel) })
+      for (const child of node.children ?? []) collect(child, out)
+      return out
+    }
+
+    const snapshot = (canonical.children ?? []).flatMap((c) => collect(c, []))
+    appendModelTrace({ ts: Date.now(), fn: 'normalizeScopeAssignments', snapshot })
+  } catch (e) {
+    // ignore tracing errors
+  }
+
+  return canonical
+}
+
+const appendModelTrace = (entry) => {
+  try {
+    if (typeof window === 'undefined' || !window?.localStorage) return
+    const key = 'roadmap-skilltree.e2e.modelTrace'
+    const raw = window.localStorage.getItem(key) || '[]'
+    const arr = JSON.parse(raw)
+    arr.push(entry)
+    // keep it bounded to avoid unbounded growth
+    if (arr.length > 2000) arr.splice(0, arr.length - 2000)
+    window.localStorage.setItem(key, JSON.stringify(arr))
+  } catch (e) {
+    // ignore
   }
 }
 
@@ -433,8 +464,16 @@ export const setNodeAdditionalDependencies = (treeData, sourceNodeId, nextTarget
   return withNormalizedDependencies(nextTree)
 }
 
-export const updateNodeProgressLevel = (treeData, id, levelId, updates) =>
-  withNormalizedDependencies(updateNodeById(treeData, id, (node) => {
+export const updateNodeProgressLevel = (treeData, id, levelId, updates) => {
+  try {
+    const node = findNodeById(treeData, id)
+    const incoming = node ? (Array.isArray(node.levels) ? (node.levels.find((l) => l.id === levelId)?.scopeIds ?? []) : []) : []
+    appendModelTrace({ ts: Date.now(), fn: 'updateNodeProgressLevel.before', nodeId: id, levelId, incoming: Array.from(incoming), updates })
+  } catch (e) {
+    // ignore
+  }
+
+  const nextTree = withNormalizedDependencies(updateNodeById(treeData, id, (node) => {
     const levels = ensureNodeLevels(node)
     const nextLevels = levels.map((level) => {
       if (level.id !== levelId) {
@@ -457,6 +496,17 @@ export const updateNodeProgressLevel = (treeData, id, levelId, updates) =>
       status: nextLevels[0]?.status ?? DEFAULT_NODE_STATUS,
     }
   }))
+
+  try {
+    const afterNode = findNodeById(nextTree, id)
+    const resulting = afterNode ? (Array.isArray(afterNode.levels) ? (afterNode.levels.find((l) => l.id === levelId)?.scopeIds ?? []) : []) : []
+    appendModelTrace({ ts: Date.now(), fn: 'updateNodeProgressLevel.after', nodeId: id, levelId, resulting: Array.from(resulting) })
+  } catch (e) {
+    // ignore
+  }
+
+  return nextTree
+}
 
 export const addNodeProgressLevel = (treeData, id, newLevelId) =>
   withNormalizedDependencies(updateNodeById(treeData, id, (node) => {

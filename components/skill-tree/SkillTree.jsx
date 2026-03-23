@@ -210,6 +210,29 @@ export function SkillTree() {
   const [selectedSegmentId, setSelectedSegmentId] = useState(null)
   const [selectedPortalKey, setSelectedPortalKey] = useState(null)
   const [isCenterIconPanelOpen, setIsCenterIconPanelOpen] = useState(false)
+  
+  // Ensure only one panel is visible at a time. Use these wrappers instead of
+  // calling the raw setters directly so opening one panel clears others.
+  const selectNodeId = (nodeId) => {
+    setSelectedNodeId(nodeId)
+    if (nodeId) {
+      selectSegmentId(null)
+      setIsCenterIconPanelOpen(false)
+    } else {
+      setSelectedProgressLevelId(null)
+      setSelectedPortalKey(null)
+    }
+  }
+
+  const selectSegmentId = (segmentId) => {
+    setSelectedSegmentId(segmentId)
+    if (segmentId) {
+      setSelectedNodeId(null)
+      setIsCenterIconPanelOpen(false)
+      setSelectedProgressLevelId(null)
+      setSelectedPortalKey(null)
+    }
+  }
   const [isToolbarCollapsed, setIsToolbarCollapsed] = useState(false)
   const [selectedScopeFilterId, setSelectedScopeFilterId] = useState(SCOPE_FILTER_ALL)
   const [releaseFilter, setReleaseFilter] = useState(RELEASE_FILTER_OPTIONS.all)
@@ -414,7 +437,7 @@ export function SkillTree() {
       return
     }
 
-    setSelectedNodeId(null)
+    selectNodeId(null)
     setSelectedProgressLevelId(null)
     setSelectedPortalKey(null)
   }, [roadmapData, selectedNodeId])
@@ -431,7 +454,7 @@ export function SkillTree() {
       return
     }
 
-    setSelectedSegmentId(null)
+    selectSegmentId(null)
     setSelectedPortalKey(null)
   }, [selectedSegmentId, roadmapData.segments])
 
@@ -774,8 +797,8 @@ export function SkillTree() {
   }
 
   const resetSelections = () => {
-    setSelectedNodeId(null)
-    setSelectedSegmentId(null)
+    selectNodeId(null)
+    selectSegmentId(null)
     setSelectedPortalKey(null)
     setSelectedProgressLevelId(null)
   }
@@ -1026,8 +1049,8 @@ export function SkillTree() {
           return
         }
         dispatchDocument({ type: 'apply', document: createEmptyDocument() })
-        setSelectedNodeId(null)
-        setSelectedSegmentId(null)
+        selectNodeId(null)
+        selectSegmentId(null)
         setSelectedPortalKey(null)
         setSelectedProgressLevelId(null)
       }
@@ -1047,7 +1070,7 @@ export function SkillTree() {
     commitDocument(result.tree)
 
     if (createdNodeId) {
-      setSelectedNodeId(createdNodeId)
+      selectNodeId(createdNodeId)
       setSelectedPortalKey(null)
     }
   }
@@ -1058,7 +1081,7 @@ export function SkillTree() {
     commitDocument(result.tree)
 
     if (createdNodeId) {
-      setSelectedNodeId(createdNodeId)
+      selectNodeId(createdNodeId)
       setSelectedPortalKey(null)
     }
   }
@@ -1069,8 +1092,8 @@ export function SkillTree() {
     commitDocument(result.tree)
 
     if (createdSegmentId) {
-      setSelectedNodeId(null)
-      setSelectedSegmentId(createdSegmentId)
+      selectNodeId(null)
+      selectSegmentId(createdSegmentId)
       setSelectedPortalKey(null)
     }
   }
@@ -1081,8 +1104,8 @@ export function SkillTree() {
     commitDocument(result.tree)
 
     if (createdSegmentId) {
-      setSelectedNodeId(null)
-      setSelectedSegmentId(createdSegmentId)
+      selectNodeId(null)
+      selectSegmentId(createdSegmentId)
       setSelectedPortalKey(null)
     }
   }
@@ -1109,20 +1132,18 @@ export function SkillTree() {
     commitDocument(result.tree)
 
     if (createdNodeId) {
-      setSelectedNodeId(createdNodeId)
+      selectNodeId(createdNodeId)
       setSelectedPortalKey(null)
     }
   }
 
   const handleSelectNode = (nodeId) => {
-    setSelectedNodeId(nodeId)
-    setSelectedSegmentId(null)
+    selectNodeId(nodeId)
     setSelectedPortalKey(null)
   }
 
   const handleSelectSegment = (segmentId) => {
-    setSelectedSegmentId(segmentId)
-    setSelectedNodeId(null)
+    selectSegmentId(segmentId)
     setSelectedPortalKey(null)
   }
 
@@ -1297,7 +1318,7 @@ export function SkillTree() {
     }
 
     commitDocument(deleteNodeOnly(roadmapData, selectedNodeId))
-    setSelectedNodeId(null)
+    selectNodeId(null)
     setSelectedPortalKey(null)
   }
 
@@ -1307,7 +1328,7 @@ export function SkillTree() {
     }
 
     commitDocument(deleteNodeBranch(roadmapData, selectedNodeId))
-    setSelectedNodeId(null)
+    selectNodeId(null)
     setSelectedPortalKey(null)
   }
 
@@ -1325,7 +1346,7 @@ export function SkillTree() {
     }
 
     commitDocument(deleteSegment(roadmapData, selectedSegmentId))
-    setSelectedSegmentId(null)
+    selectSegmentId(null)
     setSelectedPortalKey(null)
   }
 
@@ -1582,10 +1603,10 @@ export function SkillTree() {
             viewBox={`0 0 ${canvas.width} ${canvas.height}`}
             className="skill-tree-canvas"
             onClick={() => {
-              setSelectedNodeId(null)
-              setSelectedSegmentId(null)
-              setSelectedPortalKey(null)
-            }}
+                selectNodeId(null)
+                selectSegmentId(null)
+                setSelectedPortalKey(null)
+              }}
           >
             <defs>
               <radialGradient id="nodeHalo" cx="50%" cy="50%" r="60%">
@@ -1990,7 +2011,7 @@ export function SkillTree() {
         currentLevel={levelInfo.nodeLevel}
         selectedProgressLevelId={activeSelectedProgressLevelId}
         onClose={() => {
-          setSelectedNodeId(null)
+          selectNodeId(null)
         }}
         onLabelChange={handleLabelChange}
         onShortNameChange={handleShortNameChange}
@@ -2034,7 +2055,7 @@ export function SkillTree() {
 
       <SegmentPanel
         selectedSegment={selectedSegment}
-        onClose={() => setSelectedSegmentId(null)}
+        onClose={() => selectSegmentId(null)}
         onLabelChange={handleSegmentLabelChange}
         onDelete={handleDeleteSegment}
       />

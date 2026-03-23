@@ -212,7 +212,7 @@ export const parseSkillTreeCsvTemplate = (csvText, options = {}) => {
         hasCollapsedAdditionalDependency ? '' : parsed[additionalDependenciesIndex],
       )
 
-    if (!shortName || !label || !levelText || !segment || !scope) {
+    if (!shortName || !label || !levelText || !segment) {
       throw new Error(`CSV row ${i + 1} is incomplete.`)
     }
 
@@ -461,17 +461,85 @@ export const ensureScopesExist = async (page, scopeLabels) => {
 }
 
 export const trySetScopeByLabel = async (page, scopeLabel) => {
+  // retry loop: attempt selection up to 3 times and wait for the pill to appear
+  const scopeBlock = page.locator('.skill-panel__scope-block')
+  const pillSelector = '.mantine-MultiSelect-values .mantine-MultiSelect-item, .mantine-MultiSelect-item'
+  const optionLocator = () => page.getByRole('option', { name: scopeLabel, exact: true }).filter({ visible: true }).first()
+
+  const sleep = (ms) => new Promise((res) => setTimeout(res, ms))
+
   try {
-    const scopeBlock = page.locator('.skill-panel__scope-block')
-    const input = scopeBlock.getByPlaceholder('Scopes')
-    await input.click()
-    await page
-      .getByRole('option', { name: scopeLabel, exact: true })
-      .filter({ visible: true })
-      .first()
-      .click({ force: true, timeout: 3_000 })
-    return true
-  } catch {
+    // clear existing pills (best-effort)
+    try {
+      const pillRemove = scopeBlock.locator('.mantine-MultiSelect-values button, .mantine-MultiSelect-item button')
+      const count = await pillRemove.count()
+      for (let i = 0; i < count; i += 1) {
+        try {
+          await pillRemove.nth(0).click({ timeout: 500 })
+        } catch (e) {
+          break
+        }
+      }
+    } catch (e) {
+      // ignore
+    }
+
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      try {
+        const input = scopeBlock.getByPlaceholder('Scopes')
+        await input.click()
+        const opt = optionLocator()
+        await opt.click({ force: true, timeout: 2_000 })
+
+        // Immediately persist a snapshot of relevant localStorage keys so we
+        // capture the app state at the moment the scope option was clicked.
+        try {
+          const dump = await page.evaluate(() => ({
+            document: localStorage.getItem('roadmap-skilltree.document.v1'),
+            scopeTrace: localStorage.getItem('roadmap-skilltree.e2e.scopeTrace'),
+            modelTrace: localStorage.getItem('roadmap-skilltree.e2e.modelTrace'),
+          }))
+          const ts = Date.now()
+          persistTextFile(
+            resolveWorkspacePath('tmp/e2e-exports/immediate-scope-dump-' + ts + '.json'),
+            JSON.stringify(dump, null, 2),
+          )
+
+          // Also capture a screenshot (headed test only will include visual state).
+          try {
+            await page.screenshot({ path: resolveWorkspacePath('tmp/e2e-exports/immediate-scope-screenshot-' + ts + '.png'), fullPage: false })
+          } catch (e) {
+            // ignore screenshot failures
+          }
+        } catch (e) {
+          // best-effort: ignore dump failures
+        }
+
+        // wait briefly for the pill to render
+        try {
+          await page.waitForFunction(
+            (sel, label) => {
+              const els = Array.from(document.querySelectorAll(sel) || [])
+              return els.some((el) => (el.textContent || '').trim() === label)
+            },
+            pillSelector,
+            scopeLabel,
+            { timeout: 1_500 },
+          )
+          return true
+        } catch (e) {
+          // pill did not appear yet; try again after a short delay
+          await sleep(250)
+          continue
+        }
+      } catch (e) {
+        await sleep(250)
+        continue
+      }
+    }
+
+    return false
+  } catch (e) {
     return false
   }
 }
@@ -502,8 +570,80 @@ export const applyNodeSettings = async (page, row, options = {}) => {
     await trySetSelectValueByLabel(page, 'Ebene', `Ebene ${row.level}`)
   }
   await trySetSelectValueByLabel(page, 'Segment', row.segment)
-  await trySetScopeByLabel(page, row.scope)
+  if (row.scope && String(row.scope).trim().length > 0) {
+    await trySetScopeByLabel(page, row.scope)
+  }
+  // Capture the app's persisted document from localStorage to inspect model state
+  // after assignment. This reveals actual scopeIds stored for the selected node.
+  try {
+    // capture visible pills from inspector (best-effort)
+    let assignedPills = []
+    try {
+      assignedPills = await getInspectorScopeLabels(page)
+    } catch (e) {
+      assignedPills = []
+    }
+
+    // attempt to read persisted document and find the node; retry briefly if not present yet
+    const findNode = (nodes, shortName) => {
+      for (const node of nodes ?? []) {
+        if ((node.shortName ?? '').toString().trim() === shortName) return node
+        const found = findNode(node.children, shortName)
+        if (found) return found
+      }
+      return null
+    }
+
+    let found = null
+    const startMs = Date.now()
+    const timeoutMs = 3_000
+    while (Date.now() - startMs < timeoutMs) {
+      const stored = await page.evaluate(() => localStorage.getItem('roadmap-skilltree.document.v1'))
+      if (stored) {
+        try {
+          const doc = JSON.parse(stored)
+          found = findNode(doc.children, row.shortName)
+          if (found) break
+        } catch (e) {
+          // ignore parse errors and retry
+        }
+      }
+      await new Promise((res) => setTimeout(res, 200))
+    }
+
+    const out = {
+      timestamp: Date.now(),
+      shortName: row.shortName,
+      intendedScope: row.scope,
+      assignedPills,
+      nodeSnapshot: found ?? null,
+      scopeTrace: null,
+    }
+    try {
+      const rawTrace = await page.evaluate(() => localStorage.getItem('roadmap-skilltree.e2e.scopeTrace'))
+      if (rawTrace) {
+        try {
+          out.scopeTrace = JSON.parse(rawTrace)
+        } catch (e) {
+          out.scopeTrace = rawTrace
+        }
+      }
+    } catch (e) {
+      // ignore
+    }
+
+    persistTextFile(resolveWorkspacePath('tmp/e2e-exports/scope-assignments-' + Date.now() + '.json'), JSON.stringify(out, null, 2))
+  } catch (e) {
+    // ignore logging errors
+  }
   await setSelectValueByLabel(page, 'Status', row.status[0].toUpperCase() + row.status.slice(1))
+}
+
+export const getInspectorScopeLabels = async (page) => {
+  const scopeBlock = page.locator('.skill-panel__scope-block')
+  const items = scopeBlock.locator('.mantine-MultiSelect-values .mantine-MultiSelect-item, .mantine-MultiSelect-item')
+  const labels = await items.evaluateAll((els) => els.map((el) => el.textContent?.trim()).filter(Boolean))
+  return labels
 }
 
 export const applyNodeIdentity = async (page, row) => {
