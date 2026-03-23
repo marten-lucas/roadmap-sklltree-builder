@@ -443,24 +443,44 @@ export const ensureScopesExist = async (page, scopeLabels) => {
     return
   }
 
-  const scopeBlock = page.locator('.skill-panel__scope-block')
-  const manageButton = scopeBlock.getByRole('button', { name: 'Scopes verwalten' })
-  await manageButton.click()
-
-  for (const label of uniqueScopes) {
-    const alreadyExists = await scopeBlock.locator('text=' + label).count()
-    if (alreadyExists > 0) {
-      continue
-    }
-
-    await scopeBlock.getByRole('textbox', { name: 'Scopes verwalten', exact: true }).fill(label)
-    await scopeBlock.getByRole('button', { name: 'Scope hinzufügen' }).click()
+  // Prefer the toolbar scope manager: click the toolbar button and use the
+  // same accessible labels as the Inspector's scope UI so both flows remain
+  // compatible with tests.
+  const toolbar = page.locator('.skill-tree-toolbar')
+  const toolbarManage = toolbar.getByRole('button', { name: 'Scopes verwalten' }).first()
+  try {
+    await toolbarManage.click()
+  } catch (e) {
+    // Fallback: if toolbar not present or click fails, try inspector-scoped button
+    const scopeBlock = page.locator('.skill-panel__scope-block')
+    const inspectorManage = scopeBlock.getByRole('button', { name: 'Scopes verwalten' })
+    await inspectorManage.click()
   }
 
-  await manageButton.click()
+  for (const label of uniqueScopes) {
+    // skip if already exists anywhere in the document
+    const alreadyExists = await page.locator(`text=${label}`).filter({ visible: true }).count()
+    if (alreadyExists > 0) continue
+
+    const textbox = page.getByRole('textbox', { name: 'Scopes verwalten', exact: true }).filter({ visible: true }).first()
+    await textbox.fill(label)
+    await page.getByRole('button', { name: 'Scope hinzufügen' }).filter({ visible: true }).first().click()
+  }
+
+  // Close the toolbar scope manager if present
+  try {
+    await page.getByRole('button', { name: 'Scope Manager schließen' }).filter({ visible: true }).first().click()
+  } catch (e) {
+    // fallback: toggle the toolbar button again
+    try { await toolbarManage.click() } catch (err) { /* ignore */ }
+  }
 }
 
 export const trySetScopeByLabel = async (page, scopeLabel) => {
+  // If no scope label provided, skip any scope UI interaction.
+  if (!scopeLabel || String(scopeLabel).trim().length === 0) {
+    return false
+  }
   // retry loop: attempt selection up to 3 times and wait for the pill to appear
   const scopeBlock = page.locator('.skill-panel__scope-block')
   const pillSelector = '.mantine-MultiSelect-values .mantine-MultiSelect-item, .mantine-MultiSelect-item'

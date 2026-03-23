@@ -293,6 +293,15 @@
     border-bottom: 0;
 }
 
+.skill-panel--scopes {
+    inset-block: 0;
+    right: 0;
+    width: 24rem;
+    border-right: 0;
+    border-top: 0;
+    border-bottom: 0;
+}
+
 .skill-panel--segment {
     top: 1.5rem;
     right: 1.5rem;
@@ -300,9 +309,12 @@
 }
 
 .skill-panel--icon {
-    top: 1.5rem;
-    left: 1.5rem;
-    width: 21rem;
+    inset-block: 0;
+    right: 0;
+    width: 24rem;
+    border-right: 0;
+    border-top: 0;
+    border-bottom: 0;
 }
 
 .skill-panel__icon-preview {

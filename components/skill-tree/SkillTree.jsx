@@ -20,6 +20,8 @@ import { solveSkillTreeLayout } from './layoutSolver'
 import { UNASSIGNED_SEGMENT_ID } from './layoutShared'
 import { getSkillTreeShortcutAction } from './keyboardShortcuts'
 import { SegmentPanel } from './SegmentPanel'
+import ToolbarScopeManager from './ToolbarScopeManager'
+import { togglePanel, PANEL_INSPECTOR, PANEL_CENTER, PANEL_SCOPES } from './panelsState'
 import { SkillNode } from './SkillNode'
 import { getDisplayStatusKey } from './nodeStatus'
 import {
@@ -209,26 +211,29 @@ export function SkillTree() {
   const [selectedProgressLevelId, setSelectedProgressLevelId] = useState(null)
   const [selectedSegmentId, setSelectedSegmentId] = useState(null)
   const [selectedPortalKey, setSelectedPortalKey] = useState(null)
-  const [isCenterIconPanelOpen, setIsCenterIconPanelOpen] = useState(false)
+  const [rightPanel, setRightPanel] = useState(null)
   
   // Ensure only one panel is visible at a time. Use these wrappers instead of
   // calling the raw setters directly so opening one panel clears others.
   const selectNodeId = (nodeId) => {
     setSelectedNodeId(nodeId)
     if (nodeId) {
+      // Ensure only one right-side panel is open: show inspector
       selectSegmentId(null)
-      setIsCenterIconPanelOpen(false)
+      setRightPanel(PANEL_INSPECTOR)
     } else {
       setSelectedProgressLevelId(null)
       setSelectedPortalKey(null)
+      if (rightPanel === PANEL_INSPECTOR) setRightPanel(null)
     }
   }
 
   const selectSegmentId = (segmentId) => {
     setSelectedSegmentId(segmentId)
     if (segmentId) {
+      // Selecting a segment should close inspector and hide right-side panel
       setSelectedNodeId(null)
-      setIsCenterIconPanelOpen(false)
+      setRightPanel(null)
       setSelectedProgressLevelId(null)
       setSelectedPortalKey(null)
     }
@@ -746,7 +751,21 @@ export function SkillTree() {
 
   const handleOpenCenterIconPanel = (event) => {
     event.stopPropagation()
-    setIsCenterIconPanelOpen(true)
+    // Toggle center panel; ensure only one right-side panel visible
+    selectNodeId(null)
+    selectSegmentId(null)
+    setRightPanel((prev) => togglePanel(prev, PANEL_CENTER))
+  }
+
+  const handleOpenScopeManager = (event) => {
+    event?.stopPropagation()
+    selectNodeId(null)
+    selectSegmentId(null)
+    setRightPanel((prev) => togglePanel(prev, PANEL_SCOPES))
+  }
+
+  const handleCloseScopeManager = () => {
+    if (rightPanel === PANEL_SCOPES) setRightPanel(null)
   }
 
   const handleResetCenterIcon = () => {
@@ -831,7 +850,7 @@ export function SkillTree() {
     dispatchDocument({ type: 'apply', document: createEmptyDocument() })
     setTransformKey((current) => current + 1)
     resetSelections()
-    setIsCenterIconPanelOpen(false)
+    if (rightPanel === PANEL_CENTER) setRightPanel(null)
   }
 
   const handleExportSvg = async () => {
@@ -1500,6 +1519,25 @@ export function SkillTree() {
               </Tooltip>
             </div>
 
+            {/* Segments toolbar entry removed per design */}
+
+            <div className="skill-tree-toolbar__cluster">
+              <Tooltip label="Scopes verwalten" withArrow openDelay={120}>
+                <ActionIcon
+                  size="md"
+                  variant="default"
+                  aria-label="Scopes verwalten"
+                  onClick={handleOpenScopeManager}
+                >
+                  <ToolbarIcon>
+                    <path d="M3 6h18" />
+                    <path d="M6 12h12" />
+                    <path d="M9 18h6" />
+                  </ToolbarIcon>
+                </ActionIcon>
+              </Tooltip>
+            </div>
+
             <div className="skill-tree-toolbar__cluster">
               <Menu shadow="md" width={220} position="bottom-start" withArrow>
                 <Menu.Target>
@@ -2006,7 +2044,8 @@ export function SkillTree() {
         </TransformComponent>
       </TransformWrapper>
 
-      <InspectorPanel
+      {rightPanel === PANEL_INSPECTOR && (
+        <InspectorPanel
         selectedNode={selectedNode}
         currentLevel={levelInfo.nodeLevel}
         selectedProgressLevelId={activeSelectedProgressLevelId}
@@ -2051,7 +2090,18 @@ export function SkillTree() {
         onAdditionalDependenciesChange={handleAdditionalDependenciesChange}
         onDeleteNodeOnly={handleDeleteNodeOnly}
         onDeleteNodeBranch={handleDeleteNodeBranch}
-      />
+        />
+      )}
+
+      {rightPanel === PANEL_SCOPES && (
+        <ToolbarScopeManager
+          scopeOptions={scopeOptions}
+          onCreateScope={handleCreateScope}
+          onRenameScope={handleRenameScope}
+          onDeleteScope={handleDeleteScope}
+          onClose={handleCloseScopeManager}
+        />
+      )}
 
       <SegmentPanel
         selectedSegment={selectedSegment}
@@ -2061,9 +2111,9 @@ export function SkillTree() {
       />
 
       <CenterIconPanel
-        isOpen={isCenterIconPanelOpen}
+        isOpen={rightPanel === PANEL_CENTER}
         iconSource={centerIconSource}
-        onClose={() => setIsCenterIconPanelOpen(false)}
+        onClose={() => { if (rightPanel === PANEL_CENTER) setRightPanel(null) }}
         onUpload={handleCenterIconUpload}
         onResetDefault={handleResetCenterIcon}
       />

@@ -148,6 +148,14 @@ const appendModelTrace = (entry) => {
     // keep it bounded to avoid unbounded growth
     if (arr.length > 2000) arr.splice(0, arr.length - 2000)
     window.localStorage.setItem(key, JSON.stringify(arr))
+    // also persist the latest entry under a dedicated key so E2E helpers
+    // can quickly fetch the most recent model change and to reduce the
+    // chance of empty/partial modelTrace reads
+    try {
+      window.localStorage.setItem('roadmap-skilltree.e2e.modelTraceLast', JSON.stringify(entry))
+    } catch (e) {
+      // ignore secondary write failures
+    }
   } catch (e) {
     // ignore
   }

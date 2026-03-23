@@ -24,4 +24,6 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
-tmp/Roadmap Kyana.png
+tmp/
+e2e/exports.spec.js-snapshots
+test-results/*

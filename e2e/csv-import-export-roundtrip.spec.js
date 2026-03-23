@@ -150,6 +150,33 @@ test.describe('CSV template roundtrip via builder UI', () => {
     const csvText = readFileSync(csvTemplatePath, 'utf-8')
     const template = parseSkillTreeCsvTemplate(csvText)
     const rowsByCsvShortName = new Map(template.rows.map((row) => [row.shortName, row]))
+    // If tests run with ignoreManualLevels, compute levels from parent chain
+    // and reorder roots/children so parents are created before their children.
+    if (ignoreManualLevels) {
+      const computedLevelByShortName = new Map()
+      const computeLevel = (row, stack = new Set()) => {
+        if (computedLevelByShortName.has(row.shortName)) return computedLevelByShortName.get(row.shortName)
+        if (stack.has(row.shortName)) return 1
+        stack.add(row.shortName)
+        const parent = row.parentShortName ? rowsByCsvShortName.get(row.parentShortName) : null
+        const level = parent ? computeLevel(parent, stack) + 1 : 1
+        stack.delete(row.shortName)
+        computedLevelByShortName.set(row.shortName, level)
+        return level
+      }
+
+      for (const r of template.rows) computeLevel(r)
+
+      const csvSortKeyComputed = (row) => `${String(computedLevelByShortName.get(row.shortName)).padStart(4, '0')}-${String(row.order).padStart(4, '0')}`
+
+      template.roots = template.rows
+        .filter((row) => computedLevelByShortName.get(row.shortName) === 1)
+        .sort((a, b) => csvSortKeyComputed(a).localeCompare(csvSortKeyComputed(b)))
+
+      template.children = template.rows
+        .filter((row) => computedLevelByShortName.get(row.shortName) !== 1)
+        .sort((a, b) => csvSortKeyComputed(a).localeCompare(csvSortKeyComputed(b)))
+    }
     const nodeIdByCsvShortName = new Map()
 
     await page.goto('/')
@@ -201,19 +228,54 @@ test.describe('CSV template roundtrip via builder UI', () => {
     }
 
     const createNodeFromSelected = async (previousNodeId, triggerCreate) => {
-      for (let attempt = 0; attempt < 2; attempt += 1) {
+      // More robust creation: wait for a new foreignObject anchor to appear
+      // and select it. Fall back to existing inspector-change detection.
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        const beforeIds = await page
+          .locator('foreignObject.skill-node-export-anchor')
+          .evaluateAll((els) => els.map((el) => el.getAttribute('data-node-id')))
+
         await triggerCreate()
+
         try {
+          // Prefer detecting a new DOM anchor rather than only relying on inspector attr
+          const newNodeId = await page.waitForFunction(
+            (before) => {
+              const els = Array.from(document.querySelectorAll('foreignObject.skill-node-export-anchor') || [])
+              const ids = els.map((el) => el.getAttribute('data-node-id'))
+              for (const id of ids) {
+                if (!before.includes(id)) return id
+              }
+              return null
+            },
+            beforeIds,
+            { timeout: 6_000 },
+          )
+
+          if (newNodeId) {
+            const nid = String(newNodeId)
+            // click the new node's button to ensure inspector selection
+            const selector = `foreignObject.skill-node-export-anchor[data-node-id="${nid}"] .skill-node-button`
+            const node = page.locator(selector).first()
+            await node.waitFor({ state: 'attached', timeout: 5_000 })
+            await node.dispatchEvent('click')
+            await page.waitForFunction((expected) => {
+              const inspector = document.querySelector('.skill-panel--inspector')
+              return inspector && inspector.getAttribute('data-selected-node-id') === expected
+            }, nid, { timeout: 5_000 })
+            return await getSelectedNodeId(page)
+          }
+
+          // Fallback: wait for inspector's selected node to change
           return await waitForNewSelectedNode(previousNodeId)
         } catch (error) {
-          if (attempt === 1) {
-            throw error
+          if (attempt === 2) {
+            throw new Error(`Failed to create a new node from ${previousNodeId}: ${error.message}`)
           }
+          // retry by re-selecting the previous node and trying again
           await selectNodeById(page, previousNodeId)
         }
       }
-
-      throw new Error(`Failed to create a new node from ${previousNodeId}`)
     }
 
     for (let index = 1; index < template.roots.length; index += 1) {
