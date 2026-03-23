@@ -67,16 +67,20 @@ const collectActualNodeSnapshots = (document) => {
   const visit = (nodes, parentNode = null) => {
     for (const node of nodes ?? []) {
       const status = String(node.levels?.[0]?.status ?? node.status ?? 'later').trim().toLowerCase()
-      const primaryScopeId = Array.isArray(node.levels?.[0]?.scopeIds)
-        ? node.levels[0].scopeIds[0] ?? null
-        : null
+      const scopeIds = Array.isArray(node.levels?.[0]?.scopeIds) ? node.levels[0].scopeIds : []
+      const scopeLabels = scopeIds
+        .map((id) => scopesById.get(id) ?? null)
+        .filter(Boolean)
+        .map((s) => String(s).trim())
+        .filter(Boolean)
+        .sort()
 
       snapshots.push({
         shortName: String(node.shortName ?? '').trim(),
         label: node.label,
         level: Number(node.ebene),
         segment: segmentsById.get(node.segmentId ?? null) ?? null,
-        scope: primaryScopeId ? scopesById.get(primaryScopeId) ?? null : null,
+        scope: scopeLabels.length > 0 ? scopeLabels.join('|') : null,
         parentLabel: parentNode?.label ?? null,
         status,
       })
@@ -120,7 +124,7 @@ const collectExpectedNodeSnapshots = (rows, options = {}) => {
     label: row.label,
     level: computeLevel(row),
     segment: row.segment,
-    scope: row.scope,
+    scope: row.scope ? String(row.scope).trim() : null,
     parentLabel: row.parentLabel,
     status: row.status,
   }))
@@ -134,6 +138,7 @@ const toComparableSnapshot = (snapshot) => ({
   level: snapshot.level,
   parentLabel: snapshot.parentLabel,
   status: snapshot.status,
+  scope: snapshot.scope ?? null,
 })
 
 test.describe('CSV template roundtrip via builder UI', () => {
@@ -350,33 +355,85 @@ test.describe('CSV template roundtrip via builder UI', () => {
 
     expect(actualImportedSnapshots).toHaveLength(expectedSnapshots.length)
 
-    const expectedCounts = new Map()
-    for (const snapshot of expectedSnapshots) {
-      const key = toSnapshotKey(toComparableSnapshot(snapshot))
-      expectedCounts.set(key, (expectedCounts.get(key) ?? 0) + 1)
-    }
-
+    // Match expected -> actual where all comparable fields equal and
+    // expected scope (if any) is contained in actual scope set.
+    const actualUsed = new Array(actualImportedSnapshots.length).fill(false)
     const unexpectedSnapshots = []
-    for (const snapshot of actualImportedSnapshots) {
-      const comparableSnapshot = toComparableSnapshot(snapshot)
-      const key = toSnapshotKey(comparableSnapshot)
-      const remaining = expectedCounts.get(key) ?? 0
-      if (remaining === 0) {
-        unexpectedSnapshots.push(comparableSnapshot)
-        continue
-      }
-      expectedCounts.set(key, remaining - 1)
-    }
-
     const missingSnapshots = []
-    for (const [key, remaining] of expectedCounts.entries()) {
-      for (let index = 0; index < remaining; index += 1) {
-        missingSnapshots.push(JSON.parse(key))
+
+    for (let ei = 0; ei < expectedSnapshots.length; ei += 1) {
+      const expected = expectedSnapshots[ei]
+      const expComp = toComparableSnapshot(expected)
+      const expScopeList = expected.scope ? String(expected.scope).split('|').map((s) => s.trim()).filter(Boolean) : []
+      let matched = false
+
+      for (let ai = 0; ai < actualImportedSnapshots.length; ai += 1) {
+        if (actualUsed[ai]) continue
+        const actual = actualImportedSnapshots[ai]
+        const actComp = toComparableSnapshot(actual)
+        if (
+          actComp.shortName === expComp.shortName &&
+          actComp.label === expComp.label &&
+          actComp.level === expComp.level &&
+          actComp.parentLabel === expComp.parentLabel &&
+          actComp.status === expComp.status
+        ) {
+          const actualScopeSet = new Set((actual.scope ? String(actual.scope).split('|').map((x) => x.trim()).filter(Boolean) : []))
+          const expOk = expScopeList.length === 0 || expScopeList.every((s) => Array.from(actualScopeSet).some((as) => as.toLowerCase() === s.toLowerCase()))
+          if (expOk) {
+            actualUsed[ai] = true
+            matched = true
+            break
+          }
+        }
+      }
+
+      if (!matched) {
+        missingSnapshots.push(expComp)
       }
     }
 
-    expect(unexpectedSnapshots).toEqual([])
-    expect(missingSnapshots).toEqual([])
+    for (let ai = 0; ai < actualImportedSnapshots.length; ai += 1) {
+      if (!actualUsed[ai]) {
+        unexpectedSnapshots.push(toComparableSnapshot(actualImportedSnapshots[ai]))
+      }
+    }
+
+    // Collect scope mismatches for reporting; do not fail test unless strict mode
+    // is enabled via env var `SKILLTREE_E2E_STRICT_SCOPES=1`.
+    const scopeMismatches = []
+    for (const expected of expectedSnapshots) {
+      const actual = actualImportedSnapshots.find((a) => a.shortName === expected.shortName && a.label === expected.label)
+      if (!actual) continue
+      const expectedScope = expected.scope ? String(expected.scope).trim() : null
+      const actualScopeSet = new Set((actual.scope ? String(actual.scope).split('|').map((x) => x.trim()).filter(Boolean) : []))
+      if (expectedScope && !Array.from(actualScopeSet).some((s) => s.toLowerCase() === expectedScope.toLowerCase())) {
+        scopeMismatches.push({ shortName: expected.shortName, expected: expectedScope, actual: Array.from(actualScopeSet).join('|') })
+      }
+    }
+
+    if (scopeMismatches.length > 0) {
+      persistTextFile(resolve(exportOutputDir, 'scope-mismatches-debug.json'), JSON.stringify(scopeMismatches, null, 2))
+    }
+
+    if (unexpectedSnapshots.length > 0 || missingSnapshots.length > 0) {
+      const debugInfo = {
+        unexpectedSnapshots,
+        missingSnapshots,
+        expectedSnapshots,
+        actualImportedSnapshots,
+      }
+      persistTextFile(resolve(exportOutputDir, 'snapshot-mismatch-debug.json'), JSON.stringify(debugInfo, null, 2))
+    }
+
+    if (process.env.SKILLTREE_E2E_STRICT_SCOPES === '1') {
+      expect(unexpectedSnapshots).toEqual([])
+      expect(missingSnapshots).toEqual([])
+      expect(scopeMismatches).toEqual([])
+    } else {
+      expect(unexpectedSnapshots).toEqual([])
+      expect(missingSnapshots).toEqual([])
+    }
 
     expect(Array.isArray(template.warnings)).toBe(true)
   })

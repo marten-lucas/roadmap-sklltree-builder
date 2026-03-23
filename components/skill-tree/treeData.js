@@ -73,7 +73,8 @@ const normalizeScopeEntries = (value) => {
 
   for (const entry of value) {
     const id = typeof entry?.id === 'string' ? entry.id : ''
-    const label = typeof entry?.label === 'string' ? entry.label : ''
+    const rawLabel = typeof entry?.label === 'string' ? entry.label : ''
+    const label = String(rawLabel).trim()
     const labelKey = normalizeScopeNameKey(label)
 
     if (id.length === 0 || labelKey.length === 0 || usedIds.has(id) || usedNameKeys.has(labelKey)) {
@@ -646,7 +647,7 @@ const createNewSegment = () => ({
 
 const createNewScope = (label) => ({
   id: `scope-${crypto.randomUUID()}`,
-  label,
+  label: String(label ?? '').trim(),
 })
 
 export const addScopeWithResult = (treeData, label) => {

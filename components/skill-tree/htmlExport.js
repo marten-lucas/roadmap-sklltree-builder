@@ -6,6 +6,57 @@ export const HTML_EXPORT_DATA_SCRIPT_ID = 'skilltree-export-data'
 
 const XML_PREFIX_PATTERN = /^<\?xml[^>]*\?>\s*/i
 
+const normalizeScopeKey = (label) => String(label ?? '').trim().toLowerCase()
+
+const canonicalizeDocumentForExport = (doc) => {
+  if (!doc || typeof doc !== 'object' || !Array.isArray(doc.scopes)) return doc
+
+  const seen = new Map()
+  const idMap = new Map()
+  const scopes = []
+
+  for (const scope of doc.scopes) {
+    const rawLabel = typeof scope?.label === 'string' ? scope.label : ''
+    const label = String(rawLabel).trim()
+    const key = normalizeScopeKey(label)
+    if (!key) continue
+
+    if (!seen.has(key)) {
+      seen.set(key, { id: scope.id, label })
+    }
+    idMap.set(scope.id, seen.get(key).id)
+  }
+
+  for (const { id, label } of Array.from(seen.values()).sort((a, b) => a.label.localeCompare(b.label))) {
+    scopes.push({ id, label })
+  }
+
+  const canonicalDoc = JSON.parse(JSON.stringify(doc))
+  canonicalDoc.scopes = scopes
+
+  const allowedScopeIds = new Set(scopes.map((s) => s.id))
+
+  const remapScopeId = (oldId) => {
+    const mapped = idMap.get(oldId) ?? oldId
+    return allowedScopeIds.has(mapped) ? mapped : null
+  }
+
+  const remapLevels = (levels) => (Array.isArray(levels) ? levels.map((lvl) => ({
+    ...lvl,
+    scopeIds: Array.from(new Set((lvl.scopeIds ?? []).map(remapScopeId).filter(Boolean))),
+  })) : levels)
+
+  const walk = (node) => {
+    if (!node || typeof node !== 'object') return
+    node.levels = remapLevels(node.levels)
+    for (const child of node.children ?? []) walk(child)
+  }
+
+  for (const root of canonicalDoc.children ?? []) walk(root)
+
+  return canonicalDoc
+}
+
 const escapeHtml = (value) => String(value ?? '')
   .replace(/&/g, '&amp;')
   .replace(/</g, '&lt;')
@@ -429,6 +480,9 @@ export const buildHtmlExportDocument = ({
     subtitleBits.push(exportBrand)
   }
   const payloadJson = escapeJsonForScriptTag(JSON.stringify(buildPersistedDocumentPayload(roadmapDocument), null, 2))
+  
+  const canonicalDoc = canonicalizeDocumentForExport(roadmapDocument)
+  const canonicalPayloadJson = escapeJsonForScriptTag(JSON.stringify(buildPersistedDocumentPayload(canonicalDoc), null, 2))
 
   return `<!DOCTYPE html>
 <html lang="de">
@@ -771,7 +825,7 @@ export const buildHtmlExportDocument = ({
     </section>
   </main>
 
-  <script id="${HTML_EXPORT_DATA_SCRIPT_ID}" type="application/json">${payloadJson}</script>
+  <script id="${HTML_EXPORT_DATA_SCRIPT_ID}" type="application/json">${canonicalPayloadJson}</script>
   <script>${buildViewerScript()}</script>
 </body>
 </html>`
@@ -802,7 +856,15 @@ export const extractDocumentPayloadFromHtml = (htmlText) => {
     }
   }
 
-  return parseDocumentPayload(match[1].trim())
+  const parsed = parseDocumentPayload(match[1].trim())
+  if (!parsed.ok) return parsed
+
+  try {
+    const canonical = canonicalizeDocumentForExport(parsed.value)
+    return { ok: true, value: canonical }
+  } catch (err) {
+    return { ok: true, value: parsed.value }
+  }
 }
 
 export const readDocumentFromHtmlText = (htmlText) => {

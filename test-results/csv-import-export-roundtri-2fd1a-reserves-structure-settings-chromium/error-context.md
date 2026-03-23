@@ -1,0 +1,137 @@
+# Page snapshot
+
+```yaml
+- generic [ref=e1]:
+  - main [ref=e3]:
+    - generic [ref=e5]:
+      - button "Menü einklappen" [ref=e6] [cursor=pointer]:
+        - img [ref=e8]
+      - generic [ref=e10]:
+        - generic [ref=e11]:
+          - button "Export" [active] [ref=e12] [cursor=pointer]:
+            - img [ref=e14]
+          - button "HTML importieren" [ref=e17] [cursor=pointer]:
+            - img [ref=e19]
+        - generic [ref=e22]:
+          - button "Undo" [disabled] [ref=e23]:
+            - img [ref=e25]
+          - button "Redo" [disabled] [ref=e29]:
+            - img [ref=e31]
+        - button "Reset" [ref=e36] [cursor=pointer]:
+          - img [ref=e38]
+        - generic [ref=e41]:
+          - button "Scope Filter" [ref=e42] [cursor=pointer]:
+            - img [ref=e44]
+          - button "Release Filter" [ref=e45] [cursor=pointer]:
+            - img [ref=e47]
+        - paragraph [ref=e52]: Autosave 05:14:27 AM
+    - img [ref=e55]:
+      - generic [ref=e58] [cursor=pointer]:
+        - img "Center Icon"
+      - generic [ref=e66] [cursor=pointer]: Kyana Data & Connect
+      - generic [ref=e69] [cursor=pointer]: Kyana Assist
+      - generic [ref=e72] [cursor=pointer]: Kyana Cases
+      - generic [ref=e75] [cursor=pointer]: myKyana Platform
+      - button "COD" [ref=e127]:
+        - paragraph [ref=e129]: COD
+      - button "MFR" [ref=e132]:
+        - paragraph [ref=e134]: MFR
+      - button "CFL" [ref=e137]:
+        - paragraph [ref=e139]: CFL
+      - button "CLG" [ref=e142]:
+        - paragraph [ref=e144]: CLG
+      - button "LAN" [ref=e147]:
+        - paragraph [ref=e149]: LAN
+      - button "TNC" [ref=e152]:
+        - paragraph [ref=e154]: TNC
+      - button "CAN" [ref=e157]:
+        - paragraph [ref=e159]: CAN
+      - button "FLD" [ref=e162]:
+        - paragraph [ref=e164]: FLD
+      - button "PPD" [ref=e167]:
+        - paragraph [ref=e169]: PPD
+      - button "RAD" [ref=e172]:
+        - paragraph [ref=e174]: RAD
+      - button "COK" [ref=e177]:
+        - paragraph [ref=e179]: COK
+      - button "CC" [ref=e182]:
+        - paragraph [ref=e184]: CC
+      - button "PFD" [ref=e187]:
+        - paragraph [ref=e189]: PFD
+      - button "PLC" [ref=e192]:
+        - paragraph [ref=e194]: PLC
+      - button "CCL" [ref=e197]:
+        - paragraph [ref=e199]: CCL
+      - button "LCT" [ref=e202]:
+        - paragraph [ref=e204]: LCT
+      - button "CRA" [ref=e207]:
+        - paragraph [ref=e209]: CRA
+      - button "FCA" [ref=e212]:
+        - paragraph [ref=e214]: FCA
+      - button "RCA" [ref=e217]:
+        - paragraph [ref=e219]: RCA
+      - button "FLK" [ref=e222]:
+        - paragraph [ref=e224]: FLK
+      - button "PPK" [ref=e227]:
+        - paragraph [ref=e229]: PPK
+      - button "RAK" [ref=e232]:
+        - paragraph [ref=e234]: RAK
+      - button "SA1" [ref=e237]:
+        - paragraph [ref=e239]: SA1
+      - button "CLT" [ref=e242]:
+        - paragraph [ref=e244]: CLT
+      - button "PDB" [ref=e247]:
+        - paragraph [ref=e249]: PDB
+      - button "BMD" [ref=e252]:
+        - paragraph [ref=e254]: BMD
+      - button "CCP" [ref=e257]:
+        - paragraph [ref=e259]: CCP
+      - button "PCA" [ref=e262]:
+        - paragraph [ref=e264]: PCA
+      - button "DWC" [ref=e267]:
+        - paragraph [ref=e269]: DWC
+      - button "CCC" [ref=e272]:
+        - paragraph [ref=e274]: CCC
+      - button "IVP" [ref=e277]:
+        - paragraph [ref=e279]: IVP
+      - button "CC" [ref=e282]:
+        - paragraph [ref=e284]: CC
+      - button "MM" [ref=e287]:
+        - paragraph [ref=e289]: MM
+      - button "LKE" [ref=e292]:
+        - paragraph [ref=e294]: LKE
+      - button "CRJ" [ref=e297]:
+        - paragraph [ref=e299]: CRJ
+      - button "CPP" [ref=e302]:
+        - paragraph [ref=e304]: CPP
+      - button "PLT" [ref=e307]:
+        - paragraph [ref=e309]: PLT
+      - button "SPA" [ref=e312]:
+        - paragraph [ref=e314]: SPA
+      - button "MPC" [ref=e317]:
+        - paragraph [ref=e319]: MPC
+      - button "CCA" [ref=e322]:
+        - paragraph [ref=e324]: CCA
+      - button "NAH" [ref=e327]:
+        - paragraph [ref=e329]: NAH
+      - button "UC" [ref=e332]:
+        - paragraph [ref=e334]: UC
+      - button "SEA" [ref=e337]:
+        - paragraph [ref=e339]: SEA
+      - button "RJD" [ref=e342]:
+        - paragraph [ref=e344]: RJD
+      - button "PPD" [ref=e347]:
+        - paragraph [ref=e349]: PPD
+      - button "R4P" [ref=e352]:
+        - paragraph [ref=e354]: R4P
+      - button "SA" [ref=e357]:
+        - paragraph [ref=e359]: SA
+      - button "JFS" [ref=e362]:
+        - paragraph [ref=e364]: JFS
+      - button "SHV" [ref=e367]:
+        - paragraph [ref=e369]: SHV
+      - button "JBE" [ref=e372]:
+        - paragraph [ref=e374]: JBE
+  - generic:
+    - tooltip "Reset (Ctrl+Shift+Backspace)": Reset (Ctrl+Shift+Backspace)
+```
