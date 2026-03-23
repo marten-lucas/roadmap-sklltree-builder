@@ -522,6 +522,22 @@ export function SkillTree() {
     return map
   }, [roadmapData])
 
+  const [toolbarSearch, setToolbarSearch] = useState('')
+  const searchResults = useMemo(() => {
+    const q = String(toolbarSearch ?? '').trim().toLowerCase()
+    if (!q) return []
+    const results = []
+    for (const node of allNodesById.values()) {
+      const label = String(node.label ?? '').toLowerCase()
+      const short = String(node.shortName ?? '').toLowerCase()
+      if (label.includes(q) || short.includes(q)) {
+        results.push(node)
+      }
+      if (results.length >= 10) break
+    }
+    return results
+  }, [toolbarSearch, allNodesById])
+
   const selectedNodeIncomingDependencyLabels = useMemo(() => {
     const incomingIds = selectedNodeAdditionalDependencies.incomingIds ?? []
     return incomingIds
@@ -1613,6 +1629,31 @@ export function SkillTree() {
             </div>
 
             <div className="skill-tree-toolbar__cluster">
+              <div className="skill-tree-toolbar__search">
+                <input
+                  aria-label="Node search"
+                  placeholder="Suche Knoten…"
+                  value={toolbarSearch}
+                  onChange={(e) => setToolbarSearch(e.target.value)}
+                />
+                {searchResults.length > 0 && (
+                  <ul className="skill-tree-toolbar__search-results" role="listbox">
+                    {searchResults.map((n) => (
+                      <li
+                        key={n.id}
+                        role="option"
+                        onMouseDown={(ev) => {
+                          ev.preventDefault()
+                          handleSelectNode(n.id)
+                          setToolbarSearch('')
+                        }}
+                      >
+                        {n.label} {n.shortName ? `(${n.shortName})` : ''}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
               <Text size="xs" c="dimmed" className="skill-tree-toolbar__status">{autosaveLabel}</Text>
             </div>
           </div>
