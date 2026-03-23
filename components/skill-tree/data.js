@@ -9,6 +9,8 @@ const SEGMENT_FRONTEND = 'segment-frontend'
 const SEGMENT_BACKEND = 'segment-backend'
 
 export const initialData = {
+  systemName: 'myKyana',
+  release: { name: 'July 2026 Release', motto: 'Reich & Schön', introduction: '' },
   // Synthetic container only; not rendered as a selectable node.
   segments: [
     { id: SEGMENT_FRONTEND, label: 'Frontend' },

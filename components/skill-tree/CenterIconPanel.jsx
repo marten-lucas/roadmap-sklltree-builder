@@ -1,7 +1,15 @@
-import { ActionIcon, Button, Paper, Stack, Text } from '@mantine/core'
+import { ActionIcon, Button, Paper, Stack, Text, TextInput, Textarea } from '@mantine/core'
 import { useRef } from 'react'
 
-export function CenterIconPanel({ isOpen, iconSource, onClose, onUpload, onResetDefault }) {
+export function CenterIconPanel({
+  isOpen,
+  iconSource,
+  onClose,
+  onUpload,
+  onResetDefault,
+  roadmapData,
+  commitDocument,
+}) {
   const fileInputRef = useRef(null)
 
   if (!isOpen) {
@@ -41,6 +49,33 @@ export function CenterIconPanel({ isOpen, iconSource, onClose, onUpload, onReset
             void onUpload(file)
             event.currentTarget.value = ''
           }}
+        />
+
+        <Text size="sm" c="dimmed">System- und Release-Informationen</Text>
+
+        <TextInput
+          label="Systemname"
+          value={roadmapData?.systemName ?? ''}
+          onChange={(e) => commitDocument({ ...roadmapData, systemName: e.currentTarget.value })}
+        />
+
+        <TextInput
+          label="Release-Name"
+          value={roadmapData?.release?.name ?? ''}
+          onChange={(e) => commitDocument({ ...roadmapData, release: { ...(roadmapData.release || {}), name: e.currentTarget.value } })}
+        />
+
+        <TextInput
+          label="Motto"
+          value={roadmapData?.release?.motto ?? ''}
+          onChange={(e) => commitDocument({ ...roadmapData, release: { ...(roadmapData.release || {}), motto: e.currentTarget.value } })}
+        />
+
+        <Textarea
+          label="Introduction"
+          minRows={3}
+          value={roadmapData?.release?.introduction ?? ''}
+          onChange={(e) => commitDocument({ ...roadmapData, release: { ...(roadmapData.release || {}), introduction: e.currentTarget.value } })}
         />
 
         <Button onClick={() => fileInputRef.current?.click()}>

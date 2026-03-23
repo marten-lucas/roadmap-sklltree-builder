@@ -2157,6 +2157,8 @@ export function SkillTree() {
         onClose={() => { if (rightPanel === PANEL_CENTER) setRightPanel(null) }}
         onUpload={handleCenterIconUpload}
         onResetDefault={handleResetCenterIcon}
+        roadmapData={roadmapData}
+        commitDocument={commitDocument}
       />
     </main>
   )

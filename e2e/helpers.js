@@ -367,6 +367,32 @@ export const selectNodeByLabel = async (page, label) => {
   await waitForInspector(page)
 }
 
+export const searchAndSelectNode = async (page, query) => {
+  // Uses the toolbar search input added to the app UI to locate and select nodes.
+  const q = String(query ?? '').trim()
+  if (!q) throw new Error('searchAndSelectNode requires a non-empty query')
+
+  const searchBox = page.getByRole('textbox', { name: 'Node search' }).first()
+  await searchBox.waitFor({ state: 'visible', timeout: 10_000 })
+  await searchBox.fill(q)
+
+  // Wait for the dropdown to populate and click the first visible option
+  const option = page.getByRole('option').filter({ visible: true }).first()
+  await option.waitFor({ state: 'visible', timeout: 5_000 })
+  // Use mouse down then mouse up to better emulate user click and avoid focus loss
+  await option.dispatchEvent('mousedown')
+  await option.dispatchEvent('mouseup')
+
+  // Wait for inspector to show and return the selected node id
+  try {
+    await waitForInspector(page)
+  } catch (e) {
+    // If inspector didn't appear, still try to read selected id
+  }
+
+  return getSelectedNodeId(page)
+}
+
 export const clickInitialSegmentAddControl = async (page) => {
   const control = getVisibleLocator(
     page.locator('svg.skill-tree-canvas g[data-add-control="segment-initial"]'),

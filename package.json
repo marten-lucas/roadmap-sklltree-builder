@@ -18,6 +18,7 @@
     "test:e2e:csv:headed:verbose": "SKILLTREE_E2E_IGNORE_MANUAL_LEVELS=1 DEBUG=pw:api playwright test e2e/csv-import-export-roundtrip.spec.js --project=chromium --headed --reporter=list",
     "test:e2e:csv:headed:verbose:ignore-segments": "SKILLTREE_E2E_IGNORE_MANUAL_LEVELS=1 SKILLTREE_E2E_IGNORE_SEGMENTS=1 DEBUG=pw:api playwright test e2e/csv-import-export-roundtrip.spec.js --project=chromium --headed --reporter=list",
     "test:e2e:csv:headless:trace:ignore-segments": "SKILLTREE_E2E_IGNORE_MANUAL_LEVELS=1 SKILLTREE_E2E_IGNORE_SEGMENTS=1 npx playwright test e2e/csv-import-export-roundtrip.spec.js --project=chromium --trace on --reporter=list",
+    "test:e2e:csv:headless:trace:verbose:ignore-segments": "SKILLTREE_E2E_IGNORE_MANUAL_LEVELS=1 SKILLTREE_E2E_IGNORE_SEGMENTS=1 DEBUG=pw:api npx playwright test e2e/csv-import-export-roundtrip.spec.js --project=chromium --trace on --reporter=list",
     "test:e2e:verbose": "DEBUG=pw:api playwright test --project=chromium --reporter=list",
     "test:e2e:csv:headed:ignore-levels": "SKILLTREE_E2E_IGNORE_MANUAL_LEVELS=1 playwright test e2e/csv-import-export-roundtrip.spec.js --project=chromium --headed",
     "test:e2e:ui": "playwright test --ui",
