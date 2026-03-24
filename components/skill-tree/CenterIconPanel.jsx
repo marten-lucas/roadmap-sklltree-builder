@@ -31,14 +31,6 @@ export function CenterIconPanel({
       </div>
 
       <Stack gap="md" className="skill-panel__body">
-        <Paper className="skill-panel__icon-preview" radius="lg" withBorder>
-          <img src={iconSource} alt="Center Icon Vorschau" className="skill-panel__icon-preview-image" />
-        </Paper>
-
-        <Text size="sm" c="dimmed">
-          Lade eine SVG-Datei hoch. Das Icon wird in der Roadmap gespeichert und in Exporten uebernommen.
-        </Text>
-
         <input
           ref={fileInputRef}
           type="file"
@@ -85,6 +77,14 @@ export function CenterIconPanel({
         <Button variant="outline" color="gray" onClick={onResetDefault}>
           Standard-Icon wiederherstellen
         </Button>
+
+        <Paper className="skill-panel__icon-preview" radius="lg" withBorder>
+          <img src={iconSource} alt="Center Icon Vorschau" className="skill-panel__icon-preview-image" />
+        </Paper>
+
+        <Text size="sm" c="dimmed">
+          Lade eine SVG-Datei hoch. Das Icon wird in der Roadmap gespeichert und in Exporten uebernommen.
+        </Text>
       </Stack>
     </Paper>
   )
