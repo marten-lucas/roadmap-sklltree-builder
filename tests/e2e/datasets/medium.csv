@@ -1,0 +1,25 @@
+ShortName,Name,Scope,Ebene,Segment,Parent,AdditionalDependency,Status
+PLT,Platform Core,Platform,1,Core,,,
+DAT,Data Core,Data,1,Core,,,
+OPS,Operations Core,Operations,1,Core,,,
+UIM,UI Module,Frontend,2,Experience,PLT,,now
+UXR,UX Research,Frontend,2,Experience,PLT,,next
+API,API Layer,Backend,2,Delivery,DAT,,now
+ETL,ETL Jobs,Data,2,Delivery,DAT,,next
+MON,Monitoring,Operations,2,Reliability,OPS,,now
+SEC,Security Baseline,Security,2,Reliability,OPS,,next
+DOC,Docs Hub,Enablement,2,Enablement,PLT,,later
+CMP,Component Library,Frontend,3,Experience,UIM,,now
+DSN,Design System,Frontend,3,Experience,UIM,,next
+GAT,Gateway Service,Backend,3,Delivery,API,,now
+AUT,Auth Service,Backend,3,Delivery,API,,next
+STR,Streaming Jobs,Data,3,Delivery,ETL,,next
+DWH,Warehouse Models,Data,3,Delivery,ETL,,later
+ALR,Alerting Rules,Operations,3,Reliability,MON,,now
+BKP,Backup Policy,Operations,3,Reliability,MON,,next
+THR,Threat Modeling,Security,3,Reliability,SEC,,next
+TLS,TLS Hardening,Security,3,Reliability,SEC,,later
+E2E,End to End Suite,Quality,4,Enablement,AUT,"CMP, ALR",next
+REG,Regression Gates,Quality,5,Enablement,E2E,"THR, DWH",later
+RLS,Release Dashboard,Enablement,5,Enablement,REG,,next
+KPI,KPI Pack,Enablement,6,Enablement,RLS,,later

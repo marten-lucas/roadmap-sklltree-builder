@@ -25,5 +25,7 @@ dist-ssr
 *.sln
 *.sw?
 tmp/
-e2e/exports.spec.js-snapshots
-test-results/*
+test-artifacts/
+tests/e2e/exports.spec.js-snapshots
+tests/results/*
+tests/e2e/datasets/myKyana.csv

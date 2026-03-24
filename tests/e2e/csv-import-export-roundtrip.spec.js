@@ -25,16 +25,46 @@ import {
   trySetScopeByLabel,
 } from './helpers.js'
 
-const csvTemplatePath = process.env.SKILLTREE_E2E_TEMPLATE_CSV
-  ? resolve(process.env.SKILLTREE_E2E_TEMPLATE_CSV)
-  : resolve(process.cwd(), 'tmp/graph example.csv')
+const DEFAULT_DATASET = 'large'
+const datasetName = String(process.env.SKILLTREE_E2E_DATASET ?? DEFAULT_DATASET).trim().toLowerCase()
+
+const resolveCsvTemplatePath = () => {
+  if (process.env.SKILLTREE_E2E_TEMPLATE_CSV) {
+    return resolve(process.env.SKILLTREE_E2E_TEMPLATE_CSV)
+  }
+
+  if (datasetName === 'small' || datasetName === 'medium' || datasetName === 'large') {
+    return resolve(process.cwd(), 'tests/e2e/datasets', `${datasetName}.csv`)
+  }
+
+  return resolve(process.cwd(), 'tests/e2e/datasets/large.csv')
+}
+
+const csvTemplatePath = resolveCsvTemplatePath()
 
 const exportOutputDir = process.env.SKILLTREE_E2E_EXPORT_DIR
   ? resolve(process.env.SKILLTREE_E2E_EXPORT_DIR)
-  : resolve(process.cwd(), 'tmp/e2e-exports')
+  : resolve(process.cwd(), 'tests/results/e2e-exports')
+
+const metricsOutputDir = process.env.SKILLTREE_E2E_METRICS_DIR
+  ? resolve(process.env.SKILLTREE_E2E_METRICS_DIR)
+  : resolve(exportOutputDir, 'metrics')
 
 const ignoreManualLevels = process.env.SKILLTREE_E2E_IGNORE_MANUAL_LEVELS === '1'
 const ignoreSegments = process.env.SKILLTREE_E2E_IGNORE_SEGMENTS === '1'
+
+const ALL_PHASES = ['statuses', 'scopes', 'segments', 'roundtrip']
+const configuredPhases = String(process.env.SKILLTREE_E2E_PHASES ?? 'all').trim().toLowerCase()
+const selectedPhases = configuredPhases === 'all'
+  ? new Set(ALL_PHASES)
+  : new Set(
+    configuredPhases
+      .split(',')
+      .map((entry) => entry.trim())
+      .filter(Boolean),
+  )
+
+const isPhaseEnabled = (phaseName) => selectedPhases.has(phaseName)
 
 const persistHtmlExport = (htmlText) => {
   const fileName = `skilltree-roundtrip-${Date.now()}.html`
@@ -48,6 +78,114 @@ const persistPhaseExport = (htmlText, phase) => {
   const exportPath = resolve(exportOutputDir, fileName)
   persistTextFile(exportPath, htmlText)
   return exportPath
+}
+
+const collectDocumentMetrics = (document) => {
+  let nodeCount = 0
+  let edgeCount = 0
+  let maxDepth = 0
+  const segmentIds = new Set()
+  const scopeIds = new Set((document?.scopes ?? []).map((scope) => scope.id))
+
+  const visit = (nodes, depth) => {
+    for (const node of nodes ?? []) {
+      nodeCount += 1
+      maxDepth = Math.max(maxDepth, depth)
+      if (node.segmentId) {
+        segmentIds.add(node.segmentId)
+      }
+
+      const levels = Array.isArray(node.levels) ? node.levels : []
+      for (const level of levels) {
+        const levelScopeIds = Array.isArray(level.scopeIds) ? level.scopeIds : []
+        for (const scopeId of levelScopeIds) {
+          scopeIds.add(scopeId)
+        }
+      }
+
+      const children = Array.isArray(node.children) ? node.children : []
+      edgeCount += children.length
+      visit(children, depth + 1)
+    }
+  }
+
+  visit(document?.children ?? [], 1)
+
+  return {
+    nodeCount,
+    edgeCount,
+    maxDepth,
+    segmentCount: segmentIds.size,
+    scopeCount: scopeIds.size,
+  }
+}
+
+const collectCanvasGeometryMetrics = async (page) => {
+  return page.evaluate(() => {
+    const normalizeDeg = (deg) => {
+      const normalized = deg % 360
+      return normalized < 0 ? normalized + 360 : normalized
+    }
+
+    const canvas = document.querySelector('svg.skill-tree-canvas')
+    if (!canvas) {
+      return {
+        canvasWidth: 0,
+        canvasHeight: 0,
+        centerX: 0,
+        centerY: 0,
+        maxRadius: 0,
+        nodeAngleSpread: 0,
+      }
+    }
+
+    const viewBox = canvas.getAttribute('viewBox')?.split(/\s+/).map(Number) ?? [0, 0, 0, 0]
+    const canvasWidth = Number(viewBox[2] ?? 0)
+    const canvasHeight = Number(viewBox[3] ?? 0)
+
+    const centerGroup = document.querySelector('.skill-tree-center-icon')
+    const transform = centerGroup?.getAttribute('transform') ?? ''
+    const match = transform.match(/translate\(([-\d.]+),\s*([-\d.]+)\)/)
+    const centerX = match ? Number(match[1]) : canvasWidth / 2
+    const centerY = match ? Number(match[2]) : canvasHeight / 2
+
+    const anchors = Array.from(document.querySelectorAll('foreignObject.skill-node-export-anchor'))
+    const angles = []
+    const radii = []
+
+    for (const anchor of anchors) {
+      const x = Number(anchor.getAttribute('x') ?? 0)
+      const y = Number(anchor.getAttribute('y') ?? 0)
+      const width = Number(anchor.getAttribute('width') ?? 0)
+      const height = Number(anchor.getAttribute('height') ?? 0)
+      const cx = x + width / 2
+      const cy = y + height / 2
+      const dx = cx - centerX
+      const dy = cy - centerY
+      const angle = normalizeDeg((Math.atan2(dy, dx) * 180) / Math.PI)
+      angles.push(angle)
+      radii.push(Math.hypot(dx, dy))
+    }
+
+    const nodeAngleSpread = angles.length > 0
+      ? Math.max(...angles) - Math.min(...angles)
+      : 0
+
+    return {
+      canvasWidth,
+      canvasHeight,
+      centerX,
+      centerY,
+      maxRadius: radii.length > 0 ? Math.max(...radii) : 0,
+      nodeAngleSpread,
+    }
+  })
+}
+
+const persistMetrics = (phase, payload) => {
+  const metricsPath = resolve(metricsOutputDir, `skilltree-metrics-${phase}-${Date.now()}.json`)
+  persistTextFile(metricsPath, JSON.stringify(payload, null, 2))
+  return metricsPath
 }
 
 const normalizeUiShortName = (value, fallbackLabel = 'Skill') => {
@@ -154,6 +292,10 @@ test.describe('CSV template roundtrip via builder UI', () => {
   test('creates the tree from CSV, exports HTML, imports it again, and preserves structure + settings', async ({ page }) => {
     test.setTimeout(900_000)
     test.skip(!existsSync(csvTemplatePath), `CSV template not found: ${csvTemplatePath}`)
+
+    const phaseTimingsMs = {}
+    const runStartedAtMs = Date.now()
+    const runId = `${datasetName}-${runStartedAtMs}`
 
     const csvText = readFileSync(csvTemplatePath, 'utf-8')
     const template = parseSkillTreeCsvTemplate(csvText)
@@ -375,62 +517,98 @@ test.describe('CSV template roundtrip via builder UI', () => {
       persistedExportPath = persistedExportPathEarly
     }
 
-    // Phased assignment strategy: apply specific aspects in phases and export
-    // after each phase so we can inspect intermediate states.
-    // Phase 1: Statuses (status is stored on levels)
-    for (const row of rowsForSettings) {
-      const nodeId = nodeIdByCsvShortName.get(row.shortName)
-      expect(nodeId, `Node was not created for ${row.shortName}`).toBeTruthy()
-      await selectNodeById(page, nodeId)
-      if (!ignoreManualLevels) {
-        await trySetSelectValueByLabel(page, 'Ebene', `Ebene ${row.level}`)
+    // Phase strategy: the execution order remains fixed, but each phase can be
+    // toggled via SKILLTREE_E2E_PHASES.
+    if (isPhaseEnabled('statuses')) {
+      const phaseStart = Date.now()
+      for (const row of rowsForSettings) {
+        const nodeId = nodeIdByCsvShortName.get(row.shortName)
+        expect(nodeId, `Node was not created for ${row.shortName}`).toBeTruthy()
+        await selectNodeById(page, nodeId)
+        if (!ignoreManualLevels) {
+          await trySetSelectValueByLabel(page, 'Ebene', `Ebene ${row.level}`)
+        }
+        await setSelectValueByLabel(page, 'Status', row.status[0].toUpperCase() + row.status.slice(1))
       }
-      await setSelectValueByLabel(page, 'Status', row.status[0].toUpperCase() + row.status.slice(1))
-    }
-    {
+
       const [downloadPhase] = await Promise.all([
         page.waitForEvent('download'),
         page.getByRole('button', { name: 'Export', exact: true }).click(),
       ])
       const exported = await readDownload(downloadPhase)
+      const payload = extractJsonPayload(exported)
       persistPhaseExport(exported, 'statuses')
+      phaseTimingsMs.statuses = Date.now() - phaseStart
+      persistMetrics('statuses', {
+        runId,
+        datasetName,
+        phase: 'statuses',
+        phasesEnabled: Array.from(selectedPhases),
+        phaseDurationMs: phaseTimingsMs.statuses,
+        document: collectDocumentMetrics(payload.document),
+        canvas: await collectCanvasGeometryMetrics(page),
+      })
     }
 
-    // Phase 2: Scopes
-    for (const row of rowsForSettings) {
-      const nodeId = nodeIdByCsvShortName.get(row.shortName)
-      expect(nodeId, `Node was not created for ${row.shortName}`).toBeTruthy()
-      await selectNodeById(page, nodeId)
-      if (row.scope && String(row.scope).trim().length > 0) {
-        await trySetScopeByLabel(page, row.scope)
+    if (isPhaseEnabled('scopes')) {
+      const phaseStart = Date.now()
+      for (const row of rowsForSettings) {
+        const nodeId = nodeIdByCsvShortName.get(row.shortName)
+        expect(nodeId, `Node was not created for ${row.shortName}`).toBeTruthy()
+        await selectNodeById(page, nodeId)
+        if (row.scope && String(row.scope).trim().length > 0) {
+          await trySetScopeByLabel(page, row.scope)
+        }
       }
-    }
-    {
+
       const [downloadPhase] = await Promise.all([
         page.waitForEvent('download'),
         page.getByRole('button', { name: 'Export', exact: true }).click(),
       ])
       const exported = await readDownload(downloadPhase)
+      const payload = extractJsonPayload(exported)
       persistPhaseExport(exported, 'scopes')
+      phaseTimingsMs.scopes = Date.now() - phaseStart
+      persistMetrics('scopes', {
+        runId,
+        datasetName,
+        phase: 'scopes',
+        phasesEnabled: Array.from(selectedPhases),
+        phaseDurationMs: phaseTimingsMs.scopes,
+        document: collectDocumentMetrics(payload.document),
+        canvas: await collectCanvasGeometryMetrics(page),
+      })
     }
 
-    // Phase 3: Segments
-    for (const row of rowsForSettings) {
-      const nodeId = nodeIdByCsvShortName.get(row.shortName)
-      expect(nodeId, `Node was not created for ${row.shortName}`).toBeTruthy()
-      await selectNodeById(page, nodeId)
-      if (!ignoreSegments) {
-        await trySetSelectValueByLabel(page, 'Segment', row.segment)
+    if (isPhaseEnabled('segments')) {
+      const phaseStart = Date.now()
+      for (const row of rowsForSettings) {
+        const nodeId = nodeIdByCsvShortName.get(row.shortName)
+        expect(nodeId, `Node was not created for ${row.shortName}`).toBeTruthy()
+        await selectNodeById(page, nodeId)
+        if (!ignoreSegments) {
+          await trySetSelectValueByLabel(page, 'Segment', row.segment)
+        }
       }
-    }
-    {
+
       const [downloadPhase] = await Promise.all([
         page.waitForEvent('download'),
         page.getByRole('button', { name: 'Export', exact: true }).click(),
       ])
       const exported = await readDownload(downloadPhase)
+      const payload = extractJsonPayload(exported)
       // make the persisted export for the import step the final-phase export
       persistedExportPath = persistPhaseExport(exported, 'segments')
+      phaseTimingsMs.segments = Date.now() - phaseStart
+      persistMetrics('segments', {
+        runId,
+        datasetName,
+        phase: 'segments',
+        phasesEnabled: Array.from(selectedPhases),
+        phaseDurationMs: phaseTimingsMs.segments,
+        document: collectDocumentMetrics(payload.document),
+        canvas: await collectCanvasGeometryMetrics(page),
+      })
     }
 
     const actualCount = await page.locator('foreignObject.skill-node-export-anchor').count()
@@ -479,103 +657,129 @@ test.describe('CSV template roundtrip via builder UI', () => {
 
     expect(existsSync(persistedExportPath)).toBe(true)
 
-    await confirmAndReset(page)
-    await expect(page.locator('foreignObject.skill-node-export-anchor')).toHaveCount(0)
+    if (isPhaseEnabled('roundtrip')) {
+      const phaseStart = Date.now()
 
-    await page.locator('input[type="file"][accept="text/html,.html"]').setInputFiles(persistedExportPath)
-    await page.waitForSelector('foreignObject.skill-node-export-anchor', { timeout: 10_000 })
+      await confirmAndReset(page)
+      await expect(page.locator('foreignObject.skill-node-export-anchor')).toHaveCount(0)
 
-    const [importedDownload] = await Promise.all([
-      page.waitForEvent('download'),
-      page.getByRole('button', { name: 'Export', exact: true }).click(),
-    ])
-    const importedHtml = await readDownload(importedDownload)
-    const payload = extractJsonPayload(importedHtml)
+      await page.locator('input[type="file"][accept="text/html,.html"]').setInputFiles(persistedExportPath)
+      await page.waitForSelector('foreignObject.skill-node-export-anchor', { timeout: 10_000 })
 
-    const expectedSnapshots = collectExpectedNodeSnapshots(template.rows, { ignoreManualLevels })
-    const actualImportedSnapshots = collectActualNodeSnapshots(payload.document)
+      const [importedDownload] = await Promise.all([
+        page.waitForEvent('download'),
+        page.getByRole('button', { name: 'Export', exact: true }).click(),
+      ])
+      const importedHtml = await readDownload(importedDownload)
+      const payload = extractJsonPayload(importedHtml)
 
-    expect(actualImportedSnapshots).toHaveLength(expectedSnapshots.length)
+      const expectedSnapshots = collectExpectedNodeSnapshots(template.rows, { ignoreManualLevels })
+      const actualImportedSnapshots = collectActualNodeSnapshots(payload.document)
 
-    // Match expected -> actual where all comparable fields equal and
-    // expected scope (if any) is contained in actual scope set.
-    const actualUsed = new Array(actualImportedSnapshots.length).fill(false)
-    const unexpectedSnapshots = []
-    const missingSnapshots = []
+      expect(actualImportedSnapshots).toHaveLength(expectedSnapshots.length)
 
-    for (let ei = 0; ei < expectedSnapshots.length; ei += 1) {
-      const expected = expectedSnapshots[ei]
-      const expComp = toComparableSnapshot(expected)
-      const expScopeList = expected.scope ? String(expected.scope).split('|').map((s) => s.trim()).filter(Boolean) : []
-      let matched = false
+      // Match expected -> actual where all comparable fields equal and
+      // expected scope (if any) is contained in actual scope set.
+      const actualUsed = new Array(actualImportedSnapshots.length).fill(false)
+      const unexpectedSnapshots = []
+      const missingSnapshots = []
 
-      for (let ai = 0; ai < actualImportedSnapshots.length; ai += 1) {
-        if (actualUsed[ai]) continue
-        const actual = actualImportedSnapshots[ai]
-        const actComp = toComparableSnapshot(actual)
-        if (
-          actComp.shortName === expComp.shortName &&
-          actComp.label === expComp.label &&
-          actComp.level === expComp.level &&
-          actComp.parentLabel === expComp.parentLabel &&
-          actComp.status === expComp.status
-        ) {
-          const actualScopeSet = new Set((actual.scope ? String(actual.scope).split('|').map((x) => x.trim()).filter(Boolean) : []))
-          const expOk = expScopeList.length === 0 || expScopeList.every((s) => Array.from(actualScopeSet).some((as) => as.toLowerCase() === s.toLowerCase()))
-          if (expOk) {
-            actualUsed[ai] = true
-            matched = true
-            break
+      for (let ei = 0; ei < expectedSnapshots.length; ei += 1) {
+        const expected = expectedSnapshots[ei]
+        const expComp = toComparableSnapshot(expected)
+        const expScopeList = expected.scope ? String(expected.scope).split('|').map((s) => s.trim()).filter(Boolean) : []
+        let matched = false
+
+        for (let ai = 0; ai < actualImportedSnapshots.length; ai += 1) {
+          if (actualUsed[ai]) continue
+          const actual = actualImportedSnapshots[ai]
+          const actComp = toComparableSnapshot(actual)
+          if (
+            actComp.shortName === expComp.shortName &&
+            actComp.label === expComp.label &&
+            actComp.level === expComp.level &&
+            actComp.parentLabel === expComp.parentLabel &&
+            actComp.status === expComp.status
+          ) {
+            const actualScopeSet = new Set((actual.scope ? String(actual.scope).split('|').map((x) => x.trim()).filter(Boolean) : []))
+            const expOk = expScopeList.length === 0 || expScopeList.every((s) => Array.from(actualScopeSet).some((as) => as.toLowerCase() === s.toLowerCase()))
+            if (expOk) {
+              actualUsed[ai] = true
+              matched = true
+              break
+            }
           }
+        }
+
+        if (!matched) {
+          missingSnapshots.push(expComp)
         }
       }
 
-      if (!matched) {
-        missingSnapshots.push(expComp)
+      for (let ai = 0; ai < actualImportedSnapshots.length; ai += 1) {
+        if (!actualUsed[ai]) {
+          unexpectedSnapshots.push(toComparableSnapshot(actualImportedSnapshots[ai]))
+        }
       }
-    }
 
-    for (let ai = 0; ai < actualImportedSnapshots.length; ai += 1) {
-      if (!actualUsed[ai]) {
-        unexpectedSnapshots.push(toComparableSnapshot(actualImportedSnapshots[ai]))
+      // Collect scope mismatches for reporting; do not fail test unless strict mode
+      // is enabled via env var `SKILLTREE_E2E_STRICT_SCOPES=1`.
+      const scopeMismatches = []
+      for (const expected of expectedSnapshots) {
+        const actual = actualImportedSnapshots.find((a) => a.shortName === expected.shortName && a.label === expected.label)
+        if (!actual) continue
+        const expectedScope = expected.scope ? String(expected.scope).trim() : null
+        const actualScopeSet = new Set((actual.scope ? String(actual.scope).split('|').map((x) => x.trim()).filter(Boolean) : []))
+        if (expectedScope && !Array.from(actualScopeSet).some((s) => s.toLowerCase() === expectedScope.toLowerCase())) {
+          scopeMismatches.push({ shortName: expected.shortName, expected: expectedScope, actual: Array.from(actualScopeSet).join('|') })
+        }
       }
-    }
 
-    // Collect scope mismatches for reporting; do not fail test unless strict mode
-    // is enabled via env var `SKILLTREE_E2E_STRICT_SCOPES=1`.
-    const scopeMismatches = []
-    for (const expected of expectedSnapshots) {
-      const actual = actualImportedSnapshots.find((a) => a.shortName === expected.shortName && a.label === expected.label)
-      if (!actual) continue
-      const expectedScope = expected.scope ? String(expected.scope).trim() : null
-      const actualScopeSet = new Set((actual.scope ? String(actual.scope).split('|').map((x) => x.trim()).filter(Boolean) : []))
-      if (expectedScope && !Array.from(actualScopeSet).some((s) => s.toLowerCase() === expectedScope.toLowerCase())) {
-        scopeMismatches.push({ shortName: expected.shortName, expected: expectedScope, actual: Array.from(actualScopeSet).join('|') })
+      if (scopeMismatches.length > 0) {
+        persistTextFile(resolve(exportOutputDir, 'scope-mismatches-debug.json'), JSON.stringify(scopeMismatches, null, 2))
       }
-    }
 
-    if (scopeMismatches.length > 0) {
-      persistTextFile(resolve(exportOutputDir, 'scope-mismatches-debug.json'), JSON.stringify(scopeMismatches, null, 2))
-    }
-
-    if (unexpectedSnapshots.length > 0 || missingSnapshots.length > 0) {
-      const debugInfo = {
-        unexpectedSnapshots,
-        missingSnapshots,
-        expectedSnapshots,
-        actualImportedSnapshots,
+      if (unexpectedSnapshots.length > 0 || missingSnapshots.length > 0) {
+        const debugInfo = {
+          unexpectedSnapshots,
+          missingSnapshots,
+          expectedSnapshots,
+          actualImportedSnapshots,
+        }
+        persistTextFile(resolve(exportOutputDir, 'snapshot-mismatch-debug.json'), JSON.stringify(debugInfo, null, 2))
       }
-      persistTextFile(resolve(exportOutputDir, 'snapshot-mismatch-debug.json'), JSON.stringify(debugInfo, null, 2))
+
+      if (process.env.SKILLTREE_E2E_STRICT_SCOPES === '1') {
+        expect(unexpectedSnapshots).toEqual([])
+        expect(missingSnapshots).toEqual([])
+        expect(scopeMismatches).toEqual([])
+      } else {
+        expect(unexpectedSnapshots).toEqual([])
+        expect(missingSnapshots).toEqual([])
+      }
+
+      phaseTimingsMs.roundtrip = Date.now() - phaseStart
+      persistMetrics('roundtrip', {
+        runId,
+        datasetName,
+        phase: 'roundtrip',
+        phasesEnabled: Array.from(selectedPhases),
+        phaseDurationMs: phaseTimingsMs.roundtrip,
+        document: collectDocumentMetrics(payload.document),
+        canvas: await collectCanvasGeometryMetrics(page),
+      })
     }
 
-    if (process.env.SKILLTREE_E2E_STRICT_SCOPES === '1') {
-      expect(unexpectedSnapshots).toEqual([])
-      expect(missingSnapshots).toEqual([])
-      expect(scopeMismatches).toEqual([])
-    } else {
-      expect(unexpectedSnapshots).toEqual([])
-      expect(missingSnapshots).toEqual([])
-    }
+    persistMetrics('run-summary', {
+      runId,
+      datasetName,
+      phasesEnabled: Array.from(selectedPhases),
+      ignoreManualLevels,
+      ignoreSegments,
+      phaseTimingsMs,
+      totalDurationMs: Date.now() - runStartedAtMs,
+      nodeCountExpected: template.rows.length,
+    })
 
     expect(Array.isArray(template.warnings)).toBe(true)
   })

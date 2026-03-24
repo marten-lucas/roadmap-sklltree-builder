@@ -58,11 +58,45 @@ npm run build
 
 ### Testing
 ```bash
-npm test          # Run all tests (53 total)
-npm test:ui       # With Vitest UI
-npm test --watch  # Watch mode
-npm run lint      # ESLint validation
+npm run test:unit         # Fast unit suite
+npm run test:integration  # Cross-module integration tests
+npm run test:regression   # Determinism, constraints, import/export regressions
+npm run test:e2e          # Full Playwright run
+npm run test:e2e:csv      # CSV-driven E2E roundtrip (large dataset)
+npm run test:e2e:csv:small
+npm run test:e2e:csv:medium
+npm run test:e2e:csv:large
+npm run test:e2e:ui       # Playwright UI mode
+npm run test:ui           # Vitest UI
+npm run lint              # ESLint validation
 ```
+
+### E2E Dataset + Phase Selection
+CSV E2E tests support built-in datasets (`small`, `medium`, `large`) and custom files.
+
+```bash
+# Built-in dataset + selected phases
+SKILLTREE_E2E_DATASET=medium SKILLTREE_E2E_PHASES=statuses,scopes npm run test:e2e:csv
+
+# Custom CSV file
+SKILLTREE_E2E_DATASET=custom SKILLTREE_E2E_TEMPLATE_CSV="tests/e2e/datasets/large.csv" npm run test:e2e:csv:custom
+```
+
+`SKILLTREE_E2E_PHASES` values:
+- `statuses`
+- `scopes`
+- `segments`
+- `roundtrip`
+- `all` (default)
+
+### Test Artifacts
+All Playwright outputs, E2E exports, traces, and metrics are written below:
+
+```text
+tests/results/
+```
+
+This folder is excluded from git.
 
 ### Test Coverage
 

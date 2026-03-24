@@ -1,8 +1,11 @@
 import { test } from '@playwright/test'
 import fs from 'node:fs'
+import { resolve } from 'node:path'
+
+const e2eExportDir = resolve(process.env.SKILLTREE_E2E_EXPORT_DIR ?? 'tests/results/e2e-exports')
 
 test('dump model trace', async ({ page }) => {
-  const exportedHtmlPath = 'tmp/e2e-exports/skilltree-roundtrip-1774241374085.html'
+  const exportedHtmlPath = resolve(e2eExportDir, 'skilltree-roundtrip-1774241374085.html')
   if (fs.existsSync(exportedHtmlPath)) {
     const exportedHtml = fs.readFileSync(exportedHtmlPath, 'utf-8')
     const jsonMatch = exportedHtml.match(/<script[^>]*id="skilltree-export-data"[^>]*>([\s\S]*?)<\/script>/i)
@@ -41,6 +44,6 @@ test('dump model trace', async ({ page }) => {
 
   const modelTrace = await page.evaluate(() => localStorage.getItem('roadmap-skilltree.e2e.modelTrace'))
 
-  await fs.promises.mkdir('tmp/e2e-exports', { recursive: true })
-  await fs.promises.writeFile(`tmp/e2e-exports/model-trace-${Date.now()}.json`, JSON.stringify({ modelTrace }, null, 2), 'utf-8')
+  await fs.promises.mkdir(e2eExportDir, { recursive: true })
+  await fs.promises.writeFile(resolve(e2eExportDir, `model-trace-${Date.now()}.json`), JSON.stringify({ modelTrace }, null, 2), 'utf-8')
 })

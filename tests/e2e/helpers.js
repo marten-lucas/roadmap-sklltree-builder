@@ -307,6 +307,10 @@ export const persistTextFile = (filePath, text) => {
   return filePath
 }
 
+export const getE2eExportDir = () => resolve(
+  process.env.SKILLTREE_E2E_EXPORT_DIR ?? resolveWorkspacePath('tests/results', 'e2e-exports'),
+)
+
 const getVisibleLocator = (locator) => locator.filter({ visible: true })
 
 export const confirmAndReset = async (page) => {
@@ -547,13 +551,13 @@ export const trySetScopeByLabel = async (page, scopeLabel) => {
           }))
           const ts = Date.now()
           persistTextFile(
-            resolveWorkspacePath('tmp/e2e-exports/immediate-scope-dump-' + ts + '.json'),
+            resolve(getE2eExportDir(), 'immediate-scope-dump-' + ts + '.json'),
             JSON.stringify(dump, null, 2),
           )
 
           // Also capture a screenshot (headed test only will include visual state).
           try {
-            await page.screenshot({ path: resolveWorkspacePath('tmp/e2e-exports/immediate-scope-screenshot-' + ts + '.png'), fullPage: false })
+            await page.screenshot({ path: resolve(getE2eExportDir(), 'immediate-scope-screenshot-' + ts + '.png'), fullPage: false })
           } catch (e) {
             // ignore screenshot failures
           }
@@ -678,7 +682,7 @@ export const applyNodeSettings = async (page, row, options = {}) => {
       // ignore
     }
 
-    persistTextFile(resolveWorkspacePath('tmp/e2e-exports/scope-assignments-' + Date.now() + '.json'), JSON.stringify(out, null, 2))
+    persistTextFile(resolve(getE2eExportDir(), 'scope-assignments-' + Date.now() + '.json'), JSON.stringify(out, null, 2))
   } catch (e) {
     // ignore logging errors
   }

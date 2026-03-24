@@ -1,9 +1,12 @@
 import { test } from '@playwright/test'
 import fs from 'node:fs'
+import { resolve } from 'node:path'
+
+const e2eExportDir = resolve(process.env.SKILLTREE_E2E_EXPORT_DIR ?? 'tests/results/e2e-exports')
 
 test('trace COD scope changes', async ({ page }) => {
   // preload a previously exported document that contains the full tree (so COD exists)
-  const exportedHtml = fs.readFileSync('tmp/e2e-exports/skilltree-roundtrip-1774241374085.html', 'utf-8')
+  const exportedHtml = fs.readFileSync(resolve(e2eExportDir, 'skilltree-roundtrip-1774241374085.html'), 'utf-8')
   const jsonMatch = exportedHtml.match(/<script[^>]*id="skilltree-export-data"[^>]*>([\s\S]*?)<\/script>/i)
   if (jsonMatch && jsonMatch[1]) {
     const payload = jsonMatch[1].trim()
@@ -19,8 +22,8 @@ test('trace COD scope changes', async ({ page }) => {
   const nodes = await page.locator('foreignObject.skill-node-export-anchor').evaluateAll((els) =>
     els.map((el) => ({ label: el.getAttribute('data-export-label'), shortName: el.getAttribute('data-short-name') })),
   )
-  await fs.promises.mkdir('tmp/e2e-exports', { recursive: true })
-  await fs.promises.writeFile(`tmp/e2e-exports/node-list-${Date.now()}.json`, JSON.stringify(nodes, null, 2), 'utf-8')
+  await fs.promises.mkdir(e2eExportDir, { recursive: true })
+  await fs.promises.writeFile(resolve(e2eExportDir, `node-list-${Date.now()}.json`), JSON.stringify(nodes, null, 2), 'utf-8')
 
   const shortName = 'COD'
   const selector = `foreignObject.skill-node-export-anchor[data-short-name="${shortName}"] .skill-node-button`
@@ -46,6 +49,6 @@ test('trace COD scope changes', async ({ page }) => {
     scopeTrace: localStorage.getItem('roadmap-skilltree.e2e.scopeTrace'),
   }))
 
-  fs.mkdirSync('tmp/e2e-exports', { recursive: true })
-  fs.writeFileSync(`tmp/e2e-exports/cod-trace-${Date.now()}.json`, JSON.stringify(result, null, 2), 'utf-8')
+  fs.mkdirSync(e2eExportDir, { recursive: true })
+  fs.writeFileSync(resolve(e2eExportDir, `cod-trace-${Date.now()}.json`), JSON.stringify(result, null, 2), 'utf-8')
 })
