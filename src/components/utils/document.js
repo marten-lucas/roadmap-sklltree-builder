@@ -1,4 +1,4 @@
-import { initialData } from './data'
+import { createEmptyDocument } from './documentState'
 import { loadDocumentFromLocalStorage } from './documentPersistence'
 
-export const getInitialRoadmapDocument = () => loadDocumentFromLocalStorage() ?? initialData
+export const getInitialRoadmapDocument = () => loadDocumentFromLocalStorage() ?? createEmptyDocument()

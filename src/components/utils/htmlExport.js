@@ -551,7 +551,7 @@ const buildViewerScript = () => `
           })
         }
 
-        const svgMarkup = '<?xml version="1.0" encoding="UTF-8"?>\n' + clone.outerHTML
+        const svgMarkup = '<?xml version="1.0" encoding="UTF-8"?>\\n' + clone.outerHTML
         const blob = new Blob([svgMarkup], { type: 'image/svg+xml;charset=utf-8' })
         const objectUrl = URL.createObjectURL(blob)
         const anchor = document.createElement('a')
