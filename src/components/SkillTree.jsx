@@ -56,7 +56,7 @@ import { SkillTreeCanvas } from './canvas'
 import { SkillTreeToolbar } from './toolbar'
 
 import { useSkillTreeUiState } from '../hooks/useSkillTreeUiState'
-import { normalizeAngle, getAngleDelta, isAngleNear } from './utils/angle'
+import { isAngleNear } from './utils/angle'
 import { uniqueArray } from './utils/array'
 import { isEditableElement } from './utils/dom'
 import { getHtmlImportErrorMessage, confirmResetDocument } from './utils/messages'
@@ -71,7 +71,8 @@ import {
 import { getInitialRoadmapDocument } from './utils/document'
 import { resolveInspectorSelectedNode } from './utils/selection'
 
-export { resolveInspectorSelectedNode } from './utils/selection'
+// `resolveInspectorSelectedNode` is exported from `src/components/utils/selection.js`
+// Tests/importers should import from that module instead of re-exporting from here.
 
 const AUTOSAVE_DEBOUNCE_MS = 450
 const EXPORT_BRAND_NAME = 'Roadmap Skilltree Builder'
@@ -100,7 +101,7 @@ export function SkillTree() {
     selectedProgressLevelId,
     setSelectedProgressLevelId,
     selectedSegmentId,
-    setSelectedSegmentId,
+    _setSelectedSegmentId,
     selectedPortalKey,
     setSelectedPortalKey,
     rightPanel,
@@ -210,6 +211,7 @@ export function SkillTree() {
     if (!scopeStillExists) {
       setSelectedScopeFilterId(SCOPE_FILTER_ALL)
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scopeOptions, selectedScopeFilterId])
 
   const nodeVisibilityModeById = useMemo(() => {
@@ -296,7 +298,7 @@ export function SkillTree() {
     [links, renderedNodeIds],
   )
 
-  const visibleSegmentIdSet = useMemo(
+  const _visibleSegmentIdSet = useMemo(
     () => new Set(filteredSegmentLabels.map((segmentLabel) => segmentLabel.segmentId)),
     [filteredSegmentLabels],
   )
@@ -323,6 +325,7 @@ export function SkillTree() {
     selectNodeId(null)
     setSelectedProgressLevelId(null)
     setSelectedPortalKey(null)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [roadmapData, selectedNodeId])
 
   useEffect(() => {
@@ -339,6 +342,7 @@ export function SkillTree() {
 
     selectSegmentId(null)
     setSelectedPortalKey(null)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedSegmentId, roadmapData.segments])
 
   const levelInfo = useMemo(() => {
@@ -400,9 +404,9 @@ export function SkillTree() {
     return map
   }, [roadmapData])
 
-  const [toolbarSearch, setToolbarSearch] = useState('')
-  const searchResults = useMemo(() => {
-    const q = String(toolbarSearch ?? '').trim().toLowerCase()
+  const [_toolbarSearch, _setToolbarSearch] = useState('')
+  const _searchResults = useMemo(() => {
+    const q = String(_toolbarSearch ?? '').trim().toLowerCase()
     if (!q) return []
     const results = []
     for (const node of allNodesById.values()) {
@@ -414,7 +418,7 @@ export function SkillTree() {
       if (results.length >= 10) break
     }
     return results
-  }, [toolbarSearch, allNodesById])
+  }, [_toolbarSearch, allNodesById])
 
   const selectedNodeIncomingDependencyLabels = useMemo(() => {
     const incomingIds = selectedNodeAdditionalDependencies.incomingIds ?? []
@@ -1008,6 +1012,7 @@ export function SkillTree() {
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [canRedo, canUndo, roadmapData, selectedSegmentId])
 
   const autosaveLabel = lastSavedAt
@@ -1025,7 +1030,7 @@ export function SkillTree() {
     }
   }
 
-  const handleAddRootNear = (anchorRootId, side) => {
+  const _handleAddRootNear = (anchorRootId, side) => {
     const result = addRootNodeNearWithResult(roadmapData, anchorRootId, side)
     const createdNodeId = result.createdNodeId
     commitDocument(result.tree)
@@ -1110,9 +1115,9 @@ export function SkillTree() {
       }
 
       return { ok: true }
-    } catch (e) {
-      return { ok: false, error: String(e) }
-    }
+      } catch {
+        return { ok: false, error: String('Fehler beim Erstellen des Segments.') }
+      }
   }
 
   // Create segment from Inspector without auto-selecting it
@@ -1145,8 +1150,8 @@ export function SkillTree() {
 
       // Do NOT select the created segment; inspector should stay open
       return { ok: true }
-    } catch (e) {
-      return { ok: false, error: String(e) }
+    } catch (err) {
+      return { ok: false, error: String(err) }
     }
   }
 
@@ -1159,8 +1164,8 @@ export function SkillTree() {
     try {
       commitDocument(updateSegmentLabel(roadmapData, segmentId, nextLabel))
       return { ok: true }
-    } catch (e) {
-      return { ok: false, error: String(e) }
+    } catch (err) {
+      return { ok: false, error: String(err) }
     }
   }
 
@@ -1176,8 +1181,8 @@ export function SkillTree() {
         selectSegmentId(null)
       }
       return { ok: true }
-    } catch (e) {
-      return { ok: false, error: String(e) }
+    } catch (err) {
+      return { ok: false, error: String(err) }
     }
   }
 
@@ -1264,11 +1269,34 @@ export function SkillTree() {
   }
 
   const handleStatusChange = (newStatus, levelId = activeSelectedProgressLevelId) => {
-    if ((!selectedNodeId && !(Array.isArray(selectedNodeIds) && selectedNodeIds.length > 0)) || !levelId) {
+    if ((!selectedNodeId && !(Array.isArray(selectedNodeIds) && selectedNodeIds.length > 0))) {
       return
     }
 
-    applyToSelectedNodes((tree, id) => updateNodeProgressLevel(tree, id, levelId, { status: newStatus }))
+    // Determine the source level index for the active level id so we can
+    // apply the same positional level to every selected node. This ensures
+    // multi-select bulk changes map to the equivalent level on each node
+    // (or fallback to the primary level when a node has fewer levels).
+    let sourceLevelIndex = 0
+    if (levelId && selectedNodeId) {
+      try {
+        const srcNode = findNodeById(roadmapData, selectedNodeId)
+        if (srcNode && Array.isArray(srcNode.levels)) {
+          const idx = srcNode.levels.findIndex((l) => l.id === levelId)
+          sourceLevelIndex = idx >= 0 ? idx : 0
+        }
+      } catch {
+        sourceLevelIndex = 0
+      }
+    }
+
+    applyToSelectedNodes((tree, id) => {
+      const targetNode = findNodeById(tree, id)
+      const levels = Array.isArray(targetNode?.levels) ? targetNode.levels : []
+      const targetLevelId = levels[sourceLevelIndex]?.id ?? (levels[0]?.id ?? null)
+      if (!targetLevelId) return tree
+      return updateNodeProgressLevel(tree, id, targetLevelId, { status: newStatus })
+    })
   }
 
   const handleReleaseNoteChange = (releaseNote, levelId = activeSelectedProgressLevelId) => {
@@ -1439,7 +1467,7 @@ export function SkillTree() {
         setGlobalToast({ visible: true, message: detail.message || String(detail || ''), type: detail.type || 'info' })
         const id = window.setTimeout(() => setGlobalToast({ visible: false, message: '', type: 'info' }), 1600)
         return () => window.clearTimeout(id)
-      } catch (e) {
+      } catch {
         // ignore
       }
     }

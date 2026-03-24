@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { resolveInspectorSelectedNode } from '../SkillTree'
+import { resolveInspectorSelectedNode } from '../utils/selection'
 
 describe('inspector resolver', () => {
   it('returns null when multiple node ids are selected', () => {
