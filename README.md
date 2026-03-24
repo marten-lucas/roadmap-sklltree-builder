@@ -219,13 +219,37 @@ See [/__tests__/README.md](components/skill-tree/__tests__/README.md) for detail
 - **Test Suite:** ~600ms for all 53 tests
 
 ## Next Steps
-
-- [ ] Regression test suite expansion
+- [ ] E2E stabilization and execution
 - [ ] Force-directed relaxation polish layer
 - [ ] ELK integration as alternative backend
 - [ ] Performance profiling & optimization
 - [ ] Snapshot testing for layouts
 - [ ] Property-based (QuickCheck-style) tests
+
+## Phase 3 — Regression Suite
+
+Phase 3 is now the priority: it locks down the refactored core with fast regression coverage before any remaining E2E work.
+
+Run the full Phase 3 suite locally:
+
+```bash
+npm run test:phase3
+```
+
+The suite covers layout invariants, validation, tree mutations, segment CRUD and integration flows, document persistence, and the dedicated regression checks in [phase3Regression.test.js](components/skill-tree/__tests__/phase3Regression.test.js).
+
+## Phase 2 — Core E2E Suite
+
+Phase 1 (infrastructure and cleanup) is complete. Phase 2 focuses on a small, high-signal set of E2E tests that run quickly and catch regressions in critical flows.
+
+Run the Phase 2 core suite locally:
+
+```bash
+npm install
+npm run test:phase2
+```
+
+CI: A GitHub Actions workflow `/.github/workflows/phase-2-core-tests.yml` is provided to run the core suite and upload Playwright artifacts to the run's artifacts.
 
 ## Built With
 
