@@ -1,4 +1,6 @@
-const uid = () => crypto.randomUUID()
+import { generateUUID } from './uuid'
+
+const uid = () => generateUUID()
 const level = (status, releaseNote = '') => ({
   id: uid(),
   label: 'Level 1',

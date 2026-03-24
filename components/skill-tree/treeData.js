@@ -1,10 +1,11 @@
 import { normalizeStatusKey } from './config'
+import { generateUUID } from './uuid'
 
 const DEFAULT_NODE_LABEL = 'Neuer Skill'
 const DEFAULT_NODE_STATUS = 'later'
 
 const toNodeLevel = (levelLike, fallbackLabel = 'Level 1') => ({
-  id: levelLike?.id ?? crypto.randomUUID(),
+  id: levelLike?.id ?? generateUUID(),
   label: levelLike?.label ?? fallbackLabel,
   status: normalizeStatusKey(levelLike?.status ?? DEFAULT_NODE_STATUS),
   releaseNote: levelLike?.releaseNote ?? '',
@@ -346,7 +347,7 @@ export const ensureNodeLevels = (node) => {
   return [
     toNodeLevel(
       {
-        id: crypto.randomUUID(),
+        id: generateUUID(),
         label: 'Level 1',
         status: node?.status,
         releaseNote: node?.releaseNote,
@@ -520,8 +521,8 @@ export const addNodeProgressLevel = (treeData, id, newLevelId) =>
     const levels = ensureNodeLevels(node)
     const nextIndex = levels.length + 1
     const nextLevel = toNodeLevel(
-      {
-        id: newLevelId ?? crypto.randomUUID(),
+        {
+        id: newLevelId ?? generateUUID(),
         label: `Level ${nextIndex}`,
         status: DEFAULT_NODE_STATUS,
         releaseNote: '',
@@ -677,13 +678,13 @@ export const updateNodeLevel = (tree, nodeId, newLevel) => {
 }
 
 const createNewNode = (level, segmentId = null) => ({
-  id: crypto.randomUUID(),
+  id: generateUUID(),
   label: DEFAULT_NODE_LABEL,
   shortName: shortNameFromLabel(DEFAULT_NODE_LABEL),
   status: DEFAULT_NODE_STATUS,
   levels: [
     {
-      id: crypto.randomUUID(),
+      id: generateUUID(),
       label: 'Level 1',
       status: DEFAULT_NODE_STATUS,
       releaseNote: '',
@@ -698,12 +699,12 @@ const createNewNode = (level, segmentId = null) => ({
 })
 
 const createNewSegment = () => ({
-  id: `segment-${crypto.randomUUID()}`,
+  id: `segment-${generateUUID()}`,
   label: 'Neues Segment',
 })
 
 const createNewScope = (label) => ({
-  id: `scope-${crypto.randomUUID()}`,
+  id: `scope-${generateUUID()}`,
   label: String(label ?? '').trim(),
 })
 
