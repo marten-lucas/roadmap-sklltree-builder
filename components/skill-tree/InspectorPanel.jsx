@@ -1,4 +1,4 @@
-import { ActionIcon, Alert, Button, Divider, Group, MultiSelect, Paper, Select, Stack, Tabs, Text, TextInput, Textarea, Tooltip } from '@mantine/core'
+import { ActionIcon, Alert, Badge, Button, Divider, Group, MultiSelect, Paper, Select, Stack, Tabs, Text, TextInput, Textarea, Tooltip } from '@mantine/core'
 import { useState } from 'react'
 import { normalizeStatusKey, STATUS_LABELS } from './config'
 import { UNASSIGNED_SEGMENT_ID } from './layoutShared'
@@ -69,6 +69,8 @@ const STATUS_OPTIONS = [
 
 export function InspectorPanel({
   selectedNode,
+  selectedNodeIds,
+  roadmapData,
   currentLevel,
   selectedProgressLevelId,
   onClose,
@@ -98,6 +100,7 @@ export function InspectorPanel({
   onSegmentChange,
   onDeleteNodeOnly,
   onDeleteNodeBranch,
+  onFocusNode,
 }) {
   const [scopeManagerOpen, setScopeManagerOpen] = useState(false)
   const [scopeDraft, setScopeDraft] = useState('')
@@ -106,6 +109,128 @@ export function InspectorPanel({
   const [editingScopeLabel, setEditingScopeLabel] = useState('')
 
   if (!selectedNode) {
+    // If multiple nodes selected, render a multi-select inspector
+    if (Array.isArray(selectedNodeIds) && selectedNodeIds.length > 1) {
+      const count = selectedNodeIds.length
+
+      // build flat node list for lookup
+      const allNodes = []
+      const queue = [...(roadmapData?.children ?? [])]
+      while (queue.length > 0) {
+        const n = queue.shift()
+        allNodes.push(n)
+        queue.push(...(n.children ?? []))
+      }
+
+      const selectedNodes = selectedNodeIds.map((id) => allNodes.find((n) => n.id === id)).filter(Boolean)
+
+      const segmentData = (roadmapData?.segments ?? []).map((s) => ({ value: s.id, label: s.label }))
+
+      const parentData = allNodes
+        .filter((n) => !selectedNodeIds.includes(n.id))
+        .map((n) => ({ value: n.id, label: n.label }))
+
+      const additionalDependencyData = allNodes
+        .filter((n) => !selectedNodeIds.includes(n.id))
+        .map((n) => ({ id: n.id, label: n.label, shortName: n.shortName }))
+
+      // Show up to three names in the header then truncate with ellipsis
+      const visibleNames = selectedNodes.slice(0, 3).map((n) => n.label).filter(Boolean).join(', ')
+      const hasMore = selectedNodes.length > 3
+      const headerNames = hasMore ? `${visibleNames} (...)` : visibleNames
+
+      return (
+        <Paper className="skill-panel skill-panel--inspector" radius={0} shadow="none">
+          <div className="skill-panel__header">
+            <div>
+              <Text className="skill-panel__eyebrow">Inspector</Text>
+              <Text className="skill-panel__title skill-panel__title--large">{`${count} Ausgewählt${headerNames ? ' - ' + headerNames : ''}`}</Text>
+            </div>
+            <div className="skill-panel__header-actions">
+              <ActionIcon variant="subtle" color="gray" onClick={() => { /* noop: parent closes */ }} aria-label="Inspector schließen">
+                ✕
+              </ActionIcon>
+            </div>
+          </div>
+          <div className="skill-panel__body skill-panel__body--scrollable">
+            <Stack gap="md">
+              {/* Selected nodes row */}
+              <div className="multi-inspector__selected-row" style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 6 }}>
+                {selectedNodes.map((n) => (
+                  <Badge
+                    key={n.id}
+                    variant="filled"
+                    radius="sm"
+                    sx={{ cursor: onFocusNode ? 'pointer' : 'default', padding: '6px 10px', whiteSpace: 'nowrap' }}
+                    onClick={() => onFocusNode?.(n.id)}
+                  >
+                    {n.shortName ?? n.label}
+                  </Badge>
+                ))}
+              </div>
+
+              <Select
+                label="Segment (für alle)"
+                data={segmentData}
+                onChange={(value) => value && onSegmentChange(value)}
+                allowDeselect={false}
+                classNames={{ input: 'mantine-dark-input', label: 'mantine-dark-label', dropdown: 'mantine-dark-dropdown', option: 'mantine-dark-option' }}
+                comboboxProps={{ withinPortal: true, zIndex: 450 }}
+              />
+
+              <Select
+                label="Parent (für alle)"
+                data={parentData}
+                onChange={(value) => value && onParentChange(value)}
+                allowDeselect={false}
+                classNames={{ input: 'mantine-dark-input', label: 'mantine-dark-label', dropdown: 'mantine-dark-dropdown', option: 'mantine-dark-option' }}
+                comboboxProps={{ withinPortal: true, zIndex: 450 }}
+              />
+
+              <MultiSelect
+                label="Additional Dependencies (für alle)"
+                data={additionalDependencyData.map((d) => ({ value: d.id, label: d.shortName ? `${d.label} (${d.shortName})` : d.label }))}
+                onChange={(values) => onAdditionalDependenciesChange(values)}
+                searchable
+                clearable
+                classNames={{ input: 'mantine-dark-input', label: 'mantine-dark-label', dropdown: 'mantine-dark-dropdown', option: 'mantine-dark-option', pill: 'mantine-dark-pill' }}
+                comboboxProps={{ withinPortal: true, zIndex: 450 }}
+              />
+
+              <Select
+                label="Status (für alle)"
+                data={STATUS_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
+                onChange={(value) => value && onStatusChange(value)}
+                allowDeselect={false}
+                classNames={{ input: 'mantine-dark-input', label: 'mantine-dark-label', dropdown: 'mantine-dark-dropdown', option: 'mantine-dark-option' }}
+                comboboxProps={{ withinPortal: true, zIndex: 450 }}
+              />
+
+              <MultiSelect
+                label="Scopes (für alle)"
+                data={(scopeOptions ?? []).map((s) => ({ value: s.value, label: s.label }))}
+                onChange={(values) => onScopeIdsChange(values)}
+                searchable
+                clearable
+                classNames={{ input: 'mantine-dark-input', label: 'mantine-dark-label', dropdown: 'mantine-dark-dropdown', option: 'mantine-dark-option', pill: 'mantine-dark-pill' }}
+                comboboxProps={{ withinPortal: true, zIndex: 450 }}
+              />
+
+
+              <Divider />
+
+              <div className="skill-panel__danger-zone">
+                <Text className="skill-panel__danger-title">Löschen (für ausgewählte Knoten)</Text>
+                <Button variant="default" onClick={onDeleteNodeOnly}>Skill löschen (für alle)</Button>
+                <Button color="red" variant="outline" onClick={onDeleteNodeBranch}>Zweig löschen (für alle)</Button>
+              </div>
+
+            </Stack>
+          </div>
+        </Paper>
+      )
+    }
+
     return null
   }
 

@@ -138,6 +138,14 @@ const isEditableElement = (target) => {
   return target.isContentEditable || target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT'
 }
 
+// Exported helper: decide which `selectedNode` the inspector should receive.
+// When multiple nodes are selected the inspector should not get a single
+// selected node object (it renders a multi-select UI instead).
+export function resolveInspectorSelectedNode(node, nodeIds) {
+  if (Array.isArray(nodeIds) && nodeIds.length > 1) return null
+  return node
+}
+
 const getHtmlImportErrorMessage = (error) => {
   if (error instanceof Error && error.message) {
     return error.message
@@ -208,6 +216,7 @@ export function SkillTree() {
   const canvasSvgRef = useRef(null)
   const [lastSavedAt, setLastSavedAt] = useState(null)
   const [selectedNodeId, setSelectedNodeId] = useState(null)
+  const [selectedNodeIds, setSelectedNodeIds] = useState([])
   const [selectedProgressLevelId, setSelectedProgressLevelId] = useState(null)
   const [selectedSegmentId, setSelectedSegmentId] = useState(null)
   const [selectedPortalKey, setSelectedPortalKey] = useState(null)
@@ -217,6 +226,7 @@ export function SkillTree() {
   // calling the raw setters directly so opening one panel clears others.
   const selectNodeId = (nodeId) => {
     setSelectedNodeId(nodeId)
+    setSelectedNodeIds(nodeId ? [nodeId] : [])
     if (nodeId) {
       // Ensure only one right-side panel is open: show inspector
       selectSegmentId(null)
@@ -273,6 +283,8 @@ export function SkillTree() {
     () => findNodeById(roadmapData, selectedNodeId),
     [roadmapData, selectedNodeId],
   )
+
+  // Use exported helper above to decide inspector node resolution.
 
   const selectedSegment = useMemo(
     () => (roadmapData.segments ?? []).find((segment) => segment.id === selectedSegmentId) ?? null,
@@ -831,6 +843,39 @@ export function SkillTree() {
     dispatchDocument({ type: 'apply', document: nextDocument })
   }
 
+  const applyToSelectedNodes = (applier, opts = {}) => {
+    const ids = Array.isArray(selectedNodeIds) && selectedNodeIds.length > 0
+      ? selectedNodeIds
+      : selectedNodeId
+        ? [selectedNodeId]
+        : []
+
+    if (ids.length === 0) return
+
+    const applyOnce = () => {
+      let next = roadmapData
+      for (const id of ids) {
+        next = applier(next, id)
+      }
+      commitDocument(next)
+    }
+
+    if (ids.length > 1 && !opts.skipConfirm) {
+      let message = opts.description
+        ? `${opts.description} auf ${ids.length} ausgewählte Knoten anwenden?`
+        : `Änderung auf ${ids.length} ausgewählte Knoten anwenden?`
+
+      if (opts.applyToAllLevels) {
+        message += '\n\nHinweis: Die Änderung wird auf alle Level der jeweiligen Knoten angewendet.'
+      }
+
+      const confirmed = window.confirm(message)
+      if (!confirmed) return
+    }
+
+    applyOnce()
+  }
+
   const resetSelections = () => {
     selectNodeId(null)
     selectSegmentId(null)
@@ -1172,8 +1217,28 @@ export function SkillTree() {
     }
   }
 
-  const handleSelectNode = (nodeId) => {
-    selectNodeId(nodeId)
+  const handleSelectNode = (nodeId, event) => {
+    const isCtrl = event && (event.ctrlKey || event.metaKey)
+    if (isCtrl) {
+      setSelectedNodeIds((prev = []) => {
+        const exists = prev.includes(nodeId)
+        const next = exists ? prev.filter((id) => id !== nodeId) : [...prev, nodeId]
+        // open inspector when starting a multiselect (added item and inspector closed)
+        if (!exists && rightPanel !== PANEL_INSPECTOR) {
+          setRightPanel(PANEL_INSPECTOR)
+        }
+        // close inspector if we removed the last selection
+        if (next.length === 0 && rightPanel === PANEL_INSPECTOR) {
+          setRightPanel(null)
+        }
+        return next
+      })
+      // update last focused selected node id
+      setSelectedNodeId((prev) => (prev === nodeId ? null : nodeId))
+    } else {
+      selectNodeId(nodeId)
+    }
+
     setSelectedPortalKey(null)
   }
 
@@ -1200,6 +1265,11 @@ export function SkillTree() {
       return
     }
 
+    if (Array.isArray(selectedNodeIds) && selectedNodeIds.length > 1) {
+      // When multiple nodes are selected, label edits are disabled.
+      return
+    }
+
     updateNodeData(selectedNodeId, newLabel, selectedNode.status)
   }
 
@@ -1208,43 +1278,52 @@ export function SkillTree() {
       return
     }
 
+    if (Array.isArray(selectedNodeIds) && selectedNodeIds.length > 1) {
+      // Do not allow shortname edits for multi-select
+      return
+    }
+
     commitDocument(updateNodeShortName(roadmapData, selectedNodeId, newShortName))
   }
 
   const handleStatusChange = (newStatus) => {
-    if (!selectedNodeId || !activeSelectedProgressLevelId) {
+    if ((!selectedNodeId && !(Array.isArray(selectedNodeIds) && selectedNodeIds.length > 0)) || !activeSelectedProgressLevelId) {
       return
     }
 
-    commitDocument(
-      updateNodeProgressLevel(roadmapData, selectedNodeId, activeSelectedProgressLevelId, {
-        status: newStatus,
-      }),
-    )
+    applyToSelectedNodes((tree, id) => {
+      const node = findNodeById(tree, id)
+      const levels = Array.isArray(node?.levels) ? node.levels : []
+      let next = tree
+      for (const level of levels) {
+        next = updateNodeProgressLevel(next, id, level.id, { status: newStatus })
+      }
+      return next
+    }, { applyToAllLevels: true, description: 'Status ändern' })
   }
 
   const handleReleaseNoteChange = (releaseNote) => {
-    if (!selectedNodeId || !activeSelectedProgressLevelId) {
+    if ((!selectedNodeId && !(Array.isArray(selectedNodeIds) && selectedNodeIds.length > 0)) || !activeSelectedProgressLevelId) {
       return
     }
 
-    commitDocument(
-      updateNodeProgressLevel(roadmapData, selectedNodeId, activeSelectedProgressLevelId, {
-        releaseNote,
-      }),
-    )
+    applyToSelectedNodes((tree, id) => updateNodeProgressLevel(tree, id, activeSelectedProgressLevelId, { releaseNote }))
   }
 
   const handleLevelScopesChange = (scopeIds) => {
-    if (!selectedNodeId || !activeSelectedProgressLevelId) {
+    if ((!selectedNodeId && !(Array.isArray(selectedNodeIds) && selectedNodeIds.length > 0)) || !activeSelectedProgressLevelId) {
       return
     }
 
-    commitDocument(
-      updateNodeProgressLevel(roadmapData, selectedNodeId, activeSelectedProgressLevelId, {
-        scopeIds,
-      }),
-    )
+    applyToSelectedNodes((tree, id) => {
+      const node = findNodeById(tree, id)
+      const levels = Array.isArray(node?.levels) ? node.levels : []
+      let next = tree
+      for (const level of levels) {
+        next = updateNodeProgressLevel(next, id, level.id, { scopeIds })
+      }
+      return next
+    }, { applyToAllLevels: true, description: 'Scopes (Level) ändern' })
   }
 
   const handleCreateScope = (scopeLabel) => {
@@ -1313,13 +1392,11 @@ export function SkillTree() {
   }
 
   const handleAdditionalDependenciesChange = (nextDependencyIds) => {
-    if (!selectedNodeId) {
+    if (!selectedNodeId && !(Array.isArray(selectedNodeIds) && selectedNodeIds.length > 0)) {
       return
     }
 
-    commitDocument(
-      setNodeAdditionalDependencies(roadmapData, selectedNodeId, nextDependencyIds),
-    )
+    applyToSelectedNodes((tree, id) => setNodeAdditionalDependencies(tree, id, nextDependencyIds))
   }
 
   const handleAddProgressLevel = () => {
@@ -1348,21 +1425,21 @@ export function SkillTree() {
   }
 
   const handleDeleteNodeOnly = () => {
-    if (!selectedNodeId) {
+    if ((!selectedNodeId && !(Array.isArray(selectedNodeIds) && selectedNodeIds.length > 0))) {
       return
     }
 
-    commitDocument(deleteNodeOnly(roadmapData, selectedNodeId))
+    applyToSelectedNodes((tree, id) => deleteNodeOnly(tree, id), { description: 'Knoten löschen' })
     selectNodeId(null)
     setSelectedPortalKey(null)
   }
 
   const handleDeleteNodeBranch = () => {
-    if (!selectedNodeId) {
+    if ((!selectedNodeId && !(Array.isArray(selectedNodeIds) && selectedNodeIds.length > 0))) {
       return
     }
 
-    commitDocument(deleteNodeBranch(roadmapData, selectedNodeId))
+    applyToSelectedNodes((tree, id) => deleteNodeBranch(tree, id), { description: 'Zweig löschen' })
     selectNodeId(null)
     setSelectedPortalKey(null)
   }
@@ -1824,7 +1901,7 @@ export function SkillTree() {
                   node={node}
                   nodeSize={nodeSize}
                   displayMode={visibilityMode}
-                  isSelected={node.id === selectedNodeId}
+                  isSelected={node.id === selectedNodeId || selectedNodeIds.includes(node.id)}
                   onSelect={handleSelectNode}
                 />
               )
@@ -2087,12 +2164,15 @@ export function SkillTree() {
 
       {rightPanel === PANEL_INSPECTOR && (
         <InspectorPanel
-        selectedNode={selectedNode}
+        selectedNode={resolveInspectorSelectedNode(selectedNode, selectedNodeIds)}
+        selectedNodeIds={selectedNodeIds}
+        roadmapData={roadmapData}
         currentLevel={levelInfo.nodeLevel}
         selectedProgressLevelId={activeSelectedProgressLevelId}
         onClose={() => {
           selectNodeId(null)
         }}
+        onFocusNode={selectNodeId}
         onLabelChange={handleLabelChange}
         onShortNameChange={handleShortNameChange}
         onStatusChange={handleStatusChange}
@@ -2115,18 +2195,24 @@ export function SkillTree() {
         incomingDependencyLabels={selectedNodeIncomingDependencyLabels}
         validationMessage={selectedNodeValidationMessage}
         onParentChange={(nextParentKey) => {
-          if (!selectedNodeId) {
+          if (!selectedNodeId && !(Array.isArray(selectedNodeIds) && selectedNodeIds.length > 0)) {
             return
           }
 
           const nextParentId = nextParentKey === '__root__' ? null : nextParentKey
-          commitDocument(moveNodeToParent(roadmapData, selectedNodeId, nextParentId))
+          applyToSelectedNodes((tree, id) => moveNodeToParent(tree, id, nextParentId))
         }}
         onSegmentChange={(nextSegmentKey) => {
+          if (!selectedNodeId && !(Array.isArray(selectedNodeIds) && selectedNodeIds.length > 0)) {
+            return
+          }
+
           const nextSegmentId = nextSegmentKey === UNASSIGNED_SEGMENT_ID ? null : nextSegmentKey
 
-          const validation = validateNodeSegmentChange(roadmapData, selectedNodeId, nextSegmentId, TREE_CONFIG)
-          commitDocument(validation.isAllowed ? validation.tree : roadmapData)
+          applyToSelectedNodes((tree, id) => {
+            const validation = validateNodeSegmentChange(tree, id, nextSegmentId, TREE_CONFIG)
+            return validation.isAllowed ? validation.tree : tree
+          })
         }}
         onAdditionalDependenciesChange={handleAdditionalDependenciesChange}
         onDeleteNodeOnly={handleDeleteNodeOnly}

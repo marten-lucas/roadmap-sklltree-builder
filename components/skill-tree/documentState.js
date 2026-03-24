@@ -15,8 +15,6 @@ const ensureDocumentDefaults = (document) => {
     typeof document.centerIconSrc === 'string'
     && document.centerIconSrc.trim().length > 0
     && Array.isArray(document.scopes)
-    && typeof document.systemName === 'string'
-    && isObject(document.release)
   ) {
     return document
   }
@@ -28,14 +26,6 @@ const ensureDocumentDefaults = (document) => {
         ? document.centerIconSrc
         : DEFAULT_CENTER_ICON_SRC,
     scopes: nextScopes,
-    systemName: typeof document.systemName === 'string' ? document.systemName : '',
-    release: isObject(document.release)
-      ? {
-          name: typeof document.release.name === 'string' ? document.release.name : '',
-          motto: typeof document.release.motto === 'string' ? document.release.motto : '',
-          introduction: typeof document.release.introduction === 'string' ? document.release.introduction : '',
-        }
-      : { name: '', motto: '', introduction: '' },
   }
 }
 
@@ -52,8 +42,7 @@ export const createEmptyDocument = () => ({
   scopes: [],
   children: [],
   centerIconSrc: DEFAULT_CENTER_ICON_SRC,
-  systemName: '',
-  release: { name: '', motto: '', introduction: '' },
+  
 })
 
 export const cloneDocument = (document) => {

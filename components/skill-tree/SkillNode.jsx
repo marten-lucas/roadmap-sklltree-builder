@@ -91,7 +91,7 @@ export function SkillNode({ node, nodeSize, isSelected, onSelect, onSelectLevel,
       : 'radial-gradient(circle at 32% 28%, rgb(21, 45, 94), rgb(15, 23, 42) 58%, rgb(2, 6, 23) 100%)'
 
   const handleNodeClick = (event) => {
-    onSelect(node.id)
+    onSelect(node.id, event)
     const levels = Array.isArray(node?.levels) ? node.levels : []
     if (onSelectLevel && levels.length > 0) {
       const rect = event.currentTarget.getBoundingClientRect()
