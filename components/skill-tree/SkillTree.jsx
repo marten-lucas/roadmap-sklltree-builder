@@ -1411,15 +1411,7 @@ export function SkillTree() {
       return
     }
 
-    applyToSelectedNodes((tree, id) => {
-      const node = findNodeById(tree, id)
-      const levels = Array.isArray(node?.levels) ? node.levels : []
-      let next = tree
-      for (const level of levels) {
-        next = updateNodeProgressLevel(next, id, level.id, { status: newStatus })
-      }
-      return next
-    }, { applyToAllLevels: true, description: 'Status ändern' })
+    applyToSelectedNodes((tree, id) => updateNodeProgressLevel(tree, id, activeSelectedProgressLevelId, { status: newStatus }))
   }
 
   const handleReleaseNoteChange = (releaseNote) => {
