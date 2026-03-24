@@ -701,6 +701,13 @@ export const applyNodeIdentity = async (page, row) => {
     state: 'attached',
     timeout: 10_000,
   })
+  // ensure the Shortname input is committed by blurring (Tab), which the UI
+  // uses to persist the short name value into the model
+  try {
+    await inspector.getByLabel('Shortname', { exact: true }).press('Tab')
+  } catch (e) {
+    // best-effort: ignore if the control is not focusable
+  }
 }
 
 const walkNodes = (document, visitor, parentNode = null) => {
