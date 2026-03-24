@@ -59,6 +59,9 @@ import {
   updateSegmentLabel,
 } from './treeData'
 import { toDegrees, toRadians } from './layoutMath'
+import { IconDownload, IconUpload, IconPercentage, IconFilters, IconFilter, IconPercentage20 } from '@tabler/icons-react'
+
+const IconPercent20 = (props) => <IconPercentage {...props} size={20} />
 
 const normalizeAngle = (angleDeg) => {
   const normalized = angleDeg % 360
@@ -1667,24 +1670,20 @@ export function SkillTree() {
                       aria-label="Export"
                       onClick={() => void handleExportHtml()}
                     >
-                      <ToolbarIcon>
-                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                        <polyline points="7 10 12 15 17 10" />
-                        <line x1="12" y1="15" x2="12" y2="3" />
-                      </ToolbarIcon>
+                      <IconDownload size={18} />
                     </ActionIcon>
                   </Tooltip>
                 </Menu.Target>
 
                 <Menu.Dropdown>
                   <Menu.Label>Export</Menu.Label>
-                  <Menu.Item onClick={() => void handleExportPdf()}>
-                    PDF (statisch)
+                  <Menu.Item onClick={() => void handleExportPdf()} title="PDF (statisch)">
+                    PDF
                   </Menu.Item>
-                  <Menu.Item onClick={() => void handleExportSvg()}>
-                    SVG (interaktiv)
+                  <Menu.Item onClick={() => void handleExportSvg()} title="SVG (interaktiv)">
+                    SVG
                   </Menu.Item>
-                  <Menu.Item onClick={() => void handleExportCleanSvg()}>
+                  <Menu.Item onClick={() => void handleExportCleanSvg()} title="SVG (clean)">
                     SVG (clean)
                   </Menu.Item>
                 </Menu.Dropdown>
@@ -1697,11 +1696,7 @@ export function SkillTree() {
                   aria-label="HTML importieren"
                   onClick={handleOpenDocumentPicker}
                 >
-                  <ToolbarIcon>
-                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                    <polyline points="17 8 12 3 7 8" />
-                    <line x1="12" y1="3" x2="12" y2="15" />
-                  </ToolbarIcon>
+                  <IconUpload size={18} />
                 </ActionIcon>
               </Tooltip>
             </div>
@@ -1766,16 +1761,10 @@ export function SkillTree() {
                   aria-label="Segmente verwalten"
                   onClick={handleOpenSegmentManager}
                 >
-                  <ToolbarIcon>
-                    <path d="M19 5L5 19" />
-                    <circle cx="6.5" cy="6.5" r="2.5" />
-                    <circle cx="17.5" cy="17.5" r="2.5" />
-                  </ToolbarIcon>
+                  <IconPercentage20 />
                 </ActionIcon>
               </Tooltip>
-            </div>
 
-            <div className="skill-tree-toolbar__cluster">
               <Tooltip label="Scopes verwalten" withArrow openDelay={120}>
                 <ActionIcon
                   size="md"
@@ -1783,85 +1772,45 @@ export function SkillTree() {
                   aria-label="Scopes verwalten"
                   onClick={handleOpenScopeManager}
                 >
-                  <ToolbarIcon>
-                    <path d="M3 6h18" />
-                    <path d="M6 12h12" />
-                    <path d="M9 18h6" />
-                  </ToolbarIcon>
+                  <IconFilters />
                 </ActionIcon>
               </Tooltip>
-            </div>
 
-            <div className="skill-tree-toolbar__cluster">
-              <Menu shadow="md" width={220} position="bottom-start" withArrow>
+              <Menu shadow="md" width={260} position="bottom-start" withArrow>
                 <Menu.Target>
-                  <Tooltip
-                    label={scopeOptions.length > 0 ? `Scope Filter: ${selectedScopeFilterLabel}` : 'Keine Scopes vorhanden'}
-                    withArrow
-                    openDelay={120}
-                  >
+                  <Tooltip label={`Filter: ${selectedReleaseFilterLabel}${scopeOptions.length > 0 ? ' · ' + selectedScopeFilterLabel : ''}`} withArrow openDelay={120}>
                     <ActionIcon
                       size="md"
                       variant="default"
-                      aria-label="Scope Filter"
-                      disabled={scopeOptions.length === 0}
+                      aria-label="Filter"
+                      disabled={false}
                     >
-                      <ToolbarIcon>
-                        <path d="M3 6h18" />
-                        <path d="M7 12h10" />
-                        <path d="M10 18h4" />
-                      </ToolbarIcon>
+                      <IconFilter />
                     </ActionIcon>
                   </Tooltip>
                 </Menu.Target>
 
                 <Menu.Dropdown>
-                  <Menu.Label>Scope Filter</Menu.Label>
-                  <Menu.Item onClick={() => setSelectedScopeFilterId(SCOPE_FILTER_ALL)}>
-                    {selectedScopeFilterId === SCOPE_FILTER_ALL ? '● ' : ''}
-                    Alle Scopes
+                  <Menu.Label>Filter</Menu.Label>
+                  <Menu.Item onClick={() => setReleaseFilter(RELEASE_FILTER_OPTIONS.all)} title="Show all items">
+                    {releaseFilter === RELEASE_FILTER_OPTIONS.all ? '● ' : ''}All
+                  </Menu.Item>
+                  <Menu.Item onClick={() => setReleaseFilter(RELEASE_FILTER_OPTIONS.now)} title="Now — Done minimal, Later hidden">
+                    {releaseFilter === RELEASE_FILTER_OPTIONS.now ? '● ' : ''}Now
+                  </Menu.Item>
+                  <Menu.Item onClick={() => setReleaseFilter(RELEASE_FILTER_OPTIONS.next)} title="Next — Done/Later minimal">
+                    {releaseFilter === RELEASE_FILTER_OPTIONS.next ? '● ' : ''}Next
                   </Menu.Item>
                   <Menu.Divider />
+                  <Menu.Label>Scopes</Menu.Label>
+                  <Menu.Item onClick={() => setSelectedScopeFilterId(SCOPE_FILTER_ALL)}>
+                    {selectedScopeFilterId === SCOPE_FILTER_ALL ? '● ' : ''}Alle Scopes
+                  </Menu.Item>
                   {scopeOptions.map((scope) => (
                     <Menu.Item key={scope.value} onClick={() => setSelectedScopeFilterId(scope.value)}>
-                      {selectedScopeFilterId === scope.value ? '● ' : ''}
-                      {scope.label}
+                      {selectedScopeFilterId === scope.value ? '● ' : ''}{scope.label}
                     </Menu.Item>
                   ))}
-                </Menu.Dropdown>
-              </Menu>
-
-              <Menu shadow="md" width={220} position="bottom-start" withArrow>
-                <Menu.Target>
-                  <Tooltip label={`Release Filter: ${selectedReleaseFilterLabel}`} withArrow openDelay={120}>
-                    <ActionIcon
-                      size="md"
-                      variant="default"
-                      aria-label="Release Filter"
-                    >
-                      <ToolbarIcon>
-                        <path d="M4 4h16v5H4z" />
-                        <path d="M4 10h16v5H4z" />
-                        <path d="M4 16h16v4H4z" />
-                      </ToolbarIcon>
-                    </ActionIcon>
-                  </Tooltip>
-                </Menu.Target>
-
-                <Menu.Dropdown>
-                  <Menu.Label>Release Filter</Menu.Label>
-                  <Menu.Item onClick={() => setReleaseFilter(RELEASE_FILTER_OPTIONS.all)}>
-                    {releaseFilter === RELEASE_FILTER_OPTIONS.all ? '● ' : ''}
-                    All
-                  </Menu.Item>
-                  <Menu.Item onClick={() => setReleaseFilter(RELEASE_FILTER_OPTIONS.now)}>
-                    {releaseFilter === RELEASE_FILTER_OPTIONS.now ? '● ' : ''}
-                    Now (Done minimal, Later ausgeblendet)
-                  </Menu.Item>
-                  <Menu.Item onClick={() => setReleaseFilter(RELEASE_FILTER_OPTIONS.next)}>
-                    {releaseFilter === RELEASE_FILTER_OPTIONS.next ? '● ' : ''}
-                    Next (Done/Later minimal)
-                  </Menu.Item>
                 </Menu.Dropdown>
               </Menu>
             </div>
