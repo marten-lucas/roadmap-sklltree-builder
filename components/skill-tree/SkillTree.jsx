@@ -59,9 +59,7 @@ import {
   updateSegmentLabel,
 } from './treeData'
 import { toDegrees, toRadians } from './layoutMath'
-import { IconDownload, IconUpload, IconPercentage, IconFilters, IconFilter, IconPercentage20 } from '@tabler/icons-react'
-
-const IconPercent20 = (props) => <IconPercentage {...props} size={20} />
+import { IconDownload, IconUpload, IconFilters, IconFilter, IconPercentage20 } from '@tabler/icons-react'
 
 const normalizeAngle = (angleDeg) => {
   const normalized = angleDeg % 360
@@ -1670,7 +1668,7 @@ export function SkillTree() {
                       aria-label="Export"
                       onClick={() => void handleExportHtml()}
                     >
-                      <IconDownload size={18} />
+                      <IconDownload size={18} stroke={2} />
                     </ActionIcon>
                   </Tooltip>
                 </Menu.Target>
@@ -1696,7 +1694,7 @@ export function SkillTree() {
                   aria-label="HTML importieren"
                   onClick={handleOpenDocumentPicker}
                 >
-                  <IconUpload size={18} />
+                  <IconUpload size={18} stroke={2} />
                 </ActionIcon>
               </Tooltip>
             </div>
@@ -1761,7 +1759,7 @@ export function SkillTree() {
                   aria-label="Segmente verwalten"
                   onClick={handleOpenSegmentManager}
                 >
-                  <IconPercentage20 />
+                  <IconPercentage20 stroke={2} />
                 </ActionIcon>
               </Tooltip>
 
@@ -1772,7 +1770,7 @@ export function SkillTree() {
                   aria-label="Scopes verwalten"
                   onClick={handleOpenScopeManager}
                 >
-                  <IconFilters />
+                  <IconFilters stroke={2} />
                 </ActionIcon>
               </Tooltip>
 
@@ -1785,7 +1783,7 @@ export function SkillTree() {
                       aria-label="Filter"
                       disabled={false}
                     >
-                      <IconFilter />
+                      <IconFilter stroke={2} />
                     </ActionIcon>
                   </Tooltip>
                 </Menu.Target>
