@@ -1030,7 +1030,7 @@ export function SkillTree() {
     }
   }
 
-  const _handleAddRootNear = (anchorRootId, side) => {
+  const handleAddRootNear = (anchorRootId, side) => {
     const result = addRootNodeNearWithResult(roadmapData, anchorRootId, side)
     const createdNodeId = result.createdNodeId
     commitDocument(result.tree)
@@ -1572,6 +1572,7 @@ export function SkillTree() {
             onSelectPortal={handleSelectPortal}
             onAddInitialRoot={handleAddInitialRoot}
             onAddInitialSegment={handleAddInitialSegment}
+            onAddRootNear={handleAddRootNear}
             onAddSegmentNear={handleAddSegmentNear}
             onAddChild={handleAddChild}
             onSelectNode={handleSelectNode}

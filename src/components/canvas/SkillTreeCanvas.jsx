@@ -38,6 +38,7 @@ export function SkillTreeCanvas({
   onSelectPortal,
   onAddInitialRoot,
   onAddInitialSegment,
+  onAddRootNear,
   onAddSegmentNear,
   onAddChild,
   onSelectNode,
@@ -399,7 +400,7 @@ export function SkillTreeCanvas({
                 onMouseDown={(event) => event.stopPropagation()}
                 onClick={(event) => {
                   event.stopPropagation()
-                  onAddSegmentNear(selectedLayoutNode.id, 'left')
+                  onAddRootNear(selectedLayoutNode.id, 'left')
                 }}
                 className="skill-tree-clickable"
               >
@@ -423,7 +424,7 @@ export function SkillTreeCanvas({
                 onMouseDown={(event) => event.stopPropagation()}
                 onClick={(event) => {
                   event.stopPropagation()
-                  onAddSegmentNear(selectedLayoutNode.id, 'right')
+                  onAddRootNear(selectedLayoutNode.id, 'right')
                 }}
                 className="skill-tree-clickable"
               >
