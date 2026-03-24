@@ -2407,6 +2407,7 @@ export function SkillTree() {
       <SegmentPanel
         selectedSegment={selectedSegment}
         segmentOptions={roadmapData.segments ?? []}
+        isOpen={rightPanel === PANEL_SEGMENTS}
         onClose={() => selectSegmentId(null)}
         onLabelChange={handleSegmentLabelChange}
         onDelete={handleDeleteSegment}
