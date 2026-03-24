@@ -75,8 +75,6 @@ import { resolveInspectorSelectedNode } from './utils/selection'
 // Tests/importers should import from that module instead of re-exporting from here.
 
 const AUTOSAVE_DEBOUNCE_MS = 450
-const EXPORT_BRAND_NAME = 'Roadmap Skilltree Builder'
-const EXPORT_AUTHOR = 'Skilltree Team'
 const INITIAL_VIEW_SCALE = 0.7
 const MINIMAL_NODE_SIZE = 36
 
@@ -845,11 +843,6 @@ export function SkillTree() {
       const exported = exportHtmlFromSkillTree({
         svgElement: canvasSvgRef.current,
         roadmapDocument: roadmapData,
-        title: 'Skill Tree Roadmap',
-        metadata: {
-          brandName: EXPORT_BRAND_NAME,
-          author: EXPORT_AUTHOR,
-        },
       })
 
       if (!exported) {
@@ -874,11 +867,6 @@ export function SkillTree() {
       const exported = tryExportPdfFromSkillTree({
         svgElement: canvasSvgRef.current,
         roadmapDocument: roadmapData,
-        title: 'Skill Tree Roadmap',
-        metadata: {
-          brandName: EXPORT_BRAND_NAME,
-          author: EXPORT_AUTHOR,
-        },
       })
 
       if (!exported.ok) {
@@ -967,11 +955,6 @@ export function SkillTree() {
             const exported = exportHtmlFromSkillTree({
               svgElement: canvasSvgRef.current,
               roadmapDocument: roadmapData,
-              title: 'Skill Tree Roadmap',
-              metadata: {
-                brandName: EXPORT_BRAND_NAME,
-                author: EXPORT_AUTHOR,
-              },
             })
 
             if (!exported) {

@@ -7,6 +7,13 @@ import {
 } from '../utils/htmlExport'
 
 const createDocument = () => ({
+  systemName: 'myKyana',
+  release: {
+    name: 'July 2026 Release',
+    motto: 'Reich & Schön',
+    introduction: '# Release Overview\nThe introduction uses **markdown** and a [link](https://example.com).',
+    date: '2026-07-01',
+  },
   segments: [
     { id: 'segment-frontend', label: 'Frontend' },
   ],
@@ -18,7 +25,7 @@ const createDocument = () => ({
       status: 'now',
       segmentId: 'segment-frontend',
       levels: [
-        { id: 'level-1', label: 'Level 1', status: 'now', releaseNote: 'Rollout fuer die neue Plattform laeuft.' },
+        { id: 'level-1', label: 'Level 1', status: 'now', releaseNote: '## Release Impact\nRollout fuer die neue Plattform laeuft. **Now** is live.' },
       ],
       children: [],
     },
@@ -26,29 +33,33 @@ const createDocument = () => ({
 })
 
 describe('htmlExport', () => {
-  it('builds standalone html with tabs and embedded document payload', () => {
+  it('builds standalone html with a single roadmap page and embedded document payload', () => {
     const document = createDocument()
     const html = buildHtmlExportDocument({
       svgMarkup: '<svg viewBox="0 0 100 100"></svg>',
       roadmapDocument: document,
       styleText: '.skill-tree-canvas { color: red; }',
       title: 'Skill Tree Viewer',
-      metadata: {
-        brandName: 'Roadmap Studio',
-        author: 'QA Team',
-      },
     })
 
-    expect(html).toContain('Skill Tree Viewer')
-    expect(html).toContain('Skilltree')
+    expect(html).toContain('myKyana')
+    expect(html).toContain('July 2026 Release')
+    expect(html).toContain('Reich & Schön')
     expect(html).toContain('Release Notes')
     expect(html).toContain('<svg viewBox="0 0 100 100"></svg>')
     expect(html).toContain(`id="${HTML_EXPORT_DATA_SCRIPT_ID}"`)
-    expect(html).toContain('PDF drucken')
-    expect(html).toContain('SVG herunterladen')
+    expect(html).toContain('PDF')
+    expect(html).toContain('SVG interaktiv')
     expect(html).toContain('SVG clean')
-    expect(html).toContain('Roadmap Studio')
-    expect(html).toContain('Autor: QA Team')
+    expect(html).toContain('background: #000000;')
+    expect(html).toContain('aria-label="Filter"')
+    expect(html).not.toContain('Visualisierung')
+    expect(html).not.toContain('html-export__section-title')
+    expect(html).toContain('The introduction uses <strong>markdown</strong>')
+    expect(html).toContain('Rollout fuer die neue Plattform laeuft.')
+    expect(html).toContain('<strong>Now</strong> is live')
+    expect(html).toContain('<h1>Release Overview</h1>')
+    expect(html).toContain('<h2>Release Impact</h2>')
   })
 
   it('extracts and reads embedded document payload from exported html', () => {

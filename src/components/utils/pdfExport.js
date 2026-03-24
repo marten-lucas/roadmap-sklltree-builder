@@ -1,4 +1,5 @@
 import { STATUS_LABELS, normalizeStatusKey } from '../config'
+import { renderMarkdownToHtml } from './markdown'
 
 const escapeHtml = (value) => String(value ?? '')
   .replace(/&/g, '&amp;')
@@ -42,56 +43,74 @@ const sanitizeSvgCloneForPrint = (svgElement) => {
   return clone.outerHTML
 }
 
+const formatDisplayDate = (value) => {
+  const rawValue = String(value ?? '').trim()
+  if (!rawValue) {
+    return ''
+  }
+
+  const parsed = new Date(rawValue)
+  if (Number.isNaN(parsed.getTime())) {
+    return rawValue
+  }
+
+  return parsed.toLocaleDateString()
+}
+
 export const collectReleaseNoteEntries = (roadmapDocument) => {
   const segmentLabelById = new Map((roadmapDocument?.segments ?? []).map((segment) => [segment.id, segment.label]))
   const entries = []
-  const queue = [...(roadmapDocument?.children ?? [])]
+  const walk = (node) => {
+    if (!node) {
+      return
+    }
 
-  while (queue.length > 0) {
-    const node = queue.shift()
     const levels = Array.isArray(node.levels) ? node.levels : []
 
     levels.forEach((level, index) => {
       const releaseNote = String(level?.releaseNote ?? '').trim()
-      if (!releaseNote) {
+      const statusKey = normalizeStatusKey(level.status ?? node.status)
+
+      if (!releaseNote || statusKey !== 'now') {
         return
       }
 
-      const statusKey = normalizeStatusKey(level.status ?? node.status)
       entries.push({
         nodeId: node.id,
         nodeLabel: node.label,
         shortName: String(node.shortName ?? '').trim(),
         segmentLabel: segmentLabelById.get(node.segmentId) ?? 'Unassigned',
         levelLabel: level.label ?? `Level ${index + 1}`,
-        statusLabel: STATUS_LABELS[statusKey] ?? STATUS_LABELS.later,
+        statusLabel: STATUS_LABELS[statusKey] ?? STATUS_LABELS.now,
         releaseNote,
       })
     })
 
-    queue.push(...(node.children ?? []))
+    for (const child of node.children ?? []) {
+      walk(child)
+    }
   }
 
-  return entries.sort((left, right) => {
-    if (left.segmentLabel !== right.segmentLabel) {
-      return left.segmentLabel.localeCompare(right.segmentLabel)
-    }
+  for (const root of roadmapDocument?.children ?? []) {
+    walk(root)
+  }
 
-    if (left.nodeLabel !== right.nodeLabel) {
-      return left.nodeLabel.localeCompare(right.nodeLabel)
-    }
-
-    return left.levelLabel.localeCompare(right.levelLabel)
-  })
+  return entries
 }
 
-const buildReleaseNotesMarkup = (entries) => {
+const buildReleaseNotesMarkup = (entries, introductionMarkdown = '') => {
+  const introductionHtml = renderMarkdownToHtml(introductionMarkdown)
+
   if (entries.length === 0) {
-    return '<p class="pdf-export__empty">Keine Release Notes vorhanden.</p>'
+    return `${introductionHtml ? `<article class="pdf-export__intro">${introductionHtml}</article>` : ''}<p class="pdf-export__empty">Keine Release Notes vorhanden.</p>`
   }
 
   let currentSegment = null
   const parts = []
+
+  if (introductionHtml) {
+    parts.push(`<article class="pdf-export__intro">${introductionHtml}</article>`)
+  }
 
   entries.forEach((entry) => {
     if (entry.segmentLabel !== currentSegment) {
@@ -107,7 +126,7 @@ const buildReleaseNotesMarkup = (entries) => {
           <span>${escapeHtml(entry.levelLabel)}</span>
           <span>${escapeHtml(entry.statusLabel)}</span>
         </div>
-        <p>${escapeHtml(entry.releaseNote)}</p>
+        <div class="pdf-export__note-markdown">${renderMarkdownToHtml(entry.releaseNote)}</div>
       </article>
     `)
   })
@@ -118,28 +137,32 @@ const buildReleaseNotesMarkup = (entries) => {
 export const buildPdfExportHtml = ({
   svgMarkup,
   releaseNoteEntries,
+  introductionMarkdown = '',
   styleText,
-  title = 'Skill Tree Roadmap',
-  metadata = {},
+  roadmapDocument,
 }) => {
   const exportDate = new Date().toLocaleDateString()
-  const exportOwner = String(metadata.author ?? '').trim()
-  const exportBrand = String(metadata.brandName ?? '').trim()
+  const systemName = String(roadmapDocument?.systemName ?? '').trim() || 'Roadmap'
+  const releaseData = roadmapDocument?.release ?? {}
+  const releaseTitle = String(releaseData?.name ?? '').trim()
+  const releaseMotto = String(releaseData?.motto ?? '').trim()
+  const releaseDate = String(releaseData?.date ?? '').trim()
+  const pageTitle = [systemName, releaseTitle].filter(Boolean).join(' · ') || systemName
   const subtitleBits = [`Exportiert am ${exportDate}`]
 
-  if (exportOwner) {
-    subtitleBits.push(`Autor: ${exportOwner}`)
+  if (releaseMotto) {
+    subtitleBits.unshift(releaseMotto)
   }
 
-  if (exportBrand) {
-    subtitleBits.push(exportBrand)
+  if (releaseDate) {
+    subtitleBits.push(`Release Date: ${formatDisplayDate(releaseDate)}`)
   }
 
   return `<!DOCTYPE html>
 <html lang="de">
 <head>
   <meta charset="utf-8" />
-  <title>${escapeHtml(title)}</title>
+  <title>${escapeHtml(pageTitle)}</title>
   <style>
     ${styleText}
 
@@ -266,6 +289,66 @@ export const buildPdfExportHtml = ({
       font-size: 13px;
     }
 
+    .pdf-export__intro {
+      padding: 0 0 8px;
+      color: #0f172a;
+    }
+
+    .pdf-export__intro p,
+    .pdf-export__note-markdown p {
+      margin: 8px 0 0;
+      line-height: 1.55;
+    }
+
+    .pdf-export__intro h1,
+    .pdf-export__intro h2,
+    .pdf-export__intro h3,
+    .pdf-export__note-markdown h1,
+    .pdf-export__note-markdown h2,
+    .pdf-export__note-markdown h3 {
+      margin: 12px 0 0;
+      line-height: 1.15;
+      color: #0f172a;
+    }
+
+    .pdf-export__intro h1,
+    .pdf-export__note-markdown h1 {
+      font-size: 20px;
+    }
+
+    .pdf-export__intro h2,
+    .pdf-export__note-markdown h2 {
+      font-size: 17px;
+    }
+
+    .pdf-export__intro h3,
+    .pdf-export__note-markdown h3 {
+      font-size: 15px;
+    }
+
+    .pdf-export__note-markdown ul,
+    .pdf-export__intro ul {
+      margin: 8px 0 0;
+      padding-left: 18px;
+    }
+
+    .pdf-export__note-markdown li,
+    .pdf-export__intro li {
+      margin: 4px 0;
+    }
+
+    .pdf-export__note-markdown a,
+    .pdf-export__intro a {
+      color: #0f766e;
+    }
+
+    .pdf-export__note-markdown code,
+    .pdf-export__intro code {
+      padding: 0.1rem 0.3rem;
+      border-radius: 6px;
+      background: #e2e8f0;
+    }
+
     .pdf-export__note-meta {
       display: flex;
       gap: 8px;
@@ -301,7 +384,8 @@ export const buildPdfExportHtml = ({
   <section class="pdf-export__page">
     <header class="pdf-export__header">
       <div>
-        <h1 class="pdf-export__title">${escapeHtml(title)}</h1>
+        <h1 class="pdf-export__title">${escapeHtml(systemName)}</h1>
+        <p class="pdf-export__subtitle">${escapeHtml(releaseTitle || systemName)}</p>
         <p class="pdf-export__subtitle">${escapeHtml(subtitleBits.join(' · '))}</p>
       </div>
       <div class="pdf-export__legend">
@@ -320,7 +404,7 @@ export const buildPdfExportHtml = ({
         <p class="pdf-export__subtitle">Zusammenfassung aller gepflegten Notes</p>
       </div>
     </header>
-    <div class="pdf-export__notes">${buildReleaseNotesMarkup(releaseNoteEntries)}</div>
+    <div class="pdf-export__notes">${buildReleaseNotesMarkup(releaseNoteEntries, introductionMarkdown)}</div>
   </section>
   <script>
     window.addEventListener('load', () => {
@@ -336,8 +420,6 @@ export const buildPdfExportHtml = ({
 export const tryExportPdfFromSkillTree = ({
   svgElement,
   roadmapDocument,
-  title = 'Skill Tree Roadmap',
-  metadata = {},
 }) => {
   if (typeof window === 'undefined' || typeof window.document === 'undefined') {
     return {
@@ -367,9 +449,9 @@ export const tryExportPdfFromSkillTree = ({
   const html = buildPdfExportHtml({
     svgMarkup,
     releaseNoteEntries,
+    introductionMarkdown: String(roadmapDocument?.release?.introduction ?? ''),
     styleText,
-    title,
-    metadata,
+    roadmapDocument,
   })
 
   popup.document.open()

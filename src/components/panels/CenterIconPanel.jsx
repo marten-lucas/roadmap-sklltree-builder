@@ -1,5 +1,6 @@
-import { ActionIcon, Button, Paper, Stack, Text, TextInput, Textarea } from '@mantine/core'
+import { ActionIcon, Button, Paper, Stack, Text, TextInput } from '@mantine/core'
 import { useRef } from 'react'
+import { MarkdownField } from './MarkdownField'
 
 export function CenterIconPanel({
   isOpen,
@@ -63,11 +64,19 @@ export function CenterIconPanel({
           onChange={(e) => commitDocument({ ...roadmapData, release: { ...(roadmapData.release || {}), motto: e.currentTarget.value } })}
         />
 
-        <Textarea
+        <TextInput
+          label="Release Date"
+          placeholder="YYYY-MM-DD"
+          type="date"
+          value={roadmapData?.release?.date ?? ''}
+          onChange={(e) => commitDocument({ ...roadmapData, release: { ...(roadmapData.release || {}), date: e.currentTarget.value } })}
+        />
+
+        <MarkdownField
           label="Introduction"
-          minRows={3}
           value={roadmapData?.release?.introduction ?? ''}
-          onChange={(e) => commitDocument({ ...roadmapData, release: { ...(roadmapData.release || {}), introduction: e.currentTarget.value } })}
+          onChange={(nextValue) => commitDocument({ ...roadmapData, release: { ...(roadmapData.release || {}), introduction: nextValue } })}
+          minRows={3}
         />
 
         <Button onClick={() => fileInputRef.current?.click()}>

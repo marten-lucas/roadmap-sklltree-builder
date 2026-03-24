@@ -11,6 +11,7 @@ const createDoc = (suffix) => ({
   scopes: [],
   children: [{ id: `node-${suffix}`, label: `Node ${suffix}`, children: [] }],
   centerIconSrc: DEFAULT_CENTER_ICON_SRC,
+  release: { name: `Release ${suffix}`, motto: `Motto ${suffix}`, introduction: `Intro ${suffix}`, date: `2026-07-${String(suffix).padStart(2, '0')}` },
 })
 
 describe('documentState', () => {
@@ -129,6 +130,7 @@ describe('documentState', () => {
       scopes: [],
       children: [],
       centerIconSrc: DEFAULT_CENTER_ICON_SRC,
+      release: { name: '', motto: '', introduction: '', date: '' },
     })
   })
 

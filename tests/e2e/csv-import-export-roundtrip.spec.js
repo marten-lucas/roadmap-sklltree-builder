@@ -4,26 +4,69 @@ import process from 'node:process'
 import { expect, test } from '@playwright/test'
 import {
   applyNodeIdentity,
-  applyNodeSettings,
   clickChildAddForSelectedNode,
   clickInitialRootAddControl,
   clickInitialSegmentAddControl,
   clickRootAddNearSelected,
   clickSegmentAddNearSelected,
   confirmAndReset,
-  ensureScopesExist,
   extractJsonPayload,
+  ensureScopesExist,
   getSelectedNodeId,
   parseSkillTreeCsvTemplate,
   persistTextFile,
   readDownload,
   selectSegmentByLabel,
   selectNodeById,
+  selectNodeByShortName,
   setSelectValueByLabel,
   setSelectedSegmentName,
   trySetSelectValueByLabel,
   trySetScopeByLabel,
 } from './helpers.js'
+
+const ONE_YEAR_FROM_TODAY = () => {
+  const date = new Date()
+  date.setFullYear(date.getFullYear() + 1)
+  return date.toISOString().slice(0, 10)
+}
+
+const fillCenterMetadata = async (page) => {
+  const centerIcon = page.locator('.skill-tree-center-icon').first()
+  await centerIcon.click()
+  await page.waitForSelector('.skill-panel--icon', { timeout: 10_000 })
+
+  const panel = page.locator('.skill-panel--icon')
+  await panel.getByLabel('Systemname', { exact: true }).fill('Kyana Visual Roundtrip')
+  await panel.getByLabel('Release-Name', { exact: true }).fill('Final Integration Release')
+  await panel.getByLabel('Motto', { exact: true }).fill('Stabil, klar und exportierbar')
+  await panel.getByLabel('Release Date', { exact: true }).fill(ONE_YEAR_FROM_TODAY())
+
+  const introduction = [
+    '# Release Overview',
+    '',
+    'Diese Runde prueft den **Roundtrip** inkl. Icon, Markdown und Export.',
+    '',
+    '## Was enthalten ist',
+    '',
+    '- Systemdaten im Center',
+    '- Markdown mit Ueberschriften',
+    '- SVG-Icon aus dem Fixture',
+  ].join('\n')
+  await panel.locator('textarea').last().fill(introduction)
+
+  const iconPath = resolve(process.cwd(), 'tests/e2e/datasets/Kyana_Visual_final.svg')
+  await panel.locator('input[type="file"][accept=".svg,image/svg+xml"]').setInputFiles(iconPath)
+  await page.waitForTimeout(300)
+}
+
+const fillReleaseNoteForNode = async (page, nodeShortName, note) => {
+  await selectNodeByShortName(page, nodeShortName)
+  const inspector = page.locator('.skill-panel--inspector')
+  const releaseNote = inspector.getByLabel('Release Note', { exact: true })
+  await releaseNote.fill(note)
+  await releaseNote.press('Tab')
+}
 
 const DEFAULT_DATASET = 'large'
 const datasetName = String(process.env.SKILLTREE_E2E_DATASET ?? DEFAULT_DATASET).trim().toLowerCase()
@@ -289,7 +332,7 @@ const toComparableSnapshot = (snapshot) => ({
 })
 
 test.describe('CSV template roundtrip via builder UI', () => {
-  test('creates the tree from CSV, exports HTML, imports it again, and preserves structure + settings', async ({ page }) => {
+  test('creates the tree from CSV, exports HTML, imports it again, and preserves structure + settings', async ({ page, browser }) => {
     test.setTimeout(900_000)
     test.skip(!existsSync(csvTemplatePath), `CSV template not found: ${csvTemplatePath}`)
 
@@ -363,7 +406,9 @@ test.describe('CSV template roundtrip via builder UI', () => {
     if (!ignoreSegments) {
       await setSelectValueByLabel(page, 'Segment', template.roots[0].segment)
     }
-    await ensureScopesExist(page, template.rows.map((row) => row.scope))
+    await fillCenterMetadata(page)
+    const seededScopeLabels = [...new Set(template.rows.map((row) => String(row.scope ?? '').trim()).filter(Boolean))]
+    await ensureScopesExist(page, seededScopeLabels)
 
     const waitForNewSelectedNode = async (previousNodeId) => {
       await page.waitForFunction(
@@ -429,8 +474,8 @@ test.describe('CSV template roundtrip via builder UI', () => {
     }
 
     for (let index = 1; index < template.roots.length; index += 1) {
-      const anchorRootNodeId = nodeIdByCsvShortName.get(template.roots[0].shortName)
-      await selectNodeById(page, anchorRootNodeId)
+      await selectNodeById(page, nodeIdByCsvShortName.get(template.roots[0].shortName))
+      const anchorRootNodeId = await getSelectedNodeId(page)
       await createNodeFromSelected(anchorRootNodeId, () => clickRootAddNearSelected(page))
       await applyNodeIdentity(page, template.roots[index])
       nodeIdByCsvShortName.set(template.roots[index].shortName, await getSelectedNodeId(page))
@@ -438,8 +483,8 @@ test.describe('CSV template roundtrip via builder UI', () => {
 
     for (const rootRow of template.roots) {
       if (!nodeIdByCsvShortName.has(rootRow.shortName)) {
-        const anchorRootNodeId = nodeIdByCsvShortName.get(template.roots[0].shortName)
-        await selectNodeById(page, anchorRootNodeId)
+        await selectNodeById(page, nodeIdByCsvShortName.get(template.roots[0].shortName))
+        const anchorRootNodeId = await getSelectedNodeId(page)
         await createNodeFromSelected(anchorRootNodeId, () => clickRootAddNearSelected(page))
         await applyNodeIdentity(page, rootRow)
         nodeIdByCsvShortName.set(rootRow.shortName, await getSelectedNodeId(page))
@@ -450,12 +495,9 @@ test.describe('CSV template roundtrip via builder UI', () => {
       const parentRow = rowsByCsvShortName.get(row.parentShortName)
       expect(parentRow, `Missing parent CSV row for ${row.shortName}`).toBeTruthy()
 
-      const parentNodeId = nodeIdByCsvShortName.get(row.parentShortName)
-      expect(parentNodeId, `Parent node was not created for ${row.shortName}`).toBeTruthy()
-
-      await selectNodeById(page, parentNodeId)
+      await selectNodeById(page, nodeIdByCsvShortName.get(row.parentShortName))
       try {
-        await createNodeFromSelected(parentNodeId, () => clickChildAddForSelectedNode(page))
+        await createNodeFromSelected(await getSelectedNodeId(page), () => clickChildAddForSelectedNode(page))
       } catch (error) {
         throw new Error(
           `Failed to create child ${row.shortName} (${row.label}) under ${row.parentShortName} (${row.parentLabel}): ${error.message}`,
@@ -464,6 +506,8 @@ test.describe('CSV template roundtrip via builder UI', () => {
       await applyNodeIdentity(page, row)
       nodeIdByCsvShortName.set(row.shortName, await getSelectedNodeId(page))
     }
+
+    await page.waitForTimeout(900)
 
     const computedLevelByShortName = new Map()
     const computeLevelFromParent = (row, stack = new Set()) => {
@@ -496,6 +540,19 @@ test.describe('CSV template roundtrip via builder UI', () => {
       return left.order - right.order
     })
 
+    const rowsWithReleaseNotes = rowsForSettings.map((row, index) => ({
+      ...row,
+      releaseNote: [
+        `# ${row.label}`,
+        '',
+        `## Rollout ${index + 1}`,
+        '',
+        `- Status: ${row.status}`,
+        `- Segment: ${row.segment}`,
+        row.scope ? `- Scope: ${row.scope}` : null,
+      ].filter(Boolean).join('\n'),
+    }))
+
     // TEMPORARY: create an export once all nodes exist and have identity
     // (name + shortname). This allows tests to continue even if scope
     // assignment is flaky; scope-related fixes will follow later.
@@ -522,9 +579,7 @@ test.describe('CSV template roundtrip via builder UI', () => {
     if (isPhaseEnabled('statuses')) {
       const phaseStart = Date.now()
       for (const row of rowsForSettings) {
-        const nodeId = nodeIdByCsvShortName.get(row.shortName)
-        expect(nodeId, `Node was not created for ${row.shortName}`).toBeTruthy()
-        await selectNodeById(page, nodeId)
+        await selectNodeById(page, nodeIdByCsvShortName.get(row.shortName))
         if (!ignoreManualLevels) {
           await trySetSelectValueByLabel(page, 'Ebene', `Ebene ${row.level}`)
         }
@@ -553,9 +608,7 @@ test.describe('CSV template roundtrip via builder UI', () => {
     if (isPhaseEnabled('scopes')) {
       const phaseStart = Date.now()
       for (const row of rowsForSettings) {
-        const nodeId = nodeIdByCsvShortName.get(row.shortName)
-        expect(nodeId, `Node was not created for ${row.shortName}`).toBeTruthy()
-        await selectNodeById(page, nodeId)
+        await selectNodeById(page, nodeIdByCsvShortName.get(row.shortName))
         if (row.scope && String(row.scope).trim().length > 0) {
           await trySetScopeByLabel(page, row.scope)
         }
@@ -583,9 +636,7 @@ test.describe('CSV template roundtrip via builder UI', () => {
     if (isPhaseEnabled('segments')) {
       const phaseStart = Date.now()
       for (const row of rowsForSettings) {
-        const nodeId = nodeIdByCsvShortName.get(row.shortName)
-        expect(nodeId, `Node was not created for ${row.shortName}`).toBeTruthy()
-        await selectNodeById(page, nodeId)
+        await selectNodeById(page, nodeIdByCsvShortName.get(row.shortName))
         if (!ignoreSegments) {
           await trySetSelectValueByLabel(page, 'Segment', row.segment)
         }
@@ -610,6 +661,12 @@ test.describe('CSV template roundtrip via builder UI', () => {
         canvas: await collectCanvasGeometryMetrics(page),
       })
     }
+
+    const phaseStartReleaseNotes = Date.now()
+    for (const row of rowsWithReleaseNotes) {
+      await fillReleaseNoteForNode(page, row.label, row.releaseNote)
+    }
+    phaseTimingsMs.releaseNotes = Date.now() - phaseStartReleaseNotes
 
     const actualCount = await page.locator('foreignObject.skill-node-export-anchor').count()
     const actualNodes = await page.locator('foreignObject.skill-node-export-anchor').evaluateAll((elements) => (
@@ -654,8 +711,52 @@ test.describe('CSV template roundtrip via builder UI', () => {
     const actualExportedSnapshots = collectActualNodeSnapshots(exportedPayload.document)
 
     expect(actualExportedSnapshots).toHaveLength(template.rows.length)
+    expect(exportedHtml).not.toContain('skill-tree-export-exclude')
+    expect(exportedHtml).not.toContain('data-add-control="root-initial"')
+    expect(exportedHtml).not.toContain('data-add-control="segment-initial"')
+
+    const exportPage = await browser.newPage()
+    try {
+      await exportPage.setContent(exportedHtml)
+      await exportPage.waitForSelector('.html-export__tree-shell svg', { timeout: 10_000 })
+
+      await expect(exportPage.locator('body')).toHaveCSS('background-color', 'rgb(0, 0, 0)')
+
+      const svgShell = exportPage.locator('.html-export__tree-shell')
+      const svg = exportPage.locator('.html-export__tree-shell svg')
+      const transformBefore = await svg.evaluate((element) => element.style.transform)
+
+      await svgShell.hover()
+      await exportPage.mouse.wheel(0, -360)
+
+      await expect.poll(async () => svg.evaluate((element) => element.style.transform)).not.toBe(transformBefore)
+
+      const downloadPromise = exportPage.waitForEvent('download')
+      await exportPage.getByRole('button', { name: 'Export', exact: true }).click()
+      await exportPage.getByRole('button', { name: 'SVG interaktiv', exact: true }).click()
+      const svgDownload = await downloadPromise
+      expect(svgDownload.suggestedFilename()).toBe('skilltree-roadmap.svg')
+
+      await exportPage.getByRole('button', { name: 'Filter', exact: true }).click()
+      await exportPage.locator('#html-export-filter-release').selectOption('now')
+      await expect(exportPage.locator('#html-export-filter-release')).toHaveValue('now')
+    } finally {
+      await exportPage.close()
+    }
 
     expect(existsSync(persistedExportPath)).toBe(true)
+
+    const persistedScopeLabels = await page.evaluate(() => {
+      const raw = localStorage.getItem('roadmap-skilltree.document.v1')
+      if (!raw) {
+        return []
+      }
+
+      const parsed = JSON.parse(raw)
+      const scopes = Array.isArray(parsed.document?.scopes) ? parsed.document.scopes : []
+      return scopes.map((scope) => String(scope?.label ?? '').trim()).filter(Boolean)
+    })
+    expect(persistedScopeLabels.sort()).toEqual(seededScopeLabels.sort())
 
     if (isPhaseEnabled('roundtrip')) {
       const phaseStart = Date.now()

@@ -1,6 +1,13 @@
 const HISTORY_LIMIT = 100
 export const DEFAULT_CENTER_ICON_SRC = '/blob.svg'
 
+const createDefaultRelease = () => ({
+  name: '',
+  motto: '',
+  introduction: '',
+  date: '',
+})
+
 const isObject = (value) => typeof value === 'object' && value !== null
 
 const ensureDocumentDefaults = (document) => {
@@ -9,12 +16,14 @@ const ensureDocumentDefaults = (document) => {
   }
 
   const nextScopes = Array.isArray(document.scopes) ? document.scopes : []
+  const nextRelease = isObject(document.release) ? document.release : {}
 
   // If the most important fields already exist, assume it's okay to return
   if (
     typeof document.centerIconSrc === 'string'
     && document.centerIconSrc.trim().length > 0
     && Array.isArray(document.scopes)
+    && isObject(document.release)
   ) {
     return document
   }
@@ -26,6 +35,10 @@ const ensureDocumentDefaults = (document) => {
         ? document.centerIconSrc
         : DEFAULT_CENTER_ICON_SRC,
     scopes: nextScopes,
+    release: {
+      ...createDefaultRelease(),
+      ...nextRelease,
+    },
   }
 }
 
@@ -42,7 +55,7 @@ export const createEmptyDocument = () => ({
   scopes: [],
   children: [],
   centerIconSrc: DEFAULT_CENTER_ICON_SRC,
-  
+  release: createDefaultRelease(),
 })
 
 export const cloneDocument = (document) => {

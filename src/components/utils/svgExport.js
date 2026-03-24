@@ -11,6 +11,41 @@ const toNumber = (value, fallback = 0) => {
 
 const sanitizeText = (value) => String(value ?? '').replace(/\s+/g, ' ').trim()
 
+const parseTooltipMarkdownLines = (value) => {
+  const normalized = String(value ?? '').replace(/\r\n?/g, '\n').trim()
+  if (!normalized) {
+    return []
+  }
+
+  const blocks = []
+
+  for (const rawLine of normalized.split('\n')) {
+    const line = rawLine.trim()
+    if (!line) {
+      blocks.push({ type: 'spacer' })
+      continue
+    }
+
+    const headingMatch = line.match(/^(#{1,6})\s+(.+)$/)
+    if (headingMatch) {
+      blocks.push({
+        type: 'heading',
+        text: headingMatch[2],
+      })
+      continue
+    }
+
+    splitIntoLines(line).forEach((wrappedLine) => {
+      blocks.push({
+        type: 'body',
+        text: wrappedLine,
+      })
+    })
+  }
+
+  return blocks
+}
+
 export const splitIntoLines = (text, maxChars = 52, maxLines = 3) => {
   const normalized = sanitizeText(text)
   if (!normalized) {
@@ -55,28 +90,35 @@ export const splitIntoLines = (text, maxChars = 52, maxLines = 3) => {
 const injectExportTooltipStyles = (svgRoot) => {
   const style = createSvgElement('style')
   style.textContent = `
-    .export-tooltip-trigger {
+    .skill-node-tooltip-trigger {
       fill: transparent;
       cursor: pointer;
       pointer-events: all;
     }
 
-    .export-tooltip-box {
+    .skill-node-tooltip {
       fill: rgba(2, 6, 23, 0.94);
       stroke: rgba(34, 211, 238, 0.45);
       stroke-width: 1.25;
     }
 
-    .export-tooltip-title {
+    .skill-node-tooltip__title {
       fill: #f8fafc;
       font-size: 12px;
       font-weight: 700;
       font-family: ui-sans-serif, system-ui, sans-serif;
     }
 
-    .export-tooltip-note {
+    .skill-node-tooltip__note {
       fill: #cbd5e1;
       font-size: 10px;
+      font-family: ui-sans-serif, system-ui, sans-serif;
+    }
+
+    .skill-node-tooltip__heading {
+      fill: #f8fafc;
+      font-size: 13px;
+      font-weight: 700;
       font-family: ui-sans-serif, system-ui, sans-serif;
     }
   `
@@ -92,19 +134,19 @@ const injectExportTooltipStyles = (svgRoot) => {
 
 const buildTooltipGroup = ({ id, centerX, centerY, title, note }) => {
   const group = createSvgElement('g')
-  group.setAttribute('class', 'export-tooltip')
+  group.setAttribute('class', 'skill-node-tooltip')
   group.setAttribute('opacity', '0')
   group.setAttribute('pointer-events', 'none')
 
-  const textLines = splitIntoLines(note)
-  const lineCount = Math.max(1, textLines.length)
+  const textBlocks = parseTooltipMarkdownLines(note)
+  const lineCount = Math.max(1, textBlocks.filter((block) => block.type !== 'spacer').length)
   const tooltipWidth = 240
   const tooltipHeight = 42 + lineCount * 14
   const boxX = centerX - tooltipWidth / 2
   const boxY = centerY - 58 - tooltipHeight
 
   const rect = createSvgElement('rect')
-  rect.setAttribute('class', 'export-tooltip-box')
+  rect.setAttribute('class', 'skill-node-tooltip')
   rect.setAttribute('x', String(boxX))
   rect.setAttribute('y', String(boxY))
   rect.setAttribute('width', String(tooltipWidth))
@@ -112,25 +154,35 @@ const buildTooltipGroup = ({ id, centerX, centerY, title, note }) => {
   rect.setAttribute('rx', '10')
 
   const titleText = createSvgElement('text')
-  titleText.setAttribute('class', 'export-tooltip-title')
+  titleText.setAttribute('class', 'skill-node-tooltip__title')
   titleText.setAttribute('x', String(boxX + 12))
   titleText.setAttribute('y', String(boxY + 18))
   titleText.textContent = title || 'Skill'
 
   const noteText = createSvgElement('text')
-  noteText.setAttribute('class', 'export-tooltip-note')
+  noteText.setAttribute('class', 'skill-node-tooltip__note')
   noteText.setAttribute('x', String(boxX + 12))
   noteText.setAttribute('y', String(boxY + 34))
 
-  if (textLines.length === 0) {
+  if (textBlocks.length === 0) {
     noteText.textContent = 'Keine Release Note hinterlegt.'
   } else {
-    textLines.forEach((line, index) => {
+    let lineIndex = 0
+    textBlocks.forEach((block) => {
+      if (block.type === 'spacer') {
+        lineIndex += 0.6
+        return
+      }
+
       const tspan = createSvgElement('tspan')
       tspan.setAttribute('x', String(boxX + 12))
-      tspan.setAttribute('dy', index === 0 ? '0' : '14')
-      tspan.textContent = line
+      tspan.setAttribute('dy', lineIndex === 0 ? '0' : '14')
+      if (block.type === 'heading') {
+        tspan.setAttribute('class', 'skill-node-tooltip__heading')
+      }
+      tspan.textContent = block.text
       noteText.appendChild(tspan)
+      lineIndex += 1
     })
   }
 
@@ -166,7 +218,7 @@ const appendAnimatedTooltips = (svgRoot) => {
   }
 
   const overlayLayer = createSvgElement('g')
-  overlayLayer.setAttribute('class', 'export-tooltip-layer')
+  overlayLayer.setAttribute('class', 'skill-node-tooltip-layer')
 
   anchors.forEach((anchor, index) => {
     const x = toNumber(anchor.getAttribute('x'))
@@ -184,7 +236,7 @@ const appendAnimatedTooltips = (svgRoot) => {
 
     const trigger = createSvgElement('circle')
     trigger.setAttribute('id', triggerId)
-    trigger.setAttribute('class', 'export-tooltip-trigger')
+    trigger.setAttribute('class', 'skill-node-tooltip-trigger')
     if (nodeId) {
       trigger.setAttribute('data-tooltip-node-id', nodeId)
     }
@@ -253,6 +305,9 @@ export const serializeSvgElementForExport = (svgElement, options = {}) => {
   clone.removeAttribute('class')
   clone.setAttribute('xmlns', SVG_NS)
   clone.setAttribute('xmlns:xlink', SVG_XLINK_NS)
+
+  clone.querySelectorAll('.skill-tree-export-exclude').forEach((node) => node.remove())
+
   if (includeTooltips) {
     injectExportTooltipStyles(clone)
     appendAnimatedTooltips(clone)

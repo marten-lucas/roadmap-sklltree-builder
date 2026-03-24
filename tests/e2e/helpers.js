@@ -335,20 +335,14 @@ const waitForSelectedNodeId = async (page, nodeId) => {
 
 export const selectNodeByShortName = async (page, shortName) => {
   const normalizedShortName = normalizeShortNameLikeApp(shortName, shortName)
-  const selector = `foreignObject.skill-node-export-anchor[data-short-name="${escapeCssAttribute(normalizedShortName)}"] .skill-node-button`
-  const node = page.locator(selector).first()
-  await node.waitFor({ state: 'attached', timeout: 10_000 })
-  await node.dispatchEvent('click')
-  await waitForInspector(page)
-  const selectedNodeId = await getSelectedNodeId(page)
+  const selectedNodeId = await searchAndSelectNode(page, normalizedShortName)
   if (selectedNodeId) {
     await waitForSelectedNodeId(page, selectedNodeId)
   }
 }
 
 export const selectNodeById = async (page, nodeId) => {
-  const selector = `foreignObject.skill-node-export-anchor[data-node-id="${escapeCssAttribute(nodeId)}"] .skill-node-button`
-  const node = page.locator(selector).first()
+  const node = page.locator(`foreignObject.skill-node-export-anchor[data-node-id="${escapeCssAttribute(nodeId)}"] .skill-node-button`).first()
   await node.waitFor({ state: 'attached', timeout: 10_000 })
   await node.dispatchEvent('click')
   await waitForInspector(page)
@@ -364,11 +358,10 @@ export const getSelectedNodeId = async (page) => {
 const escapeCssAttribute = (value) => String(value).replace(/\\/g, '\\\\').replace(/"/g, '\\"')
 
 export const selectNodeByLabel = async (page, label) => {
-  const selector = `foreignObject.skill-node-export-anchor[data-export-label="${escapeCssAttribute(label)}"] .skill-node-button`
-  const node = page.locator(selector).first()
-  await node.waitFor({ state: 'attached', timeout: 10_000 })
-  await node.dispatchEvent('click')
-  await waitForInspector(page)
+  const selectedNodeId = await searchAndSelectNode(page, String(label).trim())
+  if (selectedNodeId) {
+    await waitForSelectedNodeId(page, selectedNodeId)
+  }
 }
 
 export const searchAndSelectNode = async (page, query) => {
@@ -473,6 +466,18 @@ export const ensureScopesExist = async (page, scopeLabels) => {
     return
   }
 
+  // Creating scopes while a node is selected auto-attaches them to that node.
+  // Deselect first so the manager only creates shared scope definitions.
+  try {
+    await page.locator('svg.skill-tree-canvas').click({ position: { x: 5, y: 5 }, timeout: 2_000 })
+  } catch (e) {
+    try {
+      await page.mouse.click(8, 8)
+    } catch (err) {
+      // ignore; the manager still works, but newly created scopes may attach to the current node
+    }
+  }
+
   // Prefer the toolbar scope manager: click the toolbar button and use the
   // same accessible labels as the Inspector's scope UI so both flows remain
   // compatible with tests.
@@ -488,13 +493,41 @@ export const ensureScopesExist = async (page, scopeLabels) => {
   }
 
   for (const label of uniqueScopes) {
-    // skip if already exists anywhere in the document
-    const alreadyExists = await page.locator(`text=${label}`).filter({ visible: true }).count()
-    if (alreadyExists > 0) continue
+    const alreadyExists = await page.evaluate((expectedLabel) => {
+      const raw = localStorage.getItem('roadmap-skilltree.document.v1')
+      if (!raw) {
+        return false
+      }
+
+      try {
+        const parsed = JSON.parse(raw)
+        const scopes = Array.isArray(parsed.document?.scopes) ? parsed.document.scopes : []
+        return scopes.some((scope) => String(scope?.label ?? '').trim() === expectedLabel)
+      } catch {
+        return false
+      }
+    }, label)
+
+    if (alreadyExists) continue
 
     const textbox = page.getByRole('textbox', { name: 'Scopes verwalten', exact: true }).filter({ visible: true }).first()
     await textbox.fill(label)
     await page.getByRole('button', { name: 'Scope hinzufügen' }).filter({ visible: true }).first().click()
+
+    await page.waitForFunction((expectedLabel) => {
+      const raw = localStorage.getItem('roadmap-skilltree.document.v1')
+      if (!raw) {
+        return false
+      }
+
+      try {
+        const parsed = JSON.parse(raw)
+        const scopes = Array.isArray(parsed.document?.scopes) ? parsed.document.scopes : []
+        return scopes.some((scope) => String(scope?.label ?? '').trim() === expectedLabel)
+      } catch {
+        return false
+      }
+    }, label, { timeout: 10_000 })
   }
 
   // Close the toolbar scope manager if present
@@ -511,10 +544,23 @@ export const trySetScopeByLabel = async (page, scopeLabel) => {
   if (!scopeLabel || String(scopeLabel).trim().length === 0) {
     return false
   }
-  // retry loop: attempt selection up to 3 times and wait for the pill to appear
+  const normalizedScopeLabel = String(scopeLabel).trim()
+  // retry loop: attempt selection up to 3 times and confirm persistence in the saved document
   const scopeBlock = page.locator('.skill-panel__scope-block')
-  const pillSelector = '.mantine-MultiSelect-values .mantine-MultiSelect-item, .mantine-MultiSelect-item'
   const optionLocator = () => page.getByRole('option', { name: scopeLabel, exact: true }).filter({ visible: true }).first()
+
+  const scopeIsVisibleInDom = async () => {
+    try {
+      const pill = scopeBlock
+        .locator('.mantine-MultiSelect-values .mantine-MultiSelect-item, .mantine-MultiSelect-item')
+        .filter({ hasText: normalizedScopeLabel })
+        .first()
+      await pill.waitFor({ state: 'visible', timeout: 1_000 })
+      return true
+    } catch {
+      return false
+    }
+  }
 
   const sleep = (ms) => new Promise((res) => setTimeout(res, ms))
 
@@ -541,42 +587,25 @@ export const trySetScopeByLabel = async (page, scopeLabel) => {
         const opt = optionLocator()
         await opt.click({ force: true, timeout: 2_000 })
 
-        // Immediately persist a snapshot of relevant localStorage keys so we
-        // capture the app state at the moment the scope option was clicked.
-        try {
-          const dump = await page.evaluate(() => ({
-            document: localStorage.getItem('roadmap-skilltree.document.v1'),
-            scopeTrace: localStorage.getItem('roadmap-skilltree.e2e.scopeTrace'),
-            modelTrace: localStorage.getItem('roadmap-skilltree.e2e.modelTrace'),
-          }))
-          const ts = Date.now()
-          persistTextFile(
-            resolve(getE2eExportDir(), 'immediate-scope-dump-' + ts + '.json'),
-            JSON.stringify(dump, null, 2),
-          )
-
-          // Also capture a screenshot (headed test only will include visual state).
+        if (await scopeIsVisibleInDom()) {
           try {
-            await page.screenshot({ path: resolve(getE2eExportDir(), 'immediate-scope-screenshot-' + ts + '.png'), fullPage: false })
+            await page.keyboard.press('Escape')
           } catch (e) {
-            // ignore screenshot failures
+            // ignore
           }
-        } catch (e) {
-          // best-effort: ignore dump failures
+          return true
         }
 
-        // wait briefly for the pill to render
         try {
-          await page.waitForFunction(
-            (sel, label) => {
-              const els = Array.from(document.querySelectorAll(sel) || [])
-              return els.some((el) => (el.textContent || '').trim() === label)
-            },
-            pillSelector,
-            scopeLabel,
-            { timeout: 1_500 },
-          )
-          return true
+          await page.waitForTimeout(100)
+          if (await scopeIsVisibleInDom()) {
+            try {
+              await page.keyboard.press('Escape')
+            } catch (e) {
+              // ignore
+            }
+            return true
+          }
         } catch (e) {
           // pill did not appear yet; try again after a short delay
           await sleep(250)

@@ -1,5 +1,6 @@
 import { buildPersistedDocumentPayload, parseDocumentPayload } from './documentPersistence'
 import { collectReleaseNoteEntries } from './pdfExport'
+import { renderMarkdownToHtml } from './markdown'
 import { serializeSvgElementForExport } from './svgExport'
 
 export const HTML_EXPORT_DATA_SCRIPT_ID = 'skilltree-export-data'
@@ -68,6 +69,20 @@ const escapeJsonForScriptTag = (value) => value
   .replace(/</g, '\\u003c')
   .replace(/-->/g, '--\\>')
 
+const formatDisplayDate = (value) => {
+  const rawValue = String(value ?? '').trim()
+  if (!rawValue) {
+    return ''
+  }
+
+  const parsed = new Date(rawValue)
+  if (Number.isNaN(parsed.getTime())) {
+    return rawValue
+  }
+
+  return parsed.toLocaleDateString()
+}
+
 const collectStyleText = (sourceDocument) => {
   if (!sourceDocument?.styleSheets) {
     return ''
@@ -87,18 +102,24 @@ const collectStyleText = (sourceDocument) => {
   return styleChunks.filter(Boolean).join('\n')
 }
 
-const buildReleaseNotesMarkup = (entries) => {
+const buildReleaseNotesMarkup = (entries, introductionMarkdown = '') => {
+  const introductionHtml = renderMarkdownToHtml(introductionMarkdown)
+
   if (entries.length === 0) {
-    return '<p class="html-export__empty">Keine Release Notes vorhanden.</p>'
+    return `${introductionHtml ? `<article class="html-export__intro">${introductionHtml}</article>` : ''}<p class="html-export__empty">Keine Release Notes vorhanden.</p>`
   }
 
   let currentSegment = null
   const parts = []
 
+  if (introductionHtml) {
+    parts.push(`<article class="html-export__intro">${introductionHtml}</article>`)
+  }
+
   entries.forEach((entry) => {
     if (entry.segmentLabel !== currentSegment) {
       currentSegment = entry.segmentLabel
-      parts.push(`<section class="html-export__release-group"><h2>${escapeHtml(currentSegment)}</h2></section>`)
+      parts.push(`<section class="html-export__release-group"><p class="html-export__release-group-label">${escapeHtml(currentSegment)}</p></section>`)
     }
 
     const title = entry.shortName
@@ -111,7 +132,7 @@ const buildReleaseNotesMarkup = (entries) => {
           <strong>${title}</strong>
           <span>${escapeHtml(entry.levelLabel)} · ${escapeHtml(entry.statusLabel)}</span>
         </header>
-        <p>${escapeHtml(entry.releaseNote)}</p>
+        <div class="html-export__note-markdown">${renderMarkdownToHtml(entry.releaseNote)}</div>
       </article>
     `)
   })
@@ -197,11 +218,8 @@ const buildViewerScript = () => `
         })
       }
 
-      const tabButtons = Array.from(document.querySelectorAll('[data-export-tab-button]'))
-      const tabPanels = Array.from(document.querySelectorAll('[data-export-tab-panel]'))
-      const skillTreePanel = document.querySelector('[data-export-tab-panel="skilltree"]')
-      const releaseNotesPanel = document.querySelector('[data-export-tab-panel="releasenotes"]')
       const svgRoot = document.querySelector('.html-export__tree-shell svg')
+      const treeShell = document.getElementById('html-export-tree-shell')
       const scopeFilterSelect = document.getElementById('html-export-filter-scope')
       const releaseFilterSelect = document.getElementById('html-export-filter-release')
       const printButton = document.getElementById('html-export-print')
@@ -259,6 +277,131 @@ const buildViewerScript = () => `
       const segmentSeparators = Array.from(document.querySelectorAll('[data-segment-left][data-segment-right]'))
       const portalElements = Array.from(document.querySelectorAll('[data-portal-node-id][data-portal-source-id][data-portal-target-id]'))
       const tooltipNodeElements = Array.from(document.querySelectorAll('[data-tooltip-node-id]'))
+      const panZoomState = {
+        scale: 1,
+        translateX: 0,
+        translateY: 0,
+        isDragging: false,
+        dragStartX: 0,
+        dragStartY: 0,
+        dragOriginX: 0,
+        dragOriginY: 0,
+      }
+
+      const clamp = (value, min, max) => Math.max(min, Math.min(max, value))
+
+      const getSvgMetrics = () => {
+        const viewBox = svgRoot?.viewBox?.baseVal
+        const baseWidth = viewBox?.width || Number.parseFloat(svgRoot?.getAttribute('width') ?? '') || treeShell?.clientWidth || 1
+        const baseHeight = viewBox?.height || Number.parseFloat(svgRoot?.getAttribute('height') ?? '') || treeShell?.clientHeight || 1
+
+        return { baseWidth, baseHeight }
+      }
+
+      const applyPanZoom = () => {
+        if (!svgRoot) {
+          return
+        }
+
+        const { baseWidth, baseHeight } = getSvgMetrics()
+        svgRoot.style.width = String(baseWidth) + 'px'
+        svgRoot.style.height = String(baseHeight) + 'px'
+        svgRoot.style.transformOrigin = '0 0'
+        svgRoot.style.transform = 'translate(' + panZoomState.translateX + 'px, ' + panZoomState.translateY + 'px) scale(' + panZoomState.scale + ')'
+      }
+
+      const fitToWidth = () => {
+        if (!svgRoot || !treeShell) {
+          return
+        }
+
+        const { baseWidth, baseHeight } = getSvgMetrics()
+        const shellWidth = treeShell.clientWidth || baseWidth
+        const shellHeight = treeShell.clientHeight || baseHeight
+        const fittedScale = clamp(shellWidth / baseWidth, 0.18, 1.6)
+
+        panZoomState.scale = fittedScale
+        panZoomState.translateX = Math.max(0, (shellWidth - baseWidth * fittedScale) / 2)
+        panZoomState.translateY = Math.max(0, (shellHeight - baseHeight * fittedScale) / 2)
+        applyPanZoom()
+      }
+
+      const zoomAtPoint = (clientX, clientY, factor) => {
+        if (!treeShell || !svgRoot) {
+          return
+        }
+
+        const rect = treeShell.getBoundingClientRect()
+        const pointX = clientX - rect.left
+        const pointY = clientY - rect.top
+        const nextScale = clamp(panZoomState.scale * factor, 0.18, 2.4)
+        const scaleRatio = nextScale / panZoomState.scale
+
+        panZoomState.translateX = pointX - (pointX - panZoomState.translateX) * scaleRatio
+        panZoomState.translateY = pointY - (pointY - panZoomState.translateY) * scaleRatio
+        panZoomState.scale = nextScale
+        applyPanZoom()
+      }
+
+      const beginDrag = (event) => {
+        if (!treeShell || !svgRoot || event.button !== 0) {
+          return
+        }
+
+        panZoomState.isDragging = true
+        panZoomState.dragStartX = event.clientX
+        panZoomState.dragStartY = event.clientY
+        panZoomState.dragOriginX = panZoomState.translateX
+        panZoomState.dragOriginY = panZoomState.translateY
+        treeShell.setAttribute('data-dragging', 'true')
+        treeShell.style.cursor = 'grabbing'
+      }
+
+      const moveDrag = (event) => {
+        if (!panZoomState.isDragging) {
+          return
+        }
+
+        const deltaX = event.clientX - panZoomState.dragStartX
+        const deltaY = event.clientY - panZoomState.dragStartY
+        panZoomState.translateX = panZoomState.dragOriginX + deltaX
+        panZoomState.translateY = panZoomState.dragOriginY + deltaY
+        applyPanZoom()
+      }
+
+      const endDrag = () => {
+        if (!panZoomState.isDragging) {
+          return
+        }
+
+        panZoomState.isDragging = false
+        if (treeShell) {
+          treeShell.removeAttribute('data-dragging')
+          treeShell.style.cursor = ''
+        }
+      }
+
+      if (treeShell && svgRoot) {
+        svgRoot.style.touchAction = 'none'
+        svgRoot.style.cursor = 'grab'
+        treeShell.addEventListener('pointerdown', beginDrag)
+        window.addEventListener('pointermove', moveDrag)
+        window.addEventListener('pointerup', endDrag)
+        window.addEventListener('pointercancel', endDrag)
+        treeShell.addEventListener('wheel', (event) => {
+          event.preventDefault()
+          const zoomFactor = event.deltaY < 0 ? 1.08 : 0.92
+          zoomAtPoint(event.clientX, event.clientY, zoomFactor)
+        }, { passive: false })
+        window.addEventListener('resize', () => {
+          if (panZoomState.scale <= 1.6) {
+            fitToWidth()
+          }
+        })
+        window.requestAnimationFrame(fitToWidth)
+        window.addEventListener('load', fitToWidth, { once: true })
+        window.setTimeout(fitToWidth, 0)
+      }
 
       const setNodeMode = (anchor, mode) => {
         if (!anchor) {
@@ -395,10 +538,14 @@ const buildViewerScript = () => `
         }
 
         const clone = sourceSvg.cloneNode(true)
+        clone.style.transform = ''
+        clone.style.transformOrigin = ''
+        clone.style.cursor = ''
+        clone.style.touchAction = ''
         if (clean) {
-          clone.querySelectorAll('.export-tooltip-layer').forEach((node) => node.remove())
+          clone.querySelectorAll('.skill-node-tooltip-layer').forEach((node) => node.remove())
           clone.querySelectorAll('style').forEach((style) => {
-            if (style.textContent && style.textContent.includes('.export-tooltip-trigger')) {
+            if (style.textContent && style.textContent.includes('.skill-node-tooltip-trigger')) {
               style.remove()
             }
           })
@@ -417,24 +564,6 @@ const buildViewerScript = () => `
         URL.revokeObjectURL(objectUrl)
       }
 
-      const activateTab = (tabName) => {
-        tabButtons.forEach((button) => {
-          const isActive = button.dataset.exportTabButton === tabName
-          button.dataset.active = isActive ? 'true' : 'false'
-        })
-
-        tabPanels.forEach((panel) => {
-          const isActive = panel.dataset.exportTabPanel === tabName
-          panel.hidden = !isActive
-        })
-      }
-
-      tabButtons.forEach((button) => {
-        button.addEventListener('click', () => {
-          activateTab(button.dataset.exportTabButton)
-        })
-      })
-
       printButton?.addEventListener('click', () => {
         window.print()
       })
@@ -450,12 +579,7 @@ const buildViewerScript = () => `
       scopeFilterSelect?.addEventListener('change', applyTreeFilters)
       releaseFilterSelect?.addEventListener('change', applyTreeFilters)
 
-      activateTab('skilltree')
       applyTreeFilters()
-
-      if (skillTreePanel && releaseNotesPanel && window.location.hash === '#release-notes') {
-        activateTab('releasenotes')
-      }
     })()
   `
 
@@ -463,21 +587,20 @@ export const buildHtmlExportDocument = ({
   svgMarkup,
   roadmapDocument,
   styleText,
-  title = 'Skill Tree Roadmap',
-  metadata = {},
 }) => {
   const releaseNoteEntries = collectReleaseNoteEntries(roadmapDocument)
   const exportDate = new Date().toLocaleDateString()
-  const exportOwner = String(metadata.author ?? '').trim()
-  const exportBrand = String(metadata.brandName ?? '').trim()
-  const subtitleBits = [`Exportiert am ${exportDate}`]
+  const systemName = String(roadmapDocument?.systemName ?? '').trim() || 'Roadmap'
+  const releaseData = roadmapDocument?.release ?? {}
+  const releaseTitle = String(releaseData?.name ?? '').trim()
+  const releaseMotto = String(releaseData?.motto ?? '').trim()
+  const releaseDate = String(releaseData?.date ?? '').trim()
+  const releaseIntroduction = String(releaseData?.introduction ?? '')
+  const pageTitle = [systemName, releaseTitle].filter(Boolean).join(' · ') || systemName
+  const subtitleBits = [releaseMotto, `Exportiert am ${exportDate}`]
 
-  if (exportOwner) {
-    subtitleBits.push(`Autor: ${exportOwner}`)
-  }
-
-  if (exportBrand) {
-    subtitleBits.push(exportBrand)
+  if (releaseDate) {
+    subtitleBits.push(`Release Date: ${formatDisplayDate(releaseDate)}`)
   }
   const payloadJson = escapeJsonForScriptTag(JSON.stringify(buildPersistedDocumentPayload(roadmapDocument), null, 2))
   
@@ -489,7 +612,7 @@ export const buildHtmlExportDocument = ({
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>${escapeHtml(title)}</title>
+  <title>${escapeHtml(pageTitle)}</title>
   <style>
     ${styleText}
 
@@ -509,9 +632,7 @@ export const buildHtmlExportDocument = ({
       min-height: 100vh;
       font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
       color: var(--export-text);
-      background:
-        radial-gradient(circle at top, rgba(8, 47, 73, 0.35), transparent 34%),
-        linear-gradient(180deg, #020617 0%, #0f172a 100%);
+      background: #000000;
     }
 
     .html-export {
@@ -524,7 +645,6 @@ export const buildHtmlExportDocument = ({
     }
 
     .html-export__header,
-    .html-export__tabs,
     .html-export__panel {
       background: var(--export-surface);
       border: 1px solid var(--export-border);
@@ -533,6 +653,8 @@ export const buildHtmlExportDocument = ({
     }
 
     .html-export__header {
+      position: relative;
+      z-index: 30;
       display: flex;
       align-items: flex-start;
       justify-content: space-between;
@@ -569,6 +691,109 @@ export const buildHtmlExportDocument = ({
       gap: 10px;
       flex-wrap: wrap;
       justify-content: flex-end;
+      position: relative;
+      z-index: 40;
+    }
+
+    .html-export__menu {
+      position: relative;
+    }
+
+    .html-export__menu > summary {
+      list-style: none;
+    }
+
+    .html-export__menu > summary::-webkit-details-marker {
+      display: none;
+    }
+
+    .html-export__menu-button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      min-width: 44px;
+      min-height: 44px;
+      padding: 0 14px;
+      border-radius: 999px;
+      border: 1px solid rgba(103, 232, 249, 0.22);
+      background: rgba(8, 47, 73, 0.35);
+      color: #ecfeff;
+      cursor: pointer;
+    }
+
+    .html-export__menu-button:hover {
+      border-color: rgba(103, 232, 249, 0.4);
+      background: rgba(8, 47, 73, 0.52);
+    }
+
+    .html-export__menu-icon {
+      width: 16px;
+      height: 16px;
+      display: inline-flex;
+    }
+
+    .html-export__menu-panel {
+      position: absolute;
+      right: 0;
+      top: calc(100% + 8px);
+      z-index: 80;
+      min-width: 240px;
+      padding: 10px;
+      border-radius: 16px;
+      border: 1px solid rgba(71, 85, 105, 0.55);
+      background: rgba(2, 6, 23, 0.98);
+      box-shadow: 0 18px 36px rgba(2, 6, 23, 0.35);
+    }
+
+    .html-export__menu-panel--filters {
+      min-width: 280px;
+    }
+
+    .html-export__menu-actions {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .html-export__menu-action {
+      width: 100%;
+      border: 1px solid rgba(103, 232, 249, 0.16);
+      border-radius: 12px;
+      padding: 10px 12px;
+      background: rgba(8, 47, 73, 0.35);
+      color: #ecfeff;
+      text-align: left;
+      cursor: pointer;
+    }
+
+    .html-export__menu-action:hover {
+      background: rgba(8, 47, 73, 0.55);
+    }
+
+    .html-export__menu-filter {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+
+    .html-export__menu-filter label {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+      color: #cbd5e1;
+      font-size: 0.82rem;
+    }
+
+    .html-export__menu-filter select {
+      appearance: none;
+      border: 1px solid rgba(103, 232, 249, 0.25);
+      border-radius: 10px;
+      padding: 7px 10px;
+      background: rgba(8, 47, 73, 0.35);
+      color: #ecfeff;
+      font-size: 0.88rem;
     }
 
     .html-export__action,
@@ -583,19 +808,26 @@ export const buildHtmlExportDocument = ({
       font-size: 0.95rem;
     }
 
-    .html-export__tabs {
-      display: flex;
-      gap: 10px;
-      padding: 12px;
-    }
-
-    .html-export__tab[data-active="true"] {
-      background: rgba(34, 211, 238, 0.18);
-      border-color: rgba(103, 232, 249, 0.5);
-    }
-
     .html-export__panel {
+      position: relative;
+      z-index: 1;
       padding: 18px;
+    }
+
+    .html-export__section-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 14px;
+    }
+
+    .html-export__eyebrow {
+      margin: 0 0 6px;
+      color: var(--export-muted);
+      font-size: 0.74rem;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
     }
 
     .html-export__filters {
@@ -646,14 +878,20 @@ export const buildHtmlExportDocument = ({
     }
 
     .html-export__tree-shell {
+      position: relative;
+      z-index: 0;
       display: flex;
       align-items: center;
       justify-content: center;
       min-height: 60vh;
       overflow: auto;
       border-radius: 16px;
-      background: rgba(2, 6, 23, 0.82);
+      background: #000000;
       padding: 10px;
+    }
+
+    .html-export__tree-shell[data-dragging="true"] {
+      cursor: grabbing;
     }
 
     .html-export__tree-shell svg {
@@ -662,19 +900,89 @@ export const buildHtmlExportDocument = ({
       height: auto;
     }
 
+    .html-export__tree-shell .skill-tree-center-icon__foreign {
+      overflow: visible;
+    }
+
+    .html-export__tree-shell .skill-tree-center-icon__image {
+      display: block;
+    }
+
+    .html-export__intro {
+      margin-bottom: 16px;
+      padding: 14px 16px;
+      border-radius: 16px;
+      border: 1px solid rgba(71, 85, 105, 0.48);
+      background: rgba(15, 23, 42, 0.9);
+    }
+
+    .html-export__intro p,
+    .html-export__note-markdown p {
+      margin: 8px 0 0;
+      line-height: 1.55;
+    }
+
+    .html-export__intro h1,
+    .html-export__intro h2,
+    .html-export__intro h3,
+    .html-export__note-markdown h1,
+    .html-export__note-markdown h2,
+    .html-export__note-markdown h3 {
+      margin: 12px 0 0;
+      line-height: 1.15;
+      color: #f8fafc;
+    }
+
+    .html-export__intro h1,
+    .html-export__note-markdown h1 {
+      font-size: 1.45rem;
+    }
+
+    .html-export__intro h2,
+    .html-export__note-markdown h2 {
+      font-size: 1.2rem;
+    }
+
+    .html-export__intro h3,
+    .html-export__note-markdown h3 {
+      font-size: 1.05rem;
+    }
+
+    .html-export__intro ul,
+    .html-export__note-markdown ul {
+      margin: 8px 0 0;
+      padding-left: 18px;
+    }
+
+    .html-export__intro li,
+    .html-export__note-markdown li {
+      margin: 4px 0;
+    }
+
+    .html-export__intro a,
+    .html-export__note-markdown a {
+      color: #67e8f9;
+    }
+
+    .html-export__intro code,
+    .html-export__note-markdown code {
+      padding: 0.1rem 0.3rem;
+      border-radius: 6px;
+      background: rgba(15, 23, 42, 0.18);
+    }
+
     .html-export__release-list {
       display: flex;
       flex-direction: column;
       gap: 12px;
     }
 
-    .html-export__release-group h2 {
+    .html-export__release-group-label {
       margin: 0;
-      padding-bottom: 6px;
-      border-bottom: 1px solid rgba(148, 163, 184, 0.18);
       color: #f8fafc;
-      font-size: 1rem;
-      letter-spacing: 0.04em;
+      font-size: 0.82rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
       text-transform: uppercase;
     }
 
@@ -750,13 +1058,8 @@ export const buildHtmlExportDocument = ({
         backdrop-filter: none;
       }
 
-      .html-export__actions,
-      .html-export__tabs {
+      .html-export__actions {
         display: none;
-      }
-
-      .html-export__panel[hidden] {
-        display: block !important;
       }
 
       .html-export__tree-shell {
@@ -765,7 +1068,6 @@ export const buildHtmlExportDocument = ({
         overflow: visible;
       }
 
-      .html-export__release-group h2,
       .html-export__note-card strong {
         color: #111827;
       }
@@ -781,47 +1083,77 @@ export const buildHtmlExportDocument = ({
   <main class="html-export">
     <section class="html-export__header">
       <div>
-        <h1 class="html-export__title">${escapeHtml(title)}</h1>
-        <p class="html-export__subtitle">${escapeHtml(subtitleBits.join(' · '))}</p>
-        ${exportBrand ? `<span class="html-export__brand">${escapeHtml(exportBrand)}</span>` : ''}
+        <p class="html-export__eyebrow">System</p>
+        <h1 class="html-export__title">${escapeHtml(systemName)}</h1>
+        <p class="html-export__subtitle">${escapeHtml(releaseTitle || systemName)}</p>
+        <p class="html-export__section-subtitle">${escapeHtml(subtitleBits.filter(Boolean).join(' · '))}</p>
       </div>
       <div class="html-export__actions">
-        <button id="html-export-print" class="html-export__action" type="button">PDF drucken</button>
-        <button id="html-export-svg" class="html-export__action" type="button">SVG herunterladen</button>
-        <button id="html-export-svg-clean" class="html-export__action" type="button">SVG clean</button>
+        <details class="html-export__menu">
+          <summary class="html-export__menu-button" aria-label="Export">
+            <span class="html-export__menu-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                <path d="m7 10 5 5 5-5" />
+                <path d="M12 15V3" />
+              </svg>
+            </span>
+          </summary>
+          <div class="html-export__menu-panel">
+            <div class="html-export__menu-actions">
+              <button id="html-export-print" class="html-export__menu-action" type="button">PDF</button>
+              <button id="html-export-svg" class="html-export__menu-action" type="button">SVG interaktiv</button>
+              <button id="html-export-svg-clean" class="html-export__menu-action" type="button">SVG clean</button>
+            </div>
+          </div>
+        </details>
       </div>
     </section>
 
-    <section class="html-export__tabs" aria-label="Ansichten">
-      <button class="html-export__tab" type="button" data-export-tab-button="skilltree">Skilltree</button>
-      <button class="html-export__tab" type="button" data-export-tab-button="releasenotes">Release Notes</button>
+    <section class="html-export__panel">
+      <header class="html-export__section-header">
+        <p class="html-export__eyebrow">Roadmap</p>
+        <details class="html-export__menu">
+          <summary class="html-export__menu-button" aria-label="Filter">
+            <span class="html-export__menu-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M4 6h16" />
+                <path d="M7 12h10" />
+                <path d="M10 18h4" />
+              </svg>
+            </span>
+          </summary>
+          <div class="html-export__menu-panel html-export__menu-panel--filters">
+            <div class="html-export__menu-filter">
+              <label>
+                <span>Scope</span>
+                <select id="html-export-filter-scope">
+                  <option value="__all__">Alle Scopes</option>
+                  ${(roadmapDocument.scopes ?? []).map((scope) => (`
+                    <option value="${escapeHtml(scope.id)}">${escapeHtml(scope.label)}</option>
+                  `)).join('')}
+                </select>
+              </label>
+              <label>
+                <span>Release</span>
+                <select id="html-export-filter-release">
+                  <option value="all">All</option>
+                  <option value="now">Now</option>
+                  <option value="next">Next</option>
+                </select>
+              </label>
+            </div>
+          </div>
+        </details>
+      </header>
+      <div id="html-export-tree-shell" class="html-export__tree-shell">${svgMarkup}</div>
     </section>
 
-    <section class="html-export__panel" data-export-tab-panel="skilltree">
-      <div class="html-export__filters" aria-label="Skilltree Filter">
-        <label class="html-export__filter-group">
-          <span>Scope</span>
-          <select id="html-export-filter-scope" class="html-export__filter-select">
-            <option value="__all__">Alle Scopes</option>
-            ${(roadmapDocument.scopes ?? []).map((scope) => (
-              `<option value="${escapeHtml(scope.id)}">${escapeHtml(scope.label)}</option>`
-            )).join('')}
-          </select>
-        </label>
-        <label class="html-export__filter-group">
-          <span>Release</span>
-          <select id="html-export-filter-release" class="html-export__filter-select">
-            <option value="all">All</option>
-            <option value="now">Now</option>
-            <option value="next">Next</option>
-          </select>
-        </label>
-      </div>
-      <div class="html-export__tree-shell">${svgMarkup}</div>
-    </section>
-
-    <section class="html-export__panel" data-export-tab-panel="releasenotes" hidden>
-      <div class="html-export__release-list">${buildReleaseNotesMarkup(releaseNoteEntries)}</div>
+    <section class="html-export__panel">
+      <header class="html-export__section-header">
+        <p class="html-export__eyebrow">Release Notes</p>
+      </header>
+      <div class="html-export__release-list">${buildReleaseNotesMarkup(releaseNoteEntries, releaseIntroduction)}</div>
     </section>
   </main>
 
@@ -880,8 +1212,6 @@ export const readDocumentFromHtmlText = (htmlText) => {
 export const exportHtmlFromSkillTree = ({
   svgElement,
   roadmapDocument,
-  title = 'Skill Tree Roadmap',
-  metadata = {},
   sourceDocument = globalThis?.document,
 }) => {
   if (typeof window === 'undefined' || typeof window.document === 'undefined') {
@@ -898,8 +1228,6 @@ export const exportHtmlFromSkillTree = ({
     svgMarkup,
     roadmapDocument,
     styleText: collectStyleText(sourceDocument),
-    title,
-    metadata,
   })
 
   const blob = new Blob([html], { type: 'text/html;charset=utf-8' })

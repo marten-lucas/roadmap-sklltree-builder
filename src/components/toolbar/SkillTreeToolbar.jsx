@@ -1,22 +1,28 @@
 import { ActionIcon, Menu, Paper, Text, Tooltip } from '@mantine/core'
 import { useMemo, useState } from 'react'
-import { IconDownload, IconFilter, IconFilters, IconPercentage20, IconUpload } from '@tabler/icons-react'
+import {
+  IconArrowBackUp,
+  IconArrowForwardUp,
+  IconChevronLeft,
+  IconChevronRight,
+  IconDownload,
+  IconFilter,
+  IconFilters,
+  IconPercentage20,
+  IconRefresh,
+  IconUpload,
+} from '@tabler/icons-react'
 
-const ToolbarIcon = ({ children }) => (
-  <svg
-    width="15"
-    height="15"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="2"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    aria-hidden="true"
-  >
-    {children}
-  </svg>
-)
+const TOOLBAR_ICON_PROPS = {
+  size: 18,
+  stroke: 2.5,
+}
+
+const TOOLBAR_TOOLTIP_MIDDLEWARES = {
+  flip: false,
+  shift: false,
+  inline: false,
+}
 
 const RELEASE_FILTER_OPTIONS = {
   all: 'all',
@@ -78,20 +84,14 @@ export function SkillTreeToolbar({
       withBorder
     >
       <div className="skill-tree-toolbar__row">
-        <Tooltip label={isCollapsed ? 'Menü aufklappen' : 'Menü einklappen'} withArrow openDelay={120}>
+        <Tooltip label={isCollapsed ? 'Menü aufklappen' : 'Menü einklappen'} withArrow openDelay={120} position="top" middlewares={TOOLBAR_TOOLTIP_MIDDLEWARES}>
           <ActionIcon
             size="md"
             variant="default"
             aria-label={isCollapsed ? 'Menü aufklappen' : 'Menü einklappen'}
             onClick={onToggleCollapsed}
           >
-            <ToolbarIcon>
-              {isCollapsed ? (
-                <path d="m9 6 6 6-6 6" />
-              ) : (
-                <path d="m15 6-6 6 6 6" />
-              )}
-            </ToolbarIcon>
+            {isCollapsed ? <IconChevronRight {...TOOLBAR_ICON_PROPS} /> : <IconChevronLeft {...TOOLBAR_ICON_PROPS} />}
           </ActionIcon>
         </Tooltip>
 
@@ -107,46 +107,46 @@ export function SkillTreeToolbar({
               closeDelay={180}
             >
               <Menu.Target>
-                <Tooltip label="Export (Klick: HTML, Hover: weitere Formate)" withArrow openDelay={120}>
+                <Tooltip label="Export (Klick: HTML, Hover: weitere Formate)" withArrow openDelay={120} position="top" middlewares={TOOLBAR_TOOLTIP_MIDDLEWARES}>
                   <ActionIcon
                     size="md"
                     variant="default"
                     aria-label="Export"
                     onClick={onExportHtml}
                   >
-                    <IconDownload size={18} stroke={2} />
+                    <IconUpload {...TOOLBAR_ICON_PROPS} />
                   </ActionIcon>
                 </Tooltip>
               </Menu.Target>
 
               <Menu.Dropdown>
                 <Menu.Label>Export</Menu.Label>
-                <Menu.Item onClick={onExportPdf} title="PDF (statisch)">
+                <Menu.Item onClick={onExportPdf}>
                   PDF
                 </Menu.Item>
-                <Menu.Item onClick={onExportSvg} title="SVG (interaktiv)">
+                <Menu.Item onClick={onExportSvg}>
                   SVG
                 </Menu.Item>
-                <Menu.Item onClick={onExportCleanSvg} title="SVG (clean)">
+                <Menu.Item onClick={onExportCleanSvg}>
                   SVG (clean)
                 </Menu.Item>
               </Menu.Dropdown>
             </Menu>
 
-            <Tooltip label="HTML importieren (Ctrl+O)" withArrow openDelay={120}>
+            <Tooltip label="HTML importieren (Ctrl+O)" withArrow openDelay={120} position="top" middlewares={TOOLBAR_TOOLTIP_MIDDLEWARES}>
               <ActionIcon
                 size="md"
                 variant="default"
                 aria-label="HTML importieren"
                 onClick={onOpenDocumentPicker}
               >
-                <IconUpload size={18} stroke={2} />
+                <IconDownload {...TOOLBAR_ICON_PROPS} />
               </ActionIcon>
             </Tooltip>
           </div>
 
           <div className="skill-tree-toolbar__cluster">
-            <Tooltip label="Undo (Ctrl+Z)" withArrow openDelay={120}>
+            <Tooltip label="Undo (Ctrl+Z)" withArrow openDelay={120} position="top" middlewares={TOOLBAR_TOOLTIP_MIDDLEWARES}>
               <ActionIcon
                 size="md"
                 variant="default"
@@ -154,15 +154,10 @@ export function SkillTreeToolbar({
                 onClick={onUndo}
                 disabled={!canUndo}
               >
-                <ToolbarIcon>
-                  <path d="M3 7h7" />
-                  <path d="m3 7 3-3" />
-                  <path d="m3 7 3 3" />
-                  <path d="M21 14a7 7 0 0 0-7-7H9" />
-                </ToolbarIcon>
+                <IconArrowBackUp {...TOOLBAR_ICON_PROPS} />
               </ActionIcon>
             </Tooltip>
-            <Tooltip label="Redo (Ctrl+Y / Ctrl+Shift+Z)" withArrow openDelay={120}>
+            <Tooltip label="Redo (Ctrl+Y / Ctrl+Shift+Z)" withArrow openDelay={120} position="top" middlewares={TOOLBAR_TOOLTIP_MIDDLEWARES}>
               <ActionIcon
                 size="md"
                 variant="default"
@@ -170,18 +165,13 @@ export function SkillTreeToolbar({
                 onClick={onRedo}
                 disabled={!canRedo}
               >
-                <ToolbarIcon>
-                  <path d="M21 7h-7" />
-                  <path d="m21 7-3-3" />
-                  <path d="m21 7-3 3" />
-                  <path d="M3 14a7 7 0 0 1 7-7h5" />
-                </ToolbarIcon>
+                <IconArrowForwardUp {...TOOLBAR_ICON_PROPS} />
               </ActionIcon>
             </Tooltip>
           </div>
 
           <div className="skill-tree-toolbar__cluster">
-            <Tooltip label="Reset (Ctrl+Shift+Backspace)" withArrow openDelay={120}>
+            <Tooltip label="Reset (Ctrl+Shift+Backspace)" withArrow openDelay={120} position="top" middlewares={TOOLBAR_TOOLTIP_MIDDLEWARES}>
               <ActionIcon
                 size="md"
                 variant="subtle"
@@ -189,60 +179,57 @@ export function SkillTreeToolbar({
                 aria-label="Reset"
                 onClick={onReset}
               >
-                <ToolbarIcon>
-                  <polyline points="1 4 1 10 7 10" />
-                  <path d="M3.51 15a9 9 0 1 0 2.13-8.87" />
-                </ToolbarIcon>
+                <IconRefresh {...TOOLBAR_ICON_PROPS} />
               </ActionIcon>
             </Tooltip>
           </div>
 
           <div className="skill-tree-toolbar__cluster">
-            <Tooltip label="Segmente verwalten" withArrow openDelay={120}>
+            <Tooltip label="Segmente verwalten" withArrow openDelay={120} position="top" middlewares={TOOLBAR_TOOLTIP_MIDDLEWARES}>
               <ActionIcon
                 size="md"
                 variant="default"
                 aria-label="Segmente verwalten"
                 onClick={onOpenSegmentManager}
               >
-                <IconPercentage20 stroke={2} />
+                <IconPercentage20 {...TOOLBAR_ICON_PROPS} />
               </ActionIcon>
             </Tooltip>
 
-            <Tooltip label="Scopes verwalten" withArrow openDelay={120}>
+            <Tooltip label="Scopes verwalten" withArrow openDelay={120} position="top" middlewares={TOOLBAR_TOOLTIP_MIDDLEWARES}>
               <ActionIcon
                 size="md"
                 variant="default"
                 aria-label="Scopes verwalten"
                 onClick={onOpenScopeManager}
               >
-                <IconFilters stroke={2} />
+                <IconFilters {...TOOLBAR_ICON_PROPS} />
               </ActionIcon>
             </Tooltip>
 
             <Menu shadow="md" width={260} position="bottom-start" withArrow>
               <Menu.Target>
-                <Tooltip label={`Filter: ${selectedReleaseFilterLabel}${scopeOptions.length > 0 ? ' · ' + selectedScopeFilterLabel : ''}`} withArrow openDelay={120}>
+                <Tooltip label={`Filter: ${selectedReleaseFilterLabel}${scopeOptions.length > 0 ? ' · ' + selectedScopeFilterLabel : ''}`} withArrow openDelay={120} position="top" middlewares={TOOLBAR_TOOLTIP_MIDDLEWARES}>
                   <ActionIcon
                     size="md"
                     variant="default"
                     aria-label="Filter"
                     disabled={false}
                   >
-                    <IconFilter stroke={2} />
+                    <IconFilter {...TOOLBAR_ICON_PROPS} />
                   </ActionIcon>
                 </Tooltip>
               </Menu.Target>
 
               <Menu.Dropdown>
                 <Menu.Label>Filter</Menu.Label>
-                <Menu.Item onClick={() => setReleaseFilter?.(RELEASE_FILTER_OPTIONS.all)} title="Show all items">
+                <Menu.Item onClick={() => setReleaseFilter?.(RELEASE_FILTER_OPTIONS.all)}>
                   {releaseFilter === RELEASE_FILTER_OPTIONS.all ? '● ' : ''}All
                 </Menu.Item>
-                <Menu.Item onClick={() => setReleaseFilter?.(RELEASE_FILTER_OPTIONS.now)} title="Now — Done minimal, Later hidden">
+                <Menu.Item onClick={() => setReleaseFilter?.(RELEASE_FILTER_OPTIONS.now)}>
                   {releaseFilter === RELEASE_FILTER_OPTIONS.now ? '● ' : ''}Now
                 </Menu.Item>
-                <Menu.Item onClick={() => setReleaseFilter?.(RELEASE_FILTER_OPTIONS.next)} title="Next — Done/Later minimal">
+                <Menu.Item onClick={() => setReleaseFilter?.(RELEASE_FILTER_OPTIONS.next)}>
                   {releaseFilter === RELEASE_FILTER_OPTIONS.next ? '● ' : ''}Next
                 </Menu.Item>
                 <Menu.Divider />

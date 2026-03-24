@@ -2,6 +2,7 @@ import { ActionIcon, Alert, Badge, Button, Divider, Group, MultiSelect, Paper, S
 import { useState, useEffect, useCallback } from 'react'
 import { normalizeStatusKey, STATUS_LABELS } from '../config'
 import { UNASSIGNED_SEGMENT_ID } from '../utils/layoutShared'
+import { MarkdownField } from './MarkdownField'
 
 const TablerInfoCircleIcon = ({ size = 16 }) => (
   <svg
@@ -579,15 +580,16 @@ export function InspectorPanel({
                   comboboxProps={{ withinPortal: true, zIndex: 450 }}
                 />
 
-                <ActionIcon
-                  variant="light"
-                  color="gray"
-                  onClick={() => setSegmentManagerOpen((open) => !open)}
-                  aria-label="Segmente verwalten"
-                  title="Segmente verwalten"
-                >
-                  <TablerPercentIcon size={15} />
-                </ActionIcon>
+                <Tooltip label="Segmente verwalten" withArrow>
+                  <ActionIcon
+                    variant="light"
+                    color="gray"
+                    onClick={() => setSegmentManagerOpen((open) => !open)}
+                    aria-label="Segmente verwalten"
+                  >
+                    <TablerPercentIcon size={15} />
+                  </ActionIcon>
+                </Tooltip>
               </Group>
 
               <div className={`skill-panel__segment-accordion ${segmentManagerOpen ? 'skill-panel__segment-accordion--open' : ''}`}>
@@ -791,15 +793,16 @@ export function InspectorPanel({
                 comboboxProps={{ withinPortal: true, zIndex: 450 }}
               />
 
-              <ActionIcon
-                variant="light"
-                color="gray"
-                onClick={() => setScopeManagerOpen((open) => !open)}
-                aria-label="Scopes verwalten"
-                title="Scopes verwalten"
-              >
-                <TablerAdjustmentsIcon size={15} />
-              </ActionIcon>
+              <Tooltip label="Scopes verwalten" withArrow>
+                <ActionIcon
+                  variant="light"
+                  color="gray"
+                  onClick={() => setScopeManagerOpen((open) => !open)}
+                  aria-label="Scopes verwalten"
+                >
+                  <TablerAdjustmentsIcon size={15} />
+                </ActionIcon>
+              </Tooltip>
             </Group>
 
             <div className={`skill-panel__scope-accordion ${scopeManagerOpen ? 'skill-panel__scope-accordion--open' : ''}`}>
@@ -899,11 +902,11 @@ export function InspectorPanel({
             </div>
           </div>
 
-          <Textarea
+          <MarkdownField
             label="Release Note"
             placeholder="Beschreibe aus Kundensicht, was in dieser Ausbaustufe geliefert wurde oder als Nächstes kommt ..."
             value={releaseNoteDraft}
-            onChange={(event) => setReleaseNoteDraft(event.currentTarget.value)}
+            onChange={(nextValue) => setReleaseNoteDraft(nextValue)}
             onBlur={() => {
               if (releaseNoteDraft !== (activeProgressLevel.releaseNote ?? '')) {
                 onReleaseNoteChange?.(releaseNoteDraft)
@@ -915,12 +918,6 @@ export function InspectorPanel({
                   // ignore
                 }
               }
-            }}
-            minRows={5}
-            autosize
-            classNames={{
-              input: 'mantine-dark-input',
-              label: 'mantine-dark-label',
             }}
           />
 
