@@ -1,4 +1,4 @@
-import { SkillTree } from './components/skill-tree/SkillTree'
+import { SkillTree } from './components/SkillTree'
 
 function App() {
   return <SkillTree />

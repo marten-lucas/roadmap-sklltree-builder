@@ -1,5 +1,0 @@
-export { CenterIconPanel } from '../CenterIconPanel'
-export { InspectorPanel } from '../InspectorPanel'
-export { SegmentPanel } from '../SegmentPanel'
-export { default as ToolbarScopeManager } from '../ToolbarScopeManager'
-export { default as ToolbarSegmentManager } from '../ToolbarSegmentManager'
