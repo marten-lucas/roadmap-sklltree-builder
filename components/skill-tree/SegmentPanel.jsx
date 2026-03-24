@@ -1,13 +1,16 @@
 import { ActionIcon, Alert, Button, Divider, Paper, Stack, Text, TextInput, Group } from '@mantine/core'
 import { useState } from 'react'
 
-export function SegmentPanel({ selectedSegment, segmentOptions = [], onClose, onLabelChange, onDelete, onCreateSegment, onRenameSegment, onDeleteSegment }) {
+export function SegmentPanel({ selectedSegment, segmentOptions = [], isOpen = false, onClose, onLabelChange, onDelete, onCreateSegment, onRenameSegment, onDeleteSegment }) {
   const [segmentDraft, setSegmentDraft] = useState('')
   const [segmentError, setSegmentError] = useState(null)
   const [editingSegmentId, setEditingSegmentId] = useState(null)
   const [editingSegmentLabel, setEditingSegmentLabel] = useState('')
 
-  if (!selectedSegment) {
+  const hasSelected = !!selectedSegment
+
+  // Show panel when there's a selected segment or when explicitly opened (toolbar)
+  if (!selectedSegment && !isOpen) {
     return null
   }
 
@@ -70,21 +73,27 @@ export function SegmentPanel({ selectedSegment, segmentOptions = [], onClose, on
       <Stack gap="md" className="skill-panel__body">
         <Paper className="skill-panel__selected" radius="lg" withBorder>
           <Text className="skill-panel__selected-label">Ausgewählt</Text>
-          <Text className="skill-panel__selected-value">{selectedSegment.label}</Text>
+          <Text className="skill-panel__selected-value">{hasSelected ? selectedSegment.label : '—'}</Text>
         </Paper>
 
-        <TextInput
-          label="Name"
-          placeholder="Segment-Name eingeben …"
-          value={selectedSegment.label}
-          onChange={(event) => onLabelChange(event.currentTarget.value)}
-          classNames={{
-            input: 'mantine-dark-input',
-            label: 'mantine-dark-label',
-          }}
-        />
+        {hasSelected ? (
+          <>
+            <TextInput
+              label="Name"
+              placeholder="Segment-Name eingeben …"
+              value={selectedSegment.label}
+              onChange={(event) => onLabelChange(event.currentTarget.value)}
+              classNames={{
+                input: 'mantine-dark-input',
+                label: 'mantine-dark-label',
+              }}
+            />
 
-        <Button color="red" variant="outline" onClick={onDelete}>Segment löschen</Button>
+            <Button color="red" variant="outline" onClick={onDelete}>Segment löschen</Button>
+          </>
+        ) : (
+          <Text size="sm" c="dimmed">Kein Segment ausgewählt — öffne ein Segment oder erstelle eines unten.</Text>
+        )}
 
         <Divider />
 

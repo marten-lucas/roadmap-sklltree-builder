@@ -26,7 +26,7 @@ export function ToolbarSegmentManager({ segmentOptions = [], onCreateSegment, on
   const segmentSelectData = (segmentOptions ?? []).map((s) => ({ value: s.id ?? s.value, label: s.label }))
 
   const handleCreate = () => {
-    const result = onCreateSegment?.()
+    const result = onCreateSegment?.(segmentDraft)
     if (result && !result.ok) {
       setSegmentError(result.error ?? 'Segment konnte nicht angelegt werden.')
       return

@@ -1218,9 +1218,74 @@ export function SkillTree() {
     handleAddSegmentNear(anchorSegmentId, 'right')
   }
 
-  const handleCreateSegmentForManager = () => {
+  const handleCreateSegmentForManager = (label) => {
     try {
-      handleCreateSegment()
+      const existingSegments = roadmapData.segments ?? []
+      let createdSegmentId = null
+
+      if (existingSegments.length === 0) {
+        const result = addInitialSegmentWithResult(roadmapData)
+        createdSegmentId = result.createdSegmentId
+        let nextTree = result.tree
+        if (createdSegmentId && label) {
+          nextTree = updateSegmentLabel(nextTree, createdSegmentId, label)
+        }
+        commitDocument(nextTree)
+      } else {
+        const anchorSegmentId = selectedSegmentId ?? existingSegments[existingSegments.length - 1]?.id
+        if (!anchorSegmentId) {
+          return { ok: false, error: 'Kein Anker-Segment vorhanden.' }
+        }
+        const result = addSegmentNearWithResult(roadmapData, anchorSegmentId, 'right')
+        createdSegmentId = result.createdSegmentId
+        let nextTree = result.tree
+        if (createdSegmentId && label) {
+          nextTree = updateSegmentLabel(nextTree, createdSegmentId, label)
+        }
+        commitDocument(nextTree)
+      }
+
+      if (createdSegmentId) {
+        selectNodeId(null)
+        selectSegmentId(createdSegmentId)
+        setSelectedPortalKey(null)
+      }
+
+      return { ok: true }
+    } catch (e) {
+      return { ok: false, error: String(e) }
+    }
+  }
+
+  // Create segment from Inspector without auto-selecting it
+  const handleCreateSegmentForInspector = (label) => {
+    try {
+      const existingSegments = roadmapData.segments ?? []
+      let createdSegmentId = null
+
+      if (existingSegments.length === 0) {
+        const result = addInitialSegmentWithResult(roadmapData)
+        createdSegmentId = result.createdSegmentId
+        let nextTree = result.tree
+        if (createdSegmentId && label) {
+          nextTree = updateSegmentLabel(nextTree, createdSegmentId, label)
+        }
+        commitDocument(nextTree)
+      } else {
+        const anchorSegmentId = selectedSegmentId ?? existingSegments[existingSegments.length - 1]?.id
+        if (!anchorSegmentId) {
+          return { ok: false, error: 'Kein Anker-Segment vorhanden.' }
+        }
+        const result = addSegmentNearWithResult(roadmapData, anchorSegmentId, 'right')
+        createdSegmentId = result.createdSegmentId
+        let nextTree = result.tree
+        if (createdSegmentId && label) {
+          nextTree = updateSegmentLabel(nextTree, createdSegmentId, label)
+        }
+        commitDocument(nextTree)
+      }
+
+      // Do NOT select the created segment; inspector should stay open
       return { ok: true }
     } catch (e) {
       return { ok: false, error: String(e) }
@@ -2278,7 +2343,7 @@ export function SkillTree() {
         onCreateScope={handleCreateScope}
         onRenameScope={handleRenameScope}
         onDeleteScope={handleDeleteScope}
-        onCreateSegment={handleCreateSegmentForManager}
+        onCreateSegment={handleCreateSegmentForInspector}
         onRenameSegment={handleRenameSegmentForManager}
         onDeleteSegment={handleDeleteSegmentForManager}
         onSelectProgressLevel={setSelectedProgressLevelId}

@@ -347,7 +347,7 @@ export function InspectorPanel({
   }
 
   const handleCreateSegment = () => {
-    const result = onCreateSegment?.()
+    const result = onCreateSegment?.(segmentDraft)
 
     if (!result?.ok && result !== undefined) {
       setSegmentError(result?.error ?? 'Segment konnte nicht angelegt werden.')
