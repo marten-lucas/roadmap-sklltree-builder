@@ -1,4 +1,4 @@
-import { ActionIcon, Group, Menu, Paper, Text, Tooltip } from '@mantine/core'
+import { ActionIcon, Alert, Group, Menu, Paper, Text, Tooltip } from '@mantine/core'
 import { useEffect, useMemo, useReducer, useRef, useState } from 'react'
 import { TransformComponent, TransformWrapper } from 'react-zoom-pan-pinch'
 import './skillTree.css'
@@ -1273,8 +1273,10 @@ export function SkillTree() {
     updateNodeData(selectedNodeId, newLabel, selectedNode.status)
   }
 
-  const handleShortNameChange = (newShortName) => {
-    if (!selectedNodeId) {
+  const handleShortNameChange = (newShortName, nodeIdParam) => {
+    const targetId = nodeIdParam || selectedNodeId
+
+    if (!targetId) {
       return
     }
 
@@ -1283,7 +1285,7 @@ export function SkillTree() {
       return
     }
 
-    commitDocument(updateNodeShortName(roadmapData, selectedNodeId, newShortName))
+    commitDocument(updateNodeShortName(roadmapData, targetId, newShortName))
   }
 
   const handleStatusChange = (newStatus) => {
@@ -1462,6 +1464,25 @@ export function SkillTree() {
     setSelectedPortalKey(null)
   }
 
+  // Global toast state (listens for window events dispatched by child components)
+  const [globalToast, setGlobalToast] = useState({ visible: false, message: '', type: 'info' })
+
+  useEffect(() => {
+    const handler = (event) => {
+      try {
+        const detail = event?.detail || {}
+        setGlobalToast({ visible: true, message: detail.message || String(detail || ''), type: detail.type || 'info' })
+        const id = window.setTimeout(() => setGlobalToast({ visible: false, message: '', type: 'info' }), 1600)
+        return () => window.clearTimeout(id)
+      } catch (e) {
+        // ignore
+      }
+    }
+
+    window.addEventListener('roadmap-skilltree.toast', handler)
+    return () => window.removeEventListener('roadmap-skilltree.toast', handler)
+  }, [])
+
   return (
     <main className="skill-tree-shell">
       <input
@@ -1471,6 +1492,14 @@ export function SkillTree() {
         style={{ display: 'none' }}
         onChange={handleDocumentFileSelected}
       />
+
+      {globalToast.visible && (
+        <div style={{ position: 'fixed', top: 12, left: '50%', transform: 'translateX(-50%)', zIndex: 9999 }}>
+          <Alert color={globalToast.type === 'warning' ? 'yellow' : globalToast.type === 'success' ? 'teal' : 'blue'}>
+            {globalToast.message}
+          </Alert>
+        </div>
+      )}
 
       <Paper
         className={isToolbarCollapsed ? 'skill-tree-toolbar skill-tree-toolbar--collapsed' : 'skill-tree-toolbar'}

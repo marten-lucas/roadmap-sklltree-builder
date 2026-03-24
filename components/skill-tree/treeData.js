@@ -31,7 +31,6 @@ const sanitizeShortName = (value, fallbackLabel = DEFAULT_NODE_LABEL) => {
   const compact = String(value ?? '')
     .replace(/[^A-Za-z0-9]/g, '')
     .toUpperCase()
-    .slice(0, 3)
 
   if (compact.length > 0) {
     return compact

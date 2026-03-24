@@ -1,5 +1,5 @@
 import { ActionIcon, Alert, Badge, Button, Divider, Group, MultiSelect, Paper, Select, Stack, Tabs, Text, TextInput, Textarea, Tooltip } from '@mantine/core'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { normalizeStatusKey, STATUS_LABELS } from './config'
 import { UNASSIGNED_SEGMENT_ID } from './layoutShared'
 
@@ -107,6 +107,20 @@ export function InspectorPanel({
   const [scopeError, setScopeError] = useState(null)
   const [editingScopeId, setEditingScopeId] = useState(null)
   const [editingScopeLabel, setEditingScopeLabel] = useState('')
+  const [nameDraft, setNameDraft] = useState(selectedNode?.label ?? '')
+  const [shortNameDraft, setShortNameDraft] = useState(selectedNode?.shortName ?? '')
+  const [releaseNoteDraft, setReleaseNoteDraft] = useState(
+    Array.isArray(selectedNode?.levels) && selectedNode.levels[0] ? (selectedNode.levels[0].releaseNote ?? '') : ''
+  )
+  const [saveToast, setSaveToast] = useState({ visible: false, message: '' })
+
+  useEffect(() => {
+    setNameDraft(selectedNode?.label ?? '')
+    setShortNameDraft(selectedNode?.shortName ?? '')
+    setReleaseNoteDraft(Array.isArray(selectedNode?.levels) && selectedNode.levels[0] ? (selectedNode.levels[0].releaseNote ?? '') : '')
+  }, [selectedNode])
+
+  
 
   if (!selectedNode) {
     // If multiple nodes selected, render a multi-select inspector
@@ -251,6 +265,14 @@ export function InspectorPanel({
     label: scope.label,
   }))
 
+  // Keep release note draft synced when the active progress level changes
+  useEffect(() => {
+    // activeProgressLevel may be undefined in some states
+    // we only update the draft when the activeProgressLevel changes
+    const next = Array.isArray(selectedNode?.levels) && selectedNode.levels[0] ? (selectedNode.levels[0].releaseNote ?? '') : ''
+    setReleaseNoteDraft(next)
+  }, [selectedNode?.levels])
+
   const handleCreateScope = () => {
     const result = onCreateScope?.(scopeDraft)
 
@@ -389,8 +411,20 @@ export function InspectorPanel({
           <Textarea
             label="Name"
             placeholder="Skill-Name eingeben …"
-            value={selectedNode.label}
-            onChange={(event) => onLabelChange(event.currentTarget.value)}
+            value={nameDraft}
+            onChange={(event) => setNameDraft(event.currentTarget.value)}
+            onBlur={() => {
+              if (nameDraft !== (selectedNode.label ?? '')) {
+                onLabelChange?.(nameDraft)
+                setSaveToast({ visible: true, message: 'Name gespeichert' })
+                setTimeout(() => setSaveToast({ visible: false, message: '' }), 1400)
+                try {
+                  window.dispatchEvent(new CustomEvent('roadmap-skilltree.toast', { detail: { type: 'success', message: 'Name gespeichert' } }))
+                } catch (e) {
+                  // ignore
+                }
+              }
+            }}
             minRows={2}
             maxRows={4}
             classNames={{
@@ -402,9 +436,32 @@ export function InspectorPanel({
           <TextInput
             label="Shortname"
             placeholder="z.B. API"
-            value={selectedNode.shortName ?? ''}
-            onChange={(event) => onShortNameChange(event.currentTarget.value)}
-            maxLength={3}
+            value={shortNameDraft}
+            onChange={(event) => setShortNameDraft(event.currentTarget.value)}
+            onBlur={() => {
+              if (shortNameDraft !== (selectedNode.shortName ?? '')) {
+                onShortNameChange?.(shortNameDraft, selectedNode.id)
+                // dispatch a global toast event so the window (app) can show a global toast
+                try {
+                  window.dispatchEvent(new CustomEvent('roadmap-skilltree.toast', { detail: { type: 'success', message: 'Shortname gespeichert' } }))
+                } catch (e) {
+                  // ignore if window not available
+                }
+
+                // validation: warn if sanitized shortname exceeds 3 characters
+                try {
+                  const sanitized = String(shortNameDraft ?? '')
+                    .replace(/[^A-Za-z0-9]/g, '')
+                    .toUpperCase()
+                  if (sanitized && sanitized.length > 3) {
+                    window.dispatchEvent(new CustomEvent('roadmap-skilltree.toast', { detail: { type: 'warning', message: 'Shortname länger als 3 Zeichen (nur Warnung)' } }))
+                  }
+                } catch (e) {
+                  // ignore
+                }
+              }
+            }}
+            /* allow longer input; show a warning on blur if >3 */
             classNames={{
               input: 'mantine-dark-input',
               label: 'mantine-dark-label',
@@ -693,8 +750,20 @@ export function InspectorPanel({
           <Textarea
             label="Release Note"
             placeholder="Beschreibe aus Kundensicht, was in dieser Ausbaustufe geliefert wurde oder als Nächstes kommt ..."
-            value={activeProgressLevel.releaseNote}
-            onChange={(event) => onReleaseNoteChange(event.currentTarget.value)}
+            value={releaseNoteDraft}
+            onChange={(event) => setReleaseNoteDraft(event.currentTarget.value)}
+            onBlur={() => {
+              if (releaseNoteDraft !== (activeProgressLevel.releaseNote ?? '')) {
+                onReleaseNoteChange?.(releaseNoteDraft)
+                setSaveToast({ visible: true, message: 'Release Note gespeichert' })
+                setTimeout(() => setSaveToast({ visible: false, message: '' }), 1400)
+                try {
+                  window.dispatchEvent(new CustomEvent('roadmap-skilltree.toast', { detail: { type: 'success', message: 'Release Note gespeichert' } }))
+                } catch (e) {
+                  // ignore
+                }
+              }
+            }}
             minRows={5}
             autosize
             classNames={{
@@ -702,6 +771,12 @@ export function InspectorPanel({
               label: 'mantine-dark-label',
             }}
           />
+
+          {saveToast.visible && (
+            <Alert color="teal" variant="light">
+              {saveToast.message}
+            </Alert>
+          )}
 
           {validationMessage && (
             <Alert color="yellow" variant="light" className="skill-panel__alert">
