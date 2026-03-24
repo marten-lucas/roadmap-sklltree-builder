@@ -1,18 +1,25 @@
 import { defineConfig, devices } from '@playwright/test'
+import { resolve } from 'node:path'
 import process from 'node:process'
 
+const artifactsRoot = resolve(process.env.SKILLTREE_TEST_ARTIFACTS_DIR ?? 'tests/results')
+
 export default defineConfig({
-  testDir: './e2e',
+  testDir: './tests/e2e',
   timeout: 45_000,
   expect: { timeout: 10_000 },
   fullyParallel: false,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
-  reporter: 'list',
+  outputDir: resolve(artifactsRoot, 'playwright'),
+  reporter: [
+    ['list'],
+    ['json', { outputFile: resolve(artifactsRoot, 'reports/playwright-results.json') }],
+  ],
   use: {
     baseURL: 'http://localhost:5173',
-    trace: 'on-first-retry',
-    video: 'on-first-retry',
+    trace: 'retain-on-failure',
+    video: 'retain-on-failure',
   },
   projects: [
     {

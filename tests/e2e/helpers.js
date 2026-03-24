@@ -308,7 +308,7 @@ export const persistTextFile = (filePath, text) => {
 }
 
 export const getE2eExportDir = () => resolve(
-  process.env.SKILLTREE_E2E_EXPORT_DIR ?? resolveWorkspacePath('test-results', 'e2e-exports'),
+  process.env.SKILLTREE_E2E_EXPORT_DIR ?? resolveWorkspacePath('tests/results', 'e2e-exports'),
 )
 
 const getVisibleLocator = (locator) => locator.filter({ visible: true })

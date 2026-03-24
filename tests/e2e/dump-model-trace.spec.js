@@ -2,7 +2,7 @@ import { test } from '@playwright/test'
 import fs from 'node:fs'
 import { resolve } from 'node:path'
 
-const e2eExportDir = resolve(process.env.SKILLTREE_E2E_EXPORT_DIR ?? 'test-results/e2e-exports')
+const e2eExportDir = resolve(process.env.SKILLTREE_E2E_EXPORT_DIR ?? 'tests/results/e2e-exports')
 
 test('dump model trace', async ({ page }) => {
   const exportedHtmlPath = resolve(e2eExportDir, 'skilltree-roundtrip-1774241374085.html')

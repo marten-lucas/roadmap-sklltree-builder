@@ -1,0 +1,11 @@
+ShortName,Name,Scope,Ebene,Segment,Parent,AdditionalDependency,Status
+FE1,Frontend Foundation,Frontend,1,Platform,,,now
+BE1,Backend Foundation,Backend,1,Platform,,,next
+UI1,UI Components,Frontend,2,Platform,FE1,,now
+API,Public API,Backend,2,Platform,BE1,,now
+DOC,Documentation,Documentation,2,Enablement,FE1,,next
+AUTH,Authentication,Backend,3,Platform,API,,next
+OBS,Observability,Backend,3,Platform,API,,later
+DES,Design Tokens,Frontend,3,Platform,UI1,,done
+INT,Integration Tests,Quality,4,Enablement,AUTH,"OBS, DES",next
+REG,Regression Suite,Quality,5,Enablement,INT,,later

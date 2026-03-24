@@ -34,17 +34,17 @@ const resolveCsvTemplatePath = () => {
   }
 
   if (datasetName === 'small' || datasetName === 'medium' || datasetName === 'large') {
-    return resolve(process.cwd(), 'e2e/datasets', `${datasetName}.csv`)
+    return resolve(process.cwd(), 'tests/e2e/datasets', `${datasetName}.csv`)
   }
 
-  return resolve(process.cwd(), 'e2e/datasets/large.csv')
+  return resolve(process.cwd(), 'tests/e2e/datasets/large.csv')
 }
 
 const csvTemplatePath = resolveCsvTemplatePath()
 
 const exportOutputDir = process.env.SKILLTREE_E2E_EXPORT_DIR
   ? resolve(process.env.SKILLTREE_E2E_EXPORT_DIR)
-  : resolve(process.cwd(), 'test-results/e2e-exports')
+  : resolve(process.cwd(), 'tests/results/e2e-exports')
 
 const metricsOutputDir = process.env.SKILLTREE_E2E_METRICS_DIR
   ? resolve(process.env.SKILLTREE_E2E_METRICS_DIR)

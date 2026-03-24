@@ -2,7 +2,7 @@ import { test } from '@playwright/test'
 import fs from 'node:fs'
 import { resolve } from 'node:path'
 
-const e2eExportDir = resolve(process.env.SKILLTREE_E2E_EXPORT_DIR ?? 'test-results/e2e-exports')
+const e2eExportDir = resolve(process.env.SKILLTREE_E2E_EXPORT_DIR ?? 'tests/results/e2e-exports')
 
 test('trace COD scope changes', async ({ page }) => {
   // preload a previously exported document that contains the full tree (so COD exists)
