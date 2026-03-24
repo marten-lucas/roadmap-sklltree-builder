@@ -1,5 +1,5 @@
 import { ActionIcon, Alert, Badge, Button, Divider, Group, MultiSelect, Paper, Select, Stack, Tabs, Text, TextInput, Textarea, Tooltip } from '@mantine/core'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { normalizeStatusKey, STATUS_LABELS } from './config'
 import { UNASSIGNED_SEGMENT_ID } from './layoutShared'
 
@@ -60,6 +60,25 @@ const TablerCirclePlusIcon = ({ size = 18 }) => (
   </svg>
 )
 
+const TablerPercentIcon = ({ size = 16 }) => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    aria-hidden="true"
+  >
+    <path d="M19 5L5 19" />
+    <circle cx="6.5" cy="6.5" r="2.5" />
+    <circle cx="17.5" cy="17.5" r="2.5" />
+  </svg>
+)
+
 const STATUS_OPTIONS = [
   { value: 'done', label: STATUS_LABELS.done },
   { value: 'now', label: STATUS_LABELS.now },
@@ -83,6 +102,9 @@ export function InspectorPanel({
   onCreateScope,
   onRenameScope,
   onDeleteScope,
+  onCreateSegment,
+  onRenameSegment,
+  onDeleteSegment,
   onSelectProgressLevel,
   onAddProgressLevel,
   onDeleteProgressLevel,
@@ -113,12 +135,59 @@ export function InspectorPanel({
     Array.isArray(selectedNode?.levels) && selectedNode.levels[0] ? (selectedNode.levels[0].releaseNote ?? '') : ''
   )
   const [saveToast, setSaveToast] = useState({ visible: false, message: '' })
+  const [segmentManagerOpen, setSegmentManagerOpen] = useState(false)
+  const [segmentDraft, setSegmentDraft] = useState('')
+  const [segmentError, setSegmentError] = useState(null)
+  const [editingSegmentId, setEditingSegmentId] = useState(null)
+  const [editingSegmentLabel, setEditingSegmentLabel] = useState('')
 
   useEffect(() => {
     setNameDraft(selectedNode?.label ?? '')
     setShortNameDraft(selectedNode?.shortName ?? '')
     setReleaseNoteDraft(Array.isArray(selectedNode?.levels) && selectedNode.levels[0] ? (selectedNode.levels[0].releaseNote ?? '') : '')
   }, [selectedNode])
+
+  const handleScopeIdsChange = useCallback((nextScopeIds) => {
+    const levels = Array.isArray(selectedNode?.levels) ? selectedNode.levels : []
+    const activeId = selectedProgressLevelId ?? (levels[0] && levels[0].id)
+    const activeLevel = levels.find((l) => l.id === activeId) ?? levels[0] ?? null
+    const prevScopeIds = Array.isArray(activeLevel?.scopeIds) ? activeLevel.scopeIds : []
+
+    onScopeIdsChange?.(nextScopeIds)
+
+    try {
+      const key = 'roadmap-skilltree.e2e.scopeTrace'
+      const raw = localStorage.getItem(key)
+      const trace = raw ? JSON.parse(raw) : []
+      // include a compact node snapshot so immediate E2E dumps capture
+      // the node state at the moment of the scope assignment
+      const nodeSnapshot = {
+        id: selectedNode.id,
+        label: selectedNode.label,
+        shortName: selectedNode.shortName ?? null,
+        segmentId: selectedNode.segmentId ?? null,
+        parentId: selectedNode.parentId ?? null,
+        levels: Array.isArray(selectedNode.levels)
+          ? selectedNode.levels.map((l) => ({ id: l.id, scopeIds: Array.isArray(l.scopeIds) ? l.scopeIds : [] }))
+          : [],
+      }
+
+      trace.push({
+        ts: Date.now(),
+        nodeId: selectedNode.id,
+        shortName: selectedNode.shortName ?? null,
+        prev: prevScopeIds,
+        next: nextScopeIds,
+        nodeSnapshot,
+      })
+
+      localStorage.setItem(key, JSON.stringify(trace))
+    } catch (err) {
+      // ignore tracing errors during normal runtime
+    }
+  }, [onScopeIdsChange, selectedNode, selectedProgressLevelId])
+
+  
 
   
 
@@ -265,14 +334,6 @@ export function InspectorPanel({
     label: scope.label,
   }))
 
-  // Keep release note draft synced when the active progress level changes
-  useEffect(() => {
-    // activeProgressLevel may be undefined in some states
-    // we only update the draft when the activeProgressLevel changes
-    const next = Array.isArray(selectedNode?.levels) && selectedNode.levels[0] ? (selectedNode.levels[0].releaseNote ?? '') : ''
-    setReleaseNoteDraft(next)
-  }, [selectedNode?.levels])
-
   const handleCreateScope = () => {
     const result = onCreateScope?.(scopeDraft)
 
@@ -283,6 +344,54 @@ export function InspectorPanel({
 
     setScopeError(null)
     setScopeDraft('')
+  }
+
+  const handleCreateSegment = () => {
+    const result = onCreateSegment?.()
+
+    if (!result?.ok && result !== undefined) {
+      setSegmentError(result?.error ?? 'Segment konnte nicht angelegt werden.')
+      return
+    }
+
+    setSegmentError(null)
+    setSegmentDraft('')
+  }
+
+  const handleStartRenameSegment = (segmentId, label) => {
+    setSegmentError(null)
+    setEditingSegmentId(segmentId)
+    setEditingSegmentLabel(label)
+  }
+
+  const handleRenameSegment = () => {
+    if (!editingSegmentId) {
+      return
+    }
+
+    const result = onRenameSegment?.(editingSegmentId, editingSegmentLabel)
+    if (!result?.ok && result !== undefined) {
+      setSegmentError(result?.error ?? 'Segment konnte nicht umbenannt werden.')
+      return
+    }
+
+    setSegmentError(null)
+    setEditingSegmentId(null)
+    setEditingSegmentLabel('')
+  }
+
+  const handleDeleteSegment = (segmentId) => {
+    const result = onDeleteSegment?.(segmentId)
+    if (!result?.ok && result !== undefined) {
+      setSegmentError(result?.error ?? 'Segment konnte nicht gelöscht werden.')
+      return
+    }
+
+    setSegmentError(null)
+    if (editingSegmentId === segmentId) {
+      setEditingSegmentId(null)
+      setEditingSegmentLabel('')
+    }
   }
 
   const handleStartRenameScope = (scopeId, label) => {
@@ -318,42 +427,6 @@ export function InspectorPanel({
     if (editingScopeId === scopeId) {
       setEditingScopeId(null)
       setEditingScopeLabel('')
-    }
-  }
-
-  const handleScopeIdsChange = (nextScopeIds) => {
-    const prevScopeIds = activeProgressLevel.scopeIds ?? []
-    onScopeIdsChange?.(nextScopeIds)
-
-    try {
-      const key = 'roadmap-skilltree.e2e.scopeTrace'
-      const raw = localStorage.getItem(key)
-      const trace = raw ? JSON.parse(raw) : []
-      // include a compact node snapshot so immediate E2E dumps capture
-      // the node state at the moment of the scope assignment
-      const nodeSnapshot = {
-        id: selectedNode.id,
-        label: selectedNode.label,
-        shortName: selectedNode.shortName ?? null,
-        segmentId: selectedNode.segmentId ?? null,
-        parentId: selectedNode.parentId ?? null,
-        levels: Array.isArray(selectedNode.levels)
-          ? selectedNode.levels.map((l) => ({ id: l.id, scopeIds: Array.isArray(l.scopeIds) ? l.scopeIds : [] }))
-          : [],
-      }
-
-      trace.push({
-        ts: Date.now(),
-        nodeId: selectedNode.id,
-        shortName: selectedNode.shortName ?? null,
-        prev: prevScopeIds,
-        next: nextScopeIds,
-        nodeSnapshot,
-      })
-
-      localStorage.setItem(key, JSON.stringify(trace))
-    } catch (err) {
-      // ignore tracing errors during normal runtime
     }
   }
 
@@ -486,22 +559,101 @@ export function InspectorPanel({
           />
 
           {segmentOptions && segmentOptions.length > 0 && (
-            <Select
-              label="Segment"
-              data={segmentData}
-              value={selectedSegmentKey}
-              onChange={(value) => value && onSegmentChange(value)}
-              allowDeselect={false}
-              description={blockedSegmentHint ?? undefined}
-              classNames={{
-                input: 'mantine-dark-input',
-                label: 'mantine-dark-label',
-                description: 'mantine-dark-description',
-                dropdown: 'mantine-dark-dropdown',
-                option: 'mantine-dark-option',
-              }}
-              comboboxProps={{ withinPortal: true, zIndex: 450 }}
-            />
+            <>
+              <Group gap="xs" align="center" wrap="nowrap">
+                <Select
+                  label="Segment"
+                  data={segmentData}
+                  value={selectedSegmentKey}
+                  onChange={(value) => value && onSegmentChange(value)}
+                  allowDeselect={false}
+                  description={blockedSegmentHint ?? undefined}
+                  flex={1}
+                  classNames={{
+                    input: 'mantine-dark-input',
+                    label: 'mantine-dark-label',
+                    description: 'mantine-dark-description',
+                    dropdown: 'mantine-dark-dropdown',
+                    option: 'mantine-dark-option',
+                  }}
+                  comboboxProps={{ withinPortal: true, zIndex: 450 }}
+                />
+
+                <ActionIcon
+                  variant="light"
+                  color="gray"
+                  onClick={() => setSegmentManagerOpen((open) => !open)}
+                  aria-label="Segmente verwalten"
+                  title="Segmente verwalten"
+                >
+                  <TablerPercentIcon size={15} />
+                </ActionIcon>
+              </Group>
+
+              <div className={`skill-panel__segment-accordion ${segmentManagerOpen ? 'skill-panel__segment-accordion--open' : ''}`}>
+                <Stack gap="sm">
+                  <Group align="flex-end" wrap="nowrap">
+                    <TextInput
+                      label="Segmente verwalten"
+                      placeholder="Neues Segment"
+                      value={segmentDraft}
+                      onChange={(event) => setSegmentDraft(event.currentTarget.value)}
+                      style={{ flex: 1 }}
+                      classNames={{ input: 'mantine-dark-input', label: 'mantine-dark-label' }}
+                    />
+                    <Tooltip label="Segment hinzufügen" withArrow>
+                      <ActionIcon
+                        variant="light"
+                        color="cyan"
+                        size="lg"
+                        onClick={handleCreateSegment}
+                        aria-label="Segment hinzufügen"
+                      >
+                        <TablerCirclePlusIcon size={20} />
+                      </ActionIcon>
+                    </Tooltip>
+                  </Group>
+
+                  <Divider />
+
+                  <Stack gap={8}>
+                    {(segmentData ?? []).length === 0 && (
+                      <Text size="sm" c="dimmed">Noch keine Segmente vorhanden.</Text>
+                    )}
+
+                    {(segmentData ?? []).map((segment) => (
+                      <Paper key={segment.value} withBorder radius="md" p="xs">
+                        {editingSegmentId === segment.value ? (
+                          <Stack gap={8}>
+                            <TextInput
+                              value={editingSegmentLabel}
+                              onChange={(event) => setEditingSegmentLabel(event.currentTarget.value)}
+                              classNames={{ input: 'mantine-dark-input' }}
+                            />
+                            <Group justify="space-between">
+                              <Button size="xs" variant="light" onClick={() => { setEditingSegmentId(null); setEditingSegmentLabel('') }}>Abbrechen</Button>
+                              <Button size="xs" onClick={handleRenameSegment}>Speichern</Button>
+                            </Group>
+                          </Stack>
+                        ) : (
+                          <Group justify="space-between" wrap="nowrap">
+                            <Text size="sm" truncate>{segment.label}</Text>
+                            <Group gap={6} wrap="nowrap">
+                              <ActionIcon size="sm" variant="subtle" color="gray" onClick={() => handleStartRenameSegment(segment.value, segment.label)} aria-label="Segment umbenennen">✎</ActionIcon>
+                              <ActionIcon size="sm" variant="subtle" color="red" onClick={() => handleDeleteSegment(segment.value)} aria-label="Segment löschen">✕</ActionIcon>
+                            </Group>
+                          </Group>
+                        )}
+                      </Paper>
+                    ))}
+
+                    {segmentError && (
+                      <Alert color="red" variant="light">{segmentError}</Alert>
+                    )}
+                  </Stack>
+                </Stack>
+              </div>
+            </>
           )}
 
           {parentOptions && parentOptions.length > 0 && (

@@ -1,5 +1,5 @@
 const HISTORY_LIMIT = 100
-export const DEFAULT_CENTER_ICON_SRC = '/Kyana_Visual_final.svg'
+export const DEFAULT_CENTER_ICON_SRC = '/blob.svg'
 
 const isObject = (value) => typeof value === 'object' && value !== null
 

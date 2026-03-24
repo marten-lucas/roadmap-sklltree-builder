@@ -21,7 +21,8 @@ import { UNASSIGNED_SEGMENT_ID } from './layoutShared'
 import { getSkillTreeShortcutAction } from './keyboardShortcuts'
 import { SegmentPanel } from './SegmentPanel'
 import ToolbarScopeManager from './ToolbarScopeManager'
-import { togglePanel, PANEL_INSPECTOR, PANEL_CENTER, PANEL_SCOPES } from './panelsState'
+import ToolbarSegmentManager from './ToolbarSegmentManager'
+import { togglePanel, PANEL_INSPECTOR, PANEL_CENTER, PANEL_SCOPES, PANEL_SEGMENTS } from './panelsState'
 import { SkillNode } from './SkillNode'
 import { getDisplayStatusKey } from './nodeStatus'
 import {
@@ -792,8 +793,19 @@ export function SkillTree() {
     setRightPanel((prev) => togglePanel(prev, PANEL_SCOPES))
   }
 
+  const handleOpenSegmentManager = (event) => {
+    event?.stopPropagation()
+    selectNodeId(null)
+    selectSegmentId(null)
+    setRightPanel((prev) => togglePanel(prev, PANEL_SEGMENTS))
+  }
+
   const handleCloseScopeManager = () => {
     if (rightPanel === PANEL_SCOPES) setRightPanel(null)
+  }
+
+  const handleCloseSegmentManager = () => {
+    if (rightPanel === PANEL_SEGMENTS) setRightPanel(null)
   }
 
   const handleResetCenterIcon = () => {
@@ -1204,6 +1216,46 @@ export function SkillTree() {
     }
 
     handleAddSegmentNear(anchorSegmentId, 'right')
+  }
+
+  const handleCreateSegmentForManager = () => {
+    try {
+      handleCreateSegment()
+      return { ok: true }
+    } catch (e) {
+      return { ok: false, error: String(e) }
+    }
+  }
+
+  const handleRenameSegmentForManager = (segmentId, nextLabel) => {
+    const exists = (roadmapData.segments ?? []).some((s) => s.id === segmentId)
+    if (!exists) {
+      return { ok: false, error: 'Segment wurde nicht gefunden.' }
+    }
+
+    try {
+      commitDocument(updateSegmentLabel(roadmapData, segmentId, nextLabel))
+      return { ok: true }
+    } catch (e) {
+      return { ok: false, error: String(e) }
+    }
+  }
+
+  const handleDeleteSegmentForManager = (segmentId) => {
+    const exists = (roadmapData.segments ?? []).some((s) => s.id === segmentId)
+    if (!exists) {
+      return { ok: false, error: 'Segment wurde nicht gefunden.' }
+    }
+
+    try {
+      commitDocument(deleteSegment(roadmapData, segmentId))
+      if (selectedSegmentId === segmentId) {
+        selectSegmentId(null)
+      }
+      return { ok: true }
+    } catch (e) {
+      return { ok: false, error: String(e) }
+    }
   }
 
   const handleAddInitialRoot = () => {
@@ -1641,7 +1693,22 @@ export function SkillTree() {
               </Tooltip>
             </div>
 
-            {/* Segments toolbar entry removed per design */}
+            <div className="skill-tree-toolbar__cluster">
+              <Tooltip label="Segmente verwalten" withArrow openDelay={120}>
+                <ActionIcon
+                  size="md"
+                  variant="default"
+                  aria-label="Segmente verwalten"
+                  onClick={handleOpenSegmentManager}
+                >
+                  <ToolbarIcon>
+                    <path d="M19 5L5 19" />
+                    <circle cx="6.5" cy="6.5" r="2.5" />
+                    <circle cx="17.5" cy="17.5" r="2.5" />
+                  </ToolbarIcon>
+                </ActionIcon>
+              </Tooltip>
+            </div>
 
             <div className="skill-tree-toolbar__cluster">
               <Tooltip label="Scopes verwalten" withArrow openDelay={120}>
@@ -2211,6 +2278,9 @@ export function SkillTree() {
         onCreateScope={handleCreateScope}
         onRenameScope={handleRenameScope}
         onDeleteScope={handleDeleteScope}
+        onCreateSegment={handleCreateSegmentForManager}
+        onRenameSegment={handleRenameSegmentForManager}
+        onDeleteSegment={handleDeleteSegmentForManager}
         onSelectProgressLevel={setSelectedProgressLevelId}
         onAddProgressLevel={handleAddProgressLevel}
         onDeleteProgressLevel={handleDeleteProgressLevel}
@@ -2259,11 +2329,25 @@ export function SkillTree() {
         />
       )}
 
+      {rightPanel === PANEL_SEGMENTS && (
+        <ToolbarSegmentManager
+          segmentOptions={roadmapData.segments ?? []}
+          onCreateSegment={handleCreateSegmentForManager}
+          onRenameSegment={handleRenameSegmentForManager}
+          onDeleteSegment={handleDeleteSegmentForManager}
+          onClose={handleCloseSegmentManager}
+        />
+      )}
+
       <SegmentPanel
         selectedSegment={selectedSegment}
+        segmentOptions={roadmapData.segments ?? []}
         onClose={() => selectSegmentId(null)}
         onLabelChange={handleSegmentLabelChange}
         onDelete={handleDeleteSegment}
+        onCreateSegment={handleCreateSegmentForManager}
+        onRenameSegment={handleRenameSegmentForManager}
+        onDeleteSegment={handleDeleteSegmentForManager}
       />
 
       <CenterIconPanel
