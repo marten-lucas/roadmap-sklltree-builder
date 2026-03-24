@@ -26,15 +26,21 @@ Advanced radial skill-tree visualization with intelligent layout solving, constr
 ## Project Structure
 
 ```
-components/skill-tree/
+src/components/skill-tree/
+├── canvas/
+├── hooks/
+├── nodes/
+├── panels/
+├── toolbar/
+├── utils/
 ├── layoutSolver.js           # Core layout computation engine
 ├── treeValidation.js         # Change validation & constraint checking
-├── treeData.js              # Tree mutations & traversal
-├── SkillTree.jsx            # Main visualization component
-├── InspectorPanel.jsx       # Node editing UI (HeroUI-based)
-├── SegmentPanel.jsx         # Segment management
-├── config.js                # Configuration constants
-├── data.js                  # Sample data
+├── treeData.js               # Tree mutations & traversal
+├── SkillTree.jsx             # Main visualization component
+├── InspectorPanel.jsx        # Node editing UI
+├── SegmentPanel.jsx          # Segment management
+├── config.js                 # Configuration constants
+├── data.js                   # Sample data
 └── __tests__/
     ├── layoutSolver.test.js  # 17 layout tests
     ├── treeValidation.test.js # 18 validation tests
@@ -118,7 +124,7 @@ This folder is excluded from git.
 
 ### Configuration
 
-[config.js](components/skill-tree/config.js) provides layout parameters:
+[config.js](src/components/skill-tree/config.js) provides layout parameters:
 
 ```javascript
 export const TREE_CONFIG = {
@@ -209,7 +215,7 @@ Tests focus on:
 4. **Edge Cases** - How do we handle extremes?
 5. **Integration** - Do components work together?
 
-See [/__tests__/README.md](components/skill-tree/__tests__/README.md) for detailed test documentation.
+See [/__tests__/README.md](src/components/skill-tree/__tests__/README.md) for detailed test documentation.
 
 ## Performance
 
@@ -236,7 +242,7 @@ Run the full Phase 3 suite locally:
 npm run test:phase3
 ```
 
-The suite covers layout invariants, validation, tree mutations, segment CRUD and integration flows, document persistence, and the dedicated regression checks in [phase3Regression.test.js](components/skill-tree/__tests__/phase3Regression.test.js).
+The suite covers layout invariants, validation, tree mutations, segment CRUD and integration flows, document persistence, and the dedicated regression checks in [phase3Regression.test.js](src/components/skill-tree/__tests__/phase3Regression.test.js).
 
 ## Phase 2 — Core E2E Suite
 

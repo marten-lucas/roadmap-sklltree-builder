@@ -1,11 +1,9 @@
-import { ActionIcon, Alert, Group, Menu, Paper, Text, Tooltip } from '@mantine/core'
+import { Alert } from '@mantine/core'
 import { useEffect, useMemo, useReducer, useRef, useState } from 'react'
 import { TransformComponent, TransformWrapper } from 'react-zoom-pan-pinch'
 import './skillTree.css'
-import { TREE_CONFIG, normalizeStatusKey, STATUS_STYLES } from './config'
-import { initialData } from './data'
+import { TREE_CONFIG, STATUS_STYLES } from './config'
 import {
-  loadDocumentFromLocalStorage,
   saveDocumentToLocalStorage,
 } from './documentPersistence'
 import {
@@ -14,16 +12,11 @@ import {
   DEFAULT_CENTER_ICON_SRC,
   documentHistoryReducer,
 } from './documentState'
-import { CenterIconPanel } from './CenterIconPanel'
-import { InspectorPanel } from './InspectorPanel'
+import { CenterIconPanel, InspectorPanel, SegmentPanel, ToolbarScopeManager, ToolbarSegmentManager } from './panels'
 import { solveSkillTreeLayout } from './layoutSolver'
 import { UNASSIGNED_SEGMENT_ID } from './layoutShared'
 import { getSkillTreeShortcutAction } from './keyboardShortcuts'
-import { SegmentPanel } from './SegmentPanel'
-import ToolbarScopeManager from './ToolbarScopeManager'
-import ToolbarSegmentManager from './ToolbarSegmentManager'
 import { togglePanel, PANEL_INSPECTOR, PANEL_CENTER, PANEL_SCOPES, PANEL_SEGMENTS } from './panelsState'
-import { SkillNode } from './SkillNode'
 import { getDisplayStatusKey } from './nodeStatus'
 import {
   getAdditionalDependencyOptionsForNode,
@@ -59,151 +52,32 @@ import {
   updateSegmentLabel,
 } from './treeData'
 import { toDegrees, toRadians } from './layoutMath'
-import { IconDownload, IconUpload, IconFilters, IconFilter, IconPercentage20 } from '@tabler/icons-react'
+import { SkillTreeCanvas } from './canvas'
+import { SkillTreeToolbar } from './toolbar'
 
-const normalizeAngle = (angleDeg) => {
-  const normalized = angleDeg % 360
-  return normalized < 0 ? normalized + 360 : normalized
-}
+import { useSkillTreeUiState } from './hooks/useSkillTreeUiState'
+import { normalizeAngle, getAngleDelta, isAngleNear } from './utils/angle'
+import { uniqueArray } from './utils/array'
+import { isEditableElement } from './utils/dom'
+import { getHtmlImportErrorMessage, confirmResetDocument } from './utils/messages'
+import { readFileAsText, readFileAsDataUrl, isValidSvgMarkup } from './utils/file'
+import {
+  RELEASE_FILTER_LABELS,
+  RELEASE_FILTER_OPTIONS,
+  SCOPE_FILTER_ALL,
+  getReleaseVisibilityMode,
+  nodeMatchesScopeFilter,
+} from './utils/visibility'
+import { getInitialRoadmapDocument } from './utils/document'
+import { resolveInspectorSelectedNode } from './utils/selection'
 
-const getAngleDelta = (leftDeg, rightDeg) => {
-  const delta = normalizeAngle(leftDeg - rightDeg)
-  return delta > 180 ? delta - 360 : delta
-}
-
-const uniqueArray = (values) => [...new Set(values)]
-
-const isAngleNear = (candidate, blocked, thresholdDeg) => {
-  return Math.abs(getAngleDelta(candidate, blocked)) < thresholdDeg
-}
+export { resolveInspectorSelectedNode } from './utils/selection'
 
 const AUTOSAVE_DEBOUNCE_MS = 450
 const EXPORT_BRAND_NAME = 'Roadmap Skilltree Builder'
 const EXPORT_AUTHOR = 'Skilltree Team'
 const INITIAL_VIEW_SCALE = 0.7
 const MINIMAL_NODE_SIZE = 36
-const SCOPE_FILTER_ALL = '__all__'
-
-const RELEASE_FILTER_OPTIONS = {
-  all: 'all',
-  now: 'now',
-  next: 'next',
-}
-
-const RELEASE_FILTER_LABELS = {
-  all: 'All',
-  now: 'Now',
-  next: 'Next',
-}
-
-const getReleaseVisibilityMode = (statusKey, releaseFilter) => {
-  if (releaseFilter === RELEASE_FILTER_OPTIONS.now) {
-    if (statusKey === 'now' || statusKey === 'next') {
-      return 'full'
-    }
-
-    if (statusKey === 'done') {
-      return 'minimal'
-    }
-
-    return 'hidden'
-  }
-
-  if (releaseFilter === RELEASE_FILTER_OPTIONS.next) {
-    if (statusKey === 'now' || statusKey === 'next') {
-      return 'full'
-    }
-
-    return 'minimal'
-  }
-
-  return 'full'
-}
-
-const nodeMatchesScopeFilter = (node, scopeId) => {
-  const levels = Array.isArray(node?.levels) ? node.levels : []
-
-  if (!scopeId || scopeId === SCOPE_FILTER_ALL) {
-    return true
-  }
-
-  return levels.some((level) => Array.isArray(level?.scopeIds) && level.scopeIds.includes(scopeId))
-}
-
-const getInitialRoadmapDocument = () => loadDocumentFromLocalStorage() ?? initialData
-
-const isEditableElement = (target) => {
-  if (!(target instanceof HTMLElement)) {
-    return false
-  }
-
-  return target.isContentEditable || target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT'
-}
-
-// Exported helper: decide which `selectedNode` the inspector should receive.
-// When multiple nodes are selected the inspector should not get a single
-// selected node object (it renders a multi-select UI instead).
-export function resolveInspectorSelectedNode(node, nodeIds) {
-  if (Array.isArray(nodeIds) && nodeIds.length > 1) return null
-  return node
-}
-
-const getHtmlImportErrorMessage = (error) => {
-  if (error instanceof Error && error.message) {
-    return error.message
-  }
-
-  return 'Die Datei konnte nicht importiert werden. Bitte eine gueltige HTML-Exportdatei verwenden.'
-}
-
-const confirmResetDocument = () => window.confirm(
-  'Roadmap wirklich zuruecksetzen? Dieser Schritt kann per Undo rueckgaengig gemacht werden.',
-)
-
-const readFileAsText = (file) => new Promise((resolve, reject) => {
-  const reader = new FileReader()
-  reader.onload = () => resolve(String(reader.result ?? ''))
-  reader.onerror = () => reject(new Error('Datei konnte nicht gelesen werden.'))
-  reader.readAsText(file)
-})
-
-const readFileAsDataUrl = (file) => new Promise((resolve, reject) => {
-  const reader = new FileReader()
-  reader.onload = () => resolve(String(reader.result ?? ''))
-  reader.onerror = () => reject(new Error('Datei konnte nicht gelesen werden.'))
-  reader.readAsDataURL(file)
-})
-
-const isValidSvgMarkup = (markup) => {
-  if (typeof markup !== 'string' || markup.trim().length === 0) {
-    return false
-  }
-
-  const parser = new DOMParser()
-  const parsed = parser.parseFromString(markup, 'image/svg+xml')
-
-  if (parsed.querySelector('parsererror')) {
-    return false
-  }
-
-  return parsed.documentElement?.tagName?.toLowerCase() === 'svg'
-}
-
-const ToolbarIcon = ({ children }) => (
-  <svg
-    width="15"
-    height="15"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="2"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    aria-hidden="true"
-  >
-    {children}
-  </svg>
-)
 
 export function SkillTree() {
   const [documentHistory, dispatchDocument] = useReducer(
@@ -217,43 +91,33 @@ export function SkillTree() {
   const documentFileInputRef = useRef(null)
   const canvasSvgRef = useRef(null)
   const [lastSavedAt, setLastSavedAt] = useState(null)
-  const [selectedNodeId, setSelectedNodeId] = useState(null)
-  const [selectedNodeIds, setSelectedNodeIds] = useState([])
-  const [selectedProgressLevelId, setSelectedProgressLevelId] = useState(null)
-  const [selectedSegmentId, setSelectedSegmentId] = useState(null)
-  const [selectedPortalKey, setSelectedPortalKey] = useState(null)
-  const [rightPanel, setRightPanel] = useState(null)
-  
-  // Ensure only one panel is visible at a time. Use these wrappers instead of
-  // calling the raw setters directly so opening one panel clears others.
-  const selectNodeId = (nodeId) => {
-    setSelectedNodeId(nodeId)
-    setSelectedNodeIds(nodeId ? [nodeId] : [])
-    if (nodeId) {
-      // Ensure only one right-side panel is open: show inspector
-      selectSegmentId(null)
-      setRightPanel(PANEL_INSPECTOR)
-    } else {
-      setSelectedProgressLevelId(null)
-      setSelectedPortalKey(null)
-      if (rightPanel === PANEL_INSPECTOR) setRightPanel(null)
-    }
-  }
 
-  const selectSegmentId = (segmentId) => {
-    setSelectedSegmentId(segmentId)
-    if (segmentId) {
-      // Selecting a segment should close inspector and hide right-side panel
-      setSelectedNodeId(null)
-      setRightPanel(null)
-      setSelectedProgressLevelId(null)
-      setSelectedPortalKey(null)
-    }
-  }
-  const [isToolbarCollapsed, setIsToolbarCollapsed] = useState(false)
-  const [selectedScopeFilterId, setSelectedScopeFilterId] = useState(SCOPE_FILTER_ALL)
-  const [releaseFilter, setReleaseFilter] = useState(RELEASE_FILTER_OPTIONS.all)
-  const [transformKey, setTransformKey] = useState(0)
+  const {
+    selectedNodeId,
+    setSelectedNodeId,
+    selectedNodeIds,
+    setSelectedNodeIds,
+    selectedProgressLevelId,
+    setSelectedProgressLevelId,
+    selectedSegmentId,
+    setSelectedSegmentId,
+    selectedPortalKey,
+    setSelectedPortalKey,
+    rightPanel,
+    setRightPanel,
+    isToolbarCollapsed,
+    setIsToolbarCollapsed,
+    selectedScopeFilterId,
+    setSelectedScopeFilterId,
+    releaseFilter,
+    setReleaseFilter,
+    transformKey,
+    setTransformKey,
+    selectNodeId,
+    selectSegmentId,
+    resetSelections,
+  } = useSkillTreeUiState()
+
   const addControlOffset = TREE_CONFIG.nodeSize * 0.82
 
   const { layout, diagnostics } = useMemo(
@@ -887,13 +751,6 @@ export function SkillTree() {
     }
 
     applyOnce()
-  }
-
-  const resetSelections = () => {
-    selectNodeId(null)
-    selectSegmentId(null)
-    setSelectedPortalKey(null)
-    setSelectedProgressLevelId(null)
   }
 
   const handleOpenDocumentPicker = () => {
@@ -1611,231 +1468,34 @@ export function SkillTree() {
         </div>
       )}
 
-      <Paper
-        className={isToolbarCollapsed ? 'skill-tree-toolbar skill-tree-toolbar--collapsed' : 'skill-tree-toolbar'}
-        radius="xl"
-        shadow="xl"
-        withBorder
-      >
-        <Group gap="xs" wrap="nowrap" className="skill-tree-toolbar__row">
-          <Tooltip label={isToolbarCollapsed ? 'Menü aufklappen' : 'Menü einklappen'} withArrow openDelay={120}>
-            <ActionIcon
-              size="md"
-              variant="default"
-              aria-label={isToolbarCollapsed ? 'Menü aufklappen' : 'Menü einklappen'}
-              onClick={() => {
-                setIsToolbarCollapsed((prev) => !prev)
-              }}
-            >
-              <ToolbarIcon>
-                {isToolbarCollapsed ? (
-                  <path d="m9 6 6 6-6 6" />
-                ) : (
-                  <path d="m15 6-6 6 6 6" />
-                )}
-              </ToolbarIcon>
-            </ActionIcon>
-          </Tooltip>
-
-          <div className="skill-tree-toolbar__actions">
-            <div className="skill-tree-toolbar__cluster">
-              <Menu
-                shadow="md"
-                width={200}
-                position="bottom-start"
-                withArrow
-                trigger="hover"
-                openDelay={100}
-                closeDelay={180}
-              >
-                <Menu.Target>
-                  <Tooltip
-                    label="Export (Klick: HTML, Hover: weitere Formate)"
-                    withArrow
-                    openDelay={120}
-                  >
-                    <ActionIcon
-                      size="md"
-                      variant="default"
-                      aria-label="Export"
-                      onClick={() => void handleExportHtml()}
-                    >
-                      <IconDownload size={18} stroke={2} />
-                    </ActionIcon>
-                  </Tooltip>
-                </Menu.Target>
-
-                <Menu.Dropdown>
-                  <Menu.Label>Export</Menu.Label>
-                  <Menu.Item onClick={() => void handleExportPdf()} title="PDF (statisch)">
-                    PDF
-                  </Menu.Item>
-                  <Menu.Item onClick={() => void handleExportSvg()} title="SVG (interaktiv)">
-                    SVG
-                  </Menu.Item>
-                  <Menu.Item onClick={() => void handleExportCleanSvg()} title="SVG (clean)">
-                    SVG (clean)
-                  </Menu.Item>
-                </Menu.Dropdown>
-              </Menu>
-
-              <Tooltip label="HTML importieren (Ctrl+O)" withArrow openDelay={120}>
-                <ActionIcon
-                  size="md"
-                  variant="default"
-                  aria-label="HTML importieren"
-                  onClick={handleOpenDocumentPicker}
-                >
-                  <IconUpload size={18} stroke={2} />
-                </ActionIcon>
-              </Tooltip>
-            </div>
-
-            <div className="skill-tree-toolbar__cluster">
-              <Tooltip label="Undo (Ctrl+Z)" withArrow openDelay={120}>
-                <ActionIcon
-                  size="md"
-                  variant="default"
-                  aria-label="Undo"
-                  onClick={handleUndo}
-                  disabled={!canUndo}
-                >
-                  <ToolbarIcon>
-                    <path d="M3 7h7" />
-                    <path d="m3 7 3-3" />
-                    <path d="m3 7 3 3" />
-                    <path d="M21 14a7 7 0 0 0-7-7H9" />
-                  </ToolbarIcon>
-                </ActionIcon>
-              </Tooltip>
-              <Tooltip label="Redo (Ctrl+Y / Ctrl+Shift+Z)" withArrow openDelay={120}>
-                <ActionIcon
-                  size="md"
-                  variant="default"
-                  aria-label="Redo"
-                  onClick={handleRedo}
-                  disabled={!canRedo}
-                >
-                  <ToolbarIcon>
-                    <path d="M21 7h-7" />
-                    <path d="m21 7-3-3" />
-                    <path d="m21 7-3 3" />
-                    <path d="M3 14a7 7 0 0 1 7-7h5" />
-                  </ToolbarIcon>
-                </ActionIcon>
-              </Tooltip>
-            </div>
-
-            <div className="skill-tree-toolbar__cluster">
-              <Tooltip label="Reset (Ctrl+Shift+Backspace)" withArrow openDelay={120}>
-                <ActionIcon
-                  size="md"
-                  variant="subtle"
-                  color="red"
-                  aria-label="Reset"
-                  onClick={handleReset}
-                >
-                  <ToolbarIcon>
-                    <polyline points="1 4 1 10 7 10" />
-                    <path d="M3.51 15a9 9 0 1 0 2.13-8.87" />
-                  </ToolbarIcon>
-                </ActionIcon>
-              </Tooltip>
-            </div>
-
-            <div className="skill-tree-toolbar__cluster">
-              <Tooltip label="Segmente verwalten" withArrow openDelay={120}>
-                <ActionIcon
-                  size="md"
-                  variant="default"
-                  aria-label="Segmente verwalten"
-                  onClick={handleOpenSegmentManager}
-                >
-                  <IconPercentage20 stroke={2} />
-                </ActionIcon>
-              </Tooltip>
-
-              <Tooltip label="Scopes verwalten" withArrow openDelay={120}>
-                <ActionIcon
-                  size="md"
-                  variant="default"
-                  aria-label="Scopes verwalten"
-                  onClick={handleOpenScopeManager}
-                >
-                  <IconFilters stroke={2} />
-                </ActionIcon>
-              </Tooltip>
-
-              <Menu shadow="md" width={260} position="bottom-start" withArrow>
-                <Menu.Target>
-                  <Tooltip label={`Filter: ${selectedReleaseFilterLabel}${scopeOptions.length > 0 ? ' · ' + selectedScopeFilterLabel : ''}`} withArrow openDelay={120}>
-                    <ActionIcon
-                      size="md"
-                      variant="default"
-                      aria-label="Filter"
-                      disabled={false}
-                    >
-                      <IconFilter stroke={2} />
-                    </ActionIcon>
-                  </Tooltip>
-                </Menu.Target>
-
-                <Menu.Dropdown>
-                  <Menu.Label>Filter</Menu.Label>
-                  <Menu.Item onClick={() => setReleaseFilter(RELEASE_FILTER_OPTIONS.all)} title="Show all items">
-                    {releaseFilter === RELEASE_FILTER_OPTIONS.all ? '● ' : ''}All
-                  </Menu.Item>
-                  <Menu.Item onClick={() => setReleaseFilter(RELEASE_FILTER_OPTIONS.now)} title="Now — Done minimal, Later hidden">
-                    {releaseFilter === RELEASE_FILTER_OPTIONS.now ? '● ' : ''}Now
-                  </Menu.Item>
-                  <Menu.Item onClick={() => setReleaseFilter(RELEASE_FILTER_OPTIONS.next)} title="Next — Done/Later minimal">
-                    {releaseFilter === RELEASE_FILTER_OPTIONS.next ? '● ' : ''}Next
-                  </Menu.Item>
-                  <Menu.Divider />
-                  <Menu.Label>Scopes</Menu.Label>
-                  <Menu.Item onClick={() => setSelectedScopeFilterId(SCOPE_FILTER_ALL)}>
-                    {selectedScopeFilterId === SCOPE_FILTER_ALL ? '● ' : ''}Alle Scopes
-                  </Menu.Item>
-                  {scopeOptions.map((scope) => (
-                    <Menu.Item key={scope.value} onClick={() => setSelectedScopeFilterId(scope.value)}>
-                      {selectedScopeFilterId === scope.value ? '● ' : ''}{scope.label}
-                    </Menu.Item>
-                  ))}
-                </Menu.Dropdown>
-              </Menu>
-            </div>
-
-            <div className="skill-tree-toolbar__cluster">
-              <div className="skill-tree-toolbar__search">
-                <input
-                  aria-label="Node search"
-                  placeholder="Suche Knoten…"
-                  value={toolbarSearch}
-                  onChange={(e) => setToolbarSearch(e.target.value)}
-                />
-                {searchResults.length > 0 && (
-                  <ul className="skill-tree-toolbar__search-results" role="listbox">
-                    {searchResults.map((n) => (
-                      <li
-                        key={n.id}
-                        role="option"
-                        onMouseDown={(ev) => {
-                          ev.preventDefault()
-                          handleSelectNode(n.id)
-                          setToolbarSearch('')
-                        }}
-                      >
-                        {n.label} {n.shortName ? `(${n.shortName})` : ''}
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-              <Text size="xs" c="dimmed" className="skill-tree-toolbar__status">{autosaveLabel}</Text>
-            </div>
-          </div>
-        </Group>
-      </Paper>
+      <SkillTreeToolbar
+        isCollapsed={isToolbarCollapsed}
+        onToggleCollapsed={() => {
+          setIsToolbarCollapsed((prev) => !prev)
+        }}
+        onOpenDocumentPicker={handleOpenDocumentPicker}
+        onExportHtml={() => void handleExportHtml()}
+        onExportPdf={() => void handleExportPdf()}
+        onExportSvg={() => void handleExportSvg()}
+        onExportCleanSvg={() => void handleExportCleanSvg()}
+        onUndo={handleUndo}
+        canUndo={canUndo}
+        onRedo={handleRedo}
+        canRedo={canRedo}
+        onReset={handleReset}
+        onOpenSegmentManager={handleOpenSegmentManager}
+        onOpenScopeManager={handleOpenScopeManager}
+        releaseFilter={releaseFilter}
+        setReleaseFilter={setReleaseFilter}
+        selectedReleaseFilterLabel={selectedReleaseFilterLabel}
+        selectedScopeFilterId={selectedScopeFilterId}
+        setSelectedScopeFilterId={setSelectedScopeFilterId}
+        selectedScopeFilterLabel={selectedScopeFilterLabel}
+        scopeOptions={scopeOptions}
+        autosaveLabel={autosaveLabel}
+        allNodesById={allNodesById}
+        onSelectNode={handleSelectNode}
+      />
 
       <TransformWrapper
         key={transformKey}
@@ -1852,413 +1512,44 @@ export function SkillTree() {
           wrapperClass="skill-tree-transform-wrapper"
           contentClass="skill-tree-transform-content"
         >
-          <svg
-            ref={canvasSvgRef}
-            width={canvas.width}
-            height={canvas.height}
-            viewBox={`0 0 ${canvas.width} ${canvas.height}`}
-            className="skill-tree-canvas"
-            onClick={() => {
-                selectNodeId(null)
-                selectSegmentId(null)
-                setSelectedPortalKey(null)
-              }}
-          >
-            <defs>
-              <radialGradient id="nodeHalo" cx="50%" cy="50%" r="60%">
-                <stop offset="0%" stopColor="#60a5fa" stopOpacity="0.22" />
-                <stop offset="100%" stopColor="#020617" stopOpacity="0" />
-              </radialGradient>
-            </defs>
-
-            <circle cx={canvas.origin.x} cy={canvas.origin.y} r={canvas.maxRadius + 160} fill="url(#nodeHalo)" />
-
-            <g
-              className="skill-tree-center-icon skill-tree-clickable"
-              transform={`translate(${canvas.origin.x}, ${canvas.origin.y})`}
-              onMouseDown={(event) => event.stopPropagation()}
-              onClick={handleOpenCenterIconPanel}
-            >
-              <foreignObject
-                key={centerIconSource}
-                x={-centerIconSize / 2}
-                y={-centerIconSize / 2}
-                width={centerIconSize}
-                height={centerIconSize}
-                className="skill-tree-center-icon__foreign"
-              >
-                <img
-                  src={centerIconSource}
-                  alt="Center Icon"
-                  className="skill-tree-center-icon__image"
-                />
-              </foreignObject>
-              <circle r={centerIconSize / 2 + 8} className="skill-tree-center-icon__hit-area" />
-            </g>
-
-            <g>
-              {filteredSegmentSeparators.map((separator) => (
-                <path
-                  key={separator.id}
-                  d={separator.path}
-                  data-segment-left={separator.leftSegmentId ?? ''}
-                  data-segment-right={separator.rightSegmentId ?? ''}
-                  fill="none"
-                  stroke="#1e3a8a"
-                  strokeOpacity="0.7"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                />
-              ))}
-            </g>
-
-            {filteredSegmentLabels.map((segmentLabel) => {
-              const isSelected = segmentLabel.segmentId === selectedSegmentId
-              const labelWidth = Math.max(88, segmentLabel.text.length * 10)
-
-              return (
-                <g
-                  key={segmentLabel.id}
-                  data-segment-id={segmentLabel.segmentId}
-                  transform={`translate(${segmentLabel.x} ${segmentLabel.y}) rotate(${segmentLabel.rotation})`}
-                  onMouseDown={(event) => event.stopPropagation()}
-                  onClick={(event) => {
-                    event.stopPropagation()
-                    handleSelectSegment(segmentLabel.segmentId)
-                  }}
-                  className="skill-tree-clickable"
-                >
-                  <rect
-                    x={-(labelWidth / 2) - 10}
-                    y={-12}
-                    width={labelWidth + 20}
-                    height={24}
-                    rx={12}
-                    fill={isSelected ? 'rgba(34, 211, 238, 0.12)' : 'transparent'}
-                    stroke={isSelected ? 'rgba(103, 232, 249, 0.6)' : 'transparent'}
-                    strokeWidth="1.5"
-                  />
-                  <text
-                    x="0"
-                    y="1"
-                    textAnchor="middle"
-                    dominantBaseline="middle"
-                    className={isSelected ? 'skill-tree-segment-label skill-tree-segment-label--selected' : 'skill-tree-segment-label'}
-                  >
-                    {segmentLabel.text}
-                  </text>
-                </g>
-              )
-            })}
-
-            {filteredLinks.filter((link) => link.linkKind === 'ring').map((link) => {
-              const segmentNode = link.targetId ? layoutNodesById.get(link.targetId) : null
-              const nodeStatus = segmentNode ? normalizeStatusKey(segmentNode.status) : 'later'
-              const statusStyle = STATUS_STYLES[nodeStatus] ?? STATUS_STYLES.later
-
-              return (
-                <path
-                  key={link.id}
-                  d={link.path}
-                  data-link-source-id={link.sourceId ?? ''}
-                  data-link-target-id={link.targetId ?? ''}
-                  stroke={statusStyle.linkStroke}
-                  strokeWidth="4"
-                  strokeOpacity={statusStyle.linkOpacity}
-                  strokeLinecap="round"
-                  fill="none"
-                />
-              )
-            })}
-            {filteredLinks.filter((link) => link.sourceDepth > 0 && link.linkKind !== 'ring').map((link) => {
-              const childNode = link.targetId ? layoutNodesById.get(link.targetId) : null
-              const nodeStatus = childNode ? normalizeStatusKey(childNode.status) : 'later'
-              const statusStyle = STATUS_STYLES[nodeStatus] ?? STATUS_STYLES.later
-
-              return (
-                <path
-                  key={link.id}
-                  d={link.path}
-                  data-link-source-id={link.sourceId ?? ''}
-                  data-link-target-id={link.targetId ?? ''}
-                  stroke={statusStyle.linkStroke}
-                  strokeWidth={statusStyle.linkStrokeWidth}
-                  strokeOpacity={statusStyle.linkOpacity}
-                  strokeDasharray={statusStyle.linkStrokeDasharray || 'none'}
-                  strokeLinecap="round"
-                  fill="none"
-                />
-              )
-            })}
-
-            {renderedNodes.map((node) => {
-              const visibilityMode = nodeVisibilityModeById.get(node.id) ?? 'full'
-              const nodeSize = visibilityMode === 'minimal' ? MINIMAL_NODE_SIZE : TREE_CONFIG.nodeSize
-
-              return (
-                <SkillNode
-                  key={node.id}
-                  node={node}
-                  nodeSize={nodeSize}
-                  displayMode={visibilityMode}
-                  isSelected={node.id === selectedNodeId || selectedNodeIds.includes(node.id)}
-                  onSelect={handleSelectNode}
-                />
-              )
-            })}
-
-            {visibleDependencyPortals.map((portal) => {
-              const isPortalSelected = portal.key === selectedPortalKey
-              const portalClassName = [
-                'skill-tree-portal',
-                portal.isInteractive ? 'skill-tree-portal--interactive' : '',
-                isPortalSelected ? 'skill-tree-portal--selected' : '',
-              ].filter(Boolean).join(' ')
-
-              return (
-                <Tooltip
-                  key={portal.key}
-                  withArrow
-                  multiline
-                  openDelay={80}
-                  closeDelay={40}
-                  transitionProps={{ transition: 'fade', duration: 120 }}
-                  classNames={{ tooltip: 'skill-node-tooltip', arrow: 'skill-node-tooltip__arrow' }}
-                  label={(
-                    <div>
-                      <Text className="skill-node-tooltip__title">{portal.otherLabel}</Text>
-                      <Text className="skill-node-tooltip__note">{portal.tooltip}</Text>
-                    </div>
-                  )}
-                >
-                  <g
-                    className={`${portalClassName} skill-tree-export-exclude`}
-                    data-portal-node-id={portal.nodeId}
-                    data-portal-source-id={portal.sourceId}
-                    data-portal-target-id={portal.targetId}
-                    transform={`translate(${portal.x} ${portal.y})`}
-                    onMouseDown={(event) => event.stopPropagation()}
-                    onClick={(event) => {
-                      event.stopPropagation()
-                      if (portal.isInteractive) {
-                        handleSelectPortal(portal)
-                      }
-                    }}
-                  >
-                    <circle className="skill-tree-portal__hit" r="30" />
-                    <circle className={`skill-tree-portal__halo skill-tree-portal__halo--${portal.type}`} r="26" />
-                    <circle className={`skill-tree-portal__core skill-tree-portal__core--${portal.type}`} r="16" />
-                    <text
-                      className="skill-tree-portal__label"
-                      x="0"
-                      y="0"
-                      textAnchor="middle"
-                      dominantBaseline="middle"
-                    >
-                      {portal.otherLabel}
-                    </text>
-                  </g>
-                </Tooltip>
-              )
-            })}
-
-            {emptyStateAddControl && (
-              <g
-                className="skill-tree-clickable skill-tree-export-exclude"
-                data-add-control="root-initial"
-                transform={`translate(${emptyStateAddControl.x}, ${emptyStateAddControl.y})`}
-                onMouseDown={(event) => event.stopPropagation()}
-                onClick={(event) => {
-                  event.stopPropagation()
-                  handleAddInitialRoot()
-                }}
-              >
-                <circle r="22" className="skill-tree-add-circle" strokeWidth="2.5" />
-                <text
-                  x="0"
-                  y="1"
-                  textAnchor="middle"
-                  dominantBaseline="middle"
-                  className="skill-tree-add-text skill-tree-add-text--large"
-                >
-                  +
-                </text>
-                <text
-                  x="0"
-                  y="42"
-                  textAnchor="middle"
-                  dominantBaseline="middle"
-                  className="skill-tree-empty-state-label"
-                >
-                  Skill hinzufügen
-                </text>
-              </g>
-            )}
-
-            {emptySegmentAddControl && (
-              <g
-                className="skill-tree-clickable skill-tree-export-exclude"
-                data-add-control="segment-initial"
-                transform={`translate(${emptySegmentAddControl.x}, ${emptySegmentAddControl.y})`}
-                onMouseDown={(event) => event.stopPropagation()}
-                onClick={(event) => {
-                  event.stopPropagation()
-                  handleAddInitialSegment()
-                }}
-              >
-                <circle r="18" className="skill-tree-add-circle skill-tree-add-circle--segment" strokeWidth="2.5" />
-                <text
-                  x="0"
-                  y="1"
-                  textAnchor="middle"
-                  dominantBaseline="middle"
-                  className="skill-tree-add-text skill-tree-add-text--secondary"
-                >
-                  +
-                </text>
-                <text
-                  x="0"
-                  y="36"
-                  textAnchor="middle"
-                  dominantBaseline="middle"
-                  className="skill-tree-empty-state-label"
-                >
-                  Segment hinzufügen
-                </text>
-              </g>
-            )}
-
-            {selectedSegmentLabel && selectedSegmentControlGeometry && (
-              <g className="skill-tree-export-exclude">
-                <g
-                  data-add-control="segment-near"
-                  data-segment-id={selectedSegmentLabel.segmentId}
-                  data-direction="left"
-                  transform={`translate(${selectedSegmentControlGeometry.left.x}, ${selectedSegmentControlGeometry.left.y})`}
-                  onMouseDown={(event) => event.stopPropagation()}
-                  onClick={(event) => {
-                    event.stopPropagation()
-                    handleAddSegmentNear(selectedSegmentLabel.segmentId, 'left')
-                  }}
-                  className="skill-tree-clickable"
-                >
-                  <circle r="16" className="skill-tree-add-circle skill-tree-add-circle--segment" strokeWidth="2.5" />
-                  <text
-                    x="0"
-                    y="1"
-                    textAnchor="middle"
-                    dominantBaseline="middle"
-                    className="skill-tree-add-text skill-tree-add-text--small skill-tree-add-text--secondary"
-                  >
-                    +
-                  </text>
-                </g>
-
-                <g
-                  data-add-control="segment-near"
-                  data-segment-id={selectedSegmentLabel.segmentId}
-                  data-direction="right"
-                  transform={`translate(${selectedSegmentControlGeometry.right.x}, ${selectedSegmentControlGeometry.right.y})`}
-                  onMouseDown={(event) => event.stopPropagation()}
-                  onClick={(event) => {
-                    event.stopPropagation()
-                    handleAddSegmentNear(selectedSegmentLabel.segmentId, 'right')
-                  }}
-                  className="skill-tree-clickable"
-                >
-                  <circle r="16" className="skill-tree-add-circle skill-tree-add-circle--segment" strokeWidth="2.5" />
-                  <text
-                    x="0"
-                    y="1"
-                    textAnchor="middle"
-                    dominantBaseline="middle"
-                    className="skill-tree-add-text skill-tree-add-text--small skill-tree-add-text--secondary"
-                  >
-                    +
-                  </text>
-                </g>
-              </g>
-            )}
-
-            {selectedLayoutNode && selectedControlGeometry && (
-              <g className="skill-tree-export-exclude">
-                <g
-                  data-add-control="child"
-                  data-node-id={selectedLayoutNode.id}
-                  transform={`translate(${selectedControlGeometry.child.x}, ${selectedControlGeometry.child.y})`}
-                  onMouseDown={(event) => event.stopPropagation()}
-                  onClick={(event) => {
-                    event.stopPropagation()
-                    handleAddChild(selectedLayoutNode.id)
-                  }}
-                  className="skill-tree-clickable"
-                >
-                  <circle r="18" className="skill-tree-add-circle" strokeWidth="2.5" />
-                  <text
-                    x="0"
-                    y="1"
-                    textAnchor="middle"
-                    dominantBaseline="middle"
-                    className="skill-tree-add-text"
-                  >
-                    +
-                  </text>
-                </g>
-
-                {selectedLayoutNode.depth === 1 && selectedLayoutNode.level === 1 && (
-                  <g>
-                    <g
-                      data-add-control="root-near"
-                      data-node-id={selectedLayoutNode.id}
-                      data-direction="left"
-                      transform={`translate(${selectedControlGeometry.left.x}, ${selectedControlGeometry.left.y})`}
-                      onMouseDown={(event) => event.stopPropagation()}
-                      onClick={(event) => {
-                        event.stopPropagation()
-                        handleAddRootNear(selectedLayoutNode.id, 'left')
-                      }}
-                      className="skill-tree-clickable"
-                    >
-                      <circle r="18" className="skill-tree-add-circle skill-tree-add-circle--secondary" strokeWidth="2.5" />
-                      <text
-                        x="0"
-                        y="1"
-                        textAnchor="middle"
-                        dominantBaseline="middle"
-                        className="skill-tree-add-text skill-tree-add-text--secondary"
-                      >
-                        +
-                      </text>
-                    </g>
-
-                    <g
-                      data-add-control="root-near"
-                      data-node-id={selectedLayoutNode.id}
-                      data-direction="right"
-                      transform={`translate(${selectedControlGeometry.right.x}, ${selectedControlGeometry.right.y})`}
-                      onMouseDown={(event) => event.stopPropagation()}
-                      onClick={(event) => {
-                        event.stopPropagation()
-                        handleAddRootNear(selectedLayoutNode.id, 'right')
-                      }}
-                      className="skill-tree-clickable"
-                    >
-                      <circle r="18" className="skill-tree-add-circle skill-tree-add-circle--secondary" strokeWidth="2.5" />
-                      <text
-                        x="0"
-                        y="1"
-                        textAnchor="middle"
-                        dominantBaseline="middle"
-                        className="skill-tree-add-text skill-tree-add-text--secondary"
-                      >
-                        +
-                      </text>
-                    </g>
-                  </g>
-                )}
-              </g>
-            )}
-          </svg>
+          <SkillTreeCanvas
+            canvasRef={canvasSvgRef}
+            canvas={canvas}
+            centerIconSource={centerIconSource}
+            centerIconSize={centerIconSize}
+            filteredSegmentSeparators={filteredSegmentSeparators}
+            filteredSegmentLabels={filteredSegmentLabels}
+            filteredLinks={filteredLinks}
+            layoutNodesById={layoutNodesById}
+            renderedNodes={renderedNodes}
+            nodeVisibilityModeById={nodeVisibilityModeById}
+            selectedNodeId={selectedNodeId}
+            selectedNodeIds={selectedNodeIds}
+            selectedSegmentId={selectedSegmentId}
+            selectedPortalKey={selectedPortalKey}
+            visibleDependencyPortals={visibleDependencyPortals}
+            selectedLayoutNode={selectedLayoutNode}
+            selectedControlGeometry={selectedControlGeometry}
+            selectedSegmentLabel={selectedSegmentLabel}
+            selectedSegmentControlGeometry={selectedSegmentControlGeometry}
+            emptyStateAddControl={emptyStateAddControl}
+            emptySegmentAddControl={emptySegmentAddControl}
+            nodeSize={TREE_CONFIG.nodeSize}
+            minimalNodeSize={MINIMAL_NODE_SIZE}
+            onCanvasClick={() => {
+              selectNodeId(null)
+              selectSegmentId(null)
+              setSelectedPortalKey(null)
+            }}
+            onOpenCenterIconPanel={handleOpenCenterIconPanel}
+            onSelectSegment={handleSelectSegment}
+            onSelectPortal={handleSelectPortal}
+            onAddInitialRoot={handleAddInitialRoot}
+            onAddInitialSegment={handleAddInitialSegment}
+            onAddSegmentNear={handleAddSegmentNear}
+            onAddChild={handleAddChild}
+            onSelectNode={handleSelectNode}
+          />
         </TransformComponent>
       </TransformWrapper>
 
