@@ -704,9 +704,7 @@ test.describe('CSV template roundtrip via builder UI', () => {
       page.getByRole('button', { name: 'Export', exact: true }).click(),
     ])
     const exportedHtml = await readDownload(download)
-    if (!persistedExportPath) {
-      persistedExportPath = persistHtmlExport(exportedHtml)
-    }
+    persistedExportPath = persistHtmlExport(exportedHtml)
     const exportedPayload = extractJsonPayload(exportedHtml)
     const actualExportedSnapshots = collectActualNodeSnapshots(exportedPayload.document)
 
@@ -881,6 +879,11 @@ test.describe('CSV template roundtrip via builder UI', () => {
       totalDurationMs: Date.now() - runStartedAtMs,
       nodeCountExpected: template.rows.length,
     })
+
+    if (process.env.SKILLTREE_E2E_HOLD_OPEN === '1' && persistedExportPath) {
+      await page.goto(`file://${persistedExportPath}`)
+      await page.pause()
+    }
 
     expect(Array.isArray(template.warnings)).toBe(true)
   })
