@@ -45,20 +45,29 @@ const seedMarkdownContent = async (page) => {
 
 const openExportViewer = async (page, browser) => {
   const html = await exportHtml(page)
-  const exportPage = await browser.newPage()
+  const exportContext = await browser.newContext()
+  const exportPage = await exportContext.newPage()
   await exportPage.setContent(html)
-  await exportPage.waitForSelector('.html-export__tree-shell svg', { timeout: 10_000 })
-  return exportPage
+  await exportPage.waitForSelector('#html-export-tree-canvas svg', { timeout: 10_000 })
+  return { exportPage, exportContext }
 }
 
 test.describe('Rendered export viewer', () => {
+  test.afterEach(async ({ page }) => {
+    try {
+      await page.context().close()
+    } catch {
+      // ignore: the context may already be closed by the test flow
+    }
+  })
+
   test.beforeEach(async ({ page }) => {
     await startFresh(page)
     await seedMarkdownContent(page)
   })
 
   test('shows the single-page export layout with header, menus, roadmap and notes', async ({ page, browser }) => {
-    const exportPage = await openExportViewer(page, browser)
+    const { exportPage, exportContext } = await openExportViewer(page, browser)
     try {
       await expect(exportPage.locator('#html-export-tree-shell')).toBeVisible()
       await expect(exportPage.getByRole('heading', { name: 'myKyana' })).toBeVisible()
@@ -68,16 +77,19 @@ test.describe('Rendered export viewer', () => {
       await expect(exportPage.getByText('Release Notes')).toBeVisible()
       await expect(exportPage.locator('.html-export__section-subtitle').first()).toContainText('Reich & Schön')
       await expect(exportPage.locator('body')).toHaveCSS('background-color', 'rgb(0, 0, 0)')
+      await expect(exportPage.locator('#html-export-tree-shell')).toHaveCSS('overflow-x', 'hidden')
+      await expect(exportPage.locator('#html-export-tree-shell')).toHaveCSS('overflow-y', 'hidden')
       await expect(exportPage.getByText('Visualisierung')).toHaveCount(0)
       await expect(exportPage.locator('.html-export__section-title')).toHaveCount(0)
       await expect(exportPage.locator('img[alt="Center Icon"]')).toBeVisible()
       await expect(exportPage.locator('.html-export__tree-shell .skill-tree-center-icon')).toBeVisible()
 
-      const svg = exportPage.locator('#html-export-tree-shell svg')
-      await expect.poll(async () => svg.evaluate((element) => element.style.transform)).not.toBe('translate(0px, 0px) scale(1)')
+      const canvas = exportPage.locator('#html-export-tree-canvas')
+      await expect.poll(async () => canvas.evaluate((element) => element.style.transform)).not.toBe('translate(0px, 0px) scale(1)')
       await expect(exportPage.locator('foreignObject.skill-node-export-anchor .skill-node-button').first()).toBeVisible()
     } finally {
       await exportPage.close()
+      await exportContext.close()
     }
   })
 
@@ -85,9 +97,10 @@ test.describe('Rendered export viewer', () => {
     const builderLabels = await getBuilderNodeLabels(page)
     const html = await exportHtml(page)
 
-    const exportPage = await browser.newPage()
+    const exportContext = await browser.newContext()
+    const exportPage = await exportContext.newPage()
     await exportPage.setContent(html)
-    await exportPage.waitForSelector('.html-export__tree-shell svg', { timeout: 10_000 })
+    await exportPage.waitForSelector('#html-export-tree-canvas svg', { timeout: 10_000 })
     try {
       const renderedHtml = await exportPage.content()
       for (const label of builderLabels) {
@@ -114,22 +127,24 @@ test.describe('Rendered export viewer', () => {
       expect(notesHtml).toContain('<strong>markdown</strong>')
     } finally {
       await exportPage.close()
+      await exportContext.close()
     }
   })
 
   test('export viewer pan zoom and filter controls respond to input', async ({ page, browser }) => {
-    const exportPage = await openExportViewer(page, browser)
+    const { exportPage, exportContext } = await openExportViewer(page, browser)
     try {
-      const transformBefore = await exportPage.locator('.html-export__tree-shell svg').evaluate((svg) => svg.style.transform)
+      const transformBefore = await exportPage.locator('#html-export-tree-canvas').evaluate((element) => element.style.transform)
       await exportPage.locator('.html-export__menu-button').last().click()
       await expect(exportPage.locator('.html-export__menu-panel--filters')).toBeVisible()
       await exportPage.locator('#html-export-filter-release').selectOption('now')
-      const transformAfter = await exportPage.locator('.html-export__tree-shell svg').evaluate((svg) => svg.style.transform)
+      const transformAfter = await exportPage.locator('#html-export-tree-canvas').evaluate((element) => element.style.transform)
 
       await expect(exportPage.locator('#html-export-filter-release')).toHaveValue('now')
       expect(transformAfter).toBe(transformBefore)
     } finally {
       await exportPage.close()
+      await exportContext.close()
     }
   })
 })

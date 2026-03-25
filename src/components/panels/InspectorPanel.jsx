@@ -194,133 +194,126 @@ export function InspectorPanel({
 
   
 
-  if (!selectedNode) {
-    // If multiple nodes selected, render a multi-select inspector
-    if (Array.isArray(selectedNodeIds) && selectedNodeIds.length > 1) {
-      const count = selectedNodeIds.length
-
-      // build flat node list for lookup
-      const allNodes = []
-      const queue = [...(roadmapData?.children ?? [])]
-      while (queue.length > 0) {
-        const n = queue.shift()
-        allNodes.push(n)
-        queue.push(...(n.children ?? []))
-      }
-
-      const selectedNodes = selectedNodeIds.map((id) => allNodes.find((n) => n.id === id)).filter(Boolean)
-
-      const segmentData = (roadmapData?.segments ?? []).map((s) => ({ value: s.id, label: s.label }))
-
-      const parentData = allNodes
-        .filter((n) => !selectedNodeIds.includes(n.id))
-        .map((n) => ({ value: n.id, label: n.label }))
-
-      const additionalDependencyData = allNodes
-        .filter((n) => !selectedNodeIds.includes(n.id))
-        .map((n) => ({ id: n.id, label: n.label, shortName: n.shortName }))
-
-      // Show up to three names in the header then truncate with ellipsis
-      const visibleNames = selectedNodes.slice(0, 3).map((n) => n.label).filter(Boolean).join(', ')
-      const hasMore = selectedNodes.length > 3
-      const headerNames = hasMore ? `${visibleNames} (...)` : visibleNames
-
-      return (
-        <Paper className="skill-panel skill-panel--inspector" radius={0} shadow="none">
-          <div className="skill-panel__header">
-            <div>
-              <Text className="skill-panel__eyebrow">Inspector</Text>
-              <Text className="skill-panel__title skill-panel__title--large">{`${count} Ausgewählt${headerNames ? ' - ' + headerNames : ''}`}</Text>
-            </div>
-            <div className="skill-panel__header-actions">
-              <ActionIcon variant="subtle" color="gray" onClick={() => { /* noop: parent closes */ }} aria-label="Inspector schließen">
-                ✕
-              </ActionIcon>
-            </div>
-          </div>
-          <div className="skill-panel__body skill-panel__body--scrollable">
-            <Stack gap="md">
-              {/* Selected nodes row */}
-              <div className="multi-inspector__selected-row" style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 6 }}>
-                {selectedNodes.map((n) => (
-                  <Badge
-                    key={n.id}
-                    variant="filled"
-                    radius="sm"
-                    sx={{ cursor: onFocusNode ? 'pointer' : 'default', padding: '6px 10px', whiteSpace: 'nowrap' }}
-                    onClick={() => onFocusNode?.(n.id)}
-                  >
-                    {n.shortName ?? n.label}
-                  </Badge>
-                ))}
-              </div>
-
-              <Select
-                label="Segment (für alle)"
-                data={segmentData}
-                onChange={(value) => value && onSegmentChange(value)}
-                allowDeselect={false}
-                classNames={{ input: 'mantine-dark-input', label: 'mantine-dark-label', dropdown: 'mantine-dark-dropdown', option: 'mantine-dark-option' }}
-                comboboxProps={{ withinPortal: true, zIndex: 450 }}
-              />
-
-              <Select
-                label="Parent (für alle)"
-                data={parentData}
-                onChange={(value) => value && onParentChange(value)}
-                allowDeselect={false}
-                classNames={{ input: 'mantine-dark-input', label: 'mantine-dark-label', dropdown: 'mantine-dark-dropdown', option: 'mantine-dark-option' }}
-                comboboxProps={{ withinPortal: true, zIndex: 450 }}
-              />
-
-              <MultiSelect
-                label="Additional Dependencies (für alle)"
-                data={additionalDependencyData.map((d) => ({ value: d.id, label: d.shortName ? `${d.label} (${d.shortName})` : d.label }))}
-                onChange={(values) => onAdditionalDependenciesChange(values)}
-                searchable
-                clearable
-                classNames={{ input: 'mantine-dark-input', label: 'mantine-dark-label', dropdown: 'mantine-dark-dropdown', option: 'mantine-dark-option', pill: 'mantine-dark-pill' }}
-                comboboxProps={{ withinPortal: true, zIndex: 450 }}
-              />
-
-              <Select
-                label="Status (für alle)"
-                data={STATUS_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
-                onChange={(value) => value && onStatusChange(value)}
-                allowDeselect={false}
-                classNames={{ input: 'mantine-dark-input', label: 'mantine-dark-label', dropdown: 'mantine-dark-dropdown', option: 'mantine-dark-option' }}
-                comboboxProps={{ withinPortal: true, zIndex: 450 }}
-              />
-
-              <MultiSelect
-                label="Scopes (für alle)"
-                data={(scopeOptions ?? []).map((s) => ({ value: s.value, label: s.label }))}
-                onChange={(values) => onScopeIdsChange(values)}
-                searchable
-                clearable
-                classNames={{ input: 'mantine-dark-input', label: 'mantine-dark-label', dropdown: 'mantine-dark-dropdown', option: 'mantine-dark-option', pill: 'mantine-dark-pill' }}
-                comboboxProps={{ withinPortal: true, zIndex: 450 }}
-              />
-
-
-              <Divider />
-
-              <div className="skill-panel__danger-zone">
-                <Text className="skill-panel__danger-title">Löschen (für ausgewählte Knoten)</Text>
-                <Button variant="default" onClick={onDeleteNodeOnly}>Skill löschen (für alle)</Button>
-                <Button color="red" variant="outline" onClick={onDeleteNodeBranch}>Zweig löschen (für alle)</Button>
-              </div>
-
-            </Stack>
-          </div>
-        </Paper>
-      )
+  const renderMultiSelectInspector = () => {
+    if (!(!selectedNode && Array.isArray(selectedNodeIds) && selectedNodeIds.length > 1)) {
+      return null
     }
 
-    return null
+    const count = selectedNodeIds.length
+
+    const allNodes = []
+    const queue = [...(roadmapData?.children ?? [])]
+    while (queue.length > 0) {
+      const node = queue.shift()
+      allNodes.push(node)
+      queue.push(...(node.children ?? []))
+    }
+
+    const selectedNodes = selectedNodeIds.map((id) => allNodes.find((node) => node.id === id)).filter(Boolean)
+    const segmentData = (roadmapData?.segments ?? []).map((segment) => ({ value: segment.id, label: segment.label }))
+    const parentData = allNodes
+      .filter((node) => !selectedNodeIds.includes(node.id))
+      .map((node) => ({ value: node.id, label: node.label }))
+    const additionalDependencyData = allNodes
+      .filter((node) => !selectedNodeIds.includes(node.id))
+      .map((node) => ({ id: node.id, label: node.label, shortName: node.shortName }))
+
+    const visibleNames = selectedNodes.slice(0, 3).map((node) => node.label).filter(Boolean).join(', ')
+    const hasMore = selectedNodes.length > 3
+    const headerNames = hasMore ? `${visibleNames} (...)` : visibleNames
+
+    return (
+      <Paper className="skill-panel skill-panel--inspector" radius={0} shadow="none">
+        <div className="skill-panel__header">
+          <div>
+            <Text className="skill-panel__eyebrow">Inspector</Text>
+            <Text className="skill-panel__title skill-panel__title--large">{`${count} Ausgewählt${headerNames ? ' - ' + headerNames : ''}`}</Text>
+          </div>
+          <div className="skill-panel__header-actions">
+            <ActionIcon variant="subtle" color="gray" onClick={() => { /* noop: parent closes */ }} aria-label="Inspector schließen">
+              ✕
+            </ActionIcon>
+          </div>
+        </div>
+        <div className="skill-panel__body skill-panel__body--scrollable">
+          <Stack gap="md">
+            <div className="multi-inspector__selected-row" style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 6 }}>
+              {selectedNodes.map((node) => (
+                <Badge
+                  key={node.id}
+                  variant="filled"
+                  radius="sm"
+                  sx={{ cursor: onFocusNode ? 'pointer' : 'default', padding: '6px 10px', whiteSpace: 'nowrap' }}
+                  onClick={() => onFocusNode?.(node.id)}
+                >
+                  {node.shortName ?? node.label}
+                </Badge>
+              ))}
+            </div>
+
+            <Select
+              label="Segment (für alle)"
+              data={segmentData}
+              onChange={(value) => value && onSegmentChange(value)}
+              allowDeselect={false}
+              classNames={{ input: 'mantine-dark-input', label: 'mantine-dark-label', dropdown: 'mantine-dark-dropdown', option: 'mantine-dark-option' }}
+              comboboxProps={{ withinPortal: true, zIndex: 450 }}
+            />
+
+            <Select
+              label="Parent (für alle)"
+              data={parentData}
+              onChange={(value) => value && onParentChange(value)}
+              allowDeselect={false}
+              classNames={{ input: 'mantine-dark-input', label: 'mantine-dark-label', dropdown: 'mantine-dark-dropdown', option: 'mantine-dark-option' }}
+              comboboxProps={{ withinPortal: true, zIndex: 450 }}
+            />
+
+            <MultiSelect
+              label="Additional Dependencies (für alle)"
+              data={additionalDependencyData.map((entry) => ({ value: entry.id, label: entry.shortName ? `${entry.label} (${entry.shortName})` : entry.label }))}
+              onChange={(values) => onAdditionalDependenciesChange(values)}
+              searchable
+              clearable
+              classNames={{ input: 'mantine-dark-input', label: 'mantine-dark-label', dropdown: 'mantine-dark-dropdown', option: 'mantine-dark-option', pill: 'mantine-dark-pill' }}
+              comboboxProps={{ withinPortal: true, zIndex: 450 }}
+            />
+
+            <Select
+              label="Status (für alle)"
+              data={STATUS_OPTIONS.map((option) => ({ value: option.value, label: option.label }))}
+              onChange={(value) => value && onStatusChange(value)}
+              allowDeselect={false}
+              classNames={{ input: 'mantine-dark-input', label: 'mantine-dark-label', dropdown: 'mantine-dark-dropdown', option: 'mantine-dark-option' }}
+              comboboxProps={{ withinPortal: true, zIndex: 450 }}
+            />
+
+            <MultiSelect
+              label="Scopes (für alle)"
+              data={(scopeOptions ?? []).map((scope) => ({ value: scope.value, label: scope.label }))}
+              onChange={(values) => onScopeIdsChange(values)}
+              searchable
+              clearable
+              classNames={{ input: 'mantine-dark-input', label: 'mantine-dark-label', dropdown: 'mantine-dark-dropdown', option: 'mantine-dark-option', pill: 'mantine-dark-pill' }}
+              comboboxProps={{ withinPortal: true, zIndex: 450 }}
+            />
+
+            <Divider />
+
+            <div className="skill-panel__danger-zone">
+              <Text className="skill-panel__danger-title">Löschen (für ausgewählte Knoten)</Text>
+              <Button variant="default" onClick={onDeleteNodeOnly}>Skill löschen (für alle)</Button>
+              <Button color="red" variant="outline" onClick={onDeleteNodeBranch}>Zweig löschen (für alle)</Button>
+            </div>
+          </Stack>
+        </div>
+      </Paper>
+    )
   }
 
-  const nodeLevels = Array.isArray(selectedNode.levels) && selectedNode.levels.length > 0
+  const multiSelectInspector = renderMultiSelectInspector()
+
+  const nodeLevels = selectedNode && Array.isArray(selectedNode.levels) && selectedNode.levels.length > 0
     ? selectedNode.levels.map((level, index) => ({
       id: level.id,
       label: level.label ?? `Level ${index + 1}`,
@@ -328,10 +321,16 @@ export function InspectorPanel({
       releaseNote: level.releaseNote ?? '',
       scopeIds: Array.isArray(level.scopeIds) ? level.scopeIds : [],
     }))
-    : [{ id: 'level-1', label: 'Level 1', status: normalizeStatusKey(selectedNode.status), releaseNote: '', scopeIds: [] }]
+    : [{ id: 'level-1', label: 'Level 1', status: normalizeStatusKey(selectedNode?.status ?? 'later'), releaseNote: '', scopeIds: [] }]
 
-  const activeProgressLevelId = selectedProgressLevelId ?? nodeLevels[0].id
-  const activeProgressLevel = nodeLevels.find((level) => level.id === activeProgressLevelId) ?? nodeLevels[0]
+  const activeProgressLevelId = selectedProgressLevelId ?? nodeLevels[0]?.id ?? 'level-1'
+  const activeProgressLevel = nodeLevels.find((level) => level.id === activeProgressLevelId) ?? nodeLevels[0] ?? {
+    id: activeProgressLevelId,
+    label: 'Level 1',
+    status: normalizeStatusKey(selectedNode?.status ?? 'later'),
+    releaseNote: '',
+    scopeIds: [],
+  }
   const scopeSelectData = (scopeOptions ?? []).map((scope) => ({
     value: scope.value,
     label: scope.label,
@@ -453,7 +452,7 @@ export function InspectorPanel({
     }
   }
 
-  const selectedSegmentKey = selectedNode.segmentId ?? UNASSIGNED_SEGMENT_ID
+  const selectedSegmentKey = selectedNode?.segmentId ?? UNASSIGNED_SEGMENT_ID
   const blockedLevelHint = levelOptions.find((option) => !option.isAllowed)?.reasons?.[0] ?? null
   const blockedSegmentHint = segmentOptions?.find((option) => !option.isAllowed)?.reasons?.[0] ?? null
   const levelData = levelOptions.map((option) => ({
@@ -477,6 +476,10 @@ export function InspectorPanel({
     label: option.shortName ? `${option.label} (${option.shortName})` : option.label,
     disabled: !option.isAllowed,
   }))
+
+  if (!selectedNode) {
+    return multiSelectInspector
+  }
 
   return (
     <Paper

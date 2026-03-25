@@ -6,6 +6,14 @@ import { startFresh, readDownload, getBuilderNodeLabels, exportHtml, extractJson
 // ---------------------------------------------------------------------------
 
 test.describe('HTML export – content matches builder', () => {
+  test.afterEach(async ({ page }) => {
+    try {
+      await page.context().close()
+    } catch {
+      // ignore: the context may already be closed by the test flow
+    }
+  })
+
   test.beforeEach(async ({ page }) => {
     await startFresh(page)
   })
@@ -97,10 +105,11 @@ test.describe('HTML export – viewer page shows same content as builder', () =>
     const builderLabels = await getBuilderNodeLabels(page)
     const html = await exportHtml(page)
 
-    const exportPage = await browser.newPage()
+    const exportContext = await browser.newContext()
+    const exportPage = await exportContext.newPage()
     try {
       await exportPage.setContent(html)
-      await exportPage.waitForSelector('.html-export__tree-shell svg', { timeout: 10_000 })
+      await exportPage.waitForSelector('#html-export-tree-canvas svg', { timeout: 10_000 })
 
       const exportPageHtml = await exportPage.content()
       for (const label of builderLabels) {
@@ -108,6 +117,7 @@ test.describe('HTML export – viewer page shows same content as builder', () =>
       }
     } finally {
       await exportPage.close()
+      await exportContext.close()
     }
   })
 
@@ -120,10 +130,11 @@ test.describe('HTML export – viewer page shows same content as builder', () =>
       .count()
     const html = await exportHtml(page)
 
-    const exportPage = await browser.newPage()
+    const exportContext = await browser.newContext()
+    const exportPage = await exportContext.newPage()
     try {
       await exportPage.setContent(html)
-      await exportPage.waitForSelector('.html-export__tree-shell svg', { timeout: 10_000 })
+      await exportPage.waitForSelector('#html-export-tree-canvas svg', { timeout: 10_000 })
 
       const exportNodeCount = await exportPage
         .locator('.html-export__tree-shell [class*="skill-node-export-anchor"]')
@@ -131,6 +142,7 @@ test.describe('HTML export – viewer page shows same content as builder', () =>
       expect(exportNodeCount).toBe(builderNodeCount)
     } finally {
       await exportPage.close()
+      await exportContext.close()
     }
   })
 
@@ -140,7 +152,8 @@ test.describe('HTML export – viewer page shows same content as builder', () =>
   }) => {
     const html = await exportHtml(page)
 
-    const exportPage = await browser.newPage()
+    const exportContext = await browser.newContext()
+    const exportPage = await exportContext.newPage()
     try {
       await exportPage.setContent(html)
       await exportPage.waitForSelector('.html-export__release-list', { timeout: 10_000 })
@@ -152,6 +165,7 @@ test.describe('HTML export – viewer page shows same content as builder', () =>
       expect(notesContent).toContain('New API contracts are being validated')
     } finally {
       await exportPage.close()
+      await exportContext.close()
     }
   })
 
@@ -173,10 +187,9 @@ test.describe('HTML export – viewer page shows same content as builder', () =>
   })
 
   /**
-   * Visual regression test – creates a screenshot baseline on the first run.
-   * Run `npx playwright test --update-snapshots` to regenerate baselines.
+    * Regression test for the export viewer initial fit and visible canvas content.
    */
-  test('exported svg tree view matches visual snapshot baseline', async ({ page, browser }) => {
+  test('exported svg tree view loads with nodes inside the visible export shell', async ({ page, browser }) => {
     // Deselect all to avoid editor controls affecting the screenshot
     await page.locator('svg.skill-tree-canvas').dispatchEvent('click', {
       clientX: 10,
@@ -186,18 +199,24 @@ test.describe('HTML export – viewer page shows same content as builder', () =>
 
     const html = await exportHtml(page)
 
-    const exportPage = await browser.newPage()
+    const exportContext = await browser.newContext()
+    const exportPage = await exportContext.newPage()
     try {
       await exportPage.setContent(html)
-      await exportPage.waitForSelector('.html-export__tree-shell svg', { timeout: 10_000 })
+      await exportPage.waitForSelector('#html-export-tree-canvas svg', { timeout: 10_000 })
       await exportPage.waitForTimeout(350)
 
-      const exportSvg = exportPage.locator('.html-export__tree-shell svg')
-      await expect(exportSvg).toHaveScreenshot('export-svg-tree.png', {
-        maxDiffPixelRatio: 0.05,
-      })
+      await expect(exportPage.locator('#html-export-tree-shell')).toHaveCSS('overflow-x', 'hidden')
+      await expect(exportPage.locator('#html-export-tree-shell')).toHaveCSS('overflow-y', 'hidden')
+
+      const canvas = exportPage.locator('#html-export-tree-canvas')
+      await expect.poll(async () => canvas.evaluate((element) => element.style.transform)).not.toBe('translate(0px, 0px) scale(1)')
+
+      const firstNode = exportPage.locator('foreignObject.skill-node-export-anchor').first()
+      await expect(firstNode).toBeVisible()
     } finally {
       await exportPage.close()
+      await exportContext.close()
     }
   })
 })

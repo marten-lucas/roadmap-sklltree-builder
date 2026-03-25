@@ -1,0 +1,5 @@
+ShortName,Name,Scope,Ebene,Segment,Parent,AdditionalDependency,Status
+RT,Root Node,,1,Core,,,now
+FE,Frontend Node,,2,Core,RT,,next
+BE,Backend Node,Focus,2,Core,RT,,now
+QA,Quality Check,,3,Core,FE,BE,later

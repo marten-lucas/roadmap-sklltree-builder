@@ -4,7 +4,25 @@ import { resolve } from 'node:path'
 import process from 'node:process'
 
 const artifactsRoot = resolve(process.env.SKILLTREE_TEST_ARTIFACTS_DIR ?? 'tests/results')
-const runId = process.env.SKILLTREE_TEST_RUN_ID ?? `${new Date().toISOString().replace(/[:.]/g, '-').replace('T', '_')}-${process.pid}`
+const formatRunStamp = (date) => {
+  const pad2 = (value) => String(value).padStart(2, '0')
+  return [
+    String(date.getFullYear()).slice(-2),
+    pad2(date.getMonth() + 1),
+    pad2(date.getDate()),
+    pad2(date.getHours()),
+    pad2(date.getMinutes()),
+  ].join('')
+}
+
+const sanitizeRunLabel = (value) => String(value ?? 'e2e')
+  .trim()
+  .toLowerCase()
+  .replace(/[^a-z0-9]+/g, '_')
+  .replace(/^_+|_+$/g, '') || 'e2e'
+
+const runLabel = sanitizeRunLabel(process.env.SKILLTREE_TEST_RUN_LABEL)
+const runId = process.env.SKILLTREE_TEST_RUN_ID ?? `${formatRunStamp(new Date())}_${runLabel}`
 const runArtifactsRoot = resolve(artifactsRoot, 'runs', runId)
 
 mkdirSync(resolve(runArtifactsRoot, 'reports'), { recursive: true })

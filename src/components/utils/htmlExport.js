@@ -218,7 +218,8 @@ const buildViewerScript = () => `
         })
       }
 
-      const svgRoot = document.querySelector('.html-export__tree-shell svg')
+      const treeCanvas = document.getElementById('html-export-tree-canvas')
+      const svgRoot = treeCanvas?.querySelector('svg')
       const treeShell = document.getElementById('html-export-tree-shell')
       const scopeFilterSelect = document.getElementById('html-export-filter-scope')
       const releaseFilterSelect = document.getElementById('html-export-filter-release')
@@ -299,19 +300,20 @@ const buildViewerScript = () => `
       }
 
       const applyPanZoom = () => {
-        if (!svgRoot) {
+        if (!treeCanvas) {
           return
         }
 
         const { baseWidth, baseHeight } = getSvgMetrics()
-        svgRoot.style.width = String(baseWidth) + 'px'
-        svgRoot.style.height = String(baseHeight) + 'px'
-        svgRoot.style.transformOrigin = '0 0'
-        svgRoot.style.transform = 'translate(' + panZoomState.translateX + 'px, ' + panZoomState.translateY + 'px) scale(' + panZoomState.scale + ')'
+        treeCanvas.style.width = String(baseWidth) + 'px'
+        treeCanvas.style.height = String(baseHeight) + 'px'
+        treeCanvas.style.transformOrigin = '0 0'
+        treeCanvas.style.transform = 'translate(' + panZoomState.translateX + 'px, ' + panZoomState.translateY + 'px) scale(' + panZoomState.scale + ')'
+        treeCanvas.style.visibility = 'visible'
       }
 
       const fitToWidth = () => {
-        if (!svgRoot || !treeShell) {
+        if (!treeCanvas || !treeShell) {
           return
         }
 
@@ -327,7 +329,7 @@ const buildViewerScript = () => `
       }
 
       const zoomAtPoint = (clientX, clientY, factor) => {
-        if (!treeShell || !svgRoot) {
+        if (!treeShell || !treeCanvas) {
           return
         }
 
@@ -344,7 +346,7 @@ const buildViewerScript = () => `
       }
 
       const beginDrag = (event) => {
-        if (!treeShell || !svgRoot || event.button !== 0) {
+        if (!treeShell || !treeCanvas || event.button !== 0) {
           return
         }
 
@@ -381,9 +383,10 @@ const buildViewerScript = () => `
         }
       }
 
-      if (treeShell && svgRoot) {
-        svgRoot.style.touchAction = 'none'
-        svgRoot.style.cursor = 'grab'
+      if (treeShell && treeCanvas) {
+        treeCanvas.style.touchAction = 'none'
+        treeCanvas.style.cursor = 'grab'
+        treeCanvas.style.visibility = 'hidden'
         treeShell.addEventListener('pointerdown', beginDrag)
         window.addEventListener('pointermove', moveDrag)
         window.addEventListener('pointerup', endDrag)
@@ -943,7 +946,8 @@ export const buildHtmlExportDocument = ({
       justify-content: center;
       height: 50vh;
       min-height: 50vh;
-      overflow: auto;
+      overflow: hidden;
+      overscroll-behavior: none;
       border-radius: 16px;
       background: #000000;
       padding: 10px;
@@ -953,7 +957,14 @@ export const buildHtmlExportDocument = ({
       cursor: grabbing;
     }
 
-    .html-export__tree-shell svg {
+    .html-export__tree-canvas {
+      position: relative;
+      flex: 0 0 auto;
+      transform-origin: 0 0;
+      will-change: transform;
+    }
+
+    .html-export__tree-canvas svg {
       display: block;
       max-width: 100%;
       height: auto;
@@ -1129,7 +1140,7 @@ export const buildHtmlExportDocument = ({
       .html-export__tree-shell {
         background: #ffffff;
         min-height: auto;
-        overflow: visible;
+        overflow: hidden;
       }
 
       .html-export__note-card strong {
@@ -1210,7 +1221,9 @@ export const buildHtmlExportDocument = ({
           </div>
         </details>
       </header>
-      <div id="html-export-tree-shell" class="html-export__tree-shell">${svgMarkup}</div>
+      <div id="html-export-tree-shell" class="html-export__tree-shell">
+        <div id="html-export-tree-canvas" class="html-export__tree-canvas">${svgMarkup}</div>
+      </div>
     </section>
 
     <section class="html-export__panel">
