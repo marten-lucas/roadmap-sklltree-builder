@@ -299,6 +299,63 @@ const buildViewerScript = () => `
         return { baseWidth, baseHeight }
       }
 
+      const getOccupiedBounds = () => {
+        const bounds = {
+          minX: Number.POSITIVE_INFINITY,
+          minY: Number.POSITIVE_INFINITY,
+          maxX: Number.NEGATIVE_INFINITY,
+          maxY: Number.NEGATIVE_INFINITY,
+        }
+
+        const includeRect = (x, y, width, height) => {
+          if (![x, y, width, height].every(Number.isFinite)) {
+            return
+          }
+
+          bounds.minX = Math.min(bounds.minX, x)
+          bounds.minY = Math.min(bounds.minY, y)
+          bounds.maxX = Math.max(bounds.maxX, x + width)
+          bounds.maxY = Math.max(bounds.maxY, y + height)
+        }
+
+        nodeAnchors.forEach((anchor) => {
+          includeRect(
+            Number.parseFloat(anchor.getAttribute('x') ?? ''),
+            Number.parseFloat(anchor.getAttribute('y') ?? ''),
+            Number.parseFloat(anchor.getAttribute('width') ?? ''),
+            Number.parseFloat(anchor.getAttribute('height') ?? ''),
+          )
+        })
+
+        const centerGroup = svgRoot?.querySelector('.skill-tree-center-icon')
+        const centerForeign = centerGroup?.querySelector('.skill-tree-center-icon__foreign')
+        const transform = centerGroup?.getAttribute('transform') ?? ''
+        const match = transform.match(/translate\(([-\d.]+)[,\s]+([-\d.]+)\)/)
+        const centerX = match ? Number.parseFloat(match[1]) : Number.NaN
+        const centerY = match ? Number.parseFloat(match[2]) : Number.NaN
+
+        if (centerForeign && Number.isFinite(centerX) && Number.isFinite(centerY)) {
+          const foreignX = Number.parseFloat(centerForeign.getAttribute('x') ?? '')
+          const foreignY = Number.parseFloat(centerForeign.getAttribute('y') ?? '')
+          const foreignWidth = Number.parseFloat(centerForeign.getAttribute('width') ?? '')
+          const foreignHeight = Number.parseFloat(centerForeign.getAttribute('height') ?? '')
+
+          includeRect(centerX + foreignX, centerY + foreignY, foreignWidth, foreignHeight)
+        }
+
+        if (!Number.isFinite(bounds.minX) || !Number.isFinite(bounds.minY) || !Number.isFinite(bounds.maxX) || !Number.isFinite(bounds.maxY)) {
+          const viewBox = svgRoot?.viewBox?.baseVal
+          return {
+            minX: viewBox?.x ?? 0,
+            minY: viewBox?.y ?? 0,
+            maxX: (viewBox?.x ?? 0) + (viewBox?.width ?? 0),
+            maxY: (viewBox?.y ?? 0) + (viewBox?.height ?? 0),
+          }
+        }
+
+        return bounds
+      }
+
       const applyPanZoom = () => {
         if (!treeCanvas) {
           return
@@ -318,13 +375,24 @@ const buildViewerScript = () => `
         }
 
         const { baseWidth, baseHeight } = getSvgMetrics()
+        const viewBox = svgRoot?.viewBox?.baseVal
         const shellWidth = treeShell.clientWidth || baseWidth
         const shellHeight = treeShell.clientHeight || baseHeight
-        const fittedScale = clamp(Math.min(shellWidth / baseWidth, shellHeight / baseHeight), 0.18, 1.6)
+        const occupied = getOccupiedBounds()
+        const padding = 72
+        const contentMinX = occupied.minX - (viewBox?.x ?? 0)
+        const contentMinY = occupied.minY - (viewBox?.y ?? 0)
+        const contentWidth = Math.max(1, occupied.maxX - occupied.minX)
+        const contentHeight = Math.max(1, occupied.maxY - occupied.minY)
+        const fittedScale = clamp(
+          Math.min(shellWidth / (contentWidth + padding * 2), shellHeight / (contentHeight + padding * 2)),
+          0.18,
+          1.6,
+        )
 
         panZoomState.scale = fittedScale
-        panZoomState.translateX = Math.max(0, (shellWidth - baseWidth * fittedScale) / 2)
-        panZoomState.translateY = Math.max(0, (shellHeight - baseHeight * fittedScale) / 2)
+        panZoomState.translateX = ((shellWidth - contentWidth * fittedScale) / 2) - contentMinX * fittedScale
+        panZoomState.translateY = ((shellHeight - contentHeight * fittedScale) / 2) - contentMinY * fittedScale
         applyPanZoom()
       }
 
@@ -941,9 +1009,7 @@ export const buildHtmlExportDocument = ({
       position: relative;
       z-index: 0;
       flex: 0 0 auto;
-      display: flex;
-      align-items: center;
-      justify-content: center;
+      display: block;
       height: 50vh;
       min-height: 50vh;
       overflow: hidden;
@@ -951,6 +1017,11 @@ export const buildHtmlExportDocument = ({
       border-radius: 16px;
       background: #000000;
       padding: 10px;
+      scrollbar-width: none;
+    }
+
+    .html-export__tree-shell::-webkit-scrollbar {
+      display: none;
     }
 
     .html-export__tree-shell[data-dragging="true"] {
@@ -958,16 +1029,19 @@ export const buildHtmlExportDocument = ({
     }
 
     .html-export__tree-canvas {
-      position: relative;
-      flex: 0 0 auto;
+      position: absolute;
+      top: 0;
+      left: 0;
       transform-origin: 0 0;
       will-change: transform;
+      overflow: visible;
     }
 
     .html-export__tree-canvas svg {
       display: block;
       max-width: 100%;
       height: auto;
+      overflow: visible;
     }
 
     .html-export__tree-shell .skill-tree-center-icon__foreign {

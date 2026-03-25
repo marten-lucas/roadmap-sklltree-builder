@@ -54,6 +54,12 @@ describe('htmlExport', () => {
     expect(html).toContain('html-export__panel--roadmap')
     expect(html).toContain('height: 50vh;')
     expect(html).toContain('background: #000000;')
+    expect(html).toContain('scrollbar-width: none;')
+    expect(html).toContain('.html-export__tree-shell::-webkit-scrollbar')
+    expect(html).toContain('.html-export__tree-canvas {')
+    expect(html).toContain('position: absolute;')
+    expect(html).toContain('left: 0;')
+    expect(html).toContain('overflow: visible;')
     expect(html).toContain('aria-label="Filter"')
     expect(html).not.toContain('Visualisierung')
     expect(html).not.toContain('html-export__section-title')
@@ -64,6 +70,9 @@ describe('htmlExport', () => {
     expect(html).toContain('<h2>Release Impact</h2>')
     expect(html).toContain('origButtonWidth')
     expect(html).toContain('applyInnerSize')
+    expect(html).toContain('const getOccupiedBounds = () =>')
+    expect(html).toContain('contentMinX')
+    expect(html).toContain('contentMinY')
   })
 
   it('extracts and reads embedded document payload from exported html', () => {
