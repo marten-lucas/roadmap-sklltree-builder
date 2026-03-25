@@ -1,11 +1,31 @@
-ShortName,Name,Scope,Ebene,Segment,Parent,AdditionalDependency,Status
-FE1,Frontend Foundation,Frontend,1,Platform,,,now
-BE1,Backend Foundation,Backend,1,Platform,,,next
-UI1,UI Components,Frontend,2,Platform,FE1,,now
-API,Public API,Backend,2,Platform,BE1,,now
-DOC,Documentation,Documentation,2,Enablement,FE1,,next
-AUTH,Authentication,Backend,3,Platform,API,,next
-OBS,Observability,Backend,3,Platform,API,,later
-DES,Design Tokens,Frontend,3,Platform,UI1,,done
-INT,Integration Tests,Quality,4,Enablement,AUTH,"OBS, DES",next
-REG,Regression Suite,Quality,5,Enablement,INT,,later
+ShortName,Name,Scope,Ebene,Segment,Parent,AdditionalDependency,Status,ReleaseNotes
+FE1,Frontend Foundation,Frontend,1,Platform,,,now,"## Release Notes
+- Foundation for frontend
+- **Note:** baseline components"
+BE1,Backend Foundation,Backend,1,Platform,,,next,"## Release Notes
+- Backend core services
+- **Planned:** API stabilization"
+UI1,UI Components,Frontend,2,Platform,FE1,,now,"## Release Notes
+- Reusable UI components
+- **Status:** now"
+API,Public API,Backend,2,Platform,BE1,,now,"## Release Notes
+- Public API defined
+- **Important:** versioning"
+DOC,Documentation,Documentation,2,Enablement,FE1,,next,"## Release Notes
+- Documentation hub
+- **Next:** add guides"
+AUTH,Authentication,Backend,3,Platform,API,,next,"## Release Notes
+- Auth flow implemented
+- **Caveat:** token rotation"
+OBS,Observability,Backend,3,Platform,API,,later,"## Release Notes
+- Observability hooks
+- **Later:** dashboards"
+DES,Design Tokens,Frontend,3,Platform,UI1,,done,"## Release Notes
+- Design tokens published
+- **Status:** done"
+INT,Integration Tests,Quality,4,Enablement,AUTH,"OBS, DES",next,"## Release Notes
+- Integration coverage
+- **Next:** add e2e cases"
+REG,Regression Suite,Quality,5,Enablement,INT,,later,"## Release Notes
+- Regression gates
+- **Planned:** nightly runs"

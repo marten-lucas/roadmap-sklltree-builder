@@ -1,5 +1,5 @@
-ShortName,Name,Scope,Ebene,Segment,Parent,AdditionalDependency,Status
-RT,Root Node,,1,Core,,,done
-FE,Frontend Node,,2,Core,RT,,next
-BE,Backend Node,Focus,2,Side,RT,,now
-QA,Quality Check,,3,Side,FE,BE,later
+ShortName,Name,Scope,Ebene,Segment,Parent,AdditionalDependency,Status,ReleaseNotes
+RT,Root Node,,1,Core,,,done,"## Release Notes\n- Initial root created\n- **Status:** done"
+FE,Frontend Node,,2,Core,RT,,next,"## Release Notes\n- Frontend skeleton added\n- **Next:** refine UI"
+BE,Backend Node,Focus,2,Side,RT,,now,"## Release Notes\n- Backend service implemented\n- **Now:** integration"
+QA,Quality Check,,3,Side,FE,BE,later,"## Release Notes\n- QA scaffolding\n- **Planned:** add tests"

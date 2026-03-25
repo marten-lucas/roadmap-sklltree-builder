@@ -1,51 +1,149 @@
-ShortName,Name,Scope,Ebene,Segment,Parent,AdditionalDependency,Status
-SA,N_SA,SC_SA,5,SEG_SA,NAH,,later
-COD,N_COD,SC_COD,1,SEG_COD,,,next
-RAD,N_RAD,SC_RAD,1,SEG_RAD,,,done
-COK,N_COK,SC_COK,2,SEG_COK,COD,BMD,next
-RAK,N_RAK,SC_RAK,2,SEG_RAK,RAD,,done
-MM,N_MM,SC_MM,3,SEG_MM,RAK,"CC, SA1",done
-BMD,N_BMD,SC_BMD,4,SEG_BMD,PLC,COK,now
-SA1,N_SA1,SC_SA1,4,SEG_SA1,COK,MM,next
-SEA,N_SEA,SC_SEA,1,SEG_SEA,MM,,later
-NAH,N_NAH,SC_NAH,4,SEG_NAH,,,next
-CCC,N_CCC,SC_CCC,3,SEG_CCC,RCA,,later
-PDK,N_PDK,SC_PDK,1,SEG_PDK,,,done
-FLD,N_FLD,SC_FLD,1,SEG_FLD,,,now
-CAN,N_CAN,SC_CAN,1,SEG_CAN,,,done
-PPK,N_PPK,SC_PPK,2,SEG_PPK,PPD,,done
-FLK,N_FLK,SC_FLK,2,SEG_FLK,FLD,,now
-RCA,N_RCA,SC_RCA,2,SEG_RCA,FLD,FCA,done
-CCK,N_CCK,SC_CCK,3,SEG_CCK,PPK,MM,now
-IVP,N_IVP,SC_IVP,3,SEG_IVP,FLK,,next
-UCK,N_UCK,SC_UCK,4,SEG_UCK,CCK,,later
-CLG,N_CLG,SC_CLG,2,SEG_CLG,,,done
-CC,N_CC,SC_CC,2,SEG_CC,COD,,done
-CCL,N_CCL,SC_CCL,3,SEG_CCL,CLG,,done
-PLC,N_PLC,SC_PLC,3,SEG_PLC,CLG,,done
-CLT,N_CLT,SC_CLT,3,SEG_CLT,CC,,done
-PDB,N_PDB,SC_PDB,4,SEG_PDB,PLC,,done
-PLT,N_PLT,SC_PLT,4,SEG_PLT,CLT,LKE,next
-LKE,N_LKE,SC_LKE,4,SEG_LKE,CLT,PLT,next
-CPP,N_CPP,SC_CPP,4,SEG_CPP,CLT,,done
-CRJ,N_CRJ,SC_CRJ,4,SEG_CRJ,CLT,,done
-SPA,N_SPA,SC_SPA,5,SEG_SPA,PDB,,later
-R4P,N_R4P,SC_R4P,5,SEG_R4P,PLT,,next
-RJD,N_RJD,SC_RJD,5,SEG_RJD,CRJ,,done
-PPD,N_PPD,SC_PPD,5,SEG_PPD,CPP,,done
-JFS,N_JFS,SC_JFS,6,SEG_JFS,R4P,,later
-PFD,N_PFD,SC_PFD,6,SEG_PFD,CFL,,done
-JBE,N_JBE,SC_JBE,7,SEG_JBE,JFS,,later
-SHV,N_SHV,SC_SHV,7,SEG_SHV,JFS,,later
-CFL,N_CFL,SC_CFL,6,SEG_CFL,,,now
-MFR,N_MFR,SC_MFR,8,SEG_MFR,,,done
-FCA,N_FCA,SC_FCA,2,SEG_FCA,CAN,RCA,done
-CRA,N_CRA,SC_CRA,2,SEG_CRA,TNC,,next
-LCT,N_LCT,SC_LCT,2,SEG_LCT,LAN,,done
-DWC,N_DWC,SC_DWC,3,SEG_DWC,FCA,,done
-PCA,N_PCA,SC_PCA,3,SEG_PCA,FCA,,done
-CCP,N_CCP,SC_CCP,3,SEG_CCP,CRA,,next
-MPC,N_MPC,SC_MPC,4,SEG_MPC,PCA,,next
-CCA,N_CCA,SC_CCA,4,SEG_CCA,CCC,,later
-TNC,N_TNC,SC_TNC,1,SEG_TNC,,,done
+ShortName,Name,Scope,Ebene,Segment,Parent,AdditionalDependency,Status,ReleaseNotes
+SA,N_SA,SC_SA,5,SEG_SA,NAH,,later,"## Release Notes
+- Sample large entry
+- **Planned:** cleanup"
+COD,N_COD,SC_COD,1,SEG_COD,,,next,"## Release Notes
+- Code module
+- **Next:** QA"
+RAD,N_RAD,SC_RAD,1,SEG_RAD,,,done,"## Release Notes
+- Radar module
+- **Status:** done"
+COK,N_COK,SC_COK,2,SEG_COK,COD,BMD,next,"## Release Notes
+- COK integration
+- **Planned:** docs"
+RAK,N_RAK,SC_RAK,2,SEG_RAK,RAD,,done,"## Release Notes
+- RAK completed
+- **Status:** done"
+MM,N_MM,SC_MM,3,SEG_MM,RAK,"CC, SA1",done,"## Release Notes
+- MM finalized
+- **Note:** dependencies"
+BMD,N_BMD,SC_BMD,4,SEG_BMD,PLC,COK,now,"## Release Notes
+- BMD in progress
+- **Now:** validate"
+SA1,N_SA1,SC_SA1,4,SEG_SA1,COK,MM,next,"## Release Notes
+- SA1 planned
+- **Next:** implementation"
+SEA,N_SEA,SC_SEA,1,SEG_SEA,MM,,later,"## Release Notes
+- SEA backlog
+- **Later:** prioritize"
+NAH,N_NAH,SC_NAH,4,SEG_NAH,,,next,"## Release Notes
+- NAH scheduled
+- **Next:** assign owners"
+CCC,N_CCC,SC_CCC,3,SEG_CCC,RCA,,later,"## Release Notes
+- CCC tasks
+- **Later:** review"
+PDK,N_PDK,SC_PDK,1,SEG_PDK,,,done,"## Release Notes
+- PDK done
+- **Status:** done"
+FLD,N_FLD,SC_FLD,1,SEG_FLD,,,now,"## Release Notes
+- FLD active
+- **Now:** monitoring"
+CAN,N_CAN,SC_CAN,1,SEG_CAN,,,done,"## Release Notes
+- CAN done
+- **Note:** archived"
+PPK,N_PPK,SC_PPK,2,SEG_PPK,PPD,,done,"## Release Notes
+- PPK complete
+- **Status:** done"
+FLK,N_FLK,SC_FLK,2,SEG_FLK,FLD,,now,"## Release Notes
+- FLK ongoing
+- **Now:** testing"
+RCA,N_RCA,SC_RCA,2,SEG_RCA,FLD,FCA,done,"## Release Notes
+- RCA finished
+- **Status:** done"
+CCK,N_CCK,SC_CCK,3,SEG_CCK,PPK,MM,now,"## Release Notes
+- CCK active
+- **Now:** integration"
+IVP,N_IVP,SC_IVP,3,SEG_IVP,FLK,,next,"## Release Notes
+- IVP planned
+- **Next:** design"
+UCK,N_UCK,SC_UCK,4,SEG_UCK,CCK,,later,"## Release Notes
+- UCK planned
+- **Later:** schedule"
+CLG,N_CLG,SC_CLG,2,SEG_CLG,,,done,"## Release Notes
+- CLG done
+- **Status:** done"
+CC,N_CC,SC_CC,2,SEG_CC,COD,,done,"## Release Notes
+- CC done
+- **Note:** minor fixes"
+CCL,N_CCL,SC_CCL,3,SEG_CCL,CLG,,done,"## Release Notes
+- CCL completed
+- **Status:** done"
+PLC,N_PLC,SC_PLC,3,SEG_PLC,CLG,,done,"## Release Notes
+- PLC complete
+- **Status:** done"
+CLT,N_CLT,SC_CLT,3,SEG_CLT,CC,,done,"## Release Notes
+- CLT done
+- **Note:** cleanup"
+PDB,N_PDB,SC_PDB,4,SEG_PDB,PLC,,done,"## Release Notes
+- PDB archived
+- **Status:** done"
+PLT,N_PLT,SC_PLT,4,SEG_PLT,CLT,LKE,next,"## Release Notes
+- PLT next
+- **Next:** deployment"
+LKE,N_LKE,SC_LKE,4,SEG_LKE,CLT,PLT,next,"## Release Notes
+- LKE next
+- **Planned:** performance"
+CPP,N_CPP,SC_CPP,4,SEG_CPP,CLT,,done,"## Release Notes
+- CPP done
+- **Status:** done"
+CRJ,N_CRJ,SC_CRJ,4,SEG_CRJ,CLT,,done,"## Release Notes
+- CRJ done
+- **Status:** done"
+SPA,N_SPA,SC_SPA,5,SEG_SPA,PDB,,later,"## Release Notes
+- SPA pending
+- **Later:** prioritize"
+R4P,N_R4P,SC_R4P,5,SEG_R4P,PLT,,next,"## Release Notes
+- R4P next
+- **Next:** handoff"
+RJD,N_RJD,SC_RJD,5,SEG_RJD,CRJ,,done,"## Release Notes
+- RJD done
+- **Status:** done"
+PPD,N_PPD,SC_PPD,5,SEG_PPD,CPP,,done,"## Release Notes
+- PPD done
+- **Status:** done"
+JFS,N_JFS,SC_JFS,6,SEG_JFS,R4P,,later,"## Release Notes
+- JFS planned
+- **Later:** design"
+PFD,N_PFD,SC_PFD,6,SEG_PFD,CFL,,done,"## Release Notes
+- PFD done
+- **Status:** done"
+JBE,N_JBE,SC_JBE,7,SEG_JBE,JFS,,later,"## Release Notes
+- JBE backlog
+- **Later:** scope"
+SHV,N_SHV,SC_SHV,7,SEG_SHV,JFS,,later,"## Release Notes
+- SHV backlog
+- **Later:** schedule"
+CFL,N_CFL,SC_CFL,6,SEG_CFL,,,now,"## Release Notes
+- CFL active
+- **Now:** stabilize"
+MFR,N_MFR,SC_MFR,8,SEG_MFR,,,done,"## Release Notes
+- MFR done
+- **Status:** done"
+FCA,N_FCA,SC_FCA,2,SEG_FCA,CAN,RCA,done,"## Release Notes
+- FCA done
+- **Status:** done"
+CRA,N_CRA,SC_CRA,2,SEG_CRA,TNC,,next,"## Release Notes
+- CRA next
+- **Next:** assign"
+LCT,N_LCT,SC_LCT,2,SEG_LCT,LAN,,done,"## Release Notes
+- LCT done
+- **Status:** done"
+DWC,N_DWC,SC_DWC,3,SEG_DWC,FCA,,done,"## Release Notes
+- DWC done
+- **Status:** done"
+PCA,N_PCA,SC_PCA,3,SEG_PCA,FCA,,done,"## Release Notes
+- PCA done
+- **Status:** done"
+CCP,N_CCP,SC_CCP,3,SEG_CCP,CRA,,next,"## Release Notes
+- CCP next
+- **Next:** tests"
+MPC,N_MPC,SC_MPC,4,SEG_MPC,PCA,,next,"## Release Notes
+- MPC next
+- **Next:** integrate"
+CCA,N_CCA,SC_CCA,4,SEG_CCA,CCC,,later,"## Release Notes
+- CCA planned
+- **Later:** review"
+TNC,N_TNC,SC_TNC,1,SEG_TNC,,,done,"## Release Notes
+- TNC done
+- **Status:** done"
 LAN,N_LAN,SC_LAN,1,SEG_LAN,,,done

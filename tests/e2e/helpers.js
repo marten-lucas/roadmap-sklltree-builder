@@ -212,6 +212,11 @@ export const parseSkillTreeCsvTemplate = (csvText, options = {}) => {
     ['AdditionalDependency', 'Additional Dependency'],
     false,
   )
+  const releaseNotesIndex = findHeaderIndex(
+    headerIndexByName,
+    ['ReleaseNotes', 'Release Notes'],
+    false,
+  )
 
   const rows = []
   for (let i = 1; i < lines.length; i += 1) {
@@ -236,6 +241,7 @@ export const parseSkillTreeCsvTemplate = (csvText, options = {}) => {
       : parseAdditionalDependencies(
         hasCollapsedAdditionalDependency ? '' : parsed[additionalDependenciesIndex],
       )
+    const releaseNote = releaseNotesIndex == null ? null : (parsed[releaseNotesIndex] ?? null)
 
     if (!shortName || !label || !levelText || !segment) {
       throw new Error(`CSV row ${i + 1} is incomplete.`)
@@ -256,6 +262,7 @@ export const parseSkillTreeCsvTemplate = (csvText, options = {}) => {
       parentLabel: null,
       additionalDependencies,
       status,
+      releaseNote,
       order: i,
     })
   }

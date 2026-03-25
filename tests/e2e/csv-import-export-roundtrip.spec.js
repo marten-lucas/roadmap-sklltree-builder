@@ -59,12 +59,25 @@ const fillCenterMetadata = async (page) => {
   await page.waitForTimeout(300)
 }
 
-const fillReleaseNoteForNode = async (page, nodeId, note) => {
+const fillReleaseNoteForNode = async (page, nodeId, note, level = 1) => {
   await selectNodeById(page, nodeId)
-  const inspector = page.locator('.skill-panel--inspector')
-  const releaseNote = inspector.getByLabel('Release Note', { exact: true })
-  await releaseNote.fill(note)
-  await releaseNote.press('Tab')
+  const inspector = page.locator('.skill-panel--inspector').first()
+  await inspector.waitFor({ state: 'attached', timeout: 10_000 })
+
+  // Ensure the correct level tab is active so the Release Note field targets the right level
+  try {
+    const tab = inspector.getByRole('tab', { name: `L${level}` })
+    await tab.click()
+  } catch (e) {
+    // ignore if tab not found; proceed to fill the visible release note field
+  }
+
+  // Target the Markdown textarea directly (robust against label/translation issues)
+  const releaseTextarea = inspector.locator('textarea').last()
+  await releaseTextarea.waitFor({ state: 'visible', timeout: 5_000 })
+  await releaseTextarea.scrollIntoViewIfNeeded()
+  await releaseTextarea.fill(note)
+  await releaseTextarea.press('Tab')
 }
 
 const DEFAULT_DATASET = 'large'
@@ -564,9 +577,8 @@ test.describe('CSV template roundtrip via builder UI', () => {
       return left.order - right.order
     })
 
-    const rowsWithReleaseNotes = rowsForSettings.map((row, index) => ({
-      ...row,
-      releaseNote: [
+    const rowsWithReleaseNotes = rowsForSettings.map((row, index) => {
+      const generated = [
         `# ${row.label}`,
         '',
         `## Rollout ${index + 1}`,
@@ -574,8 +586,15 @@ test.describe('CSV template roundtrip via builder UI', () => {
         `- Status: ${row.status}`,
         `- Segment: ${row.segment}`,
         row.scope ? `- Scope: ${row.scope}` : null,
-      ].filter(Boolean).join('\n'),
-    }))
+      ].filter(Boolean).join('\n')
+
+      return {
+        ...row,
+        releaseNote: row.releaseNote && String(row.releaseNote).trim().length > 0
+          ? String(row.releaseNote)
+          : generated,
+      }
+    })
 
     // TEMPORARY: create an export once all nodes exist and have identity
     // (name + shortname). This allows tests to continue even if scope
@@ -692,7 +711,7 @@ test.describe('CSV template roundtrip via builder UI', () => {
         continue
       }
 
-      await fillReleaseNoteForNode(page, nodeIdByCsvShortName.get(row.shortName), row.releaseNote)
+      await fillReleaseNoteForNode(page, nodeIdByCsvShortName.get(row.shortName), row.releaseNote, row.level)
     }
     phaseTimingsMs.releaseNotes = Date.now() - phaseStartReleaseNotes
 
