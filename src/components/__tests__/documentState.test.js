@@ -4,6 +4,7 @@ import {
   createEmptyDocument,
   DEFAULT_CENTER_ICON_SRC,
   documentHistoryReducer,
+  normalizeCenterIconSrc,
 } from '../utils/documentState'
 
 const createDoc = (suffix) => ({
@@ -143,5 +144,24 @@ describe('documentState', () => {
 
     expect(state.present.scopes).toEqual([])
     expect(state.present.centerIconSrc).toBe('/custom.svg')
+  })
+
+  it('normalizes the legacy blob icon source to an embedded data url', () => {
+    const normalized = normalizeCenterIconSrc('/blob.svg')
+
+    expect(normalized).toBe(DEFAULT_CENTER_ICON_SRC)
+    expect(normalized).toContain('data:image/svg+xml')
+  })
+
+  it('defaults a missing center icon to the embedded blob data url', () => {
+    const state = createDocumentHistoryState({
+      segments: [],
+      scopes: [],
+      children: [],
+      release: { name: '', motto: '', introduction: '', date: '' },
+    })
+
+    expect(state.present.centerIconSrc).toBe(DEFAULT_CENTER_ICON_SRC)
+    expect(state.present.centerIconSrc).toContain('data:image/svg+xml')
   })
 })

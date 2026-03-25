@@ -1010,7 +1010,7 @@ export const buildHtmlExportDocument = ({
       z-index: 0;
       flex: 0 0 auto;
       display: block;
-      height: 50vh;
+      height: 70vh;
       min-height: 50vh;
       overflow: hidden;
       overscroll-behavior: none;

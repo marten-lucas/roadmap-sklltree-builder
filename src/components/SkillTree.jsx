@@ -1,5 +1,6 @@
 import { Alert } from '@mantine/core'
 import { useEffect, useMemo, useReducer, useRef, useState } from 'react'
+import { flushSync } from 'react-dom'
 import { TransformComponent, TransformWrapper } from 'react-zoom-pan-pinch'
 import './skillTree.css'
 import { TREE_CONFIG, STATUS_STYLES } from './config'
@@ -804,6 +805,7 @@ export function SkillTree() {
     }
 
     try {
+      flushSync(() => resetSelections())
       const { exportSvgFromElement } = await import('./utils/svgExport')
       const exported = exportSvgFromElement(canvasSvgRef.current, {
         fileName: 'skilltree-roadmap.svg',
@@ -828,6 +830,7 @@ export function SkillTree() {
     }
 
     try {
+      flushSync(() => resetSelections())
       const { exportSvgFromElement } = await import('./utils/svgExport')
       const exported = exportSvgFromElement(canvasSvgRef.current, {
         fileName: 'skilltree-roadmap-clean.svg',
@@ -852,6 +855,7 @@ export function SkillTree() {
     }
 
     try {
+      flushSync(() => resetSelections())
       const { exportHtmlFromSkillTree } = await import('./utils/htmlExport')
       const exported = exportHtmlFromSkillTree({
         svgElement: canvasSvgRef.current,
@@ -876,6 +880,7 @@ export function SkillTree() {
     }
 
     try {
+      flushSync(() => resetSelections())
       const { tryExportPdfFromSkillTree } = await import('./utils/pdfExport')
       const exported = tryExportPdfFromSkillTree({
         svgElement: canvasSvgRef.current,
@@ -965,6 +970,7 @@ export function SkillTree() {
               return
             }
 
+            flushSync(() => resetSelections())
             const { exportHtmlFromSkillTree } = await import('./utils/htmlExport')
             const exported = exportHtmlFromSkillTree({
               svgElement: canvasSvgRef.current,

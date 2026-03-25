@@ -763,6 +763,10 @@ test.describe('CSV template roundtrip via builder UI', () => {
     expect(exportedHtml).not.toContain('skill-tree-export-exclude')
     expect(exportedHtml).not.toContain('data-add-control="root-initial"')
     expect(exportedHtml).not.toContain('data-add-control="segment-initial"')
+    expect(exportedHtml).toContain('data:image/svg+xml')
+    expect(exportedHtml).not.toContain('/blob.svg')
+    expect(exportedPayload.document.centerIconSrc).toContain('data:image/svg+xml')
+    expect(page.locator('.skill-node-button--selected')).toHaveCount(0)
 
     expect(existsSync(persistedExportPath)).toBe(true)
 
