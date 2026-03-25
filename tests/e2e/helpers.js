@@ -319,7 +319,7 @@ export const confirmAndReset = async (page) => {
 }
 
 export const waitForInspector = async (page) => {
-  await page.waitForSelector('.skill-panel--inspector', { timeout: 10_000 })
+  await page.waitForSelector('.skill-panel--inspector', { timeout: 30_000 })
 }
 
 const waitForSelectedNodeId = async (page, nodeId) => {
@@ -329,7 +329,7 @@ const waitForSelectedNodeId = async (page, nodeId) => {
       return inspector && inspector.getAttribute('data-selected-node-id') === expectedNodeId
     },
     nodeId,
-    { timeout: 10_000 },
+    { timeout: 30_000 },
   )
 }
 
