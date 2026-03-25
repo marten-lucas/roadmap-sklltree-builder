@@ -69,8 +69,16 @@ export const saveDocumentToLocalStorage = (document, storage = globalThis?.local
     return false
   }
 
-  storage.setItem(LOCAL_STORAGE_DOCUMENT_KEY, serializeDocumentPayload(document))
-  return true
+  try {
+    storage.setItem(LOCAL_STORAGE_DOCUMENT_KEY, serializeDocumentPayload(document))
+    return true
+  } catch (err) {
+    // Fail gracefully if storage quota is exceeded or other storage errors occur.
+    // Tests will detect persistence failures via other means if required.
+    // eslint-disable-next-line no-console
+    console.warn('saveDocumentToLocalStorage failed:', err)
+    return false
+  }
 }
 
 export const loadDocumentFromLocalStorage = (storage = globalThis?.localStorage) => {

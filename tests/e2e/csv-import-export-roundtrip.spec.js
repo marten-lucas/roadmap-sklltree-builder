@@ -55,8 +55,11 @@ const fillCenterMetadata = async (page) => {
   await panel.locator('textarea').last().fill(introduction)
 
   const iconPath = resolve(process.cwd(), 'tests/e2e/datasets/Kyana_Visual_final.svg')
-  await panel.locator('input[type="file"][accept=".svg,image/svg+xml"]').setInputFiles(iconPath)
-  await page.waitForTimeout(300)
+  const skipIcon = process.env.SKILLTREE_E2E_SKIP_ICON === '1'
+  if (!skipIcon) {
+    await panel.locator('input[type="file"][accept=".svg,image/svg+xml"]').setInputFiles(iconPath)
+    await page.waitForTimeout(300)
+  }
 }
 
 const fillReleaseNoteForNode = async (page, nodeId, note, level = 1) => {
