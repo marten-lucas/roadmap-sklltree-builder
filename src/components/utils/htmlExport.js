@@ -185,15 +185,11 @@ const buildViewerScript = () => `
 
       const getReleaseVisibilityMode = (statusKey, releaseFilter) => {
         if (releaseFilter === RELEASE_FILTER.now) {
-          if (statusKey === 'now' || statusKey === 'next') {
+          if (statusKey === 'now') {
             return 'full'
           }
 
-          if (statusKey === 'done') {
-            return 'minimal'
-          }
-
-          return 'hidden'
+          return 'minimal'
         }
 
         if (releaseFilter === RELEASE_FILTER.next) {
@@ -585,7 +581,9 @@ const buildViewerScript = () => `
             return
           }
 
-          const scopeVisible = selectedScopeId === SCOPE_FILTER_ALL || nodeInfo.scopeIds.has(selectedScopeId)
+          const scopeVisible = selectedScopeId === SCOPE_FILTER_ALL
+            || nodeInfo.scopeIds.size === 0
+            || nodeInfo.scopeIds.has(selectedScopeId)
 
           if (!scopeVisible) {
             setNodeMode(anchor, 'hidden')

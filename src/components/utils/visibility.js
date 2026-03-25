@@ -14,15 +14,11 @@ export const RELEASE_FILTER_LABELS = {
 
 export const getReleaseVisibilityMode = (statusKey, releaseFilter) => {
   if (releaseFilter === RELEASE_FILTER_OPTIONS.now) {
-    if (statusKey === 'now' || statusKey === 'next') {
+    if (statusKey === 'now') {
       return 'full'
     }
 
-    if (statusKey === 'done') {
-      return 'minimal'
-    }
-
-    return 'hidden'
+    return 'minimal'
   }
 
   if (releaseFilter === RELEASE_FILTER_OPTIONS.next) {
@@ -40,6 +36,12 @@ export const nodeMatchesScopeFilter = (node, scopeId) => {
   const levels = Array.isArray(node?.levels) ? node.levels : []
 
   if (!scopeId || scopeId === SCOPE_FILTER_ALL) {
+    return true
+  }
+
+  const hasAnyScopeAssignments = levels.some((level) => Array.isArray(level?.scopeIds) && level.scopeIds.length > 0)
+
+  if (!hasAnyScopeAssignments) {
     return true
   }
 

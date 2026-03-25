@@ -409,10 +409,11 @@ test.describe('Phase 3 regressions', () => {
 
     await expect(getNodeAnchor(page, 'FND')).toBeVisible()
     await expect(getNodeAnchor(page, 'BCK')).toBeVisible()
-    await expect(getNodeAnchor(page, 'DBM')).toHaveCount(0)
+    await expect(getNodeAnchor(page, 'DBM')).toBeVisible()
 
     await expect(getNodeButton(page, 'FND')).toHaveClass(/skill-node-button--minimal/)
     await expect(getNodeButton(page, 'BCK')).not.toHaveClass(/skill-node-button--minimal/)
+    await expect(getNodeButton(page, 'DBM')).toHaveClass(/skill-node-button--minimal/)
 
     await openFilterMenu(page)
     await page.getByRole('menuitem', { name: 'Next', exact: true }).click()
@@ -420,8 +421,9 @@ test.describe('Phase 3 regressions', () => {
     await expect(getNodeAnchor(page, 'FND')).toBeVisible()
     await expect(getNodeAnchor(page, 'BCK')).toBeVisible()
     await expect(getNodeAnchor(page, 'DBM')).toBeVisible()
-    await expect(getNodeButton(page, 'DBM')).toHaveClass(/skill-node-button--minimal/)
+    await expect(getNodeButton(page, 'FND')).toHaveClass(/skill-node-button--minimal/)
     await expect(getNodeButton(page, 'BCK')).not.toHaveClass(/skill-node-button--minimal/)
+    await expect(getNodeButton(page, 'DBM')).toHaveClass(/skill-node-button--minimal/)
   })
 
   test('renders additional dependency portals after assigning a dependency', async ({ page }) => {
