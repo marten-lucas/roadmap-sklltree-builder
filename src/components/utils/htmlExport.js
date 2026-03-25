@@ -326,7 +326,7 @@ const buildViewerScript = () => `
         const centerGroup = svgRoot?.querySelector('.skill-tree-center-icon')
         const centerForeign = centerGroup?.querySelector('.skill-tree-center-icon__foreign')
         const transform = centerGroup?.getAttribute('transform') ?? ''
-        const match = transform.match(/translate\(([-\d.]+)[,\s]+([-\d.]+)\)/)
+        const match = transform.match(/translate[(]([-0-9.]+)[, ]+([-0-9.]+)[)]/)
         const centerX = match ? Number.parseFloat(match[1]) : Number.NaN
         const centerY = match ? Number.parseFloat(match[2]) : Number.NaN
 
@@ -721,8 +721,6 @@ export const buildHtmlExportDocument = ({
   if (releaseDate) {
     subtitleBits.push(`Release Date: ${formatDisplayDate(releaseDate)}`)
   }
-  const payloadJson = escapeJsonForScriptTag(JSON.stringify(buildPersistedDocumentPayload(roadmapDocument), null, 2))
-  
   const canonicalDoc = canonicalizeDocumentForExport(roadmapDocument)
   const canonicalPayloadJson = escapeJsonForScriptTag(JSON.stringify(buildPersistedDocumentPayload(canonicalDoc), null, 2))
 
@@ -1343,7 +1341,7 @@ export const extractDocumentPayloadFromHtml = (htmlText) => {
   try {
     const canonical = canonicalizeDocumentForExport(parsed.value)
     return { ok: true, value: canonical }
-  } catch (err) {
+  } catch {
     return { ok: true, value: parsed.value }
   }
 }
