@@ -25,6 +25,43 @@ const toNumber = (value, fallback = 0) => {
 
 const sanitizeText = (value) => String(value ?? '').replace(/\s+/g, ' ').trim()
 
+const replaceCenterIconForeignObject = (svgRoot) => {
+  const centerForeign = svgRoot.querySelector('.skill-tree-center-icon__foreign')
+  const centerImage = svgRoot.querySelector('.skill-tree-center-icon__image')
+
+  if (!centerForeign || !centerImage) {
+    return
+  }
+
+  const src = String(centerImage.getAttribute('src') ?? '').trim()
+  if (!src) {
+    return
+  }
+
+  const x = centerForeign.getAttribute('x') ?? '0'
+  const y = centerForeign.getAttribute('y') ?? '0'
+  const width = centerForeign.getAttribute('width') ?? '0'
+  const height = centerForeign.getAttribute('height') ?? '0'
+
+  const image = createSvgElement('image')
+  image.setAttribute('class', 'skill-tree-center-icon__image')
+  image.setAttribute('x', x)
+  image.setAttribute('y', y)
+  image.setAttribute('width', width)
+  image.setAttribute('height', height)
+  image.setAttribute('href', src)
+  if (typeof image.setAttributeNS === 'function') {
+    image.setAttributeNS(SVG_XLINK_NS, 'xlink:href', src)
+  }
+
+  const parentNode = centerForeign.parentNode
+  if (parentNode && typeof parentNode.replaceChild === 'function') {
+    parentNode.replaceChild(image, centerForeign)
+  } else if (typeof centerForeign.replaceWith === 'function') {
+    centerForeign.replaceWith(image)
+  }
+}
+
 const collectStyleText = (sourceDocument) => {
   if (!sourceDocument?.styleSheets) {
     return ''
@@ -536,6 +573,7 @@ export const serializeSvgElementForExport = (svgElement, options = {}) => {
   clone.setAttribute('xmlns:xlink', SVG_XLINK_NS)
 
   applyExportViewport(clone, getExportViewportBounds(svgElement))
+  replaceCenterIconForeignObject(clone)
 
   if (embedStyles) {
     injectExportStyles(clone, styleText || collectStyleText(sourceDocument))

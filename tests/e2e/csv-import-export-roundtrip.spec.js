@@ -768,6 +768,18 @@ test.describe('CSV template roundtrip via builder UI', () => {
     expect(exportedPayload.document.centerIconSrc).toContain('data:image/svg+xml')
     expect(page.locator('.skill-node-button--selected')).toHaveCount(0)
 
+    await page.getByRole('button', { name: 'Export', exact: true }).hover()
+    const [svgDownload] = await Promise.all([
+      page.waitForEvent('download'),
+      page.getByRole('menuitem', { name: 'SVG', exact: true }).click(),
+    ])
+    const exportedSvg = await readDownload(svgDownload)
+
+    expect(exportedSvg).toContain('data:image/svg+xml')
+    expect(exportedSvg).not.toContain('/blob.svg')
+    expect(exportedSvg).toContain('<image class="skill-tree-center-icon__image"')
+    expect(exportedSvg).not.toContain('<div xmlns="http://www.w3.org/1999/xhtml" class="skill-tree-center-icon__foreign"')
+
     expect(existsSync(persistedExportPath)).toBe(true)
 
     const persistedScopeLabels = await page.evaluate(() => {

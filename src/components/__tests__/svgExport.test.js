@@ -7,6 +7,7 @@ class MockElement {
     this.attributes = new Map()
     this.children = []
     this.textContent = ''
+    this.parentNode = null
   }
 
   setAttribute(name, value) {
@@ -22,11 +23,13 @@ class MockElement {
   }
 
   appendChild(child) {
+    child.parentNode = this
     this.children.push(child)
     return child
   }
 
   insertBefore(child, beforeChild) {
+    child.parentNode = this
     if (!beforeChild) {
       this.children.unshift(child)
       return child
@@ -40,6 +43,18 @@ class MockElement {
     }
 
     return child
+  }
+
+  replaceChild(nextChild, previousChild) {
+    const index = this.children.indexOf(previousChild)
+    if (index === -1) {
+      return previousChild
+    }
+
+    nextChild.parentNode = this
+    previousChild.parentNode = null
+    this.children.splice(index, 1, nextChild)
+    return previousChild
   }
 
   cloneNode(deep = false) {
@@ -59,25 +74,36 @@ class MockElement {
   }
 
   querySelector(selector) {
-    if (selector === 'defs') {
-      return this.children.find((child) => child.tagName === 'defs') ?? null
-    }
-
-    return null
+    const matches = this.querySelectorAll(selector)
+    return matches[0] ?? null
   }
 
   querySelectorAll(selector) {
+    const walk = (node, visitor) => {
+      for (const child of node.children ?? []) {
+        visitor(child)
+        walk(child, visitor)
+      }
+    }
+
+    const descendants = []
+    walk(this, (child) => descendants.push(child))
+
+    if (selector === 'defs') {
+      return descendants.filter((child) => child.tagName === 'defs')
+    }
+
     if (selector === 'foreignObject.skill-node-export-anchor') {
-      return this.children.filter((child) => child.tagName === 'foreignObject' && child.attributes.has('class') && child.attributes.get('class').includes('skill-node-export-anchor'))
+      return descendants.filter((child) => child.tagName === 'foreignObject' && child.attributes.has('class') && child.attributes.get('class').includes('skill-node-export-anchor'))
     }
 
     if (selector.startsWith('.')) {
       const className = selector.slice(1)
-      return this.children.filter((child) => child.attributes.has('class') && child.attributes.get('class').includes(className))
+      return descendants.filter((child) => child.attributes.has('class') && child.attributes.get('class').includes(className))
     }
 
     if (selector === 'style') {
-      return this.children.filter((child) => child.tagName === 'style')
+      return descendants.filter((child) => child.tagName === 'style')
     }
 
     return []
@@ -220,6 +246,37 @@ describe('svgExport', () => {
 
     expect(serialized).toContain('skill-tree-center-icon')
     expect(serialized).toContain('viewBox="404 404 812 1012"')
+  })
+
+  it('embeds the default center icon as inline svg data in the exported svg', () => {
+    installSvgDomShim()
+
+    const svg = new MockElement('svg')
+
+    const centerIcon = new MockElement('g')
+    centerIcon.setAttribute('class', 'skill-tree-center-icon')
+    centerIcon.setAttribute('transform', 'translate(500, 500)')
+
+    const foreignObject = new MockElement('foreignObject')
+    foreignObject.setAttribute('class', 'skill-tree-center-icon__foreign')
+    foreignObject.setAttribute('x', '-96')
+    foreignObject.setAttribute('y', '-96')
+    foreignObject.setAttribute('width', '192')
+    foreignObject.setAttribute('height', '192')
+
+    const image = new MockElement('img')
+    image.setAttribute('class', 'skill-tree-center-icon__image')
+    image.setAttribute('src', 'data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D"http://www.w3.org/2000/svg"%3E%3C/svg%3E')
+    foreignObject.appendChild(image)
+
+    centerIcon.appendChild(foreignObject)
+    svg.appendChild(centerIcon)
+
+    const serialized = serializeSvgElementForExport(svg)
+
+    expect(serialized).not.toContain('skill-tree-center-icon__foreign')
+    expect(serialized).toContain('<image')
+    expect(serialized).toContain('data:image/svg+xml')
   })
 
   it('sizes the export viewport to the occupied content bounds', () => {
