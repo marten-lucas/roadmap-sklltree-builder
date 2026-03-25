@@ -170,6 +170,33 @@ describe('svgExport', () => {
     expect(serialized).toContain('skill-node-tooltip__note')
   })
 
+  it('uses builder-like tooltip colors, font and sizing', () => {
+    installSvgDomShim()
+
+    const svg = new MockElement('svg')
+    const foreignObject = new MockElement('foreignObject')
+
+    foreignObject.setAttribute('class', 'skill-node-export-anchor')
+    foreignObject.setAttribute('x', '10')
+    foreignObject.setAttribute('y', '20')
+    foreignObject.setAttribute('width', '120')
+    foreignObject.setAttribute('height', '120')
+    foreignObject.setAttribute('data-node-id', 'node-1')
+    foreignObject.setAttribute('data-export-label', 'React Platform')
+    foreignObject.setAttribute('data-export-note', 'Now is live')
+    svg.appendChild(foreignObject)
+
+    const serialized = serializeSvgElementForExport(svg)
+
+    expect(serialized).toContain('rgba(2, 6, 23, 0.96)')
+    expect(serialized).toContain('rgba(56, 189, 248, 0.25)')
+    expect(serialized).toContain('filter: drop-shadow(0 18px 40px rgba(2, 6, 23, 0.45))')
+    expect(serialized).toContain('font-family: "Space Grotesk", "Rajdhani", sans-serif')
+    expect(serialized).toContain('font-size: 13px')
+    expect(serialized).toContain('font-size: 12px')
+    expect(serialized).toContain('height="62"')
+  })
+
   it('keeps the center icon inside the exported viewport', () => {
     installSvgDomShim()
 
@@ -275,7 +302,7 @@ describe('svgExport', () => {
     expect(serialized).toContain('.skill-tree-canvas { display: block; }')
   })
 
-  it('uses a cross-platform sans-serif font stack for exported text', () => {
+  it('uses the builder tooltip font stack for exported text', () => {
     installSvgDomShim()
 
     const svg = new MockElement('svg')
@@ -290,6 +317,6 @@ describe('svgExport', () => {
 
     const serialized = serializeSvgElementForExport(svg, { includeTooltips: true })
 
-    expect(serialized).toContain('-apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif')
+    expect(serialized).toContain('"Space Grotesk", "Rajdhani", sans-serif')
   })
 })

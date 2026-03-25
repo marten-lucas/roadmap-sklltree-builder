@@ -1,6 +1,24 @@
 import { test, expect } from '@playwright/test'
 import { startFresh, exportHtml, getBuilderNodeLabels } from './helpers.js'
 
+const getTooltipCssText = async (page) => page.evaluate(() => {
+  const tooltipRules = []
+
+  for (const styleSheet of Array.from(document.styleSheets)) {
+    try {
+      for (const rule of Array.from(styleSheet.cssRules ?? [])) {
+        if (typeof rule.cssText === 'string' && rule.cssText.includes('.skill-node-tooltip')) {
+          tooltipRules.push(rule.cssText)
+        }
+      }
+    } catch {
+      // Ignore cross-origin or inaccessible stylesheets.
+    }
+  }
+
+  return tooltipRules.join('\n')
+})
+
 const seedMarkdownContent = async (page) => {
   await page.evaluate(() => {
     const raw = localStorage.getItem('roadmap-skilltree.document.v1')
@@ -125,6 +143,31 @@ test.describe('Rendered export viewer', () => {
       const notesHtml = await exportPage.locator('.html-export__release-list').innerHTML()
       expect(notesHtml).toContain('<strong>now</strong>')
       expect(notesHtml).toContain('<strong>markdown</strong>')
+    } finally {
+      await exportPage.close()
+      await exportContext.close()
+    }
+  })
+
+  test('export viewer keeps node tooltip styling aligned with the builder', async ({
+    page,
+    browser,
+  }) => {
+    const builderTooltipCss = await getTooltipCssText(page)
+    expect(builderTooltipCss).toContain('.skill-node-tooltip')
+
+    const html = await exportHtml(page)
+    const exportContext = await browser.newContext()
+    const exportPage = await exportContext.newPage()
+
+    try {
+      await exportPage.setContent(html)
+      await exportPage.waitForSelector('#html-export-tree-canvas svg', { timeout: 10_000 })
+
+      const exportedTooltipCss = await getTooltipCssText(exportPage)
+      expect(exportedTooltipCss).toContain('.skill-node-tooltip')
+
+      expect(exportedTooltipCss).toContain(builderTooltipCss)
     } finally {
       await exportPage.close()
       await exportContext.close()

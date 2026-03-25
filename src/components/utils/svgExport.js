@@ -1,3 +1,9 @@
+import {
+  TOOLTIP_FONT_FAMILY,
+  TOOLTIP_SVG_LAYOUT,
+  TOOLTIP_SVG_STYLES,
+} from '../tooltip/tooltipStyles'
+
 const SVG_XML_PREFIX = '<?xml version="1.0" encoding="UTF-8"?>\n'
 const SVG_NS = 'http://www.w3.org/2000/svg'
 const SVG_XLINK_NS = 'http://www.w3.org/1999/xlink'
@@ -316,29 +322,30 @@ const injectExportTooltipStyles = (svgRoot) => {
     }
 
     .skill-node-tooltip {
-      fill: rgba(2, 6, 23, 0.94);
-      stroke: rgba(34, 211, 238, 0.45);
-      stroke-width: 1.25;
+      fill: ${TOOLTIP_SVG_STYLES.backgroundFill};
+      stroke: ${TOOLTIP_SVG_STYLES.borderStroke};
+      stroke-width: ${TOOLTIP_SVG_STYLES.borderWidth};
+      filter: ${TOOLTIP_SVG_STYLES.boxShadow};
     }
 
     .skill-node-tooltip__title {
-      fill: #f8fafc;
-      font-size: 12px;
+      fill: ${TOOLTIP_SVG_STYLES.titleFill};
+      font-size: ${TOOLTIP_SVG_STYLES.titleFontSize};
       font-weight: 700;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+      font-family: ${TOOLTIP_FONT_FAMILY};
     }
 
     .skill-node-tooltip__note {
-      fill: #cbd5e1;
-      font-size: 10px;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+      fill: ${TOOLTIP_SVG_STYLES.noteFill};
+      font-size: ${TOOLTIP_SVG_STYLES.noteFontSize};
+      font-family: ${TOOLTIP_FONT_FAMILY};
     }
 
     .skill-node-tooltip__heading {
-      fill: #f8fafc;
-      font-size: 13px;
+      fill: ${TOOLTIP_SVG_STYLES.titleFill};
+      font-size: ${TOOLTIP_SVG_STYLES.headingFontSize};
       font-weight: 700;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+      font-family: ${TOOLTIP_FONT_FAMILY};
     }
   `
 
@@ -359,10 +366,10 @@ const buildTooltipGroup = ({ id, centerX, centerY, title, note }) => {
 
   const textBlocks = parseTooltipMarkdownLines(note)
   const lineCount = Math.max(1, textBlocks.filter((block) => block.type !== 'spacer').length)
-  const tooltipWidth = 240
-  const tooltipHeight = 42 + lineCount * 14
+  const tooltipWidth = TOOLTIP_SVG_LAYOUT.width
+  const tooltipHeight = TOOLTIP_SVG_LAYOUT.heightBase + lineCount * TOOLTIP_SVG_LAYOUT.rowHeight
   const boxX = centerX - tooltipWidth / 2
-  const boxY = centerY - 58 - tooltipHeight
+  const boxY = centerY - TOOLTIP_SVG_LAYOUT.centerGap - tooltipHeight
 
   const rect = createSvgElement('rect')
   rect.setAttribute('class', 'skill-node-tooltip')
@@ -374,14 +381,14 @@ const buildTooltipGroup = ({ id, centerX, centerY, title, note }) => {
 
   const titleText = createSvgElement('text')
   titleText.setAttribute('class', 'skill-node-tooltip__title')
-  titleText.setAttribute('x', String(boxX + 12))
-  titleText.setAttribute('y', String(boxY + 18))
+  titleText.setAttribute('x', String(boxX + TOOLTIP_SVG_LAYOUT.paddingX))
+  titleText.setAttribute('y', String(boxY + TOOLTIP_SVG_LAYOUT.titleOffsetY))
   titleText.textContent = title || 'Skill'
 
   const noteText = createSvgElement('text')
   noteText.setAttribute('class', 'skill-node-tooltip__note')
-  noteText.setAttribute('x', String(boxX + 12))
-  noteText.setAttribute('y', String(boxY + 34))
+  noteText.setAttribute('x', String(boxX + TOOLTIP_SVG_LAYOUT.paddingX))
+  noteText.setAttribute('y', String(boxY + TOOLTIP_SVG_LAYOUT.noteOffsetY))
 
   if (textBlocks.length === 0) {
     noteText.textContent = 'Keine Release Note hinterlegt.'
@@ -394,8 +401,8 @@ const buildTooltipGroup = ({ id, centerX, centerY, title, note }) => {
       }
 
       const tspan = createSvgElement('tspan')
-      tspan.setAttribute('x', String(boxX + 12))
-      tspan.setAttribute('dy', lineIndex === 0 ? '0' : '14')
+      tspan.setAttribute('x', String(boxX + TOOLTIP_SVG_LAYOUT.paddingX))
+      tspan.setAttribute('dy', lineIndex === 0 ? '0' : String(TOOLTIP_SVG_LAYOUT.rowHeight))
       if (block.type === 'heading') {
         tspan.setAttribute('class', 'skill-node-tooltip__heading')
       }

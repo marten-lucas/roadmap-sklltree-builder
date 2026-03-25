@@ -1,4 +1,5 @@
 import { createTheme } from '@mantine/core'
+import { TOOLTIP_ARROW_BORDER_COLOR, TOOLTIP_THEME_STYLES } from './components/tooltip/tooltipStyles'
 
 export const appTheme = createTheme({
   components: {
@@ -7,18 +8,9 @@ export const appTheme = createTheme({
         withArrow: true,
       },
       styles: {
-        tooltip: {
-          maxWidth: '20rem',
-          padding: '0.7rem 0.8rem',
-          color: '#e2e8f0',
-          backgroundColor: 'rgba(2, 6, 23, 0.96)',
-          border: '1px solid rgba(56, 189, 248, 0.25)',
-          boxShadow: '0 18px 40px rgba(2, 6, 23, 0.45)',
-          backdropFilter: 'blur(14px)',
-          WebkitBackdropFilter: 'blur(14px)',
-        },
+        tooltip: TOOLTIP_THEME_STYLES,
         arrow: {
-          borderColor: 'rgba(56, 189, 248, 0.25)',
+          borderColor: TOOLTIP_ARROW_BORDER_COLOR,
         },
       },
     },

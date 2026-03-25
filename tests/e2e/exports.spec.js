@@ -254,6 +254,25 @@ test.describe('SVG export modes', () => {
     expect(download.suggestedFilename()).toBe('skilltree-roadmap.svg')
   })
 
+  test('interactive svg export matches the builder tooltip palette and font stack', async ({
+    page,
+  }) => {
+    await openExportMenu(page)
+
+    const [download] = await Promise.all([
+      page.waitForEvent('download'),
+      page.getByRole('menuitem', { name: 'SVG', exact: true }).click(),
+    ])
+    const svgContent = await readDownload(download)
+
+    expect(svgContent).toContain('rgba(2, 6, 23, 0.96)')
+    expect(svgContent).toContain('rgba(56, 189, 248, 0.25)')
+    expect(svgContent).toContain('filter: drop-shadow(0 18px 40px rgba(2, 6, 23, 0.45))')
+    expect(svgContent).toContain('font-family: "Space Grotesk", "Rajdhani", sans-serif')
+    expect(svgContent).toContain('font-size: 13px')
+    expect(svgContent).toContain('font-size: 12px')
+  })
+
   test('clean svg export has no tooltip animations and has correct filename', async ({
     page,
   }) => {
