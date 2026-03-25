@@ -65,11 +65,10 @@ const fillReleaseNoteForNode = async (page, nodeId, note, level = 1) => {
   await inspector.waitFor({ state: 'attached', timeout: 10_000 })
 
   // Ensure the correct level tab is active so the Release Note field targets the right level
-  try {
-    const tab = inspector.getByRole('tab', { name: `L${level}` })
-    await tab.click()
-  } catch (e) {
-    // ignore if tab not found; proceed to fill the visible release note field
+  // Click only when the requested level tab exists; otherwise keep current tab.
+  const tab = inspector.getByRole('tab', { name: `L${level}` })
+  if (await tab.count() > 0) {
+    await tab.first().click()
   }
 
   // Target the Markdown textarea directly (robust against label/translation issues)
@@ -77,7 +76,9 @@ const fillReleaseNoteForNode = async (page, nodeId, note, level = 1) => {
   await releaseTextarea.waitFor({ state: 'visible', timeout: 5_000 })
   await releaseTextarea.scrollIntoViewIfNeeded()
   await releaseTextarea.fill(note)
-  await releaseTextarea.press('Tab')
+  // Trigger onBlur handler without sending a Tab key (more robust)
+  await releaseTextarea.evaluate((el) => el.blur())
+  await page.waitForTimeout(150)
 }
 
 const DEFAULT_DATASET = 'large'
