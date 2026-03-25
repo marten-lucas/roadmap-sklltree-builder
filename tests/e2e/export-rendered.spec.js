@@ -72,6 +72,10 @@ test.describe('Rendered export viewer', () => {
       await expect(exportPage.locator('.html-export__section-title')).toHaveCount(0)
       await expect(exportPage.locator('img[alt="Center Icon"]')).toBeVisible()
       await expect(exportPage.locator('.html-export__tree-shell .skill-tree-center-icon')).toBeVisible()
+
+      const svg = exportPage.locator('#html-export-tree-shell svg')
+      await expect.poll(async () => svg.evaluate((element) => element.style.transform)).not.toBe('translate(0px, 0px) scale(1)')
+      await expect(exportPage.locator('foreignObject.skill-node-export-anchor .skill-node-button').first()).toBeVisible()
     } finally {
       await exportPage.close()
     }

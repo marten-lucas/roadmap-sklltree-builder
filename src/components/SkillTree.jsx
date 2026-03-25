@@ -126,8 +126,19 @@ export function SkillTree() {
   const { nodes, links, segments, canvas } = layout
   const viewportWidth = typeof window !== 'undefined' ? window.innerWidth : canvas.width
   const viewportHeight = typeof window !== 'undefined' ? window.innerHeight : canvas.height
-  const initialPositionX = viewportWidth / 2 - canvas.origin.x * INITIAL_VIEW_SCALE
-  const initialPositionY = viewportHeight / 2 - canvas.origin.y * INITIAL_VIEW_SCALE
+  const initialViewScale = useMemo(() => {
+    if (!canvas.width || !canvas.height || !viewportWidth || !viewportHeight) {
+      return INITIAL_VIEW_SCALE
+    }
+
+    const availableWidth = Math.max(1, viewportWidth - 80)
+    const availableHeight = Math.max(1, viewportHeight - 80)
+    const fittedScale = Math.min(availableWidth / canvas.width, availableHeight / canvas.height)
+
+    return Math.max(0.2, Math.min(1.5, fittedScale))
+  }, [canvas.height, canvas.width, viewportHeight, viewportWidth])
+  const initialPositionX = viewportWidth / 2 - canvas.origin.x * initialViewScale
+  const initialPositionY = viewportHeight / 2 - canvas.origin.y * initialViewScale
   const centerIconSource = roadmapData.centerIconSrc ?? DEFAULT_CENTER_ICON_SRC
 
   const centerIconSize = useMemo(() => {
@@ -898,6 +909,7 @@ export function SkillTree() {
       const { readDocumentFromHtmlText } = await import('./utils/htmlExport')
       const nextDocument = readDocumentFromHtmlText(rawText)
       dispatchDocument({ type: 'replace', document: nextDocument })
+      setTransformKey((current) => current + 1)
       resetSelections()
     } catch (error) {
       console.error('HTML import failed', error)
@@ -1512,7 +1524,7 @@ export function SkillTree() {
         key={transformKey}
         minScale={0.2}
         maxScale={2.2}
-        initialScale={INITIAL_VIEW_SCALE}
+        initialScale={initialViewScale}
         initialPositionX={initialPositionX}
         initialPositionY={initialPositionY}
         wheel={{ step: 0.12 }}

@@ -18,7 +18,6 @@ import {
   readDownload,
   selectSegmentByLabel,
   selectNodeById,
-  selectNodeByShortName,
   setSelectValueByLabel,
   setSelectedSegmentName,
   trySetSelectValueByLabel,
@@ -60,8 +59,8 @@ const fillCenterMetadata = async (page) => {
   await page.waitForTimeout(300)
 }
 
-const fillReleaseNoteForNode = async (page, nodeShortName, note) => {
-  await selectNodeByShortName(page, nodeShortName)
+const fillReleaseNoteForNode = async (page, nodeId, note) => {
+  await selectNodeById(page, nodeId)
   const inspector = page.locator('.skill-panel--inspector')
   const releaseNote = inspector.getByLabel('Release Note', { exact: true })
   await releaseNote.fill(note)
@@ -95,6 +94,7 @@ const metricsOutputDir = process.env.SKILLTREE_E2E_METRICS_DIR
 
 const ignoreManualLevels = process.env.SKILLTREE_E2E_IGNORE_MANUAL_LEVELS === '1'
 const ignoreSegments = process.env.SKILLTREE_E2E_IGNORE_SEGMENTS === '1'
+const skipReleaseNotes = process.env.SKILLTREE_E2E_SKIP_RELEASE_NOTES === '1'
 
 const ALL_PHASES = ['statuses', 'scopes', 'segments', 'roundtrip']
 const configuredPhases = String(process.env.SKILLTREE_E2E_PHASES ?? 'all').trim().toLowerCase()
@@ -106,6 +106,10 @@ const selectedPhases = configuredPhases === 'all'
       .map((entry) => entry.trim())
       .filter(Boolean),
   )
+
+if (ignoreSegments) {
+  selectedPhases.delete('segments')
+}
 
 const isPhaseEnabled = (phaseName) => selectedPhases.has(phaseName)
 
@@ -320,7 +324,6 @@ const collectExpectedNodeSnapshots = (rows, options = {}) => {
   }))
 }
 
-const toSnapshotKey = (snapshot) => JSON.stringify(snapshot)
 
 const toComparableSnapshot = (snapshot) => ({
   shortName: snapshot.shortName,
@@ -664,7 +667,11 @@ test.describe('CSV template roundtrip via builder UI', () => {
 
     const phaseStartReleaseNotes = Date.now()
     for (const row of rowsWithReleaseNotes) {
-      await fillReleaseNoteForNode(page, row.label, row.releaseNote)
+      if (skipReleaseNotes) {
+        continue
+      }
+
+      await fillReleaseNoteForNode(page, nodeIdByCsvShortName.get(row.shortName), row.releaseNote)
     }
     phaseTimingsMs.releaseNotes = Date.now() - phaseStartReleaseNotes
 

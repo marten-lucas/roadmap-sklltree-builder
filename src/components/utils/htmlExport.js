@@ -398,9 +398,29 @@ const buildViewerScript = () => `
             fitToWidth()
           }
         })
-        window.requestAnimationFrame(fitToWidth)
-        window.addEventListener('load', fitToWidth, { once: true })
-        window.setTimeout(fitToWidth, 0)
+
+        const fitWhenReady = () => {
+          const shellRect = treeShell.getBoundingClientRect()
+          if (shellRect.width <= 0 || shellRect.height <= 0) {
+            window.requestAnimationFrame(fitWhenReady)
+            return
+          }
+
+          fitToWidth()
+        }
+
+        if (typeof window.ResizeObserver === 'function') {
+          const resizeObserver = new window.ResizeObserver(() => {
+            if (panZoomState.scale <= 1.6) {
+              fitToWidth()
+            }
+          })
+          resizeObserver.observe(treeShell)
+        }
+
+        window.requestAnimationFrame(fitWhenReady)
+        window.addEventListener('load', fitWhenReady, { once: true })
+        window.setTimeout(fitWhenReady, 0)
       }
 
       const setNodeMode = (anchor, mode) => {

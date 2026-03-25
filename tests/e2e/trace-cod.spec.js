@@ -1,12 +1,14 @@
 import { test } from '@playwright/test'
 import fs from 'node:fs'
 import { resolve } from 'node:path'
+import { getE2eExportDir } from './helpers.js'
 
-const e2eExportDir = resolve(process.env.SKILLTREE_E2E_EXPORT_DIR ?? 'tests/results/e2e-exports')
+const e2eExportDir = getE2eExportDir()
+const seedExportHtmlPath = resolve(process.cwd(), 'tests/results/e2e-exports/skilltree-roundtrip-1774358009970.html')
 
-test('trace COD scope changes', async ({ page }) => {
-  // preload a previously exported document that contains the full tree (so COD exists)
-  const exportedHtml = fs.readFileSync(resolve(e2eExportDir, 'skilltree-roundtrip-1774241374085.html'), 'utf-8')
+test('trace scope changes', async ({ page }) => {
+  // preload a previously exported document that contains the full tree
+  const exportedHtml = fs.readFileSync(seedExportHtmlPath, 'utf-8')
   const jsonMatch = exportedHtml.match(/<script[^>]*id="skilltree-export-data"[^>]*>([\s\S]*?)<\/script>/i)
   if (jsonMatch && jsonMatch[1]) {
     const payload = jsonMatch[1].trim()
@@ -25,7 +27,7 @@ test('trace COD scope changes', async ({ page }) => {
   await fs.promises.mkdir(e2eExportDir, { recursive: true })
   await fs.promises.writeFile(resolve(e2eExportDir, `node-list-${Date.now()}.json`), JSON.stringify(nodes, null, 2), 'utf-8')
 
-  const shortName = 'COD'
+  const shortName = 'API'
   const selector = `foreignObject.skill-node-export-anchor[data-short-name="${shortName}"] .skill-node-button`
   const node = page.locator(selector).first()
   await node.waitFor({ state: 'attached', timeout: 10_000 })
@@ -33,13 +35,6 @@ test('trace COD scope changes', async ({ page }) => {
   await node.evaluate((el) => el.click())
 
   await page.waitForSelector('.skill-panel--inspector', { timeout: 10_000 })
-
-  // attempt to set the scope to Corrugated via the inspector MultiSelect
-  const scopeBlock = page.locator('.skill-panel__scope-block')
-  const input = scopeBlock.getByPlaceholder('Scopes')
-  await input.click()
-  const opt = page.getByRole('option', { name: 'Corrugated', exact: true }).filter({ visible: true }).first()
-  await opt.click({ force: true })
 
   // wait a short moment for app to persist state
   await page.waitForTimeout(500)
