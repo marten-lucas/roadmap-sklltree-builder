@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest'
-import { buildPdfExportHtml, collectReleaseNoteEntries } from '../utils/pdfExport'
+import { describe, expect, it, vi } from 'vitest'
+import { buildPdfExportHtml, collectReleaseNoteEntries, tryExportPdfFromSkillTree } from '../utils/pdfExport'
 
 const createDocument = () => ({
   systemName: 'myKyana',
@@ -71,5 +71,47 @@ describe('pdfExport', () => {
     expect(html).toContain('<h1>Release Overview</h1>')
     expect(html).toContain('<h2>Release Impact</h2>')
     expect(html).toContain('window.print()')
+  })
+
+  it('opens the PDF export in a blob-backed popup instead of writing to a blank tab', () => {
+    const openSpy = vi.fn(() => ({ closed: false }))
+    const createObjectUrlSpy = vi.fn(() => 'blob:pdf-export')
+    const revokeObjectUrlSpy = vi.fn()
+    const windowShim = {
+      document: { styleSheets: [] },
+      setTimeout: (callback) => {
+        callback()
+        return 1
+      },
+      open: openSpy,
+      URL: {
+        createObjectURL: createObjectUrlSpy,
+        revokeObjectURL: revokeObjectUrlSpy,
+      },
+    }
+
+    vi.stubGlobal('window', windowShim)
+
+    try {
+      const result = tryExportPdfFromSkillTree({
+        svgElement: {
+          cloneNode: () => ({
+            setAttribute: () => {},
+            querySelectorAll: () => [],
+            style: {},
+            outerHTML: '<svg viewBox="0 0 10 10"></svg>',
+          }),
+        },
+        roadmapDocument: createDocument(),
+      })
+
+      expect(result.ok).toBe(true)
+      expect(openSpy).toHaveBeenCalledWith('blob:pdf-export', '_blank', 'noopener,noreferrer')
+      expect(createObjectUrlSpy).toHaveBeenCalledTimes(1)
+      expect(revokeObjectUrlSpy).toHaveBeenCalledWith('blob:pdf-export')
+    } finally {
+      vi.unstubAllGlobals()
+      vi.restoreAllMocks()
+    }
   })
 })

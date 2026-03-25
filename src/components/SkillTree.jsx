@@ -797,6 +797,7 @@ export function SkillTree() {
       const exported = exportSvgFromElement(canvasSvgRef.current, {
         fileName: 'skilltree-roadmap.svg',
         includeTooltips: true,
+        sourceDocument: window.document,
       })
       if (!exported) {
         window.alert('SVG-Export fehlgeschlagen.')
@@ -820,6 +821,7 @@ export function SkillTree() {
       const exported = exportSvgFromElement(canvasSvgRef.current, {
         fileName: 'skilltree-roadmap-clean.svg',
         includeTooltips: false,
+        sourceDocument: window.document,
       })
       if (!exported) {
         window.alert('Clean-SVG-Export fehlgeschlagen.')

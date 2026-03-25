@@ -74,7 +74,8 @@ test.describe('HTML export – content matches builder', () => {
     ])
     const html = await readDownload(download)
 
-    expect(html).toContain('Roadmap Skilltree Builder')
+    expect(html).toContain('myKyana')
+    expect(html).toContain('July 2026 Release')
     expect(html).toContain('Exportiert am')
     expect(download.suggestedFilename()).toBe('skilltree-roadmap.html')
   })
@@ -142,25 +143,33 @@ test.describe('HTML export – viewer page shows same content as builder', () =>
     const exportPage = await browser.newPage()
     try {
       await exportPage.setContent(html)
-        await exportPage.waitForLoadState('domcontentloaded')
+      await exportPage.waitForSelector('.html-export__release-list', { timeout: 10_000 })
 
-        // Expose the hidden panel directly so we can inspect its content independent
-        // of the tab-switching JS lifecycle (which may differ in setContent context)
-        await exportPage.evaluate(() => {
-          document
-            .querySelectorAll('[data-export-tab-panel]')
-            .forEach((panel) => panel.removeAttribute('hidden'))
-        })
+      const notesContent = await exportPage.locator('.html-export__release-list').innerHTML()
 
-        const notesContent = await exportPage
-          .locator('[data-export-tab-panel="releasenotes"]')
-          .innerHTML()
-
-      expect(notesContent).toContain('Frontend')
       expect(notesContent).toContain('Backend')
+      expect(notesContent).toContain('Service hardening is in active implementation')
+      expect(notesContent).toContain('New API contracts are being validated')
     } finally {
       await exportPage.close()
     }
+  })
+
+  test('exported pdf opens a populated popup page', async ({ page }) => {
+    await startFresh(page)
+
+    const popupPromise = page.waitForEvent('popup')
+    await page.getByRole('button', { name: 'Export', exact: true }).hover()
+    await page.getByRole('menuitem', { name: 'PDF' }).click()
+
+    const popup = await popupPromise
+    await popup.waitForLoadState('domcontentloaded')
+
+    const popupText = await popup.locator('body').innerText()
+    expect(popupText).toContain('Release Notes')
+    expect(popupText).toContain('July 2026 Release')
+    expect(popupText).toContain('Service hardening is in active implementation')
+    expect(popupText).toContain('New API contracts are being validated')
   })
 
   /**
@@ -169,7 +178,10 @@ test.describe('HTML export – viewer page shows same content as builder', () =>
    */
   test('exported svg tree view matches visual snapshot baseline', async ({ page, browser }) => {
     // Deselect all to avoid editor controls affecting the screenshot
-    await page.locator('svg.skill-tree-canvas').click({ position: { x: 10, y: 10 } })
+    await page.locator('svg.skill-tree-canvas').dispatchEvent('click', {
+      clientX: 10,
+      clientY: 10,
+    })
     await page.waitForTimeout(350)
 
     const html = await exportHtml(page)
@@ -197,7 +209,7 @@ test.describe('HTML export – viewer page shows same content as builder', () =>
 test.describe('SVG export modes', () => {
   const openExportMenu = async (page) => {
     await page.getByRole('button', { name: 'Export', exact: true }).hover()
-    await expect(page.getByRole('menuitem', { name: 'SVG (interaktiv)' })).toBeVisible()
+    await expect(page.getByRole('menuitem', { name: 'SVG', exact: true })).toBeVisible()
   }
 
   test.beforeEach(async ({ page }) => {
@@ -211,13 +223,15 @@ test.describe('SVG export modes', () => {
 
     const [download] = await Promise.all([
       page.waitForEvent('download'),
-      page.getByRole('menuitem', { name: 'SVG (interaktiv)' }).click(),
+      page.getByRole('menuitem', { name: 'SVG', exact: true }).click(),
     ])
     const svgContent = await readDownload(download)
 
     expect(svgContent).toContain('export-tooltip-trigger')
     expect(svgContent).toContain('<animate')
     expect(svgContent).toContain('skill-node-export-anchor')
+    expect(svgContent).toContain('.skill-node-button {')
+    expect(svgContent).toContain('.skill-tree-canvas {')
     expect(download.suggestedFilename()).toBe('skilltree-roadmap.svg')
   })
 
@@ -235,6 +249,7 @@ test.describe('SVG export modes', () => {
     expect(svgContent).not.toContain('export-tooltip-trigger')
     expect(svgContent).not.toContain('<animate')
     expect(svgContent).toContain('skill-node-export-anchor')
+    expect(svgContent).toContain('.skill-node-button {')
     expect(download.suggestedFilename()).toContain('clean')
   })
 

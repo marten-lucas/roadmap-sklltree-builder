@@ -1,4 +1,4 @@
-import { ActionIcon, Menu, Paper, Text, Tooltip } from '@mantine/core'
+import { ActionIcon, Menu, Paper, Text } from '@mantine/core'
 import { useMemo, useState } from 'react'
 import {
   IconArrowBackUp,
@@ -12,6 +12,7 @@ import {
   IconRefresh,
   IconUpload,
 } from '@tabler/icons-react'
+import { Tooltip } from '../tooltip'
 
 const TOOLBAR_ICON_PROPS = {
   size: 18,
@@ -84,7 +85,7 @@ export function SkillTreeToolbar({
       withBorder
     >
       <div className="skill-tree-toolbar__row">
-        <Tooltip label={isCollapsed ? 'Menü aufklappen' : 'Menü einklappen'} withArrow openDelay={120} position="top" middlewares={TOOLBAR_TOOLTIP_MIDDLEWARES}>
+        <Tooltip label={isCollapsed ? 'Menü aufklappen' : 'Menü einklappen'} position="top" middlewares={TOOLBAR_TOOLTIP_MIDDLEWARES}>
           <ActionIcon
             size="md"
             variant="default"
@@ -107,7 +108,7 @@ export function SkillTreeToolbar({
               closeDelay={180}
             >
               <Menu.Target>
-                <Tooltip label="Export (Klick: HTML, Hover: weitere Formate)" withArrow openDelay={120} position="top" middlewares={TOOLBAR_TOOLTIP_MIDDLEWARES}>
+                <Tooltip label="Export (Klick: HTML, Hover: weitere Formate)" position="top" middlewares={TOOLBAR_TOOLTIP_MIDDLEWARES}>
                   <ActionIcon
                     size="md"
                     variant="default"
@@ -133,7 +134,7 @@ export function SkillTreeToolbar({
               </Menu.Dropdown>
             </Menu>
 
-            <Tooltip label="HTML importieren (Ctrl+O)" withArrow openDelay={120} position="top" middlewares={TOOLBAR_TOOLTIP_MIDDLEWARES}>
+            <Tooltip label="HTML importieren (Ctrl+O)" position="top" middlewares={TOOLBAR_TOOLTIP_MIDDLEWARES}>
               <ActionIcon
                 size="md"
                 variant="default"
@@ -146,7 +147,7 @@ export function SkillTreeToolbar({
           </div>
 
           <div className="skill-tree-toolbar__cluster">
-            <Tooltip label="Undo (Ctrl+Z)" withArrow openDelay={120} position="top" middlewares={TOOLBAR_TOOLTIP_MIDDLEWARES}>
+            <Tooltip label="Undo (Ctrl+Z)" position="top" middlewares={TOOLBAR_TOOLTIP_MIDDLEWARES}>
               <ActionIcon
                 size="md"
                 variant="default"
@@ -157,7 +158,7 @@ export function SkillTreeToolbar({
                 <IconArrowBackUp {...TOOLBAR_ICON_PROPS} />
               </ActionIcon>
             </Tooltip>
-            <Tooltip label="Redo (Ctrl+Y / Ctrl+Shift+Z)" withArrow openDelay={120} position="top" middlewares={TOOLBAR_TOOLTIP_MIDDLEWARES}>
+            <Tooltip label="Redo (Ctrl+Y / Ctrl+Shift+Z)" position="top" middlewares={TOOLBAR_TOOLTIP_MIDDLEWARES}>
               <ActionIcon
                 size="md"
                 variant="default"
@@ -171,7 +172,7 @@ export function SkillTreeToolbar({
           </div>
 
           <div className="skill-tree-toolbar__cluster">
-            <Tooltip label="Reset (Ctrl+Shift+Backspace)" withArrow openDelay={120} position="top" middlewares={TOOLBAR_TOOLTIP_MIDDLEWARES}>
+            <Tooltip label="Reset (Ctrl+Shift+Backspace)" position="top" middlewares={TOOLBAR_TOOLTIP_MIDDLEWARES}>
               <ActionIcon
                 size="md"
                 variant="subtle"
@@ -185,7 +186,7 @@ export function SkillTreeToolbar({
           </div>
 
           <div className="skill-tree-toolbar__cluster">
-            <Tooltip label="Segmente verwalten" withArrow openDelay={120} position="top" middlewares={TOOLBAR_TOOLTIP_MIDDLEWARES}>
+            <Tooltip label="Segmente verwalten" position="top" middlewares={TOOLBAR_TOOLTIP_MIDDLEWARES}>
               <ActionIcon
                 size="md"
                 variant="default"
@@ -196,7 +197,7 @@ export function SkillTreeToolbar({
               </ActionIcon>
             </Tooltip>
 
-            <Tooltip label="Scopes verwalten" withArrow openDelay={120} position="top" middlewares={TOOLBAR_TOOLTIP_MIDDLEWARES}>
+            <Tooltip label="Scopes verwalten" position="top" middlewares={TOOLBAR_TOOLTIP_MIDDLEWARES}>
               <ActionIcon
                 size="md"
                 variant="default"
@@ -209,7 +210,7 @@ export function SkillTreeToolbar({
 
             <Menu shadow="md" width={260} position="bottom-start" withArrow>
               <Menu.Target>
-                <Tooltip label={`Filter: ${selectedReleaseFilterLabel}${scopeOptions.length > 0 ? ' · ' + selectedScopeFilterLabel : ''}`} withArrow openDelay={120} position="top" middlewares={TOOLBAR_TOOLTIP_MIDDLEWARES}>
+                <Tooltip label={`Filter: ${selectedReleaseFilterLabel}${scopeOptions.length > 0 ? ' · ' + selectedScopeFilterLabel : ''}`} position="top" middlewares={TOOLBAR_TOOLTIP_MIDDLEWARES}>
                   <ActionIcon
                     size="md"
                     variant="default"

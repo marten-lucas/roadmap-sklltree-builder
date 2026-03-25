@@ -1,7 +1,8 @@
-import { ActionIcon, Group, Stack, Text, Textarea, Tooltip } from '@mantine/core'
+import { ActionIcon, Group, Stack, Text, Textarea } from '@mantine/core'
 import { useRef } from 'react'
 import { IconBold, IconHeading, IconLink, IconList, IconItalic } from '@tabler/icons-react'
 import { applyMarkdownFormatting } from '../utils/markdown'
+import { Tooltip } from '../tooltip'
 
 const toolbarActions = [
   { action: 'bold', label: 'Fett', icon: IconBold },
@@ -53,7 +54,7 @@ export function MarkdownField({
             const Icon = entry.icon
 
             return (
-              <Tooltip key={entry.action} label={entry.label} withArrow>
+              <Tooltip key={entry.action} label={entry.label}>
                 <ActionIcon variant="light" color="gray" size="sm" aria-label={entry.label} onClick={() => applyAction(entry.action)}>
                   <Icon size={14} stroke={2} />
                 </ActionIcon>

@@ -1,8 +1,10 @@
-import { ActionIcon, Alert, Badge, Button, Divider, Group, MultiSelect, Paper, Select, Stack, Tabs, Text, TextInput, Textarea, Tooltip } from '@mantine/core'
+import { ActionIcon, Alert, Badge, Button, Divider, Group, MultiSelect, Paper, Select, Stack, Tabs, Text, TextInput, Textarea } from '@mantine/core'
 import { useState, useEffect, useCallback } from 'react'
 import { normalizeStatusKey, STATUS_LABELS } from '../config'
 import { UNASSIGNED_SEGMENT_ID } from '../utils/layoutShared'
+import { commitReleaseNoteDraft } from '../utils/releaseNoteDraft'
 import { MarkdownField } from './MarkdownField'
+import { Tooltip } from '../tooltip'
 
 const TablerInfoCircleIcon = ({ size = 16 }) => (
   <svg
@@ -335,6 +337,26 @@ export function InspectorPanel({
     label: scope.label,
   }))
 
+  const commitActiveReleaseNoteDraft = useCallback((showToast = false) => {
+    const didCommit = commitReleaseNoteDraft({
+      draft: releaseNoteDraft,
+      currentValue: activeProgressLevel?.releaseNote ?? '',
+      onCommit: onReleaseNoteChange,
+    })
+
+    if (didCommit && showToast) {
+      setSaveToast({ visible: true, message: 'Release Note gespeichert' })
+      setTimeout(() => setSaveToast({ visible: false, message: '' }), 1400)
+      try {
+        window.dispatchEvent(new CustomEvent('roadmap-skilltree.toast', { detail: { type: 'success', message: 'Release Note gespeichert' } }))
+      } catch (e) {
+        // ignore
+      }
+    }
+
+    return didCommit
+  }, [activeProgressLevel?.releaseNote, onReleaseNoteChange, releaseNoteDraft])
+
   const handleCreateScope = () => {
     const result = onCreateScope?.(scopeDraft)
 
@@ -469,7 +491,7 @@ export function InspectorPanel({
           <Text className="skill-panel__title skill-panel__title--large">Skill bearbeiten</Text>
         </div>
         <div className="skill-panel__header-actions">
-          <ActionIcon variant="subtle" color="gray" onClick={onClose} aria-label="Inspector schließen">
+          <ActionIcon variant="subtle" color="gray" onClick={() => { commitActiveReleaseNoteDraft(false); onClose?.() }} aria-label="Inspector schließen">
             ✕
           </ActionIcon>
         </div>
@@ -580,7 +602,7 @@ export function InspectorPanel({
                   comboboxProps={{ withinPortal: true, zIndex: 450 }}
                 />
 
-                <Tooltip label="Segmente verwalten" withArrow>
+                <Tooltip label="Segmente verwalten">
                   <ActionIcon
                     variant="light"
                     color="gray"
@@ -603,7 +625,7 @@ export function InspectorPanel({
                       style={{ flex: 1 }}
                       classNames={{ input: 'mantine-dark-input', label: 'mantine-dark-label' }}
                     />
-                    <Tooltip label="Segment hinzufügen" withArrow>
+                    <Tooltip label="Segment hinzufügen">
                       <ActionIcon
                         variant="light"
                         color="cyan"
@@ -763,7 +785,7 @@ export function InspectorPanel({
           <div className="skill-panel__scope-block">
             <Group justify="space-between" align="center" mb={6}>
               <Text className="mantine-dark-label" size="sm">Scope</Text>
-              <Tooltip label="Ohne Zuordnung gilt die Ausbaustufe fuer alle Produktgruppen." withArrow>
+              <Tooltip label="Ohne Zuordnung gilt die Ausbaustufe fuer alle Produktgruppen.">
                 <ActionIcon
                   variant="subtle"
                   color="gray"
@@ -793,7 +815,7 @@ export function InspectorPanel({
                 comboboxProps={{ withinPortal: true, zIndex: 450 }}
               />
 
-              <Tooltip label="Scopes verwalten" withArrow>
+              <Tooltip label="Scopes verwalten">
                 <ActionIcon
                   variant="light"
                   color="gray"
@@ -819,7 +841,7 @@ export function InspectorPanel({
                       label: 'mantine-dark-label',
                     }}
                   />
-                  <Tooltip label="Scope hinzufügen" withArrow>
+                  <Tooltip label="Scope hinzufügen">
                     <ActionIcon
                       variant="light"
                       color="cyan"
@@ -908,16 +930,7 @@ export function InspectorPanel({
             value={releaseNoteDraft}
             onChange={(nextValue) => setReleaseNoteDraft(nextValue)}
             onBlur={() => {
-              if (releaseNoteDraft !== (activeProgressLevel.releaseNote ?? '')) {
-                onReleaseNoteChange?.(releaseNoteDraft)
-                setSaveToast({ visible: true, message: 'Release Note gespeichert' })
-                setTimeout(() => setSaveToast({ visible: false, message: '' }), 1400)
-                try {
-                  window.dispatchEvent(new CustomEvent('roadmap-skilltree.toast', { detail: { type: 'success', message: 'Release Note gespeichert' } }))
-                } catch (e) {
-                  // ignore
-                }
-              }
+              commitActiveReleaseNoteDraft(true)
             }}
           />
 

@@ -60,6 +60,7 @@ test.describe('Rendered export viewer', () => {
   test('shows the single-page export layout with header, menus, roadmap and notes', async ({ page, browser }) => {
     const exportPage = await openExportViewer(page, browser)
     try {
+      await expect(exportPage.locator('#html-export-tree-shell')).toBeVisible()
       await expect(exportPage.getByRole('heading', { name: 'myKyana' })).toBeVisible()
       await expect(exportPage.locator('.html-export__subtitle')).toContainText('July 2026 Release')
       await expect(exportPage.locator('.html-export__menu-button')).toHaveCount(2)
@@ -70,6 +71,7 @@ test.describe('Rendered export viewer', () => {
       await expect(exportPage.getByText('Visualisierung')).toHaveCount(0)
       await expect(exportPage.locator('.html-export__section-title')).toHaveCount(0)
       await expect(exportPage.locator('img[alt="Center Icon"]')).toBeVisible()
+      await expect(exportPage.locator('.html-export__tree-shell .skill-tree-center-icon')).toBeVisible()
     } finally {
       await exportPage.close()
     }

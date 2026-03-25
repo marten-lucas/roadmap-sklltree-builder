@@ -1,5 +1,6 @@
 import { STATUS_LABELS, normalizeStatusKey } from '../config'
 import { renderMarkdownToHtml } from './markdown'
+import { getExportViewportBounds } from './svgExport'
 
 const escapeHtml = (value) => String(value ?? '')
   .replace(/&/g, '&amp;')
@@ -36,6 +37,11 @@ const sanitizeSvgCloneForPrint = (svgElement) => {
 
   clone.querySelectorAll('.skill-tree-export-exclude').forEach((node) => node.remove())
 
+  const bounds = getExportViewportBounds(svgElement)
+  clone.setAttribute('viewBox', `${bounds.x} ${bounds.y} ${bounds.width} ${bounds.height}`)
+  clone.setAttribute('width', String(bounds.width))
+  clone.setAttribute('height', String(bounds.height))
+
   clone.style.width = '100%'
   clone.style.height = 'auto'
   clone.style.maxHeight = '65vh'
@@ -71,7 +77,7 @@ export const collectReleaseNoteEntries = (roadmapDocument) => {
       const releaseNote = String(level?.releaseNote ?? '').trim()
       const statusKey = normalizeStatusKey(level.status ?? node.status)
 
-      if (!releaseNote || statusKey !== 'now') {
+      if (!releaseNote || normalizeStatusKey(level.status ?? node.status) !== 'now') {
         return
       }
 
@@ -436,14 +442,6 @@ export const tryExportPdfFromSkillTree = ({
     }
   }
 
-  const popup = window.open('', '_blank', 'noopener,noreferrer')
-  if (!popup) {
-    return {
-      ok: false,
-      errorCode: 'popup-blocked',
-    }
-  }
-
   const styleText = collectStyleText(window.document)
   const releaseNoteEntries = collectReleaseNoteEntries(roadmapDocument)
   const html = buildPdfExportHtml({
@@ -454,9 +452,21 @@ export const tryExportPdfFromSkillTree = ({
     roadmapDocument,
   })
 
-  popup.document.open()
-  popup.document.write(html)
-  popup.document.close()
+  const blob = new Blob([html], { type: 'text/html;charset=utf-8' })
+  const objectUrl = window.URL.createObjectURL(blob)
+
+  const popup = window.open(objectUrl, '_blank', 'noopener,noreferrer')
+  if (!popup) {
+    window.URL.revokeObjectURL(objectUrl)
+    return {
+      ok: false,
+      errorCode: 'popup-blocked',
+    }
+  }
+
+  window.setTimeout(() => {
+    window.URL.revokeObjectURL(objectUrl)
+  }, 60_000)
 
   return {
     ok: true,

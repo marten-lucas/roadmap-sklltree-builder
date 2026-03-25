@@ -1,6 +1,6 @@
-import { Text, Tooltip } from '@mantine/core'
 import { TREE_CONFIG, normalizeStatusKey, STATUS_STYLES } from '../config'
 import { SkillTreeNode } from '../nodes/SkillTreeNode'
+import { MarkdownTooltipContent, Tooltip } from '../tooltip'
 
 const getPortalClassName = (portal, isSelected) => [
   'skill-tree-portal',
@@ -209,12 +209,7 @@ export function SkillTreeCanvas({
             closeDelay={40}
             transitionProps={{ transition: 'fade', duration: 120 }}
             classNames={{ tooltip: 'skill-node-tooltip', arrow: 'skill-node-tooltip__arrow' }}
-            label={(
-              <div>
-                <Text className="skill-node-tooltip__title">{portal.otherLabel}</Text>
-                <Text className="skill-node-tooltip__note">{portal.tooltip}</Text>
-              </div>
-            )}
+            label={<MarkdownTooltipContent title={portal.otherLabel} markdown={portal.tooltip} />}
           >
             <g
               className={`${portalClassName} skill-tree-export-exclude`}

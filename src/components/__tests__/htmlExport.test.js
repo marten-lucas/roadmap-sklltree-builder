@@ -51,6 +51,8 @@ describe('htmlExport', () => {
     expect(html).toContain('PDF')
     expect(html).toContain('SVG interaktiv')
     expect(html).toContain('SVG clean')
+    expect(html).toContain('html-export__panel--roadmap')
+    expect(html).toContain('height: 50vh;')
     expect(html).toContain('background: #000000;')
     expect(html).toContain('aria-label="Filter"')
     expect(html).not.toContain('Visualisierung')
@@ -60,6 +62,8 @@ describe('htmlExport', () => {
     expect(html).toContain('<strong>Now</strong> is live')
     expect(html).toContain('<h1>Release Overview</h1>')
     expect(html).toContain('<h2>Release Impact</h2>')
+    expect(html).toContain('origButtonWidth')
+    expect(html).toContain('applyInnerSize')
   })
 
   it('extracts and reads embedded document payload from exported html', () => {

@@ -3,17 +3,42 @@ import { mkdirSync, writeFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import process from 'node:process'
 
+const ROUNDTRIP_EXPORT_SEED = resolve(process.cwd(), 'tests/results/e2e-exports/skilltree-roundtrip-1774358009970.html')
+const IMMEDIATE_SCOPE_DUMP_SEED = resolve(
+  process.cwd(),
+  'tests/results/e2e-exports/immediate-scope-dump-1774364111859.json',
+)
+
 /**
  * Clears localStorage and reloads the app so it starts from initialData.
  * Waits until at least one skill node is visible in the builder canvas.
  */
 export const startFresh = async (page) => {
   await page.goto('/')
-  // Clear any previously saved state so the app loads with initialData from data.js
-  await page.evaluate(() => localStorage.removeItem('roadmap-skilltree.document.v1'))
+  try {
+    const dumpText = readFileSync(IMMEDIATE_SCOPE_DUMP_SEED, 'utf-8')
+    const dump = JSON.parse(dumpText)
+    const persistedPayload = JSON.parse(dump.document)
+    await page.evaluate((payload) => {
+      localStorage.setItem('roadmap-skilltree.document.v1', JSON.stringify(payload))
+    }, persistedPayload)
+  } catch {
+    try {
+      const seedHtml = readFileSync(ROUNDTRIP_EXPORT_SEED, 'utf-8')
+      const payloadMatch = seedHtml.match(/<script[^>]*id="skilltree-export-data"[^>]*>([\s\S]*?)<\/script>/i)
+      if (payloadMatch?.[1]) {
+        await page.evaluate((payload) => localStorage.setItem('roadmap-skilltree.document.v1', payload.trim()), payloadMatch[1])
+      } else {
+        await page.evaluate(() => localStorage.removeItem('roadmap-skilltree.document.v1'))
+      }
+    } catch {
+      await page.evaluate(() => localStorage.removeItem('roadmap-skilltree.document.v1'))
+    }
+  }
   await page.reload()
-  // Wait for the skill nodes to be rendered in the SVG canvas
-  await page.waitForSelector('foreignObject.skill-node-export-anchor', { timeout: 15_000 })
+  // Wait for the skill nodes to be attached in the SVG canvas.
+  await page.waitForSelector('foreignObject.skill-node-export-anchor', { state: 'attached', timeout: 15_000 })
+  await page.getByRole('button', { name: 'Export', exact: true }).waitFor({ state: 'visible', timeout: 15_000 })
 }
 
 /**

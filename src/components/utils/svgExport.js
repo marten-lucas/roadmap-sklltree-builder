@@ -1,6 +1,14 @@
 const SVG_XML_PREFIX = '<?xml version="1.0" encoding="UTF-8"?>\n'
 const SVG_NS = 'http://www.w3.org/2000/svg'
 const SVG_XLINK_NS = 'http://www.w3.org/1999/xlink'
+const EXPORT_VIEWPORT_PADDING = 96
+const EXPORT_VIEWPORT_SELECTORS = [
+  '.skill-tree-center-icon',
+  'foreignObject.skill-node-export-anchor',
+  '[data-link-source-id][data-link-target-id]',
+  '[data-segment-id]',
+  '[data-segment-left][data-segment-right]',
+]
 
 const createSvgElement = (tagName) => document.createElementNS(SVG_NS, tagName)
 
@@ -10,6 +18,217 @@ const toNumber = (value, fallback = 0) => {
 }
 
 const sanitizeText = (value) => String(value ?? '').replace(/\s+/g, ' ').trim()
+
+const collectStyleText = (sourceDocument) => {
+  if (!sourceDocument?.styleSheets) {
+    return ''
+  }
+
+  const styleChunks = []
+
+  for (const styleSheet of Array.from(sourceDocument.styleSheets)) {
+    try {
+      const cssRules = Array.from(styleSheet.cssRules ?? [])
+      styleChunks.push(cssRules.map((rule) => rule.cssText).join('\n'))
+    } catch {
+      // Ignore cross-origin or unavailable stylesheets.
+    }
+  }
+
+  return styleChunks.filter(Boolean).join('\n')
+}
+
+const isFiniteNumber = (value) => Number.isFinite(value) && !Number.isNaN(value)
+
+const getBoundsFromElement = (element) => {
+  if (!element) {
+    return null
+  }
+
+  if (typeof element.getBBox === 'function') {
+    try {
+      const box = element.getBBox()
+      if (
+        box
+        && isFiniteNumber(box.x)
+        && isFiniteNumber(box.y)
+        && isFiniteNumber(box.width)
+        && isFiniteNumber(box.height)
+        && box.width > 0
+        && box.height > 0
+      ) {
+        return {
+          x: box.x,
+          y: box.y,
+          width: box.width,
+          height: box.height,
+        }
+      }
+    } catch {
+      // Detached or unsupported elements can throw here; fall back to attributes.
+    }
+  }
+
+  const x = toNumber(element.getAttribute?.('x'), Number.NaN)
+  const y = toNumber(element.getAttribute?.('y'), Number.NaN)
+  const width = toNumber(element.getAttribute?.('width'), Number.NaN)
+  const height = toNumber(element.getAttribute?.('height'), Number.NaN)
+
+  if (
+    isFiniteNumber(x)
+    && isFiniteNumber(y)
+    && isFiniteNumber(width)
+    && isFiniteNumber(height)
+    && width > 0
+    && height > 0
+  ) {
+    return {
+      x,
+      y,
+      width,
+      height,
+    }
+  }
+
+  return null
+}
+
+const expandBounds = (bounds, padding) => ({
+  x: bounds.x - padding,
+  y: bounds.y - padding,
+  width: bounds.width + (padding * 2),
+  height: bounds.height + (padding * 2),
+})
+
+const unionBounds = (boundsList) => {
+  if (boundsList.length === 0) {
+    return null
+  }
+
+  let minX = Number.POSITIVE_INFINITY
+  let minY = Number.POSITIVE_INFINITY
+  let maxX = Number.NEGATIVE_INFINITY
+  let maxY = Number.NEGATIVE_INFINITY
+
+  boundsList.forEach((bounds) => {
+    minX = Math.min(minX, bounds.x)
+    minY = Math.min(minY, bounds.y)
+    maxX = Math.max(maxX, bounds.x + bounds.width)
+    maxY = Math.max(maxY, bounds.y + bounds.height)
+  })
+
+  if (!isFiniteNumber(minX) || !isFiniteNumber(minY) || !isFiniteNumber(maxX) || !isFiniteNumber(maxY)) {
+    return null
+  }
+
+  return {
+    x: minX,
+    y: minY,
+    width: Math.max(1, maxX - minX),
+    height: Math.max(1, maxY - minY),
+  }
+}
+
+const getFallbackViewportBounds = (svgElement) => {
+  const viewBox = svgElement?.viewBox?.baseVal
+  if (
+    viewBox
+    && isFiniteNumber(viewBox.x)
+    && isFiniteNumber(viewBox.y)
+    && isFiniteNumber(viewBox.width)
+    && isFiniteNumber(viewBox.height)
+    && viewBox.width > 0
+    && viewBox.height > 0
+  ) {
+    return {
+      x: viewBox.x,
+      y: viewBox.y,
+      width: viewBox.width,
+      height: viewBox.height,
+    }
+  }
+
+  const width = toNumber(svgElement?.getAttribute?.('width'), Number.NaN)
+  const height = toNumber(svgElement?.getAttribute?.('height'), Number.NaN)
+
+  if (isFiniteNumber(width) && isFiniteNumber(height) && width > 0 && height > 0) {
+    return {
+      x: 0,
+      y: 0,
+      width,
+      height,
+    }
+  }
+
+  return {
+    x: 0,
+    y: 0,
+    width: 1,
+    height: 1,
+  }
+}
+
+export const getExportViewportBounds = (svgElement) => {
+  if (!svgElement || typeof svgElement.querySelectorAll !== 'function') {
+    return expandBounds(getFallbackViewportBounds(svgElement), EXPORT_VIEWPORT_PADDING)
+  }
+
+  const candidateBounds = []
+
+  EXPORT_VIEWPORT_SELECTORS.forEach((selector) => {
+    Array.from(svgElement.querySelectorAll(selector)).forEach((element) => {
+      if (typeof element.closest === 'function' && element.closest('.skill-tree-export-exclude')) {
+        return
+      }
+
+      const bounds = getBoundsFromElement(element)
+      if (bounds) {
+        candidateBounds.push(bounds)
+      }
+    })
+  })
+
+  const mergedBounds = unionBounds(candidateBounds)
+  if (mergedBounds) {
+    return expandBounds(mergedBounds, EXPORT_VIEWPORT_PADDING)
+  }
+
+  return expandBounds(getFallbackViewportBounds(svgElement), EXPORT_VIEWPORT_PADDING)
+}
+
+const applyExportViewport = (svgRoot, bounds) => {
+  svgRoot.setAttribute('viewBox', `${bounds.x} ${bounds.y} ${bounds.width} ${bounds.height}`)
+  svgRoot.setAttribute('width', String(bounds.width))
+  svgRoot.setAttribute('height', String(bounds.height))
+}
+
+const injectExportStyles = (svgRoot, styleText) => {
+  const normalizedStyleText = String(styleText ?? '').trim()
+  if (!normalizedStyleText) {
+    return
+  }
+
+  let defs = svgRoot.querySelector('defs')
+  if (!defs) {
+    defs = createSvgElement('defs')
+    svgRoot.insertBefore(defs, svgRoot.firstChild)
+  }
+
+  const style = createSvgElement('style')
+  style.textContent = `${normalizedStyleText}
+
+    .skill-tree-center-icon,
+    .skill-tree-center-icon text,
+    .skill-tree-segment-label,
+    .skill-tree-empty-state-label,
+    .skill-tree-add-text,
+    .skill-node-foreign,
+    .skill-node-foreign * {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    }
+  `
+  defs.appendChild(style)
+}
 
 const parseTooltipMarkdownLines = (value) => {
   const normalized = String(value ?? '').replace(/\r\n?/g, '\n').trim()
@@ -106,20 +325,20 @@ const injectExportTooltipStyles = (svgRoot) => {
       fill: #f8fafc;
       font-size: 12px;
       font-weight: 700;
-      font-family: ui-sans-serif, system-ui, sans-serif;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
     }
 
     .skill-node-tooltip__note {
       fill: #cbd5e1;
       font-size: 10px;
-      font-family: ui-sans-serif, system-ui, sans-serif;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
     }
 
     .skill-node-tooltip__heading {
       fill: #f8fafc;
       font-size: 13px;
       font-weight: 700;
-      font-family: ui-sans-serif, system-ui, sans-serif;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
     }
   `
 
@@ -299,12 +518,21 @@ export const serializeSvgElementForExport = (svgElement, options = {}) => {
 
   const {
     includeTooltips = true,
+    embedStyles = false,
+    styleText = '',
+    sourceDocument = globalThis?.document,
   } = options
 
   const clone = svgElement.cloneNode(true)
   clone.removeAttribute('class')
   clone.setAttribute('xmlns', SVG_NS)
   clone.setAttribute('xmlns:xlink', SVG_XLINK_NS)
+
+  applyExportViewport(clone, getExportViewportBounds(svgElement))
+
+  if (embedStyles) {
+    injectExportStyles(clone, styleText || collectStyleText(sourceDocument))
+  }
 
   clone.querySelectorAll('.skill-tree-export-exclude').forEach((node) => node.remove())
 
@@ -347,9 +575,16 @@ export const exportSvgFromElement = (svgElement, options = {}) => {
   const {
     fileName = 'skilltree-roadmap.svg',
     includeTooltips = true,
+    sourceDocument = globalThis?.document,
+    styleText = '',
   } = options
 
-  const markup = serializeSvgElementForExport(svgElement, { includeTooltips })
+  const markup = serializeSvgElementForExport(svgElement, {
+    includeTooltips,
+    embedStyles: true,
+    sourceDocument,
+    styleText,
+  })
 
   if (!markup) {
     return false

@@ -71,6 +71,11 @@ class MockElement {
       return this.children.filter((child) => child.tagName === 'foreignObject' && child.attributes.has('class') && child.attributes.get('class').includes('skill-node-export-anchor'))
     }
 
+    if (selector.startsWith('.')) {
+      const className = selector.slice(1)
+      return this.children.filter((child) => child.attributes.has('class') && child.attributes.get('class').includes(className))
+    }
+
     if (selector === 'style') {
       return this.children.filter((child) => child.tagName === 'style')
     }
@@ -165,6 +170,56 @@ describe('svgExport', () => {
     expect(serialized).toContain('skill-node-tooltip__note')
   })
 
+  it('keeps the center icon inside the exported viewport', () => {
+    installSvgDomShim()
+
+    const svg = new MockElement('svg')
+
+    const centerIcon = new MockElement('g')
+    centerIcon.setAttribute('class', 'skill-tree-center-icon')
+    centerIcon.setAttribute('transform', 'translate(500, 500)')
+    centerIcon.getBBox = () => ({ x: 500, y: 500, width: 120, height: 120 })
+    svg.appendChild(centerIcon)
+
+    const foreignObject = new MockElement('foreignObject')
+    foreignObject.setAttribute('class', 'skill-node-export-anchor')
+    foreignObject.setAttribute('x', '1000')
+    foreignObject.setAttribute('y', '1200')
+    foreignObject.setAttribute('width', '120')
+    foreignObject.setAttribute('height', '120')
+    svg.appendChild(foreignObject)
+
+    const serialized = serializeSvgElementForExport(svg, { includeTooltips: false })
+
+    expect(serialized).toContain('skill-tree-center-icon')
+    expect(serialized).toContain('viewBox="404 404 812 1012"')
+  })
+
+  it('sizes the export viewport to the occupied content bounds', () => {
+    installSvgDomShim()
+
+    const svg = new MockElement('svg')
+    svg.getBBox = () => ({ x: 0, y: 0, width: 7564, height: 7564 })
+
+    const foreignObject = new MockElement('foreignObject')
+    foreignObject.setAttribute('class', 'skill-node-export-anchor')
+    foreignObject.setAttribute('x', '100')
+    foreignObject.setAttribute('y', '200')
+    foreignObject.setAttribute('width', '400')
+    foreignObject.setAttribute('height', '300')
+    foreignObject.setAttribute('data-node-id', 'node-1')
+    foreignObject.setAttribute('data-export-label', 'React Platform')
+    foreignObject.setAttribute('data-export-note', 'Now is **live**')
+    foreignObject.getBBox = () => ({ x: 100, y: 200, width: 400, height: 300 })
+    svg.appendChild(foreignObject)
+
+    const serialized = serializeSvgElementForExport(svg)
+
+    expect(serialized).toContain('viewBox="4 104 592 492"')
+    expect(serialized).toContain('width="592"')
+    expect(serialized).toContain('height="492"')
+  })
+
   it('renders markdown headings inside tooltip notes', () => {
     installSvgDomShim()
 
@@ -185,5 +240,56 @@ describe('svgExport', () => {
 
     expect(serialized).toContain('skill-node-tooltip__heading')
     expect(serialized).toContain('Release Impact')
+  })
+
+  it('embeds source styles when exporting a standalone svg', () => {
+    installSvgDomShim()
+
+    const svg = new MockElement('svg')
+    const foreignObject = new MockElement('foreignObject')
+
+    foreignObject.setAttribute('class', 'skill-node-export-anchor')
+    foreignObject.setAttribute('x', '10')
+    foreignObject.setAttribute('y', '20')
+    foreignObject.setAttribute('width', '120')
+    foreignObject.setAttribute('height', '120')
+    svg.appendChild(foreignObject)
+
+    const sourceDocument = {
+      styleSheets: [
+        {
+          cssRules: [
+            { cssText: '.skill-node-button { background: red; }' },
+            { cssText: '.skill-tree-canvas { display: block; }' },
+          ],
+        },
+      ],
+    }
+
+    const serialized = serializeSvgElementForExport(svg, {
+      embedStyles: true,
+      sourceDocument,
+    })
+
+    expect(serialized).toContain('.skill-node-button { background: red; }')
+    expect(serialized).toContain('.skill-tree-canvas { display: block; }')
+  })
+
+  it('uses a cross-platform sans-serif font stack for exported text', () => {
+    installSvgDomShim()
+
+    const svg = new MockElement('svg')
+    const foreignObject = new MockElement('foreignObject')
+
+    foreignObject.setAttribute('class', 'skill-node-export-anchor')
+    foreignObject.setAttribute('x', '10')
+    foreignObject.setAttribute('y', '20')
+    foreignObject.setAttribute('width', '120')
+    foreignObject.setAttribute('height', '120')
+    svg.appendChild(foreignObject)
+
+    const serialized = serializeSvgElementForExport(svg, { includeTooltips: true })
+
+    expect(serialized).toContain('-apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif')
   })
 })

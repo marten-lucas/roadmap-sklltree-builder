@@ -1,6 +1,7 @@
-import { Paper, Text, Tooltip } from '@mantine/core'
+import { Paper, Text } from '@mantine/core'
 import { STATUS_STYLES } from '../config'
 import { getDisplayStatusKey, getLevelStatusKeys } from '../utils/nodeStatus'
+import { MarkdownTooltipContent, Tooltip } from '../tooltip'
 
 const getShortName = (node) => {
   const explicitShortName = String(node?.shortName ?? '').trim().toUpperCase().slice(0, 3)
@@ -129,18 +130,12 @@ export function SkillNode({ node, nodeSize, isSelected, onSelect, onSelectLevel,
         onClick={(event) => event.stopPropagation()}
       >
         <Tooltip
-          withArrow
           multiline
           openDelay={80}
           closeDelay={40}
           transitionProps={{ transition: 'fade', duration: 120 }}
           classNames={{ tooltip: 'skill-node-tooltip', arrow: 'skill-node-tooltip__arrow' }}
-          label={(
-            <div>
-              <Text className="skill-node-tooltip__title">{node.label}</Text>
-              <Text className="skill-node-tooltip__note">{tooltipReleaseNote}</Text>
-            </div>
-          )}
+          label={<MarkdownTooltipContent title={node.label} markdown={tooltipReleaseNote} />}
         >
           <Paper
             component="button"

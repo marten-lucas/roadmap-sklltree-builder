@@ -318,7 +318,7 @@ const buildViewerScript = () => `
         const { baseWidth, baseHeight } = getSvgMetrics()
         const shellWidth = treeShell.clientWidth || baseWidth
         const shellHeight = treeShell.clientHeight || baseHeight
-        const fittedScale = clamp(shellWidth / baseWidth, 0.18, 1.6)
+        const fittedScale = clamp(Math.min(shellWidth / baseWidth, shellHeight / baseHeight), 0.18, 1.6)
 
         panZoomState.scale = fittedScale
         panZoomState.translateX = Math.max(0, (shellWidth - baseWidth * fittedScale) / 2)
@@ -412,12 +412,37 @@ const buildViewerScript = () => `
         const originalY = Number.parseFloat(anchor.dataset.origY ?? anchor.getAttribute('y') ?? '0')
         const originalWidth = Number.parseFloat(anchor.dataset.origWidth ?? anchor.getAttribute('width') ?? '0')
         const originalHeight = Number.parseFloat(anchor.dataset.origHeight ?? anchor.getAttribute('height') ?? '0')
+        const button = anchor.querySelector('.skill-node-button')
+        const wrapper = anchor.querySelector('.skill-node-foreign')
+        const originalButtonWidth = Number.parseFloat(anchor.dataset.origButtonWidth ?? button?.style.width ?? button?.getAttribute('width') ?? '0')
+        const originalButtonHeight = Number.parseFloat(anchor.dataset.origButtonHeight ?? button?.style.height ?? button?.getAttribute('height') ?? '0')
+        const originalPadding = Number.parseFloat(anchor.dataset.origPadding ?? wrapper?.style.padding ?? '0')
 
         if (!anchor.dataset.origX) {
           anchor.dataset.origX = String(originalX)
           anchor.dataset.origY = String(originalY)
           anchor.dataset.origWidth = String(originalWidth)
           anchor.dataset.origHeight = String(originalHeight)
+        }
+
+        if (!anchor.dataset.origButtonWidth) {
+          anchor.dataset.origButtonWidth = String(originalButtonWidth)
+          anchor.dataset.origButtonHeight = String(originalButtonHeight)
+        }
+
+        if (!anchor.dataset.origPadding) {
+          anchor.dataset.origPadding = String(originalPadding)
+        }
+
+        const applyInnerSize = (buttonWidth, buttonHeight, padding) => {
+          if (button) {
+            button.style.width = String(buttonWidth) + 'px'
+            button.style.height = String(buttonHeight) + 'px'
+          }
+
+          if (wrapper) {
+            wrapper.style.padding = String(padding) + 'px'
+          }
         }
 
         if (mode === 'hidden') {
@@ -430,13 +455,17 @@ const buildViewerScript = () => `
         if (mode === 'minimal') {
           const centerX = originalX + originalWidth / 2
           const centerY = originalY + originalHeight / 2
-          const width = Math.max(30, originalWidth * MINIMAL_NODE_SCALE)
-          const height = Math.max(30, originalHeight * MINIMAL_NODE_SCALE)
+          const buttonWidth = Math.max(30, originalButtonWidth * MINIMAL_NODE_SCALE)
+          const buttonHeight = Math.max(30, originalButtonHeight * MINIMAL_NODE_SCALE)
+          const padding = Math.max(4, originalPadding * MINIMAL_NODE_SCALE)
+          const width = buttonWidth + padding * 2
+          const height = buttonHeight + padding * 2
 
           anchor.setAttribute('x', String(centerX - width / 2))
           anchor.setAttribute('y', String(centerY - height / 2))
           anchor.setAttribute('width', String(width))
           anchor.setAttribute('height', String(height))
+          applyInnerSize(buttonWidth, buttonHeight, padding)
           anchor.classList.add('html-export__node--minimal')
           return
         }
@@ -445,6 +474,7 @@ const buildViewerScript = () => `
         anchor.setAttribute('y', String(originalY))
         anchor.setAttribute('width', String(originalWidth))
         anchor.setAttribute('height', String(originalHeight))
+        applyInnerSize(originalButtonWidth, originalButtonHeight, originalPadding)
         anchor.classList.remove('html-export__node--minimal')
       }
 
@@ -642,6 +672,7 @@ export const buildHtmlExportDocument = ({
       display: flex;
       flex-direction: column;
       gap: 18px;
+      min-height: 100vh;
     }
 
     .html-export__header,
@@ -814,6 +845,12 @@ export const buildHtmlExportDocument = ({
       padding: 18px;
     }
 
+    .html-export__panel--roadmap {
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+    }
+
     .html-export__section-header {
       display: flex;
       align-items: flex-start;
@@ -880,10 +917,12 @@ export const buildHtmlExportDocument = ({
     .html-export__tree-shell {
       position: relative;
       z-index: 0;
+      flex: 0 0 auto;
       display: flex;
       align-items: center;
       justify-content: center;
-      min-height: 60vh;
+      height: 50vh;
+      min-height: 50vh;
       overflow: auto;
       border-radius: 16px;
       background: #000000;
@@ -1027,6 +1066,10 @@ export const buildHtmlExportDocument = ({
         flex-direction: column;
       }
 
+      .html-export__panel--roadmap {
+        min-height: 0;
+      }
+
       .html-export__actions {
         justify-content: flex-start;
       }
@@ -1046,6 +1089,7 @@ export const buildHtmlExportDocument = ({
       .html-export {
         max-width: none;
         padding: 0;
+        min-height: auto;
       }
 
       .html-export__header,
@@ -1110,7 +1154,7 @@ export const buildHtmlExportDocument = ({
       </div>
     </section>
 
-    <section class="html-export__panel">
+    <section class="html-export__panel html-export__panel--roadmap">
       <header class="html-export__section-header">
         <p class="html-export__eyebrow">Roadmap</p>
         <details class="html-export__menu">
