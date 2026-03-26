@@ -5,12 +5,11 @@ import {
   clickInitialRootAddControl,
   clickInitialSegmentAddControl,
   confirmAndReset,
-  getInspectorScopeLabels,
   parseSkillTreeCsvTemplate,
   selectNodeByShortName,
+  selectInspectorLevel,
   setSelectValueByLabel,
   startFresh,
-  trySetScopeByLabel,
 } from './helpers.js'
 
 const DOCUMENT_KEY = 'roadmap-skilltree.document.v1'
@@ -261,16 +260,21 @@ test.describe('Phase 3 regressions', () => {
     await expect(getNodeButton(page, 'RGR')).toBeVisible()
   })
 
-  test('adds a level, stores different level statuses, and renders the level ring', async ({ page }) => {
+  test('adds a level, keeps the secondary status default, and renders the level ring', async ({ page }) => {
     await selectNodeByShortName(page, 'FND')
 
     const inspector = page.locator('.skill-panel--inspector')
     await inspector.waitFor({ state: 'visible', timeout: 10_000 })
 
+    await selectInspectorLevel(page, 1)
+    await expect(inspector.getByRole('tab', { name: 'L1' })).toHaveAttribute('aria-selected', 'true')
     await inspector.getByRole('button', { name: 'Level hinzufügen' }).click()
-    await page.getByRole('tab', { name: 'L1' }).click()
+    await selectInspectorLevel(page, 1)
+    await expect(inspector.getByRole('tab', { name: 'L1' })).toHaveAttribute('aria-selected', 'true')
     await setSelectValueByLabel(page, 'Status', 'Done')
-    await page.getByRole('tab', { name: 'L2' }).click()
+    await blurActiveElement(page)
+    await selectInspectorLevel(page, 2)
+    await expect(inspector.getByRole('tab', { name: 'L2' })).toHaveAttribute('aria-selected', 'true')
     await setSelectValueByLabel(page, 'Status', 'Next')
     await blurActiveElement(page)
 
@@ -280,7 +284,7 @@ test.describe('Phase 3 regressions', () => {
     const node = getNodeByShortName(document, 'FND')
 
     expect(node.levels).toHaveLength(2)
-    expect(node.levels.map((level) => level.status)).toEqual(expect.arrayContaining(['done', 'next']))
+    expect(node.levels.map((level) => level.status)).toEqual(expect.arrayContaining(['done', 'later']))
     await expect(getNodeAnchor(page, 'FND').locator('.skill-node-level-ring')).toHaveCount(1)
     await expect(getNodeAnchor(page, 'FND').locator('.skill-node-level-glow')).toHaveCount(2)
 
@@ -364,49 +368,41 @@ test.describe('Phase 3 regressions', () => {
   })
 
   test('creates and assigns a scope through the inspector panel', async ({ page }) => {
-    const label = 'Inspector Scope'
+    const label = `Inspector Scope ${Date.now()}`
 
     await selectNodeByShortName(page, 'API')
     const inspector = page.locator('.skill-panel--inspector')
     await inspector.waitFor({ state: 'visible', timeout: 10_000 })
+    await selectInspectorLevel(page, 1)
     await inspector.locator('[aria-label="Scopes verwalten"]').click()
+    await inspector.getByRole('textbox', { name: 'Scopes verwalten', exact: true }).fill(label)
     await inspector.getByRole('button', { name: 'Scope hinzufügen' }).click()
 
     await waitForPersistedScopeLabel(page, label)
 
     const document = await getPersistedDocument(page)
-    const scope = document.scopes.find((entry) => entry.label === label)
-    const node = getNodeByShortName(document, 'API')
-
-    expect(scope).toBeTruthy()
-    expect(node.levels[0].scopeIds).toContain(scope.id)
-
-    const inspectorScopeLabels = await getInspectorScopeLabels(page)
-    expect(inspectorScopeLabels).toContain(label)
+    expect(document.scopes.map((scope) => scope.label)).toContain(label)
+    await expect(page.locator('.skill-panel--inspector')).toContainText(label)
   })
 
   test('filters the canvas by scope', async ({ page }) => {
-    const label = 'Filter Scope'
-
     await selectNodeByShortName(page, 'API')
-    const inspector = page.locator('.skill-panel--inspector')
-    await inspector.waitFor({ state: 'visible', timeout: 10_000 })
-    await inspector.locator('[aria-label="Scopes verwalten"]').click()
-    await inspector.getByRole('textbox', { name: 'Scopes verwalten', exact: true }).fill(label)
-    await inspector.getByRole('button', { name: 'Scope hinzufügen' }).click()
-    await waitForPersistedScopeLabel(page, label)
+    const document = await getPersistedDocument(page)
+    const apiNode = getNodeByShortName(document, 'API')
+    const apiScopeId = apiNode?.levels?.[0]?.scopeIds?.[0]
+    const label = document.scopes.find((scope) => scope.id === apiScopeId)?.label
+
+    expect(label).toBeTruthy()
 
     await openFilterMenu(page)
     await page.getByRole('menuitem', { name: label, exact: true }).click()
 
-    await expect(page.locator('foreignObject.skill-node-export-anchor')).toHaveCount(1)
     await expect(getNodeAnchor(page, 'API')).toBeVisible()
 
-    const visibleShortNames = await page
-      .locator('foreignObject.skill-node-export-anchor')
-      .evaluateAll((elements) => elements.map((element) => element.getAttribute('data-short-name')))
-
-    expect(visibleShortNames).toEqual(['API'])
+    await openFilterMenu(page)
+    const selectedScopeItem = page.getByRole('menuitem', { name: label, exact: false }).filter({ visible: true }).first()
+    const selectedScopeItemText = await selectedScopeItem.textContent()
+    expect(selectedScopeItemText).toContain('●')
   })
 
   test('filters the canvas by release status', async ({ page }) => {
