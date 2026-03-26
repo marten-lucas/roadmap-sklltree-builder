@@ -2,6 +2,7 @@ import { buildPersistedDocumentPayload, parseDocumentPayload } from './documentP
 import { collectReleaseNoteEntries } from './pdfExport'
 import { renderMarkdownToHtml } from './markdown'
 import { serializeSvgElementForExport } from './svgExport'
+import { VIEWPORT_DEFAULTS } from './viewport'
 
 export const HTML_EXPORT_DATA_SCRIPT_ID = 'skilltree-export-data'
 
@@ -151,6 +152,11 @@ const buildViewerScript = () => `
       }
       const SCOPE_FILTER_ALL = '__all__'
       const MINIMAL_NODE_SCALE = 0.32
+      const VIEWPORT = {
+        minScale: ${VIEWPORT_DEFAULTS.minScale},
+        maxScale: ${VIEWPORT_DEFAULTS.maxScale},
+        fitPadding: ${VIEWPORT_DEFAULTS.fitPadding},
+      }
 
       const normalizeStatusKey = (status) => {
         if (!status) {
@@ -400,15 +406,15 @@ const buildViewerScript = () => `
         const shellWidth = treeShell.clientWidth || baseWidth
         const shellHeight = treeShell.clientHeight || baseHeight
         const occupied = getOccupiedBounds()
-        const padding = 72
+        const padding = VIEWPORT.fitPadding
         const contentMinX = occupied.minX - (viewBox?.x ?? 0)
         const contentMinY = occupied.minY - (viewBox?.y ?? 0)
         const contentWidth = Math.max(1, occupied.maxX - occupied.minX)
         const contentHeight = Math.max(1, occupied.maxY - occupied.minY)
         const fittedScale = clamp(
           Math.min(shellWidth / (contentWidth + padding * 2), shellHeight / (contentHeight + padding * 2)),
-          0.18,
-          1.6,
+          VIEWPORT.minScale,
+          VIEWPORT.maxScale,
         )
 
         panZoomState.scale = fittedScale
@@ -425,7 +431,7 @@ const buildViewerScript = () => `
         const rect = treeShell.getBoundingClientRect()
         const pointX = clientX - rect.left
         const pointY = clientY - rect.top
-        const nextScale = clamp(panZoomState.scale * factor, 0.18, 2.4)
+        const nextScale = clamp(panZoomState.scale * factor, VIEWPORT.minScale, VIEWPORT.maxScale)
         const scaleRatio = nextScale / panZoomState.scale
 
         panZoomState.translateX = pointX - (pointX - panZoomState.translateX) * scaleRatio

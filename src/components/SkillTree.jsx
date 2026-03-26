@@ -70,6 +70,7 @@ import {
   getReleaseVisibilityMode,
   nodeMatchesScopeFilter,
 } from './utils/visibility'
+import { VIEWPORT_DEFAULTS, computeFitScale } from './utils/viewport'
 import { getInitialRoadmapDocument } from './utils/document'
 import { resolveInspectorSelectedNode } from './utils/selection'
 
@@ -77,7 +78,6 @@ import { resolveInspectorSelectedNode } from './utils/selection'
 // Tests/importers should import from that module instead of re-exporting from here.
 
 const AUTOSAVE_DEBOUNCE_MS = 450
-const INITIAL_VIEW_SCALE = 0.7
 const MINIMAL_NODE_SIZE = 36
 
 export function SkillTree() {
@@ -131,14 +131,17 @@ export function SkillTree() {
   const viewportHeight = typeof window !== 'undefined' ? window.innerHeight : canvas.height
   const initialViewScale = useMemo(() => {
     if (!canvas.width || !canvas.height || !viewportWidth || !viewportHeight) {
-      return INITIAL_VIEW_SCALE
+      return 0.7
     }
 
-    const availableWidth = Math.max(1, viewportWidth - 80)
-    const availableHeight = Math.max(1, viewportHeight - 80)
-    const fittedScale = Math.min(availableWidth / canvas.width, availableHeight / canvas.height)
-
-    return Math.max(0.2, Math.min(1.5, fittedScale))
+    return computeFitScale({
+      contentWidth: canvas.width,
+      contentHeight: canvas.height,
+      viewportWidth,
+      viewportHeight,
+      minScale: VIEWPORT_DEFAULTS.minScale,
+      maxScale: VIEWPORT_DEFAULTS.maxScale,
+    })
   }, [canvas.height, canvas.width, viewportHeight, viewportWidth])
   const initialPositionX = viewportWidth / 2 - canvas.origin.x * initialViewScale
   const initialPositionY = viewportHeight / 2 - canvas.origin.y * initialViewScale
@@ -1579,12 +1582,12 @@ export function SkillTree() {
 
       <TransformWrapper
         key={transformKey}
-        minScale={0.2}
-        maxScale={2.2}
+        minScale={VIEWPORT_DEFAULTS.minScale}
+        maxScale={VIEWPORT_DEFAULTS.maxScale}
         initialScale={initialViewScale}
         initialPositionX={initialPositionX}
         initialPositionY={initialPositionY}
-        wheel={{ step: 0.12 }}
+        wheel={{ step: VIEWPORT_DEFAULTS.wheelStep }}
         limitToBounds={false}
         centerOnInit={false}
       >
