@@ -235,7 +235,7 @@ test.describe('SVG export modes', () => {
     await startFresh(page)
   })
 
-  test('interactive svg export contains tooltip animations and has correct filename', async ({
+  test('interactive svg export contains tooltip hover styles and has correct filename', async ({
     page,
   }) => {
     await openExportMenu(page)
@@ -247,7 +247,9 @@ test.describe('SVG export modes', () => {
     const svgContent = await readDownload(download)
 
     expect(svgContent).toContain('export-tooltip-trigger')
-    expect(svgContent).toContain('<animate')
+    expect(svgContent).toContain('.skill-node-tooltip-trigger:hover + .skill-node-tooltip-group')
+    expect(svgContent).not.toContain('<animate')
+    expect(svgContent).not.toContain('begin="export-tooltip-trigger-')
     expect(svgContent).toContain('skill-node-export-anchor')
     expect(svgContent).toContain('.skill-node-button {')
     expect(svgContent).toContain('.skill-tree-canvas {')
@@ -267,10 +269,14 @@ test.describe('SVG export modes', () => {
 
     expect(svgContent).toContain('rgba(2, 6, 23, 0.96)')
     expect(svgContent).toContain('rgba(56, 189, 248, 0.25)')
-    expect(svgContent).toContain('filter: drop-shadow(0 18px 40px rgba(2, 6, 23, 0.45))')
-    expect(svgContent).toContain('font-family: "Space Grotesk", "Rajdhani", sans-serif')
-    expect(svgContent).toContain('font-size: 13px')
-    expect(svgContent).toContain('font-size: 12px')
+    expect(svgContent).toContain('box-shadow: rgba(2, 6, 23, 0.45) 0px 18px 40px')
+    expect(svgContent).toContain('font-family: "Space Grotesk", Rajdhani, sans-serif')
+    expect(svgContent).toContain('max-width: 44rem')
+    expect(svgContent).toMatch(/text-rendering:\s*geometricprecision/i)
+    expect(svgContent).toContain('font-size: 1rem')
+    expect(svgContent).toContain('font-size: 0.98rem')
+    expect(svgContent).toContain('width="156"')
+    expect(svgContent).toContain('height="156"')
   })
 
   test('clean svg export has no tooltip animations and has correct filename', async ({

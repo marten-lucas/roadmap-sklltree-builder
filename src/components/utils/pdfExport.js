@@ -86,6 +86,7 @@ export const collectReleaseNoteEntries = (roadmapDocument) => {
         nodeLabel: node.label,
         shortName: String(node.shortName ?? '').trim(),
         segmentLabel: segmentLabelById.get(node.segmentId) ?? 'Unassigned',
+        levelCount: levels.length,
         levelLabel: level.label ?? `Level ${index + 1}`,
         statusLabel: STATUS_LABELS[statusKey] ?? STATUS_LABELS.now,
         releaseNote,
@@ -125,12 +126,14 @@ const buildReleaseNotesMarkup = (entries, introductionMarkdown = '') => {
     }
 
     const badge = entry.shortName ? `${escapeHtml(entry.nodeLabel)} (${escapeHtml(entry.shortName)})` : escapeHtml(entry.nodeLabel)
+    const levelText = entry.levelCount > 1 ? escapeHtml(entry.levelLabel) : ''
+    const statusText = escapeHtml(entry.statusLabel)
     parts.push(`
       <article class="pdf-export__note-card">
         <div class="pdf-export__note-meta">
           <span class="pdf-export__badge">${badge}</span>
-          <span>${escapeHtml(entry.levelLabel)}</span>
-          <span>${escapeHtml(entry.statusLabel)}</span>
+          ${levelText ? `<span>${levelText}</span>` : ''}
+          <span>${statusText}</span>
         </div>
         <div class="pdf-export__note-markdown">${renderMarkdownToHtml(entry.releaseNote)}</div>
       </article>

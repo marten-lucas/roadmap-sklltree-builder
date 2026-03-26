@@ -230,10 +230,13 @@ describe('svgExport', () => {
     expect(serialized).toContain('rgba(56, 189, 248, 0.25)')
     expect(serialized).toContain('box-shadow: 0 18px 40px rgba(2, 6, 23, 0.45)')
     expect(serialized).toContain('font-family: "Space Grotesk", "Rajdhani", sans-serif')
-    expect(serialized).toContain('font-size: 0.82rem')
-    expect(serialized).toContain('font-size: 0.76rem')
+    expect(serialized).toContain('max-width: 44rem')
+    expect(serialized).toContain('text-rendering: geometricPrecision')
+    expect(serialized).toContain('font-size: 1rem')
+    expect(serialized).toContain('font-size: 0.98rem')
     expect(serialized).toContain('border-radius: 10px')
-    expect(serialized).toContain('height="122"')
+    expect(serialized).toContain('width="440"')
+    expect(serialized).toContain('height="104"')
   })
 
   it('keeps the center icon inside the exported viewport', () => {
@@ -272,17 +275,22 @@ describe('svgExport', () => {
 
     const foreignObject = new MockElement('foreignObject')
     foreignObject.setAttribute('class', 'skill-tree-center-icon__foreign')
-    foreignObject.setAttribute('x', '-96')
-    foreignObject.setAttribute('y', '-96')
-    foreignObject.setAttribute('width', '192')
-    foreignObject.setAttribute('height', '192')
+    foreignObject.setAttribute('x', '-78')
+    foreignObject.setAttribute('y', '-78')
+    foreignObject.setAttribute('width', '156')
+    foreignObject.setAttribute('height', '156')
 
     const image = new MockElement('img')
     image.setAttribute('class', 'skill-tree-center-icon__image')
     image.setAttribute('src', 'data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D"http://www.w3.org/2000/svg"%3E%3C/svg%3E')
     foreignObject.appendChild(image)
 
+    const hitArea = new MockElement('circle')
+    hitArea.setAttribute('class', 'skill-tree-center-icon__hit-area')
+    hitArea.setAttribute('r', '68')
+
     centerIcon.appendChild(foreignObject)
+    centerIcon.appendChild(hitArea)
     svg.appendChild(centerIcon)
 
     const serialized = serializeSvgElementForExport(svg)
@@ -290,9 +298,14 @@ describe('svgExport', () => {
     expect(serialized).not.toContain('skill-tree-center-icon__foreign')
     expect(serialized).toContain('<image')
     expect(serialized).toContain('data:image/svg+xml')
+    expect(serialized).toContain('x="-78"')
+    expect(serialized).toContain('y="-78"')
+    expect(serialized).toContain('width="156"')
+    expect(serialized).toContain('height="156"')
+    expect(serialized).toContain('r="78"')
   })
 
-  it('sizes the export viewport to the occupied content bounds', () => {
+  it('sizes the export viewport from the root svg bounds', () => {
     installSvgDomShim()
 
     const svg = new MockElement('svg')
@@ -312,9 +325,43 @@ describe('svgExport', () => {
 
     const serialized = serializeSvgElementForExport(svg)
 
-    expect(serialized).toContain('viewBox="4 104 592 492"')
-    expect(serialized).toContain('width="592"')
-    expect(serialized).toContain('height="492"')
+    expect(serialized).toContain('viewBox="0 0 7564 7564"')
+    expect(serialized).toContain('width="7564"')
+    expect(serialized).toContain('height="7564"')
+  })
+
+  it('prefers the root svg bounds over a competing root viewBox', () => {
+    installSvgDomShim()
+
+    const svg = new MockElement('svg')
+    svg.viewBox = {
+      baseVal: {
+        x: -200,
+        y: -200,
+        width: 2232.8597412109375,
+        height: 1928,
+      },
+    }
+    svg.getBBox = () => ({
+      x: -200,
+      y: -200,
+      width: 2232.8597412109375,
+      height: 1928,
+    })
+
+    const foreignObject = new MockElement('foreignObject')
+    foreignObject.setAttribute('class', 'skill-node-export-anchor')
+    foreignObject.setAttribute('x', '1000')
+    foreignObject.setAttribute('y', '1200')
+    foreignObject.setAttribute('width', '120')
+    foreignObject.setAttribute('height', '120')
+    svg.appendChild(foreignObject)
+
+    const serialized = serializeSvgElementForExport(svg)
+
+    expect(serialized).toContain('viewBox="-200 -200 2232.8597412109375 1928"')
+    expect(serialized).toContain('width="2232.8597412109375"')
+    expect(serialized).toContain('height="1928"')
   })
 
   it('renders markdown headings inside tooltip notes', () => {
@@ -340,7 +387,37 @@ describe('svgExport', () => {
     expect(serialized).toContain('<p>Rollout is live.</p>')
   })
 
-  it('serializes stacked level notes and level-specific hover triggers', () => {
+  it('hides the level label for single-level tooltip cards', () => {
+    installSvgDomShim()
+
+    const svg = new MockElement('svg')
+    const foreignObject = new MockElement('foreignObject')
+
+    foreignObject.setAttribute('class', 'skill-node-export-anchor')
+    foreignObject.setAttribute('x', '10')
+    foreignObject.setAttribute('y', '20')
+    foreignObject.setAttribute('width', '120')
+    foreignObject.setAttribute('height', '120')
+    foreignObject.setAttribute('data-node-id', 'node-1')
+    foreignObject.setAttribute('data-export-label', 'React Platform')
+    foreignObject.setAttribute('data-export-levels', JSON.stringify([
+      {
+        id: 'level-now',
+        label: 'Level 1',
+        status: 'now',
+        statusLabel: 'Now',
+        releaseNote: 'Now is live.',
+      },
+    ]))
+    svg.appendChild(foreignObject)
+
+    const serialized = serializeSvgElementForExport(svg)
+
+    expect(serialized).not.toContain('Level 1</strong><span>Now')
+    expect(serialized).toContain('<span>Now</span>')
+  })
+
+  it('serializes stacked level notes and hover styles without SMIL begin values', () => {
     installSvgDomShim()
 
     const svg = new MockElement('svg')
@@ -379,6 +456,9 @@ describe('svgExport', () => {
     expect(serialized).toContain('export-tooltip-trigger-1-level-2')
     expect(serialized).toContain('<strong>launch</strong>')
     expect(serialized).toContain('<ul><li>draft</li><li>review</li></ul>')
+    expect(serialized).toContain('.skill-node-tooltip-trigger:hover + .skill-node-tooltip-group')
+    expect(serialized).not.toContain('<animate')
+    expect(serialized).not.toContain('begin="export-tooltip-trigger-1.mouseover"')
   })
 
   it('embeds source styles when exporting a standalone svg', () => {
@@ -431,4 +511,5 @@ describe('svgExport', () => {
 
     expect(serialized).toContain('"Space Grotesk", "Rajdhani", sans-serif')
   })
+
 })

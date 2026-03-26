@@ -125,12 +125,14 @@ const buildReleaseNotesMarkup = (entries, introductionMarkdown = '') => {
     const title = entry.shortName
       ? `${escapeHtml(entry.nodeLabel)} (${escapeHtml(entry.shortName)})`
       : escapeHtml(entry.nodeLabel)
+    const levelText = entry.levelCount > 1 ? escapeHtml(entry.levelLabel) : ''
+    const statusText = escapeHtml(entry.statusLabel)
 
     parts.push(`
       <article class="html-export__note-card">
         <header>
           <strong>${title}</strong>
-          <span>${escapeHtml(entry.levelLabel)} · ${escapeHtml(entry.statusLabel)}</span>
+          <span>${levelText ? `${levelText} · ` : ''}${statusText}</span>
         </header>
         <div class="html-export__note-markdown">${renderMarkdownToHtml(entry.releaseNote)}</div>
       </article>
@@ -323,21 +325,44 @@ const buildViewerScript = () => `
           )
         })
 
-        const centerGroup = svgRoot?.querySelector('.skill-tree-center-icon')
-        const centerForeign = centerGroup?.querySelector('.skill-tree-center-icon__foreign')
-        const transform = centerGroup?.getAttribute('transform') ?? ''
-        const match = transform.match(/translate[(]([-0-9.]+)[, ]+([-0-9.]+)[)]/)
-        const centerX = match ? Number.parseFloat(match[1]) : Number.NaN
-        const centerY = match ? Number.parseFloat(match[2]) : Number.NaN
+        const centerGroups = svgRoot?.querySelectorAll('.skill-tree-center-icon') ?? []
+        centerGroups.forEach((centerGroup) => {
+          const transform = centerGroup.getAttribute('transform') ?? ''
+          const match = transform.match(/translate[(]([-0-9.]+)[, ]+([-0-9.]+)[)]/)
+          const centerX = match ? Number.parseFloat(match[1]) : Number.NaN
+          const centerY = match ? Number.parseFloat(match[2]) : Number.NaN
 
-        if (centerForeign && Number.isFinite(centerX) && Number.isFinite(centerY)) {
-          const foreignX = Number.parseFloat(centerForeign.getAttribute('x') ?? '')
-          const foreignY = Number.parseFloat(centerForeign.getAttribute('y') ?? '')
-          const foreignWidth = Number.parseFloat(centerForeign.getAttribute('width') ?? '')
-          const foreignHeight = Number.parseFloat(centerForeign.getAttribute('height') ?? '')
+          if (!Number.isFinite(centerX) || !Number.isFinite(centerY)) {
+            return
+          }
 
-          includeRect(centerX + foreignX, centerY + foreignY, foreignWidth, foreignHeight)
-        }
+          const centerImage = centerGroup.querySelector('.skill-tree-center-icon__image')
+          const centerForeign = centerGroup.querySelector('.skill-tree-center-icon__foreign')
+          const centerHitArea = centerGroup.querySelector('.skill-tree-center-icon__hit-area')
+
+          if (centerImage) {
+            includeRect(
+              centerX + Number.parseFloat(centerImage.getAttribute('x') ?? '0'),
+              centerY + Number.parseFloat(centerImage.getAttribute('y') ?? '0'),
+              Number.parseFloat(centerImage.getAttribute('width') ?? '0'),
+              Number.parseFloat(centerImage.getAttribute('height') ?? '0'),
+            )
+          }
+
+          if (centerForeign) {
+            includeRect(
+              centerX + Number.parseFloat(centerForeign.getAttribute('x') ?? '0'),
+              centerY + Number.parseFloat(centerForeign.getAttribute('y') ?? '0'),
+              Number.parseFloat(centerForeign.getAttribute('width') ?? '0'),
+              Number.parseFloat(centerForeign.getAttribute('height') ?? '0'),
+            )
+          }
+
+          if (centerHitArea) {
+            const radius = Number.parseFloat(centerHitArea.getAttribute('r') ?? '0')
+            includeRect(centerX - radius, centerY - radius, radius * 2, radius * 2)
+          }
+        })
 
         if (!Number.isFinite(bounds.minX) || !Number.isFinite(bounds.minY) || !Number.isFinite(bounds.maxX) || !Number.isFinite(bounds.maxY)) {
           const viewBox = svgRoot?.viewBox?.baseVal

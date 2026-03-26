@@ -12,6 +12,8 @@ const SVG_XML_PREFIX = '<?xml version="1.0" encoding="UTF-8"?>\n'
 const SVG_NS = 'http://www.w3.org/2000/svg'
 const SVG_XLINK_NS = 'http://www.w3.org/1999/xlink'
 const EXPORT_VIEWPORT_PADDING = 96
+const CENTER_ICON_EXPORT_SIZE = 156
+const CENTER_ICON_EXPORT_HIT_RADIUS = 78
 const EXPORT_VIEWPORT_SELECTORS = [
   '.skill-tree-center-icon',
   'foreignObject.skill-node-export-anchor',
@@ -106,6 +108,14 @@ const buildDonutSectorPath = (centerX, centerY, innerRadius, outerRadius, startA
   ].join(' ')
 }
 
+const estimateTooltipCardHeight = (entry) => {
+  const rendered = renderMarkdownToHtml(entry?.releaseNote) || '<p>Keine Release Note hinterlegt.</p>'
+  const blockCount = Math.max(1, (rendered.match(/<(p|h[1-6]|ul)\b/gi) || []).length)
+  const listItemCount = (rendered.match(/<li\b/gi) || []).length
+
+  return 40 + (blockCount * 18) + (listItemCount * 12)
+}
+
 const replaceCenterIconForeignObject = (svgRoot) => {
   const centerForeign = svgRoot.querySelector('.skill-tree-center-icon__foreign')
   const centerImage = svgRoot.querySelector('.skill-tree-center-icon__image')
@@ -126,10 +136,12 @@ const replaceCenterIconForeignObject = (svgRoot) => {
 
   const image = createSvgElement('image')
   image.setAttribute('class', 'skill-tree-center-icon__image')
-  image.setAttribute('x', x)
-  image.setAttribute('y', y)
-  image.setAttribute('width', width)
-  image.setAttribute('height', height)
+  const exportSize = CENTER_ICON_EXPORT_SIZE
+  const exportHalf = exportSize / 2
+  image.setAttribute('x', String(-exportHalf))
+  image.setAttribute('y', String(-exportHalf))
+  image.setAttribute('width', String(exportSize))
+  image.setAttribute('height', String(exportSize))
   image.setAttribute('href', src)
   if (typeof image.setAttributeNS === 'function') {
     image.setAttributeNS(SVG_XLINK_NS, 'xlink:href', src)
@@ -140,6 +152,11 @@ const replaceCenterIconForeignObject = (svgRoot) => {
     parentNode.replaceChild(image, centerForeign)
   } else if (typeof centerForeign.replaceWith === 'function') {
     centerForeign.replaceWith(image)
+  }
+
+  const hitArea = svgRoot.querySelector('.skill-tree-center-icon__hit-area')
+  if (hitArea) {
+    hitArea.setAttribute('r', String(CENTER_ICON_EXPORT_HIT_RADIUS))
   }
 }
 
@@ -211,6 +228,70 @@ const getBoundsFromElement = (element) => {
       y,
       width,
       height,
+    }
+  }
+
+  return null
+}
+
+const getRootBounds = (svgElement) => {
+  if (!svgElement || typeof svgElement.getBBox !== 'function') {
+    return null
+  }
+
+  const removableNodes = []
+  const removalSelectors = ['.skill-node-tooltip-layer', '.skill-tree-export-exclude']
+
+  if (typeof svgElement.querySelectorAll === 'function') {
+    removalSelectors.forEach((selector) => {
+      Array.from(svgElement.querySelectorAll(selector)).forEach((node) => {
+        const parentNode = node?.parentNode
+        if (!parentNode || typeof parentNode.removeChild !== 'function') {
+          return
+        }
+
+        removableNodes.push({
+          node,
+          parentNode,
+          nextSibling: node.nextSibling ?? null,
+        })
+        parentNode.removeChild(node)
+      })
+    })
+  }
+
+  try {
+    const box = svgElement.getBBox()
+    if (
+      box
+      && isFiniteNumber(box.x)
+      && isFiniteNumber(box.y)
+      && isFiniteNumber(box.width)
+      && isFiniteNumber(box.height)
+      && box.width > 0
+      && box.height > 0
+    ) {
+      return {
+        x: box.x,
+        y: box.y,
+        width: box.width,
+        height: box.height,
+      }
+    }
+  } catch {
+    // Detached or unsupported root SVG elements can throw here.
+  } finally {
+    for (let index = removableNodes.length - 1; index >= 0; index -= 1) {
+      const { node, parentNode, nextSibling } = removableNodes[index]
+      if (!parentNode || typeof parentNode.insertBefore !== 'function') {
+        continue
+      }
+
+      if (nextSibling && nextSibling.parentNode === parentNode) {
+        parentNode.insertBefore(node, nextSibling)
+      } else {
+        parentNode.appendChild(node)
+      }
     }
   }
 
@@ -297,11 +378,78 @@ export const getExportViewportBounds = (svgElement) => {
     return expandBounds(getFallbackViewportBounds(svgElement), EXPORT_VIEWPORT_PADDING)
   }
 
+  const rootBounds = getRootBounds(svgElement)
+  if (rootBounds) {
+    return rootBounds
+  }
+
   const candidateBounds = []
 
   EXPORT_VIEWPORT_SELECTORS.forEach((selector) => {
     Array.from(svgElement.querySelectorAll(selector)).forEach((element) => {
       if (typeof element.closest === 'function' && element.closest('.skill-tree-export-exclude')) {
+        return
+      }
+
+      if (selector === '.skill-tree-center-icon') {
+        const transform = String(element.getAttribute?.('transform') ?? '')
+        const match = transform.match(/translate[(]([-0-9.]+)[, ]+([-0-9.]+)[)]/)
+        const centerX = match ? Number.parseFloat(match[1]) : Number.NaN
+        const centerY = match ? Number.parseFloat(match[2]) : Number.NaN
+        let pushedChildBounds = false
+
+        if (Number.isFinite(centerX) && Number.isFinite(centerY)) {
+          const centerImage = element.querySelector?.('.skill-tree-center-icon__image')
+          const centerForeign = element.querySelector?.('.skill-tree-center-icon__foreign')
+          const centerHitArea = element.querySelector?.('.skill-tree-center-icon__hit-area')
+
+          if (centerImage) {
+            const bounds = getBoundsFromElement(centerImage)
+            if (bounds) {
+              candidateBounds.push({
+                x: centerX + bounds.x,
+                y: centerY + bounds.y,
+                width: bounds.width,
+                height: bounds.height,
+              })
+              pushedChildBounds = true
+            }
+          }
+
+          if (centerForeign) {
+            const bounds = getBoundsFromElement(centerForeign)
+            if (bounds) {
+              candidateBounds.push({
+                x: centerX + bounds.x,
+                y: centerY + bounds.y,
+                width: bounds.width,
+                height: bounds.height,
+              })
+              pushedChildBounds = true
+            }
+          }
+
+          if (centerHitArea) {
+            const radius = toNumber(centerHitArea.getAttribute?.('r'), Number.NaN)
+            if (isFiniteNumber(radius) && radius > 0) {
+              candidateBounds.push({
+                x: centerX - radius,
+                y: centerY - radius,
+                width: radius * 2,
+                height: radius * 2,
+              })
+              pushedChildBounds = true
+            }
+          }
+        }
+
+        if (!pushedChildBounds) {
+          const bounds = getBoundsFromElement(element)
+          if (bounds) {
+            candidateBounds.push(bounds)
+          }
+        }
+
         return
       }
 
@@ -407,6 +555,13 @@ const injectExportTooltipStyles = (svgRoot) => {
     .skill-node-tooltip-group {
       opacity: 0;
       pointer-events: none;
+      transition: opacity 0.16s ease;
+    }
+
+    .skill-node-tooltip-trigger:hover + .skill-node-tooltip-group,
+    .skill-node-tooltip-trigger:focus + .skill-node-tooltip-group,
+    .skill-node-tooltip-trigger:focus-visible + .skill-node-tooltip-group {
+      opacity: 1;
     }
 
     .skill-node-tooltip__panel {
@@ -422,6 +577,9 @@ const injectExportTooltipStyles = (svgRoot) => {
       box-sizing: border-box;
       overflow: hidden;
       font-family: ${TOOLTIP_FONT_FAMILY};
+      -webkit-font-smoothing: ${TOOLTIP_HTML_BOX_STYLES.WebkitFontSmoothing};
+      -moz-osx-font-smoothing: ${TOOLTIP_HTML_BOX_STYLES.MozOsxFontSmoothing};
+      text-rendering: ${TOOLTIP_HTML_BOX_STYLES.textRendering};
     }
 
     .skill-node-tooltip__title {
@@ -548,7 +706,8 @@ const buildTooltipGroup = ({ id, centerX, centerY, title, entries }) => {
   group.setAttribute('pointer-events', 'none')
 
   const tooltipWidth = TOOLTIP_SVG_LAYOUT.width
-  const tooltipHeight = TOOLTIP_SVG_LAYOUT.heightBase + (entries.length * 76) + Math.max(0, (entries.length - 1) * 8)
+  const cardsHeight = entries.reduce((sum, entry) => sum + estimateTooltipCardHeight(entry), 0)
+  const tooltipHeight = TOOLTIP_SVG_LAYOUT.heightBase + cardsHeight + Math.max(0, (entries.length - 1) * 8)
   const boxX = centerX - tooltipWidth / 2
   const boxY = centerY - TOOLTIP_SVG_LAYOUT.centerGap - tooltipHeight
 
@@ -577,13 +736,14 @@ const buildTooltipGroup = ({ id, centerX, centerY, title, entries }) => {
     const header = document.createElementNS('http://www.w3.org/1999/xhtml', 'header')
     header.setAttribute('class', 'skill-node-tooltip__card-header')
 
-    const headerTitle = document.createElementNS('http://www.w3.org/1999/xhtml', 'strong')
-    headerTitle.textContent = entry.label || title || 'Skill'
-
     const statusLabel = document.createElementNS('http://www.w3.org/1999/xhtml', 'span')
     statusLabel.textContent = entry.statusLabel || ''
 
-    header.appendChild(headerTitle)
+    if (entries.length > 1) {
+      const headerTitle = document.createElementNS('http://www.w3.org/1999/xhtml', 'strong')
+      headerTitle.textContent = entry.label || title || 'Skill'
+      header.appendChild(headerTitle)
+    }
     header.appendChild(statusLabel)
 
     const noteWrapper = document.createElementNS('http://www.w3.org/1999/xhtml', 'div')
@@ -598,25 +758,7 @@ const buildTooltipGroup = ({ id, centerX, centerY, title, entries }) => {
   wrapper.appendChild(stack)
   foreignObject.appendChild(wrapper)
 
-  const fadeIn = createSvgElement('animate')
-  fadeIn.setAttribute('attributeName', 'opacity')
-  fadeIn.setAttribute('from', '0')
-  fadeIn.setAttribute('to', '1')
-  fadeIn.setAttribute('dur', '0.16s')
-  fadeIn.setAttribute('begin', `${id}.mouseover`)
-  fadeIn.setAttribute('fill', 'freeze')
-
-  const fadeOut = createSvgElement('animate')
-  fadeOut.setAttribute('attributeName', 'opacity')
-  fadeOut.setAttribute('from', '1')
-  fadeOut.setAttribute('to', '0')
-  fadeOut.setAttribute('dur', '0.16s')
-  fadeOut.setAttribute('begin', `${id}.mouseout`)
-  fadeOut.setAttribute('fill', 'freeze')
-
   group.appendChild(foreignObject)
-  group.appendChild(fadeIn)
-  group.appendChild(fadeOut)
 
   return group
 }
@@ -688,8 +830,8 @@ const appendAnimatedTooltips = (svgRoot) => {
     if (nodeId) {
       tooltipGroup.setAttribute('data-tooltip-node-id', nodeId)
     }
-    overlayLayer.appendChild(tooltipGroup)
     overlayLayer.appendChild(trigger)
+    overlayLayer.appendChild(tooltipGroup)
 
     if (levelEntries.length > 1) {
       const ringInnerRadius = Math.max(0, buttonWidth * 0.37)
@@ -718,8 +860,8 @@ const appendAnimatedTooltips = (svgRoot) => {
         if (nodeId) {
           sectorGroup.setAttribute('data-tooltip-node-id', nodeId)
         }
-        overlayLayer.appendChild(sectorGroup)
         overlayLayer.appendChild(sector)
+        overlayLayer.appendChild(sectorGroup)
       })
     }
   })

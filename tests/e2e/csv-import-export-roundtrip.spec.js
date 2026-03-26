@@ -275,6 +275,22 @@ const collectCanvasGeometryMetrics = async (page) => {
   })
 }
 
+const extractCenterIconGeometryFromMarkup = (markup) => {
+  const transformMatch = markup.match(/class="skill-tree-center-icon[^"]*"[^>]*transform="translate\(([-\d.]+),\s*([-\d.]+)\)"/)
+  const imageMatch = markup.match(/class="skill-tree-center-icon__image"[^>]*x="([-.\d]+)"[^>]*y="([-.\d]+)"[^>]*width="([-.\d]+)"[^>]*height="([-.\d]+)"/)
+  const hitAreaMatch = markup.match(/class="skill-tree-center-icon__hit-area"[^>]*r="([-.\d]+)"|<circle[^>]*r="([-.\d]+)"[^>]*class="skill-tree-center-icon__hit-area"/)
+
+  return {
+    centerX: transformMatch ? Number(transformMatch[1]) : Number.NaN,
+    centerY: transformMatch ? Number(transformMatch[2]) : Number.NaN,
+    imageX: imageMatch ? Number(imageMatch[1]) : Number.NaN,
+    imageY: imageMatch ? Number(imageMatch[2]) : Number.NaN,
+    imageWidth: imageMatch ? Number(imageMatch[3]) : Number.NaN,
+    imageHeight: imageMatch ? Number(imageMatch[4]) : Number.NaN,
+    hitRadius: hitAreaMatch ? Number(hitAreaMatch[1] ?? hitAreaMatch[2]) : Number.NaN,
+  }
+}
+
 const persistMetrics = (phase, payload) => {
   const metricsPath = resolve(metricsOutputDir, `skilltree-metrics-${phase}-${Date.now()}.json`)
   persistTextFile(metricsPath, JSON.stringify(payload, null, 2))
@@ -889,6 +905,26 @@ test.describe('CSV template roundtrip via builder UI', () => {
     expect(exportedSvg).not.toContain('/blob.svg')
     expect(exportedSvg).toContain('<image class="skill-tree-center-icon__image"')
     expect(exportedSvg).not.toContain('<div xmlns="http://www.w3.org/1999/xhtml" class="skill-tree-center-icon__foreign"')
+
+    const htmlCenterGeometry = extractCenterIconGeometryFromMarkup(exportedHtml)
+    const svgCenterGeometry = extractCenterIconGeometryFromMarkup(exportedSvg)
+
+    expect(htmlCenterGeometry.imageWidth).toBe(156)
+    expect(htmlCenterGeometry.imageHeight).toBe(156)
+    expect(htmlCenterGeometry.imageX).toBe(-78)
+    expect(htmlCenterGeometry.imageY).toBe(-78)
+    expect(htmlCenterGeometry.hitRadius).toBe(78)
+
+    expect(svgCenterGeometry.imageWidth).toBe(156)
+    expect(svgCenterGeometry.imageHeight).toBe(156)
+    expect(svgCenterGeometry.imageX).toBe(-78)
+    expect(svgCenterGeometry.imageY).toBe(-78)
+    expect(svgCenterGeometry.hitRadius).toBe(78)
+
+    expect(Number.isFinite(htmlCenterGeometry.centerX)).toBe(true)
+    expect(Number.isFinite(htmlCenterGeometry.centerY)).toBe(true)
+    expect(Number.isFinite(svgCenterGeometry.centerX)).toBe(true)
+    expect(Number.isFinite(svgCenterGeometry.centerY)).toBe(true)
 
     expect(existsSync(persistedExportPath)).toBe(true)
 

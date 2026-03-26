@@ -75,6 +75,37 @@ describe('htmlExport', () => {
     expect(html).toContain('contentMinY')
   })
 
+  it('omits level labels for single-level release notes and keeps them for multi-level nodes', () => {
+    const singleLevelDocument = createDocument()
+    const singleLevelHtml = buildHtmlExportDocument({
+      svgMarkup: '<svg viewBox="0 0 100 100"></svg>',
+      roadmapDocument: singleLevelDocument,
+      styleText: '',
+      title: 'Skill Tree Viewer',
+    })
+
+    expect(singleLevelHtml).toContain('<span>Now</span>')
+    expect(singleLevelHtml).not.toContain('Level 1 · Now')
+
+    const multiLevelDocument = createDocument()
+    multiLevelDocument.children[0].levels.push({
+      id: 'level-2',
+      label: 'Level 2',
+      status: 'now',
+      releaseNote: 'Follow-up release note.',
+    })
+
+    const multiLevelHtml = buildHtmlExportDocument({
+      svgMarkup: '<svg viewBox="0 0 100 100"></svg>',
+      roadmapDocument: multiLevelDocument,
+      styleText: '',
+      title: 'Skill Tree Viewer',
+    })
+
+    expect(multiLevelHtml).toContain('Level 1 · Now')
+    expect(multiLevelHtml).toContain('Level 2 · Now')
+  })
+
   it('extracts and reads embedded document payload from exported html', () => {
     const document = createDocument()
     const html = buildHtmlExportDocument({

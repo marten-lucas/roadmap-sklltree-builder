@@ -104,6 +104,14 @@ test.describe('Rendered export viewer', () => {
 
       const canvas = exportPage.locator('#html-export-tree-canvas')
       await expect.poll(async () => canvas.evaluate((element) => element.style.transform)).not.toBe('translate(0px, 0px) scale(1)')
+      const shellBox = await exportPage.locator('#html-export-tree-shell').boundingBox()
+      const centerIconBox = await exportPage.locator('.html-export__tree-shell .skill-tree-center-icon').boundingBox()
+      expect(shellBox).toBeTruthy()
+      expect(centerIconBox).toBeTruthy()
+      expect(centerIconBox.x).toBeGreaterThanOrEqual(shellBox.x)
+      expect(centerIconBox.y).toBeGreaterThanOrEqual(shellBox.y)
+      expect(centerIconBox.x).toBeLessThan(shellBox.x + shellBox.width)
+      expect(centerIconBox.y).toBeLessThan(shellBox.y + shellBox.height)
       await expect(exportPage.locator('foreignObject.skill-node-export-anchor .skill-node-button').first()).toBeVisible()
     } finally {
       await exportPage.close()
@@ -166,6 +174,8 @@ test.describe('Rendered export viewer', () => {
 
       const exportedTooltipCss = await getTooltipCssText(exportPage)
       expect(exportedTooltipCss).toContain('.skill-node-tooltip')
+      expect(exportedTooltipCss).toContain('max-width: 44rem')
+      expect(exportedTooltipCss).toMatch(/text-rendering:\s*geometricprecision/i)
 
       expect(exportedTooltipCss).toContain(builderTooltipCss)
     } finally {
