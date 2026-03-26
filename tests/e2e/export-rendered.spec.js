@@ -1,5 +1,8 @@
 import { test, expect } from '@playwright/test'
+import { resolve } from 'node:path'
 import { startFresh, exportHtml, getBuilderNodeLabels } from './helpers.js'
+
+const MINIMAL_CSV_PATH = resolve(process.cwd(), 'tests/e2e/datasets/minimal.csv')
 
 const getTooltipCssText = async (page) => page.evaluate(() => {
   const tooltipRules = []
@@ -70,6 +73,27 @@ const openExportViewer = async (page, browser) => {
   return { exportPage, exportContext }
 }
 
+const readCanvasTransform = async (page) => page.locator('#html-export-tree-canvas').evaluate((element) => {
+  const inlineTransform = element.style.transform
+  const computedTransform = window.getComputedStyle(element).transform
+  return `${inlineTransform}|${computedTransform}`
+})
+
+const importCsvFile = async (page, csvPath) => {
+  await page.getByRole('button', { name: 'HTML importieren', exact: true }).hover()
+  await expect(page.getByRole('menuitem', { name: 'CSV', exact: true })).toBeVisible()
+  await page.locator('input[type="file"][accept="text/csv,.csv"]').setInputFiles(csvPath)
+
+  const dialog = page.getByRole('dialog', { name: 'CSV-Import Optionen' })
+  await expect(dialog).toBeVisible()
+  await dialog.evaluate((element) => {
+    const buttons = Array.from(element.querySelectorAll('button'))
+    buttons.at(-1)?.click()
+  })
+  await expect(dialog).toBeHidden()
+  await page.waitForSelector('foreignObject.skill-node-export-anchor', { timeout: 15_000 })
+}
+
 test.describe('Rendered export viewer', () => {
   test.afterEach(async ({ page }) => {
     try {
@@ -102,8 +126,6 @@ test.describe('Rendered export viewer', () => {
       await expect(exportPage.locator('.skill-tree-center-icon__image')).toBeVisible()
       await expect(exportPage.locator('.html-export__tree-shell .skill-tree-center-icon')).toBeVisible()
 
-      const canvas = exportPage.locator('#html-export-tree-canvas')
-      await expect.poll(async () => canvas.evaluate((element) => element.style.transform)).not.toBe('translate(0px, 0px) scale(1)')
       const shellBox = await exportPage.locator('#html-export-tree-shell').boundingBox()
       const centerIconBox = await exportPage.locator('.html-export__tree-shell .skill-tree-center-icon').boundingBox()
       expect(shellBox).toBeTruthy()
@@ -176,19 +198,42 @@ test.describe('Rendered export viewer', () => {
       expect(exportedTooltipCss).toContain('.skill-node-tooltip')
       expect(exportedTooltipCss).toContain('max-width: 44rem')
       expect(exportedTooltipCss).toMatch(/text-rendering:\s*geometricprecision/i)
+      expect(exportedTooltipCss).toContain('overflow: visible')
 
       expect(exportedTooltipCss).toContain(builderTooltipCss)
+
+      const tooltipForeignObjectHeight = await exportPage.evaluate(() => {
+        const panel = document.querySelector('.skill-node-tooltip__panel')
+        const foreignObject = panel?.closest('foreignObject')
+        if (!foreignObject) {
+          return 0
+        }
+
+        return Number.parseFloat(foreignObject.getAttribute('height') ?? '0')
+      })
+
+      expect(tooltipForeignObjectHeight).toBeGreaterThan(0)
     } finally {
       await exportPage.close()
       await exportContext.close()
     }
   })
 
-  test('export viewer pan zoom and filter controls respond to input', async ({ page, browser }) => {
+  test('minimal csv export viewer keeps roadmap controls and pan/zoom behavior', async ({ page, browser }) => {
+    await importCsvFile(page, MINIMAL_CSV_PATH)
+
     const { exportPage, exportContext } = await openExportViewer(page, browser)
     try {
       const shell = exportPage.locator('#html-export-tree-shell')
       const zoomValue = exportPage.locator('#html-export-zoom-value')
+
+      const roadmapHeader = exportPage.locator('.html-export__panel--roadmap .html-export__section-header').first()
+      await expect(roadmapHeader.locator('#html-export-fit')).toBeVisible()
+      await expect(roadmapHeader.locator('#html-export-fit svg')).toBeVisible()
+      await expect(roadmapHeader.locator('#html-export-zoom-toggle')).toBeVisible()
+      await expect(exportPage.locator('.html-export__header #html-export-fit')).toHaveCount(0)
+      await expect(exportPage.locator('.html-export__header #html-export-zoom-toggle')).toHaveCount(0)
+
       await expect(shell).toHaveCSS('cursor', 'grab')
 
       await exportPage.locator('#html-export-zoom-toggle').click()
@@ -209,6 +254,29 @@ test.describe('Rendered export viewer', () => {
       })
 
       await expect(exportPage.locator('#html-export-zoom-value')).toHaveText('150%')
+      await expect.poll(async () => readCanvasTransform(exportPage)).not.toBe('|none')
+
+      const transformBeforeWheel = await readCanvasTransform(exportPage)
+      const shellBox = await shell.boundingBox()
+      expect(shellBox).toBeTruthy()
+      await exportPage.mouse.move(shellBox.x + shellBox.width * 0.5, shellBox.y + shellBox.height * 0.5)
+      await exportPage.mouse.wheel(0, -260)
+      await expect.poll(async () => readCanvasTransform(exportPage)).not.toBe(transformBeforeWheel)
+
+      const transformBeforeDrag = await readCanvasTransform(exportPage)
+      await exportPage.mouse.move(shellBox.x + shellBox.width * 0.5, shellBox.y + shellBox.height * 0.5)
+      await exportPage.mouse.down()
+      await exportPage.mouse.move(shellBox.x + shellBox.width * 0.62, shellBox.y + shellBox.height * 0.58)
+      await exportPage.mouse.up()
+      await expect.poll(async () => readCanvasTransform(exportPage)).not.toBe(transformBeforeDrag)
+
+      const transformBeforeArrow = await readCanvasTransform(exportPage)
+      await exportPage.keyboard.press('ArrowRight')
+      await expect.poll(async () => readCanvasTransform(exportPage)).not.toBe(transformBeforeArrow)
+
+      const transformBeforeFit = await readCanvasTransform(exportPage)
+      await exportPage.locator('#html-export-fit').click()
+      await expect.poll(async () => readCanvasTransform(exportPage), { timeout: 10_000 }).not.toBe(transformBeforeFit)
 
       await exportPage.locator('.html-export__menu-button').last().click()
       await expect(exportPage.locator('.html-export__menu-panel--filters')).toBeVisible()

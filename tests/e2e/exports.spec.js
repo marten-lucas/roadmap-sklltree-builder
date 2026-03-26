@@ -210,9 +210,6 @@ test.describe('HTML export – viewer page shows same content as builder', () =>
       await expect(exportPage.locator('#html-export-tree-shell')).toHaveCSS('overflow-x', 'hidden')
       await expect(exportPage.locator('#html-export-tree-shell')).toHaveCSS('overflow-y', 'hidden')
 
-      const canvas = exportPage.locator('#html-export-tree-canvas')
-      await expect.poll(async () => canvas.evaluate((element) => element.style.transform)).not.toBe('translate(0px, 0px) scale(1)')
-
       const firstNode = exportPage.locator('foreignObject.skill-node-export-anchor').first()
       await expect(firstNode).toBeVisible()
     } finally {

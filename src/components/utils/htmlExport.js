@@ -301,6 +301,22 @@ const buildViewerScript = () => `
         dragOriginY: 0,
       }
 
+      const ensureFinitePanZoomState = () => {
+        if (!Number.isFinite(panZoomState.scale)) {
+          panZoomState.scale = 1
+        }
+
+        panZoomState.scale = clamp(panZoomState.scale, VIEWPORT.minScale, VIEWPORT.maxScale)
+
+        if (!Number.isFinite(panZoomState.translateX)) {
+          panZoomState.translateX = 0
+        }
+
+        if (!Number.isFinite(panZoomState.translateY)) {
+          panZoomState.translateY = 0
+        }
+      }
+
       const clamp = (value, min, max) => Math.max(min, Math.min(max, value))
 
       const snapScaleToStep = (value, steps = VIEWPORT_ZOOM_STEPS) => {
@@ -337,6 +353,10 @@ const buildViewerScript = () => `
       const getViewportKeyboardAction = ({ key, ctrlKey = false, metaKey = false, shiftKey = false, isEditableTarget = false }) => {
         if (isEditableTarget) {
           return null
+        }
+
+        if (key === ' ') {
+          return 'pan-hold'
         }
 
         const normalizedKey = String(key ?? '').toLowerCase()
@@ -409,7 +429,7 @@ const buildViewerScript = () => `
         const centerGroups = svgRoot?.querySelectorAll('.skill-tree-center-icon') ?? []
         centerGroups.forEach((centerGroup) => {
           const transform = centerGroup.getAttribute('transform') ?? ''
-          const match = transform.match(/translate[(]([-0-9.]+)[, ]+([-0-9.]+)[)]/)
+          const match = transform.match(/translate[(] *([-0-9.]+)(?:[, ]+)([-0-9.]+) *[)]/)
           const centerX = match ? Number.parseFloat(match[1]) : Number.NaN
           const centerY = match ? Number.parseFloat(match[2]) : Number.NaN
 
@@ -463,6 +483,8 @@ const buildViewerScript = () => `
           return
         }
 
+        ensureFinitePanZoomState()
+
         const { baseWidth, baseHeight } = getSvgMetrics()
         treeCanvas.style.width = String(baseWidth) + 'px'
         treeCanvas.style.height = String(baseHeight) + 'px'
@@ -481,12 +503,18 @@ const buildViewerScript = () => `
         if (treeShell) {
           treeShell.style.cursor = panZoomState.isDragging ? 'grabbing' : 'grab'
         }
+
+        if (treeCanvas) {
+          treeCanvas.style.cursor = panZoomState.isDragging ? 'grabbing' : 'grab'
+        }
       }
 
       const zoomToScale = (nextScale, anchorX, anchorY) => {
         if (!treeShell || !treeCanvas) {
           return
         }
+
+        ensureFinitePanZoomState()
 
         const nextClampedScale = clamp(nextScale, VIEWPORT.minScale, VIEWPORT.maxScale)
         const scaleRatio = nextClampedScale / panZoomState.scale
@@ -525,49 +553,59 @@ const buildViewerScript = () => `
 
         const { baseWidth, baseHeight } = getSvgMetrics()
         const viewBox = svgRoot?.viewBox?.baseVal
+        const viewBoxX = viewBox?.x ?? 0
+        const viewBoxY = viewBox?.y ?? 0
         const shellWidth = treeShell.clientWidth || baseWidth
         const shellHeight = treeShell.clientHeight || baseHeight
         const occupied = getOccupiedBounds()
         const padding = VIEWPORT.fitPadding
-        const contentMinX = occupied.minX - (viewBox?.x ?? 0)
-        const contentMinY = occupied.minY - (viewBox?.y ?? 0)
+        const boundsX = occupied.minX - viewBoxX
+        const boundsY = occupied.minY - viewBoxY
         const contentWidth = Math.max(1, occupied.maxX - occupied.minX)
         const contentHeight = Math.max(1, occupied.maxY - occupied.minY)
         const centerGroup = svgRoot?.querySelector('.skill-tree-center-icon')
         const centerTransform = String(centerGroup?.getAttribute('transform') ?? '').trim()
-        let centerX = contentMinX + contentWidth / 2
-        let centerY = contentMinY + contentHeight / 2
+        let centerX = boundsX + contentWidth / 2
+        let centerY = boundsY + contentHeight / 2
 
-        if (centerTransform.startsWith('translate(') && centerTransform.endsWith(')')) {
-          const [rawX, rawY] = centerTransform
-            .slice('translate('.length, -1)
-            .split(',')
-            .map((value) => value.trim())
-          const parsedX = Number.parseFloat(rawX)
-          const parsedY = Number.parseFloat(rawY)
+        const centerMatch = centerTransform.match(/translate[(] *([-0-9.]+)(?:[, ]+)([-0-9.]+) *[)]/)
+        if (centerMatch) {
+          const parsedX = Number.parseFloat(centerMatch[1])
+          const parsedY = Number.parseFloat(centerMatch[2])
 
-          if (Number.isFinite(parsedX)) centerX = parsedX
-          if (Number.isFinite(parsedY)) centerY = parsedY
+          if (Number.isFinite(parsedX)) centerX = parsedX - viewBoxX
+          if (Number.isFinite(parsedY)) centerY = parsedY - viewBoxY
         }
-        const halfWidth = Math.max(centerX - occupied.minX, occupied.maxX - centerX)
-        const halfHeight = Math.max(centerY - occupied.minY, occupied.maxY - centerY)
+        const boundsMaxX = boundsX + contentWidth
+        const boundsMaxY = boundsY + contentHeight
+        const halfWidth = Math.max(centerX - boundsX, boundsMaxX - centerX)
+        const halfHeight = Math.max(centerY - boundsY, boundsMaxY - centerY)
         const fittedBoundsWidth = Math.max(contentWidth, halfWidth * 2)
         const fittedBoundsHeight = Math.max(contentHeight, halfHeight * 2)
+        const fittedBoundsX = centerX - halfWidth
+        const fittedBoundsY = centerY - halfHeight
         const fittedScale = clamp(
             Math.min(shellWidth / (fittedBoundsWidth + padding * 2), shellHeight / (fittedBoundsHeight + padding * 2)),
           VIEWPORT.minScale,
           VIEWPORT.maxScale,
         )
 
+        if (!Number.isFinite(fittedScale) || !Number.isFinite(fittedBoundsX) || !Number.isFinite(fittedBoundsY)) {
+          panZoomState.scale = 1
+          panZoomState.translateX = 0
+          panZoomState.translateY = 0
+          applyPanZoom()
+          return
+        }
+
         panZoomState.scale = fittedScale
-          panZoomState.translateX = ((shellWidth - fittedBoundsWidth * fittedScale) / 2) - (centerX - halfWidth) * fittedScale
-          panZoomState.translateY = ((shellHeight - fittedBoundsHeight * fittedScale) / 2) - (centerY - halfHeight) * fittedScale
+        panZoomState.translateX = ((shellWidth - fittedBoundsWidth * fittedScale) / 2) - (fittedBoundsX * fittedScale)
+        panZoomState.translateY = ((shellHeight - fittedBoundsHeight * fittedScale) / 2) - (fittedBoundsY * fittedScale)
         applyPanZoom()
       }
 
       const beginDrag = (event) => {
-        const isBackgroundTarget = event.target === treeShell || event.target === svgRoot
-        if (!treeShell || !treeCanvas || event.button !== 0 || (!panZoomState.isPanModeActive && !isBackgroundTarget)) {
+        if (!treeShell || !treeCanvas || event.button !== 0) {
           return
         }
 
@@ -647,14 +685,24 @@ const buildViewerScript = () => `
           })
 
           if (!action) {
-            if (event.key === ' ' && !editableTarget) {
+            const hasSelectionModifiers = event.ctrlKey || event.metaKey || event.shiftKey || event.altKey
+            if (!editableTarget && !hasSelectionModifiers && (event.key === 'ArrowLeft' || event.key === 'ArrowRight' || event.key === 'ArrowUp' || event.key === 'ArrowDown')) {
               event.preventDefault()
-              panZoomState.isPanModeActive = true
+              if (event.key === 'ArrowLeft') panZoomState.translateX -= 48
+              if (event.key === 'ArrowRight') panZoomState.translateX += 48
+              if (event.key === 'ArrowUp') panZoomState.translateY -= 48
+              if (event.key === 'ArrowDown') panZoomState.translateY += 48
+              applyPanZoom()
             }
             return
           }
 
           event.preventDefault()
+
+          if (action === 'pan-hold') {
+            panZoomState.isPanModeActive = true
+            return
+          }
 
           if (action === 'zoom-in') {
             zoomByDirection(1)
@@ -736,6 +784,15 @@ const buildViewerScript = () => `
           fitToWidth()
         }
 
+        const scheduleInitialFit = () => {
+          const delays = [0, 64, 180, 420]
+          delays.forEach((delay) => {
+            window.setTimeout(() => {
+              fitWhenReady()
+            }, delay)
+          })
+        }
+
         if (typeof window.ResizeObserver === 'function') {
           const resizeObserver = new window.ResizeObserver(() => {
             if (panZoomState.scale <= 1.6) {
@@ -746,8 +803,8 @@ const buildViewerScript = () => `
         }
 
         window.requestAnimationFrame(fitWhenReady)
-        window.addEventListener('load', fitWhenReady, { once: true })
-        window.setTimeout(fitWhenReady, 0)
+        window.addEventListener('load', scheduleInitialFit, { once: true })
+        scheduleInitialFit()
       }
 
       const setNodeMode = (anchor, mode) => {
@@ -1177,6 +1234,18 @@ export const buildHtmlExportDocument = ({
 
     .html-export__action--fit {
       align-self: center;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 44px;
+      min-height: 44px;
+      padding: 0;
+    }
+
+    .html-export__action-icon {
+      width: 16px;
+      height: 16px;
+      display: inline-flex;
     }
 
     .html-export__menu-action:hover {
@@ -1238,6 +1307,14 @@ export const buildHtmlExportDocument = ({
       justify-content: space-between;
       gap: 16px;
       margin-bottom: 14px;
+    }
+
+    .html-export__roadmap-actions {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
     }
 
     .html-export__eyebrow {
@@ -1477,6 +1554,10 @@ export const buildHtmlExportDocument = ({
         flex-direction: column;
         align-items: flex-start;
       }
+
+      .html-export__roadmap-actions {
+        justify-content: flex-start;
+      }
     }
 
     @media print {
@@ -1532,25 +1613,6 @@ export const buildHtmlExportDocument = ({
         <p class="html-export__section-subtitle">${escapeHtml(subtitleBits.filter(Boolean).join(' · '))}</p>
       </div>
       <div class="html-export__actions">
-        <button id="html-export-fit" class="html-export__action html-export__action--fit" type="button" aria-label="Fit to screen">Fit</button>
-        <details class="html-export__menu html-export__menu--zoom">
-          <summary id="html-export-zoom-toggle" class="html-export__menu-button" aria-label="Zoom" aria-expanded="false">
-            <span class="html-export__menu-icon" aria-hidden="true">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <circle cx="11" cy="11" r="7" />
-                <path d="M20 20l-3.5-3.5" />
-              </svg>
-            </span>
-          </summary>
-          <div class="html-export__menu-panel html-export__menu-panel--zoom">
-            <div class="html-export__zoom-controls">
-              <button id="html-export-zoom-out" class="html-export__menu-action html-export__menu-action--icon" type="button" aria-label="Zoom out">−</button>
-              <input id="html-export-zoom-slider" class="html-export__zoom-slider" type="range" min="25" max="200" step="1" value="100" aria-label="Zoom">
-              <span id="html-export-zoom-value" class="html-export__zoom-value">100%</span>
-              <button id="html-export-zoom-in" class="html-export__menu-action html-export__menu-action--icon" type="button" aria-label="Zoom in">+</button>
-            </div>
-          </div>
-        </details>
         <details class="html-export__menu">
           <summary class="html-export__menu-button" aria-label="Export">
             <span class="html-export__menu-icon" aria-hidden="true">
@@ -1575,38 +1637,68 @@ export const buildHtmlExportDocument = ({
     <section class="html-export__panel html-export__panel--roadmap">
       <header class="html-export__section-header">
         <p class="html-export__eyebrow">Roadmap</p>
-        <details class="html-export__menu">
-          <summary class="html-export__menu-button" aria-label="Filter">
-            <span class="html-export__menu-icon" aria-hidden="true">
+        <div class="html-export__roadmap-actions">
+          <button id="html-export-fit" class="html-export__action html-export__action--fit" type="button" aria-label="Fit to screen">
+            <span class="html-export__action-icon" aria-hidden="true">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M4 6h16" />
-                <path d="M7 12h10" />
-                <path d="M10 18h4" />
+                <path d="M4 4h6v2H6v4H4z" />
+                <path d="M20 4h-6v2h4v4h2z" />
+                <path d="M4 20h6v-2H6v-4H4z" />
+                <path d="M20 20h-6v-2h4v-4h2z" />
               </svg>
             </span>
-          </summary>
-          <div class="html-export__menu-panel html-export__menu-panel--filters">
-            <div class="html-export__menu-filter">
-              <label>
-                <span>Scope</span>
-                <select id="html-export-filter-scope">
-                  <option value="__all__">Alle Scopes</option>
-                  ${(roadmapDocument.scopes ?? []).map((scope) => (`
-                    <option value="${escapeHtml(scope.id)}">${escapeHtml(scope.label)}</option>
-                  `)).join('')}
-                </select>
-              </label>
-              <label>
-                <span>Release</span>
-                <select id="html-export-filter-release">
-                  <option value="all">All</option>
-                  <option value="now">Now</option>
-                  <option value="next">Next</option>
-                </select>
-              </label>
+          </button>
+          <details class="html-export__menu html-export__menu--zoom">
+            <summary id="html-export-zoom-toggle" class="html-export__menu-button" aria-label="Zoom" aria-expanded="false">
+              <span class="html-export__menu-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="11" cy="11" r="7" />
+                  <path d="M20 20l-3.5-3.5" />
+                </svg>
+              </span>
+            </summary>
+            <div class="html-export__menu-panel html-export__menu-panel--zoom">
+              <div class="html-export__zoom-controls">
+                <button id="html-export-zoom-out" class="html-export__menu-action html-export__menu-action--icon" type="button" aria-label="Zoom out">−</button>
+                <input id="html-export-zoom-slider" class="html-export__zoom-slider" type="range" min="25" max="200" step="1" value="100" aria-label="Zoom">
+                <span id="html-export-zoom-value" class="html-export__zoom-value">100%</span>
+                <button id="html-export-zoom-in" class="html-export__menu-action html-export__menu-action--icon" type="button" aria-label="Zoom in">+</button>
+              </div>
             </div>
-          </div>
-        </details>
+          </details>
+          <details class="html-export__menu">
+            <summary class="html-export__menu-button" aria-label="Filter">
+              <span class="html-export__menu-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M4 6h16" />
+                  <path d="M7 12h10" />
+                  <path d="M10 18h4" />
+                </svg>
+              </span>
+            </summary>
+            <div class="html-export__menu-panel html-export__menu-panel--filters">
+              <div class="html-export__menu-filter">
+                <label>
+                  <span>Scope</span>
+                  <select id="html-export-filter-scope">
+                    <option value="__all__">Alle Scopes</option>
+                    ${(roadmapDocument.scopes ?? []).map((scope) => (`
+                      <option value="${escapeHtml(scope.id)}">${escapeHtml(scope.label)}</option>
+                    `)).join('')}
+                  </select>
+                </label>
+                <label>
+                  <span>Release</span>
+                  <select id="html-export-filter-release">
+                    <option value="all">All</option>
+                    <option value="now">Now</option>
+                    <option value="next">Next</option>
+                  </select>
+                </label>
+              </div>
+            </div>
+          </details>
+        </div>
       </header>
       <div id="html-export-tree-shell" class="html-export__tree-shell">
         <div id="html-export-tree-canvas" class="html-export__tree-canvas">${svgMarkup}</div>

@@ -570,7 +570,7 @@ const injectExportTooltipStyles = (svgRoot) => {
       -webkit-backdrop-filter: ${TOOLTIP_HTML_BOX_STYLES.WebkitBackdropFilter};
       border-radius: ${TOOLTIP_HTML_BOX_STYLES.borderRadius};
       box-sizing: border-box;
-      overflow: hidden;
+      overflow: visible;
       font-family: ${TOOLTIP_FONT_FAMILY};
       -webkit-font-smoothing: ${TOOLTIP_HTML_BOX_STYLES.WebkitFontSmoothing};
       -moz-osx-font-smoothing: ${TOOLTIP_HTML_BOX_STYLES.MozOsxFontSmoothing};
@@ -703,6 +703,7 @@ const buildTooltipGroup = ({ centerX, centerY, title, entries }) => {
   const tooltipWidth = TOOLTIP_SVG_LAYOUT.width
   const cardsHeight = entries.reduce((sum, entry) => sum + estimateTooltipCardHeight(entry), 0)
   const tooltipHeight = TOOLTIP_SVG_LAYOUT.heightBase + cardsHeight + Math.max(0, (entries.length - 1) * 8)
+  const tooltipHeightSafety = 6
   const boxX = centerX - tooltipWidth / 2
   const boxY = centerY - TOOLTIP_SVG_LAYOUT.centerGap - tooltipHeight
 
@@ -710,7 +711,7 @@ const buildTooltipGroup = ({ centerX, centerY, title, entries }) => {
   foreignObject.setAttribute('x', String(boxX))
   foreignObject.setAttribute('y', String(boxY))
   foreignObject.setAttribute('width', String(tooltipWidth))
-  foreignObject.setAttribute('height', String(tooltipHeight))
+  foreignObject.setAttribute('height', String(tooltipHeight + tooltipHeightSafety))
 
   const wrapper = document.createElementNS('http://www.w3.org/1999/xhtml', 'div')
   wrapper.setAttribute('xmlns', 'http://www.w3.org/1999/xhtml')
