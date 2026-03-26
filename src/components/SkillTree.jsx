@@ -1,4 +1,4 @@
-import { Alert } from '@mantine/core'
+import { Alert, Button, Checkbox, Group, Modal, Stack, Text } from '@mantine/core'
 import { useEffect, useMemo, useReducer, useRef, useState } from 'react'
 import { flushSync } from 'react-dom'
 import { TransformComponent, TransformWrapper } from 'react-zoom-pan-pinch'
@@ -70,24 +70,19 @@ import {
   getReleaseVisibilityMode,
   nodeMatchesScopeFilter,
 } from './utils/visibility'
-import {
-  VIEWPORT_DEFAULTS,
-  VIEWPORT_ZOOM_STEPS,
-  clampScale,
-  computeFitScale,
-  getViewportKeyboardAction,
-  getNextZoomStep,
-  snapScaleToStep,
-} from './utils/viewport'
+import { VIEWPORT_DEFAULTS, computeFitScale, getNextZoomStep, getViewportKeyboardAction } from './utils/viewport'
 import { getInitialRoadmapDocument } from './utils/document'
 import { resolveInspectorSelectedNode } from './utils/selection'
-import { shouldCenterInspectorOnCommit } from './utils/inspectorCommit'
 
 // `resolveInspectorSelectedNode` is exported from `src/components/utils/selection.js`
 // Tests/importers should import from that module instead of re-exporting from here.
 
 const AUTOSAVE_DEBOUNCE_MS = 450
 const MINIMAL_NODE_SIZE = 36
+const DEFAULT_CSV_IMPORT_OPTIONS = {
+  ignoreSegments: false,
+  ignoreManualLevels: false,
+}
 
 export function SkillTree() {
   const [documentHistory, dispatchDocument] = useReducer(
@@ -101,10 +96,13 @@ export function SkillTree() {
   const documentFileInputRef = useRef(null)
   const csvDocumentFileInputRef = useRef(null)
   const canvasSvgRef = useRef(null)
-  const [lastSavedAt, setLastSavedAt] = useState(null)
   const transformApiRef = useRef(null)
-  const [currentZoomScale, setCurrentZoomScale] = useState(1)
   const [isPanModeActive, setIsPanModeActive] = useState(false)
+  const [currentZoomScale, setCurrentZoomScale] = useState(1)
+  const [lastSavedAt, setLastSavedAt] = useState(null)
+  const [csvImportDialogOpen, setCsvImportDialogOpen] = useState(false)
+  const [csvImportOptions, setCsvImportOptions] = useState(DEFAULT_CSV_IMPORT_OPTIONS)
+  const [pendingCsvImport, setPendingCsvImport] = useState(null)
 
   const {
     selectedNodeId,
@@ -157,119 +155,6 @@ export function SkillTree() {
   }, [canvas.height, canvas.width, viewportHeight, viewportWidth])
   const initialPositionX = viewportWidth / 2 - canvas.origin.x * initialViewScale
   const initialPositionY = viewportHeight / 2 - canvas.origin.y * initialViewScale
-
-  useEffect(() => {
-    setCurrentZoomScale(initialViewScale)
-  }, [initialViewScale])
-
-  const getZoomAnchorPoint = () => {
-    const selectedLayout = selectedNodeId ? layoutNodesById.get(selectedNodeId) : null
-
-    if (selectedLayout?.x != null && selectedLayout?.y != null) {
-      return { x: selectedLayout.x, y: selectedLayout.y }
-    }
-
-    return {
-      x: viewportWidth / 2,
-      y: viewportHeight / 2,
-    }
-  }
-
-  const handleZoomToScale = (nextScale) => {
-    const api = transformApiRef.current
-    if (!api) {
-      return
-    }
-
-    const snapped = snapScaleToStep(
-      clampScale(nextScale, VIEWPORT_DEFAULTS.minScale, VIEWPORT_DEFAULTS.maxScale),
-      VIEWPORT_ZOOM_STEPS,
-    )
-
-    const anchor = getZoomAnchorPoint()
-    api.zoomToElement?.(undefined)
-    api.zoomToPoint?.(snapped, anchor.x, anchor.y, 160, 'easeOut')
-
-    if (!api.zoomToPoint) {
-      const previousScale = api.state.scale || 1
-      const ratio = snapped / previousScale
-      const nextX = anchor.x - (anchor.x - api.state.positionX) * ratio
-      const nextY = anchor.y - (anchor.y - api.state.positionY) * ratio
-      api.setTransform(nextX, nextY, snapped, 160, 'easeOut')
-    }
-  }
-
-  const handleFitToScreen = () => {
-    const api = transformApiRef.current
-    if (!api) {
-      setTransformKey((current) => current + 1)
-      return
-    }
-
-    const nodeHalf = TREE_CONFIG.nodeSize / 2
-    let minX = canvas.origin.x - centerIconSize / 2
-    let maxX = canvas.origin.x + centerIconSize / 2
-    let minY = canvas.origin.y - centerIconSize / 2
-    let maxY = canvas.origin.y + centerIconSize / 2
-
-    for (const node of renderedNodes) {
-      minX = Math.min(minX, node.x - nodeHalf)
-      maxX = Math.max(maxX, node.x + nodeHalf)
-      minY = Math.min(minY, node.y - nodeHalf)
-      maxY = Math.max(maxY, node.y + nodeHalf)
-    }
-
-    const fitScale = computeFitScale({
-      contentWidth: maxX - minX,
-      contentHeight: maxY - minY,
-      viewportWidth,
-      viewportHeight,
-      minScale: VIEWPORT_DEFAULTS.minScale,
-      maxScale: VIEWPORT_DEFAULTS.maxScale,
-    })
-
-    const centerX = (minX + maxX) / 2
-    const centerY = (minY + maxY) / 2
-    const nextX = viewportWidth / 2 - centerX * fitScale
-    const nextY = viewportHeight / 2 - centerY * fitScale
-
-    api.setTransform(nextX, nextY, fitScale, 220, 'easeOut')
-  }
-
-  const handleZoomByDirection = (direction) => {
-    const nextScale = getNextZoomStep(
-      currentZoomScale,
-      direction,
-      VIEWPORT_ZOOM_STEPS,
-      VIEWPORT_DEFAULTS.minScale,
-      VIEWPORT_DEFAULTS.maxScale,
-    )
-
-    handleZoomToScale(nextScale)
-  }
-
-  const centerNodeInViewport = (nodeId) => {
-    const api = transformApiRef.current
-    const layoutNode = layoutNodesById.get(nodeId)
-
-    if (!api || !layoutNode) {
-      return
-    }
-
-    const scale = api.state.scale || currentZoomScale || 1
-    const nextX = viewportWidth / 2 - layoutNode.x * scale
-    const nextY = viewportHeight / 2 - layoutNode.y * scale
-    api.setTransform(nextX, nextY, scale, 180, 'easeOut')
-  }
-
-  const handlePanByKeyboard = (dx, dy) => {
-    const api = transformApiRef.current
-    if (!api) {
-      return
-    }
-
-    api.setTransform(api.state.positionX + dx, api.state.positionY + dy, api.state.scale, 120, 'easeOut')
-  }
   const centerIconSource = roadmapData.centerIconSrc ?? DEFAULT_CENTER_ICON_SRC
 
   const centerIconSize = useMemo(() => {
@@ -905,6 +790,12 @@ export function SkillTree() {
     csvDocumentFileInputRef.current?.click()
   }
 
+  const closeCsvImportDialog = () => {
+    setCsvImportDialogOpen(false)
+    setPendingCsvImport(null)
+    setCsvImportOptions(DEFAULT_CSV_IMPORT_OPTIONS)
+  }
+
   const handleUndo = () => {
     if (!canUndo) {
       return
@@ -1081,16 +972,33 @@ export function SkillTree() {
 
     try {
       const rawText = await file.text()
-      const nextDocument = readDocumentFromCsvText(rawText)
-      dispatchDocument({ type: 'replace', document: nextDocument })
-      setTransformKey((current) => current + 1)
-      resetSelections()
+      setPendingCsvImport({ fileName: file.name || 'skilltree-roadmap.csv', rawText })
+      setCsvImportOptions(DEFAULT_CSV_IMPORT_OPTIONS)
+      setCsvImportDialogOpen(true)
     } catch (error) {
       console.error('CSV import failed', error)
       const message = getCsvImportErrorMessage(error)
       window.alert(message)
     } finally {
       event.target.value = ''
+    }
+  }
+
+  const handleConfirmCsvImport = () => {
+    if (!pendingCsvImport) {
+      return
+    }
+
+    try {
+      const nextDocument = readDocumentFromCsvText(pendingCsvImport.rawText, csvImportOptions)
+      dispatchDocument({ type: 'replace', document: nextDocument })
+      setTransformKey((current) => current + 1)
+      resetSelections()
+      closeCsvImportDialog()
+    } catch (error) {
+      console.error('CSV import failed', error)
+      const message = getCsvImportErrorMessage(error)
+      window.alert(message)
     }
   }
 
@@ -1127,58 +1035,6 @@ export function SkillTree() {
         if (canRedo) {
           dispatchDocument({ type: 'redo' })
         }
-        return
-      }
-
-      const isEditableTarget = isEditableElement(event.target)
-
-      const viewportAction = getViewportKeyboardAction({
-        key: event.key,
-        ctrlKey: event.ctrlKey,
-        metaKey: event.metaKey,
-        shiftKey: event.shiftKey,
-        isEditableTarget,
-      })
-
-      if (viewportAction === 'zoom-in') {
-        event.preventDefault()
-        handleZoomByDirection(1)
-        return
-      }
-
-      if (viewportAction === 'zoom-out') {
-        event.preventDefault()
-        handleZoomByDirection(-1)
-        return
-      }
-
-      if (viewportAction === 'fit') {
-        event.preventDefault()
-        handleFitToScreen()
-        return
-      }
-
-      if (viewportAction === 'pan-left') {
-        event.preventDefault()
-        handlePanByKeyboard(48, 0)
-        return
-      }
-
-      if (viewportAction === 'pan-right') {
-        event.preventDefault()
-        handlePanByKeyboard(-48, 0)
-        return
-      }
-
-      if (viewportAction === 'pan-up') {
-        event.preventDefault()
-        handlePanByKeyboard(0, 48)
-        return
-      }
-
-      if (viewportAction === 'pan-down') {
-        event.preventDefault()
-        handlePanByKeyboard(0, -48)
         return
       }
 
@@ -1234,39 +1090,131 @@ export function SkillTree() {
       }
     }
 
-    const handlePanModeKeyDown = (event) => {
-      if (event.repeat) {
-        return
-      }
-
-      const isEditableTarget = isEditableElement(event.target)
-      const action = getViewportKeyboardAction({ key: event.key, spaceKey: event.key === ' ', isEditableTarget })
-      if (action === 'pan-hold') {
-        event.preventDefault()
-        setIsPanModeActive(true)
-      }
-    }
-
-    const handlePanModeKeyUp = (event) => {
-      if (event.key === ' ') {
-        setIsPanModeActive(false)
-      }
-    }
-
     window.addEventListener('keydown', handleKeyDown)
-    window.addEventListener('keydown', handlePanModeKeyDown)
-    window.addEventListener('keyup', handlePanModeKeyUp)
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown)
-      window.removeEventListener('keydown', handlePanModeKeyDown)
-      window.removeEventListener('keyup', handlePanModeKeyUp)
-    }
+    return () => window.removeEventListener('keydown', handleKeyDown)
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [canRedo, canUndo, roadmapData, selectedSegmentId, selectedNodeId, currentZoomScale])
+  }, [canRedo, canUndo, roadmapData, selectedSegmentId])
 
   const autosaveLabel = lastSavedAt
     ? `Autosave ${lastSavedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}`
     : 'Autosave aktiv'
+
+  const handleFitToScreen = () => {
+    if (!transformApiRef.current) return
+    const vw = window.innerWidth
+    const vh = window.innerHeight
+    const scale = computeFitScale({
+      contentWidth: canvas.width,
+      contentHeight: canvas.height,
+      viewportWidth: vw,
+      viewportHeight: vh,
+    })
+    transformApiRef.current.setTransform(
+      vw / 2 - canvas.origin.x * scale,
+      vh / 2 - canvas.origin.y * scale,
+      scale,
+      300,
+      'easeOut',
+    )
+  }
+
+  const handleZoomToScale = (scale) => {
+    if (!transformApiRef.current) return
+    const { positionX, positionY, scale: currentScale } = transformApiRef.current.state
+    const cx = window.innerWidth / 2
+    const cy = window.innerHeight / 2
+    transformApiRef.current.setTransform(
+      cx - (cx - positionX) * (scale / currentScale),
+      cy - (cy - positionY) * (scale / currentScale),
+      scale,
+      200,
+      'easeOut',
+    )
+  }
+
+  const handleZoomIn = () => {
+    if (!transformApiRef.current) return
+    handleZoomToScale(getNextZoomStep(transformApiRef.current.state.scale, 1))
+  }
+
+  const handleZoomOut = () => {
+    if (!transformApiRef.current) return
+    handleZoomToScale(getNextZoomStep(transformApiRef.current.state.scale, -1))
+  }
+
+  useEffect(() => {
+    const fitToScreen = () => {
+      if (!transformApiRef.current) return
+      const vw = window.innerWidth
+      const vh = window.innerHeight
+      const scale = computeFitScale({
+        contentWidth: canvas.width,
+        contentHeight: canvas.height,
+        viewportWidth: vw,
+        viewportHeight: vh,
+      })
+      transformApiRef.current.setTransform(
+        vw / 2 - canvas.origin.x * scale,
+        vh / 2 - canvas.origin.y * scale,
+        scale,
+        300,
+        'easeOut',
+      )
+    }
+
+    const zoomByStep = (direction) => {
+      if (!transformApiRef.current) return
+      const { positionX, positionY, scale: currentScale } = transformApiRef.current.state
+      const targetScale = getNextZoomStep(currentScale, direction)
+      const cx = window.innerWidth / 2
+      const cy = window.innerHeight / 2
+      transformApiRef.current.setTransform(
+        cx - (cx - positionX) * (targetScale / currentScale),
+        cy - (cy - positionY) * (targetScale / currentScale),
+        targetScale,
+        200,
+        'easeOut',
+      )
+    }
+
+    const panBy = (dx, dy) => {
+      if (!transformApiRef.current) return
+      const { positionX, positionY, scale } = transformApiRef.current.state
+      transformApiRef.current.setTransform(positionX + dx, positionY + dy, scale, 120, 'linear')
+    }
+
+    const handleViewportKeyDown = (event) => {
+      const action = getViewportKeyboardAction({
+        key: event.key,
+        ctrlKey: event.ctrlKey,
+        metaKey: event.metaKey,
+        shiftKey: event.shiftKey,
+        isEditableTarget: isEditableElement(event.target),
+      })
+      if (!action) return
+      event.preventDefault()
+      if (action === 'pan-hold') { setIsPanModeActive(true); return }
+      if (action === 'pan-left') { panBy(-48, 0); return }
+      if (action === 'pan-right') { panBy(48, 0); return }
+      if (action === 'pan-up') { panBy(0, -48); return }
+      if (action === 'pan-down') { panBy(0, 48); return }
+      if (action === 'zoom-in') { zoomByStep(1); return }
+      if (action === 'zoom-out') { zoomByStep(-1); return }
+      if (action === 'fit') { fitToScreen(); return }
+    }
+
+    const handleViewportKeyUp = (event) => {
+      if (event.key === ' ') setIsPanModeActive(false)
+    }
+
+    window.addEventListener('keydown', handleViewportKeyDown)
+    window.addEventListener('keyup', handleViewportKeyUp)
+    return () => {
+      window.removeEventListener('keydown', handleViewportKeyDown)
+      window.removeEventListener('keyup', handleViewportKeyUp)
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [canvas.width, canvas.height, canvas.origin.x, canvas.origin.y])
 
   const handleAddChild = (parentId) => {
     const result = addChildNodeWithResult(roadmapData, parentId)
@@ -1706,16 +1654,6 @@ export function SkillTree() {
     setSelectedPortalKey(null)
   }
 
-  const handleInspectorCommit = (commitResult, commitSource) => {
-    if (!shouldCenterInspectorOnCommit(commitResult, commitSource)) {
-      return
-    }
-
-    if (selectedNodeId) {
-      centerNodeInViewport(selectedNodeId)
-    }
-  }
-
   // Global toast state (listens for window events dispatched by child components)
   const [globalToast, setGlobalToast] = useState({ visible: false, message: '', type: 'info' })
 
@@ -1752,6 +1690,59 @@ export function SkillTree() {
         style={{ display: 'none' }}
         onChange={handleCsvDocumentFileSelected}
       />
+
+      <Modal
+        opened={csvImportDialogOpen}
+        onClose={closeCsvImportDialog}
+        title="CSV-Import Optionen"
+        centered
+        size="lg"
+      >
+        <Stack gap="md">
+          <Text size="sm" c="dimmed">
+            Waehl aus, welche CSV-Aspekte beim Import ignoriert werden sollen.
+          </Text>
+
+          <Text size="sm" fw={600}>
+            {pendingCsvImport?.fileName ?? 'CSV-Datei'}
+          </Text>
+
+          <Checkbox
+            checked={csvImportOptions.ignoreSegments}
+            onChange={(event) => {
+              setCsvImportOptions((current) => ({
+                ...current,
+                ignoreSegments: event.currentTarget.checked,
+              }))
+            }}
+            label="Segmente ignorieren"
+          />
+
+          <Checkbox
+            checked={csvImportOptions.ignoreManualLevels}
+            onChange={(event) => {
+              setCsvImportOptions((current) => ({
+                ...current,
+                ignoreManualLevels: event.currentTarget.checked,
+              }))
+            }}
+            label="Manuelle Ebenen ignorieren"
+          />
+
+          <Text size="xs" c="dimmed">
+            Segmente werden dann entfernt. Ebenen werden aus der Parent-Struktur neu abgeleitet.
+          </Text>
+
+          <Group justify="flex-end">
+            <Button variant="default" onClick={closeCsvImportDialog}>
+              Abbrechen
+            </Button>
+            <Button onClick={handleConfirmCsvImport} disabled={!pendingCsvImport}>
+              Importieren
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
 
       {globalToast.visible && (
         <div style={{ position: 'fixed', top: 12, left: '50%', transform: 'translateX(-50%)', zIndex: 9999 }}>
@@ -1791,8 +1782,8 @@ export function SkillTree() {
         allNodesById={allNodesById}
         onSelectNode={handleSelectNode}
         currentZoomScale={currentZoomScale}
-        onZoomIn={() => handleZoomByDirection(1)}
-        onZoomOut={() => handleZoomByDirection(-1)}
+        onZoomIn={handleZoomIn}
+        onZoomOut={handleZoomOut}
         onZoomToScale={handleZoomToScale}
         onFitToScreen={handleFitToScreen}
       />
@@ -1811,13 +1802,13 @@ export function SkillTree() {
           transformApiRef.current = api
           setCurrentZoomScale(api.state.scale)
         }}
-        onTransformed={(api) => {
-          setCurrentZoomScale(api.state.scale)
+        onTransformed={(_ref, state) => {
+          setCurrentZoomScale(state.scale)
         }}
       >
         <TransformComponent
-            wrapperStyle={{ cursor: isPanModeActive ? 'grab' : 'default' }}
           wrapperClass="skill-tree-transform-wrapper"
+          wrapperStyle={{ cursor: isPanModeActive ? 'grabbing' : 'grab' }}
           contentClass="skill-tree-transform-content"
         >
           <SkillTreeCanvas
@@ -1849,9 +1840,7 @@ export function SkillTree() {
               selectSegmentId(null)
               setSelectedPortalKey(null)
             }}
-            onCanvasDoubleClick={() => {
-              handleFitToScreen()
-            }}
+            onCanvasDoubleClick={handleFitToScreen}
             onOpenCenterIconPanel={handleOpenCenterIconPanel}
             onSelectSegment={handleSelectSegment}
             onSelectPortal={handleSelectPortal}
@@ -1923,7 +1912,6 @@ export function SkillTree() {
         onAdditionalDependenciesChange={handleAdditionalDependenciesChange}
         onDeleteNodeOnly={handleDeleteNodeOnly}
         onDeleteNodeBranch={handleDeleteNodeBranch}
-        onInspectorCommit={handleInspectorCommit}
         />
       )}
 

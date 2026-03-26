@@ -4,6 +4,21 @@ import { confirmAndReset, readDownload, startFresh } from './helpers.js'
 
 const normalizeCsv = (csvText) => String(csvText ?? '').replace(/\r\n/g, '\n').trim()
 
+const findNodeByShortName = (nodes, shortName) => {
+  for (const node of nodes ?? []) {
+    if (node.shortName === shortName) {
+      return node
+    }
+
+    const childMatch = findNodeByShortName(node.children, shortName)
+    if (childMatch) {
+      return childMatch
+    }
+  }
+
+  return null
+}
+
 test.describe('CSV toolbar flow', () => {
   test.beforeEach(async ({ page }) => {
     await startFresh(page)
@@ -25,8 +40,8 @@ test.describe('CSV toolbar flow', () => {
     await expect(page.getByRole('menuitem', { name: 'CSV', exact: true })).toBeVisible()
     const importCsvText = [
       'ShortName,Name,Scope,Ebene,Segment,Parent,AdditionalDependency,ProgressLevel,Status,ReleaseNotes',
-      'ROOT,Root Node,Alpha,1,Core,,,1,now,"# Root note"',
-      'CHD,Child Node,Beta,2,Core,ROOT,,1,next,"Child note"',
+      'ROOT,Root Node,Alpha,9,Core,,,1,now,"# Root note"',
+      'CHD,Child Node,Beta,7,Core,ROOT,,1,next,"Child note"',
     ].join('\n')
 
     await page.locator('input[type="file"][accept="text/csv,.csv"]').setInputFiles({
@@ -35,7 +50,40 @@ test.describe('CSV toolbar flow', () => {
       buffer: Buffer.from(importCsvText, 'utf-8'),
     })
 
+    const dialog = page.getByRole('dialog', { name: 'CSV-Import Optionen' })
+    await expect(dialog).toBeVisible()
+    await page.evaluate(() => {
+      const dialogRoot = document.querySelector('[role="dialog"]')
+      const checkboxes = Array.from(dialogRoot?.querySelectorAll('input[type="checkbox"]') ?? [])
+      checkboxes.forEach((input) => input.click())
+    })
+
+    await page.evaluate(() => {
+      const dialogRoot = document.querySelector('[role="dialog"]')
+      const buttons = Array.from(dialogRoot?.querySelectorAll('button') ?? [])
+      buttons.at(-1)?.click()
+    })
+
     await expect(page.locator('foreignObject.skill-node-export-anchor')).toHaveCount(2)
+
+    await page.waitForTimeout(700)
+    const persistedDocument = await page.evaluate(() => {
+      const raw = localStorage.getItem('roadmap-skilltree.document.v1')
+      if (!raw) {
+        return null
+      }
+
+      return JSON.parse(raw).document
+    })
+
+    const rootNode = findNodeByShortName(persistedDocument?.children, 'ROOT')
+    const childNode = findNodeByShortName(persistedDocument?.children, 'CHD')
+
+    expect(persistedDocument?.segments ?? []).toHaveLength(0)
+    expect(rootNode?.ebene).toBe(1)
+    expect(rootNode?.segmentId).toBeNull()
+    expect(childNode?.ebene).toBe(2)
+    expect(childNode?.segmentId).toBeNull()
 
     expect(normalizeCsv(csvText)).toContain('ShortName,Name,Scope,Ebene,Segment,Parent,AdditionalDependency,ProgressLevel,Status,ReleaseNotes')
   })

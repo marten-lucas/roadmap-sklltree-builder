@@ -188,4 +188,24 @@ describe('csv', () => {
     expect(docsNode.levels).toHaveLength(1)
     expect(docsNode.levels[0].releaseNote).toContain('Docs include a short paragraph')
   })
+
+  it('can ignore segments and manual levels during import', () => {
+    const csvPath = resolve(process.cwd(), 'tests/e2e/datasets/minimal.csv')
+    const csv = readFileSync(csvPath, 'utf8')
+
+    const document = readDocumentFromCsvText(csv, {
+      ignoreSegments: true,
+      ignoreManualLevels: true,
+    })
+
+    const docsNode = findNodeByShortName(document.children, 'DOC')
+    const apiNode = findNodeByShortName(document.children, 'API')
+
+    expect(document.segments).toHaveLength(0)
+    expect(docsNode).toBeDefined()
+    expect(docsNode.ebene).toBe(3)
+    expect(docsNode.segmentId).toBeNull()
+    expect(apiNode).toBeDefined()
+    expect(apiNode.segmentId).toBeNull()
+  })
 })

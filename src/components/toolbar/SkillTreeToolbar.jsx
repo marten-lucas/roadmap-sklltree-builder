@@ -15,6 +15,7 @@ import {
   IconZoomIn,
   IconZoomOut,
   IconUpload,
+  IconX,
 } from '@tabler/icons-react'
 import { VIEWPORT_ZOOM_STEPS } from '../utils/viewport'
 import { Tooltip } from '../tooltip'
@@ -202,7 +203,7 @@ export function SkillTreeToolbar({
                 aria-label={isZoomMenuOpen ? 'Zoom-Menü ausblenden' : 'Zoom-Menü einblenden'}
                 onClick={() => setIsZoomMenuOpen((open) => !open)}
               >
-                <IconSearch {...TOOLBAR_ICON_PROPS} />
+                {isZoomMenuOpen ? <IconX {...TOOLBAR_ICON_PROPS} /> : <IconSearch {...TOOLBAR_ICON_PROPS} />}
               </ActionIcon>
             </Tooltip>
 

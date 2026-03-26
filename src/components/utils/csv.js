@@ -261,7 +261,45 @@ const buildLevelScopes = (scopeLabels, scopeIdByLabelKey) => {
   return Array.from(new Set(scopeIds))
 }
 
-const buildDocumentFromRows = (rows) => {
+const normalizeCsvImportOptions = (options = {}) => ({
+  ignoreSegments: options?.ignoreSegments === true,
+  ignoreManualLevels: options?.ignoreManualLevels === true,
+})
+
+const applyCsvImportOptions = (document, options = {}) => {
+  const { ignoreSegments, ignoreManualLevels } = normalizeCsvImportOptions(options)
+
+  if (!ignoreSegments && !ignoreManualLevels) {
+    return document
+  }
+
+  const visitNode = (node, depth) => {
+    if (ignoreSegments) {
+      node.segmentId = null
+    }
+
+    if (ignoreManualLevels) {
+      node.ebene = depth
+    }
+
+    for (const child of node.children ?? []) {
+      visitNode(child, depth + 1)
+    }
+  }
+
+  for (const root of document.children ?? []) {
+    visitNode(root, 1)
+  }
+
+  if (ignoreSegments) {
+    document.segments = []
+  }
+
+  return document
+}
+
+const buildDocumentFromRows = (rows, options = {}) => {
+  const { ignoreSegments, ignoreManualLevels } = normalizeCsvImportOptions(options)
   const errors = []
   const dataRows = [...rows]
 
@@ -329,8 +367,9 @@ const buildDocumentFromRows = (rows) => {
       rowErrors.push(`Zeile ${rowNumber}: Name fehlt.`)
     }
 
-    const level = Number.parseInt(levelText, 10)
-    if (!Number.isInteger(level) || level < 1) {
+    const parsedLevel = Number.parseInt(levelText, 10)
+    const level = Number.isInteger(parsedLevel) && parsedLevel >= 1 ? parsedLevel : null
+    if (!ignoreManualLevels && level == null) {
       rowErrors.push(`Zeile ${rowNumber}: Ebene ist ungueltig: ${levelText || '(leer)'}.`)
     }
 
@@ -386,11 +425,11 @@ const buildDocumentFromRows = (rows) => {
       errors.push(`Knoten ${shortName} hat unterschiedliche Namen in den CSV-Zeilen.`)
     }
 
-    if (group.level !== level) {
+    if (!ignoreManualLevels && group.level !== level) {
       errors.push(`Knoten ${shortName} hat unterschiedliche Ebenen in den CSV-Zeilen.`)
     }
 
-    if (group.segmentText !== segmentText) {
+    if (!ignoreSegments && group.segmentText !== segmentText) {
       errors.push(`Knoten ${shortName} hat unterschiedliche Segmente in den CSV-Zeilen.`)
     }
 
@@ -588,7 +627,7 @@ const buildDocumentFromRows = (rows) => {
 
   return {
     ok: true,
-    value: document,
+    value: applyCsvImportOptions(document, { ignoreSegments, ignoreManualLevels }),
   }
 }
 
@@ -680,7 +719,7 @@ export const downloadDocumentCsv = (roadmapDocument, fileName = CSV_EXPORT_FILE_
   return true
 }
 
-export const parseDocumentFromCsvText = (csvText) => {
+export const parseDocumentFromCsvText = (csvText, options = {}) => {
   const parsed = parseCsvTable(csvText)
   if (!parsed.ok) {
     return {
@@ -689,11 +728,11 @@ export const parseDocumentFromCsvText = (csvText) => {
     }
   }
 
-  return buildDocumentFromRows(parsed.rows)
+  return buildDocumentFromRows(parsed.rows, options)
 }
 
-export const readDocumentFromCsvText = (csvText) => {
-  const parsed = parseDocumentFromCsvText(csvText)
+export const readDocumentFromCsvText = (csvText, options = {}) => {
+  const parsed = parseDocumentFromCsvText(csvText, options)
   if (!parsed.ok) {
     throw new Error(formatImportErrors(parsed.errors))
   }

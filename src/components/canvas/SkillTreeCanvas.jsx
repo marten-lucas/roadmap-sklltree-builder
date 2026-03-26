@@ -33,6 +33,7 @@ export function SkillTreeCanvas({
   nodeSize = TREE_CONFIG.nodeSize,
   minimalNodeSize = 36,
   onCanvasClick,
+  onCanvasDoubleClick,
   onOpenCenterIconPanel,
   onSelectSegment,
   onSelectPortal,
@@ -51,6 +52,7 @@ export function SkillTreeCanvas({
       viewBox={`0 0 ${canvas.width} ${canvas.height}`}
       className="skill-tree-canvas"
       onClick={onCanvasClick}
+      onDoubleClick={onCanvasDoubleClick}
     >
       <defs>
         <radialGradient id="nodeHalo" cx="50%" cy="50%" r="60%">
