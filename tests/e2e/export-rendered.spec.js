@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test'
 import { resolve } from 'node:path'
-import { startFresh, exportHtml, getBuilderNodeLabels } from './helpers.js'
+import { startFresh, exportHtml, getBuilderNodeLabels, readDownload } from './helpers.js'
 
 const MINIMAL_CSV_PATH = resolve(process.cwd(), 'tests/e2e/datasets/minimal.csv')
 
@@ -71,6 +71,114 @@ const openExportViewer = async (page, browser) => {
   await exportPage.setContent(html)
   await exportPage.waitForSelector('#html-export-tree-canvas svg', { timeout: 10_000 })
   return { exportPage, exportContext }
+}
+
+const canonicalizeSvgMarkup = async (page, svgMarkup) => page.evaluate((markup) => {
+  const container = document.createElement('div')
+  container.innerHTML = String(markup ?? '').replace(/^<\?xml[^>]*\?>\s*/i, '')
+  const root = container.querySelector('svg')
+
+  if (!root) {
+    throw new Error('Unable to parse SVG markup for comparison')
+  }
+
+  const normalizeText = (value) => String(value ?? '').replace(/\s+/g, ' ').trim()
+  const escapeAttribute = (value) => String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+
+  const serializeNode = (node, depth = 0) => {
+    if (node.nodeType === Node.TEXT_NODE) {
+      return normalizeText(node.textContent)
+    }
+
+    if (node.nodeType !== Node.ELEMENT_NODE) {
+      return ''
+    }
+
+    if (node.classList?.contains('skill-tree-center-icon')) {
+      return '<center-icon></center-icon>'
+    }
+
+    const tagName = node.tagName.toLowerCase()
+    if (tagName === 'style' || tagName === 'script' || tagName === 'title' || tagName === 'desc' || tagName === 'metadata') {
+      return ''
+    }
+
+    if (tagName === 'circle' && String(node.id ?? '').startsWith('export-tooltip-trigger-')) {
+      return ''
+    }
+
+    if (tagName === 'g' && node.querySelector?.('circle[id^="export-tooltip-trigger-"]')) {
+      return ''
+    }
+
+    const allowedAttributesByTag = new Map([
+      ['svg', new Set([])],
+      ['defs', new Set([])],
+      ['radialgradient', new Set(['cx', 'cy', 'id', 'r'])],
+      ['stop', new Set(['offset', 'stop-color', 'stop-opacity'])],
+      ['circle', new Set(['cx', 'cy', 'fill', 'id', 'r'])],
+      ['g', new Set(['transform'])],
+      ['path', new Set(['d', 'fill', 'stroke', 'stroke-dasharray', 'stroke-linecap', 'stroke-opacity', 'stroke-width'])],
+      ['rect', new Set(['fill', 'height', 'rx', 'stroke', 'stroke-width', 'width', 'x', 'y'])],
+      ['text', new Set(['dominant-baseline', 'text-anchor', 'x', 'y'])],
+      ['foreignobject', new Set(['height', 'width', 'x', 'y'])],
+    ])
+    const allowedAttributes = allowedAttributesByTag.get(tagName) ?? new Set([])
+    const attributes = Array.from(node.attributes)
+      .filter((attribute) => allowedAttributes.has(attribute.name))
+      .map((attribute) => [attribute.name, attribute.value])
+      .sort(([leftName], [rightName]) => leftName.localeCompare(rightName))
+      .map(([name, value]) => ` ${name}="${escapeAttribute(value)}"`)
+      .join('')
+
+    if (tagName === 'foreignobject') {
+      return `<${tagName}${attributes}></${tagName}>`
+    }
+
+    const children = Array.from(node.childNodes)
+      .map((child) => serializeNode(child, depth + 1))
+      .filter((value) => value.length > 0)
+      .join('')
+
+    return `<${tagName}${attributes}>${children}</${tagName}>`
+  }
+
+  return serializeNode(root)
+}, svgMarkup)
+
+const downloadBuilderSvg = async (page) => {
+  await page.getByRole('button', { name: 'Export', exact: true }).hover()
+
+  const [download] = await Promise.all([
+    page.waitForEvent('download'),
+    page.getByRole('menuitem', { name: 'SVG (interactive)', exact: true }).click(),
+  ])
+
+  return readDownload(download)
+}
+
+const downloadViewerSvg = async (exportPage) => {
+  await exportPage.getByLabel('Export', { exact: true }).click()
+  await expect(exportPage.locator('#html-export-svg')).toBeVisible()
+
+  const [download] = await Promise.all([
+    exportPage.waitForEvent('download'),
+    exportPage.locator('#html-export-svg').click(),
+  ])
+
+  return readDownload(download)
+}
+
+const openPdfPopup = async (page) => {
+  const popupPromise = page.waitForEvent('popup')
+  await page.getByRole('button', { name: 'Export', exact: true }).hover()
+  await page.getByRole('menuitem', { name: 'PDF' }).click()
+
+  const popup = await popupPromise
+  await popup.waitForLoadState('domcontentloaded')
+  return popup
 }
 
 const readCanvasTransform = async (page) => page.locator('#html-export-tree-canvas').evaluate((element) => {
@@ -216,6 +324,49 @@ test.describe('Rendered export viewer', () => {
     } finally {
       await exportPage.close()
       await exportContext.close()
+    }
+  })
+
+  test('svg export dom stays aligned between the builder and html export while preserving the shell background', async ({ page, browser }) => {
+    await startFresh(page)
+
+    await expect(page.locator('.skill-tree-shell')).toHaveCSS('background-color', 'rgb(2, 6, 23)')
+
+    const builderSvgMarkup = await downloadBuilderSvg(page)
+    const builderSvgDom = await canonicalizeSvgMarkup(page, builderSvgMarkup)
+
+    const { exportPage, exportContext } = await openExportViewer(page, browser)
+    try {
+      await expect(exportPage.locator('body')).toHaveCSS('background-color', 'rgb(0, 0, 0)')
+      await expect(exportPage.locator('#html-export-tree-shell')).toHaveCSS('background-color', 'rgb(0, 0, 0)')
+
+      const exportedSvgMarkup = await downloadViewerSvg(exportPage)
+      const exportedSvgDom = await canonicalizeSvgMarkup(exportPage, exportedSvgMarkup)
+
+      expect(exportedSvgDom).toBe(builderSvgDom)
+    } finally {
+      await exportPage.close()
+      await exportContext.close()
+    }
+  })
+
+  test('pdf export popup keeps the same svg dom as the builder export and uses the expected background palette', async ({ page }) => {
+    await startFresh(page)
+
+    const builderSvgMarkup = await downloadBuilderSvg(page)
+    const builderSvgDom = await canonicalizeSvgMarkup(page, builderSvgMarkup)
+
+    const popup = await openPdfPopup(page)
+    try {
+      await expect(popup.locator('body')).toHaveCSS('background-color', 'rgb(255, 255, 255)')
+      await expect(popup.locator('.pdf-export__tree-shell')).toHaveCSS('background-color', 'rgb(2, 6, 23)')
+
+      const popupSvgMarkup = await popup.locator('.pdf-export__tree-shell svg').evaluate((element) => element.outerHTML)
+      const popupSvgDom = await canonicalizeSvgMarkup(popup, popupSvgMarkup)
+
+      expect(popupSvgDom).toBe(builderSvgDom)
+    } finally {
+      await popup.close()
     }
   })
 
