@@ -72,6 +72,38 @@ export const computeFitScale = ({
   return clampScale(fittedScale, minScale, maxScale)
 }
 
+export const computeFitTransform = ({
+  contentBounds,
+  viewportWidth,
+  viewportHeight,
+  padding = VIEWPORT_DEFAULTS.fitPadding,
+  minScale = VIEWPORT_DEFAULTS.minScale,
+  maxScale = VIEWPORT_DEFAULTS.maxScale,
+}) => {
+  const bounds = contentBounds ?? { x: 0, y: 0, width: 1, height: 1 }
+  const contentWidth = Math.max(1, Number(bounds.width) || 1)
+  const contentHeight = Math.max(1, Number(bounds.height) || 1)
+  const viewWidth = Math.max(1, Number(viewportWidth) || 1)
+  const viewHeight = Math.max(1, Number(viewportHeight) || 1)
+  const fittedScale = computeFitScale({
+    contentWidth,
+    contentHeight,
+    viewportWidth: viewWidth,
+    viewportHeight: viewHeight,
+    padding,
+    minScale,
+    maxScale,
+  })
+  const centerX = (Number(bounds.x) || 0) + contentWidth / 2
+  const centerY = (Number(bounds.y) || 0) + contentHeight / 2
+
+  return {
+    scale: fittedScale,
+    positionX: viewWidth / 2 - centerX * fittedScale,
+    positionY: viewHeight / 2 - centerY * fittedScale,
+  }
+}
+
 export const getViewportKeyboardAction = ({
   key,
   ctrlKey = false,

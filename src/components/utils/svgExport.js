@@ -957,6 +957,103 @@ export const downloadSvgMarkup = (markup, fileName = 'skilltree-roadmap.svg') =>
   return true
 }
 
+const downloadBlob = (blob, fileName) => {
+  if (typeof window === 'undefined' || typeof window.document === 'undefined') {
+    return false
+  }
+
+  const objectUrl = window.URL.createObjectURL(blob)
+  const anchor = window.document.createElement('a')
+
+  anchor.href = objectUrl
+  anchor.download = fileName
+  anchor.style.display = 'none'
+
+  window.document.body.appendChild(anchor)
+  anchor.click()
+  window.document.body.removeChild(anchor)
+  window.URL.revokeObjectURL(objectUrl)
+
+  return true
+}
+
+const getExportBackgroundColor = (svgElement, sourceDocument) => {
+  const shellElement = svgElement?.closest?.('.skill-tree-shell') ?? null
+  const element = shellElement ?? sourceDocument?.body ?? null
+
+  if (!element || typeof window === 'undefined' || typeof window.getComputedStyle !== 'function') {
+    return null
+  }
+
+  const backgroundColor = window.getComputedStyle(element).backgroundColor
+  if (!backgroundColor || backgroundColor === 'transparent' || backgroundColor === 'rgba(0, 0, 0, 0)') {
+    return null
+  }
+
+  return backgroundColor
+}
+
+export const exportPngFromElement = async (svgElement, options = {}) => {
+  const {
+    fileName = 'skilltree-roadmap.png',
+    includeTooltips = false,
+    sourceDocument = globalThis?.document,
+    styleText = '',
+    scale = 1,
+  } = options
+
+  if (typeof window === 'undefined' || typeof window.document === 'undefined' || typeof document === 'undefined') {
+    return false
+  }
+
+  const markup = serializeSvgElementForExport(svgElement, {
+    includeTooltips,
+    embedStyles: true,
+    sourceDocument,
+    styleText,
+  })
+
+  if (!markup) {
+    return false
+  }
+
+  const tempContainer = window.document.createElement('div')
+  tempContainer.style.position = 'fixed'
+  tempContainer.style.left = '-100000px'
+  tempContainer.style.top = '-100000px'
+  tempContainer.style.width = '0'
+  tempContainer.style.height = '0'
+  tempContainer.style.overflow = 'hidden'
+  tempContainer.style.pointerEvents = 'none'
+  tempContainer.innerHTML = markup
+
+  const tempSvg = tempContainer.querySelector('svg')
+  if (!tempSvg) {
+    return false
+  }
+
+  window.document.body.appendChild(tempContainer)
+
+  try {
+    const { toBlob } = await import('html-to-image')
+    const pngBlob = await toBlob(tempSvg, {
+      cacheBust: true,
+      skipFonts: true,
+      skipAutoScale: true,
+      pixelRatio: scale,
+      backgroundColor: getExportBackgroundColor(svgElement, sourceDocument) ?? undefined,
+    })
+
+    if (!pngBlob) {
+      return false
+    }
+
+    return downloadBlob(pngBlob, fileName)
+  } finally {
+    tempContainer.remove()
+  }
+}
+
 export const exportSvgFromElement = (svgElement, options = {}) => {
   const {
     fileName = 'skilltree-roadmap.svg',

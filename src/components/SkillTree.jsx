@@ -79,9 +79,9 @@ import { resolveInspectorSelectedNode } from './utils/selection'
 
 const AUTOSAVE_DEBOUNCE_MS = 450
 const MINIMAL_NODE_SIZE = 36
-const DEFAULT_CSV_IMPORT_OPTIONS = {
-  ignoreSegments: false,
-  ignoreManualLevels: false,
+const DEFAULT_CSV_IMPORT_PROCESS_OPTIONS = {
+  processSegments: true,
+  processManualLevels: true,
 }
 
 export function SkillTree() {
@@ -101,7 +101,7 @@ export function SkillTree() {
   const [currentZoomScale, setCurrentZoomScale] = useState(1)
   const [lastSavedAt, setLastSavedAt] = useState(null)
   const [csvImportDialogOpen, setCsvImportDialogOpen] = useState(false)
-  const [csvImportOptions, setCsvImportOptions] = useState(DEFAULT_CSV_IMPORT_OPTIONS)
+  const [csvImportOptions, setCsvImportOptions] = useState(DEFAULT_CSV_IMPORT_PROCESS_OPTIONS)
   const [pendingCsvImport, setPendingCsvImport] = useState(null)
 
   const {
@@ -793,7 +793,7 @@ export function SkillTree() {
   const closeCsvImportDialog = () => {
     setCsvImportDialogOpen(false)
     setPendingCsvImport(null)
-    setCsvImportOptions(DEFAULT_CSV_IMPORT_OPTIONS)
+    setCsvImportOptions(DEFAULT_CSV_IMPORT_PROCESS_OPTIONS)
   }
 
   const handleUndo = () => {
@@ -818,9 +818,10 @@ export function SkillTree() {
     }
 
     dispatchDocument({ type: 'apply', document: createEmptyDocument() })
-    setTransformKey((current) => current + 1)
-    resetSelections()
-    if (rightPanel === PANEL_CENTER) setRightPanel(null)
+    selectNodeId(null)
+    selectSegmentId(null)
+    setSelectedPortalKey(null)
+    setSelectedProgressLevelId(null)
   }
 
   const handleExportSvg = async () => {
@@ -845,6 +846,31 @@ export function SkillTree() {
     } catch (error) {
       console.error('SVG export failed', error)
       window.alert('SVG-Export fehlgeschlagen.')
+    }
+  }
+
+  const handleExportPng = async () => {
+    if (!canvasSvgRef.current) {
+      window.alert('PNG-Export derzeit nicht verfuegbar.')
+      return
+    }
+
+    try {
+      flushSync(() => resetSelections())
+      const { exportPngFromElement } = await import('./utils/svgExport')
+      const exported = await exportPngFromElement(canvasSvgRef.current, {
+        fileName: 'skilltree-roadmap.png',
+        includeTooltips: false,
+        sourceDocument: window.document,
+      })
+
+      if (!exported) {
+        window.alert('PNG-Export fehlgeschlagen.')
+        return
+      }
+    } catch (error) {
+      console.error('PNG export failed', error)
+      window.alert('PNG-Export fehlgeschlagen.')
     }
   }
 
@@ -973,7 +999,7 @@ export function SkillTree() {
     try {
       const rawText = await file.text()
       setPendingCsvImport({ fileName: file.name || 'skilltree-roadmap.csv', rawText })
-      setCsvImportOptions(DEFAULT_CSV_IMPORT_OPTIONS)
+      setCsvImportOptions(DEFAULT_CSV_IMPORT_PROCESS_OPTIONS)
       setCsvImportDialogOpen(true)
     } catch (error) {
       console.error('CSV import failed', error)
@@ -990,7 +1016,10 @@ export function SkillTree() {
     }
 
     try {
-      const nextDocument = readDocumentFromCsvText(pendingCsvImport.rawText, csvImportOptions)
+      const nextDocument = readDocumentFromCsvText(pendingCsvImport.rawText, {
+        ignoreSegments: !csvImportOptions.processSegments,
+        ignoreManualLevels: !csvImportOptions.processManualLevels,
+      })
       dispatchDocument({ type: 'replace', document: nextDocument })
       setTransformKey((current) => current + 1)
       resetSelections()
@@ -1079,14 +1108,7 @@ export function SkillTree() {
 
       if (action === 'reset') {
         event.preventDefault()
-        if (!confirmResetDocument()) {
-          return
-        }
-        dispatchDocument({ type: 'apply', document: createEmptyDocument() })
-        selectNodeId(null)
-        selectSegmentId(null)
-        setSelectedPortalKey(null)
-        setSelectedProgressLevelId(null)
+        handleReset()
       }
     }
 
@@ -1142,6 +1164,63 @@ export function SkillTree() {
     handleZoomToScale(getNextZoomStep(transformApiRef.current.state.scale, -1))
   }
 
+  const getConnectedNodeIdByArrowKey = (nodeId, key) => {
+    if (!nodeId) return null
+
+    const connectedIds = new Set()
+
+    for (const link of filteredLinks) {
+      if (link.sourceId === nodeId && link.targetId) {
+        connectedIds.add(link.targetId)
+      }
+      if (link.targetId === nodeId && link.sourceId) {
+        connectedIds.add(link.sourceId)
+      }
+    }
+
+    if (connectedIds.size === 0) {
+      return null
+    }
+
+    const currentLayoutNode = layoutNodesById.get(nodeId)
+    if (!currentLayoutNode) {
+      return null
+    }
+
+    const axis = key === 'ArrowLeft' || key === 'ArrowRight' ? 'x' : 'y'
+    const direction = key === 'ArrowLeft' || key === 'ArrowUp' ? -1 : 1
+    let bestMatch = null
+
+    for (const connectedId of connectedIds) {
+      const target = layoutNodesById.get(connectedId)
+      if (!target) continue
+
+      const delta = target[axis] - currentLayoutNode[axis]
+      if (direction < 0 && delta >= 0) continue
+      if (direction > 0 && delta <= 0) continue
+
+      const distance = Math.hypot(target.x - currentLayoutNode.x, target.y - currentLayoutNode.y)
+      const directionalDistance = Math.abs(delta)
+
+      if (!bestMatch) {
+        bestMatch = { id: connectedId, directionalDistance, distance }
+        continue
+      }
+
+      if (
+        directionalDistance < bestMatch.directionalDistance
+        || (
+          directionalDistance === bestMatch.directionalDistance
+          && distance < bestMatch.distance
+        )
+      ) {
+        bestMatch = { id: connectedId, directionalDistance, distance }
+      }
+    }
+
+    return bestMatch?.id ?? null
+  }
+
   useEffect(() => {
     const fitToScreen = () => {
       if (!transformApiRef.current) return
@@ -1184,6 +1263,27 @@ export function SkillTree() {
     }
 
     const handleViewportKeyDown = (event) => {
+      const hasSelection = Boolean(selectedNodeId)
+        || Boolean(selectedSegmentId)
+        || (Array.isArray(selectedNodeIds) && selectedNodeIds.length > 0)
+
+      if (selectedNodeId && (event.key === 'ArrowLeft' || event.key === 'ArrowRight' || event.key === 'ArrowUp' || event.key === 'ArrowDown') && !event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey && !isEditableElement(event.target)) {
+        const nextNodeId = getConnectedNodeIdByArrowKey(selectedNodeId, event.key)
+        if (nextNodeId) {
+          event.preventDefault()
+          handleSelectNode(nextNodeId)
+        }
+        return
+      }
+
+      if (!hasSelection && (event.key === 'ArrowLeft' || event.key === 'ArrowRight' || event.key === 'ArrowUp' || event.key === 'ArrowDown') && !event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey && !isEditableElement(event.target)) {
+        event.preventDefault()
+        if (event.key === 'ArrowLeft') { panBy(-48, 0); return }
+        if (event.key === 'ArrowRight') { panBy(48, 0); return }
+        if (event.key === 'ArrowUp') { panBy(0, -48); return }
+        if (event.key === 'ArrowDown') { panBy(0, 48); return }
+      }
+
       const action = getViewportKeyboardAction({
         key: event.key,
         ctrlKey: event.ctrlKey,
@@ -1214,7 +1314,7 @@ export function SkillTree() {
       window.removeEventListener('keyup', handleViewportKeyUp)
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [canvas.width, canvas.height, canvas.origin.x, canvas.origin.y])
+  }, [canvas.width, canvas.height, canvas.origin.x, canvas.origin.y, selectedNodeId, selectedNodeIds, selectedSegmentId, filteredLinks, layoutNodesById])
 
   const handleAddChild = (parentId) => {
     const result = addChildNodeWithResult(roadmapData, parentId)
@@ -1697,10 +1797,13 @@ export function SkillTree() {
         title="CSV-Import Optionen"
         centered
         size="lg"
+        closeOnClickOutside={false}
+        closeOnEscape={false}
+        zIndex={1000}
       >
         <Stack gap="md">
           <Text size="sm" c="dimmed">
-            Waehl aus, welche CSV-Aspekte beim Import ignoriert werden sollen.
+            Waehl aus, was beim Import verarbeitet werden soll.
           </Text>
 
           <Text size="sm" fw={600}>
@@ -1708,29 +1811,31 @@ export function SkillTree() {
           </Text>
 
           <Checkbox
-            checked={csvImportOptions.ignoreSegments}
+            checked={csvImportOptions.processSegments}
             onChange={(event) => {
+              const checked = event.currentTarget.checked
               setCsvImportOptions((current) => ({
                 ...current,
-                ignoreSegments: event.currentTarget.checked,
+                processSegments: checked,
               }))
             }}
-            label="Segmente ignorieren"
+            label="Segmente verarbeiten"
           />
 
           <Checkbox
-            checked={csvImportOptions.ignoreManualLevels}
+            checked={csvImportOptions.processManualLevels}
             onChange={(event) => {
+              const checked = event.currentTarget.checked
               setCsvImportOptions((current) => ({
                 ...current,
-                ignoreManualLevels: event.currentTarget.checked,
+                processManualLevels: checked,
               }))
             }}
-            label="Manuelle Ebenen ignorieren"
+            label="Manuelle Ebenen verarbeiten"
           />
 
           <Text size="xs" c="dimmed">
-            Segmente werden dann entfernt. Ebenen werden aus der Parent-Struktur neu abgeleitet.
+            Wenn eine Option nicht aktiviert ist, wird der betreffende Aspekt beim Import ignoriert.
           </Text>
 
           <Group justify="flex-end">
@@ -1763,6 +1868,7 @@ export function SkillTree() {
         onExportCsv={handleExportCsv}
         onExportPdf={() => void handleExportPdf()}
         onExportSvg={() => void handleExportSvg()}
+        onExportPng={() => void handleExportPng()}
         onExportCleanSvg={() => void handleExportCleanSvg()}
         onUndo={handleUndo}
         canUndo={canUndo}

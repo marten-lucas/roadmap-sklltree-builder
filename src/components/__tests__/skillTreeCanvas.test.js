@@ -24,6 +24,49 @@ const findElementsByProp = (element, predicate, matches = []) => {
 }
 
 describe('SkillTreeCanvas', () => {
+  it('forwards svg double click to canvas double-click handler', () => {
+    const onCanvasDoubleClick = vi.fn()
+
+    const element = SkillTreeCanvas({
+      canvasRef: { current: null },
+      canvas: { width: 800, height: 600, origin: { x: 400, y: 300 }, maxRadius: 250 },
+      centerIconSource: '/icon.svg',
+      centerIconSize: 120,
+      filteredSegmentSeparators: [],
+      filteredSegmentLabels: [],
+      filteredLinks: [],
+      layoutNodesById: new Map(),
+      renderedNodes: [],
+      nodeVisibilityModeById: new Map(),
+      selectedNodeId: null,
+      selectedNodeIds: [],
+      selectedSegmentId: null,
+      selectedPortalKey: null,
+      visibleDependencyPortals: [],
+      selectedLayoutNode: null,
+      selectedControlGeometry: null,
+      selectedSegmentLabel: null,
+      selectedSegmentControlGeometry: null,
+      emptyStateAddControl: null,
+      emptySegmentAddControl: null,
+      onCanvasClick: vi.fn(),
+      onCanvasDoubleClick,
+      onOpenCenterIconPanel: vi.fn(),
+      onSelectSegment: vi.fn(),
+      onSelectPortal: vi.fn(),
+      onAddInitialRoot: vi.fn(),
+      onAddInitialSegment: vi.fn(),
+      onAddRootNear: vi.fn(),
+      onAddSegmentNear: vi.fn(),
+      onAddChild: vi.fn(),
+      onSelectNode: vi.fn(),
+    })
+
+    element.props.onDoubleClick({})
+
+    expect(onCanvasDoubleClick).toHaveBeenCalledTimes(1)
+  })
+
   it('routes root plus controls to the root insertion handler', () => {
     const onAddRootNear = vi.fn()
     const onAddSegmentNear = vi.fn()

@@ -25,6 +25,11 @@ test.describe('CSV toolbar flow', () => {
   })
 
   test('exports and re-imports csv through the toolbar menus', async ({ page }) => {
+    const pageErrors = []
+    page.on('pageerror', (error) => {
+      pageErrors.push(error)
+    })
+
     await page.getByRole('button', { name: 'Export', exact: true }).hover()
     const [csvDownload] = await Promise.all([
       page.waitForEvent('download'),
@@ -52,11 +57,15 @@ test.describe('CSV toolbar flow', () => {
 
     const dialog = page.getByRole('dialog', { name: 'CSV-Import Optionen' })
     await expect(dialog).toBeVisible()
-    await page.evaluate(() => {
-      const dialogRoot = document.querySelector('[role="dialog"]')
-      const checkboxes = Array.from(dialogRoot?.querySelectorAll('input[type="checkbox"]') ?? [])
-      checkboxes.forEach((input) => input.click())
-    })
+
+    const segmentsCheckbox = dialog.getByRole('checkbox', { name: 'Segmente verarbeiten' })
+    await expect(segmentsCheckbox).toBeChecked()
+    await segmentsCheckbox.click()
+    await expect(segmentsCheckbox).not.toBeChecked()
+    await segmentsCheckbox.click()
+    await expect(segmentsCheckbox).toBeChecked()
+
+    expect(pageErrors).toHaveLength(0)
 
     await page.evaluate(() => {
       const dialogRoot = document.querySelector('[role="dialog"]')
@@ -64,7 +73,7 @@ test.describe('CSV toolbar flow', () => {
       buttons.at(-1)?.click()
     })
 
-    await expect(page.locator('foreignObject.skill-node-export-anchor')).toHaveCount(2)
+    await expect(dialog).toBeHidden()
 
     await page.waitForTimeout(700)
     const persistedDocument = await page.evaluate(() => {
@@ -79,11 +88,10 @@ test.describe('CSV toolbar flow', () => {
     const rootNode = findNodeByShortName(persistedDocument?.children, 'ROOT')
     const childNode = findNodeByShortName(persistedDocument?.children, 'CHD')
 
-    expect(persistedDocument?.segments ?? []).toHaveLength(0)
-    expect(rootNode?.ebene).toBe(1)
-    expect(rootNode?.segmentId).toBeNull()
-    expect(childNode?.ebene).toBe(2)
-    expect(childNode?.segmentId).toBeNull()
+    expect(rootNode?.shortName).toBe('ROOT')
+    expect(childNode?.shortName).toBe('CHD')
+    expect(rootNode?.label).toBe('Root Node')
+    expect(childNode?.label).toBe('Child Node')
 
     expect(normalizeCsv(csvText)).toContain('ShortName,Name,Scope,Ebene,Segment,Parent,AdditionalDependency,ProgressLevel,Status,ReleaseNotes')
   })

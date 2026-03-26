@@ -363,6 +363,18 @@ const buildViewerScript = () => `
       }
 
       const getOccupiedBounds = () => {
+        const contentGroup = svgRoot?.querySelector('.skill-tree-canvas__content')
+        if (contentGroup && typeof contentGroup.getBBox === 'function') {
+          try {
+            const bounds = contentGroup.getBBox()
+            if (Number.isFinite(bounds.x) && Number.isFinite(bounds.y) && Number.isFinite(bounds.width) && Number.isFinite(bounds.height)) {
+              return bounds
+            }
+          } catch {
+            // Fall back to manual bounds collection below.
+          }
+        }
+
         const bounds = {
           minX: Number.POSITIVE_INFINITY,
           minY: Number.POSITIVE_INFINITY,

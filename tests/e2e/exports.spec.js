@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs'
 import { test, expect } from '@playwright/test'
 import { startFresh, readDownload, getBuilderNodeLabels, exportHtml, extractJsonPayload } from './helpers.js'
 
@@ -254,6 +255,25 @@ test.describe('SVG export modes', () => {
     expect(svgContent).toContain('.skill-node-button {')
     expect(svgContent).toContain('.skill-tree-canvas {')
     expect(download.suggestedFilename()).toBe('skilltree-roadmap.svg')
+  })
+
+  test('png export downloads a binary png file', async ({
+    page,
+  }) => {
+    await openExportMenu(page)
+
+    const [download] = await Promise.all([
+      page.waitForEvent('download'),
+      page.getByRole('menuitem', { name: 'PNG', exact: true }).click(),
+    ])
+
+    const filePath = await download.path()
+    const fileBuffer = readFileSync(filePath)
+    const pngSignature = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
+
+    expect(download.suggestedFilename()).toBe('skilltree-roadmap.png')
+    expect(fileBuffer.subarray(0, 8)).toEqual(pngSignature)
+    expect(fileBuffer.length).toBeGreaterThan(8)
   })
 
   test('interactive svg export matches the builder tooltip palette and font stack', async ({

@@ -48,6 +48,7 @@ export function SkillTreeToolbar({
   onExportCsv,
   onExportPdf,
   onExportSvg,
+  onExportPng,
   onExportCleanSvg,
   onUndo,
   canUndo,
@@ -154,6 +155,9 @@ export function SkillTreeToolbar({
                 </Menu.Item>
                 <Menu.Item onClick={onExportSvg}>
                   SVG
+                </Menu.Item>
+                <Menu.Item onClick={onExportPng}>
+                  PNG
                 </Menu.Item>
                 <Menu.Item onClick={onExportCleanSvg}>
                   SVG (clean)
