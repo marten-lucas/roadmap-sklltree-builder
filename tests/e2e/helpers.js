@@ -120,6 +120,50 @@ const parseCsvLine = (line) => {
   return values.map((value) => value.trim())
 }
 
+const splitCsvRecords = (csvText) => {
+  const records = []
+  let current = ''
+  let inQuotes = false
+  const text = String(csvText).replace(/^\uFEFF/, '')
+
+  for (let i = 0; i < text.length; i += 1) {
+    const char = text[i]
+    const nextChar = text[i + 1]
+
+    if (char === '"') {
+      if (inQuotes && nextChar === '"') {
+        current += '"'
+        i += 1
+        continue
+      }
+
+      inQuotes = !inQuotes
+      current += char
+      continue
+    }
+
+    if ((char === '\n' || char === '\r') && !inQuotes) {
+      if (char === '\r' && nextChar === '\n') {
+        i += 1
+      }
+
+      if (current.trim().length > 0) {
+        records.push(current)
+      }
+      current = ''
+      continue
+    }
+
+    current += char
+  }
+
+  if (current.trim().length > 0) {
+    records.push(current)
+  }
+
+  return records
+}
+
 const normalizeStatus = (status) => {
   const normalized = String(status ?? '').trim().toLowerCase()
   if (normalized === 'done' || normalized === 'now' || normalized === 'next' || normalized === 'later') {
@@ -187,12 +231,23 @@ const parseAdditionalDependencies = (value) => {
     .filter(Boolean)
 }
 
+const normalizeProgressLevel = (value, fallbackLevel = 1) => {
+  const raw = String(value ?? '').trim()
+  if (!raw) {
+    return fallbackLevel
+  }
+
+  const parsed = Number.parseInt(raw, 10)
+  if (!Number.isInteger(parsed) || parsed < 1) {
+    throw new Error(`CSV row has invalid ProgressLevel: ${value}`)
+  }
+
+  return parsed
+}
+
 export const parseSkillTreeCsvTemplate = (csvText, options = {}) => {
   const { strictParentValidation = false } = options
-  const lines = String(csvText)
-    .replace(/^\uFEFF/, '')
-    .split(/\r?\n/)
-    .filter((line) => line.trim().length > 0)
+  const lines = splitCsvRecords(csvText)
 
   if (lines.length < 2) {
     throw new Error('CSV is empty or missing data rows.')
@@ -207,6 +262,7 @@ export const parseSkillTreeCsvTemplate = (csvText, options = {}) => {
   const scopeIndex = findHeaderIndex(headerIndexByName, ['Scope'])
   const parentIndex = findHeaderIndex(headerIndexByName, ['Parent'])
   const statusIndex = findHeaderIndex(headerIndexByName, ['Status'])
+  const progressLevelIndex = findHeaderIndex(headerIndexByName, ['ProgressLevel', 'Progress Level'], false)
   const additionalDependenciesIndex = findHeaderIndex(
     headerIndexByName,
     ['AdditionalDependency', 'Additional Dependency'],
@@ -218,7 +274,7 @@ export const parseSkillTreeCsvTemplate = (csvText, options = {}) => {
     false,
   )
 
-  const rows = []
+  const levelRows = []
   for (let i = 1; i < lines.length; i += 1) {
     const parsed = parseCsvLine(lines[i])
     const hasCollapsedAdditionalDependency =
@@ -232,6 +288,9 @@ export const parseSkillTreeCsvTemplate = (csvText, options = {}) => {
     const segment = parsed[segmentIndex]?.trim()
     const scope = parsed[scopeIndex]?.trim()
     const parentShortName = normalizeParent(parsed[parentIndex])
+    const progressLevel = progressLevelIndex == null
+      ? 1
+      : normalizeProgressLevel(parsed[progressLevelIndex], 1)
     const statusValue = hasCollapsedAdditionalDependency
       ? parsed[additionalDependenciesIndex]
       : parsed[statusIndex]
@@ -252,10 +311,11 @@ export const parseSkillTreeCsvTemplate = (csvText, options = {}) => {
       throw new Error(`CSV row ${i + 1} has invalid Ebene: ${levelText}`)
     }
 
-    rows.push({
+    levelRows.push({
       shortName,
       label,
       level,
+      progressLevel,
       segment,
       scope,
       parentShortName,
@@ -267,17 +327,19 @@ export const parseSkillTreeCsvTemplate = (csvText, options = {}) => {
     })
   }
 
-  const byShortName = new Map()
-  for (const row of rows) {
-    if (byShortName.has(row.shortName)) {
-      throw new Error(`Duplicate Node Short Name in CSV: ${row.shortName}`)
-    }
-    byShortName.set(row.shortName, row)
+  const rowsByShortName = new Map()
+  for (const row of levelRows) {
+    const current = rowsByShortName.get(row.shortName) ?? []
+    current.push(row)
+    rowsByShortName.set(row.shortName, current)
   }
 
   const warnings = []
-  for (const row of rows) {
-    if (row.parentShortName && !byShortName.has(row.parentShortName)) {
+  const rows = []
+  for (const [shortName, groupedRows] of rowsByShortName.entries()) {
+    const row = groupedRows[0]
+
+    if (row.parentShortName && !rowsByShortName.has(row.parentShortName)) {
       if (strictParentValidation) {
         throw new Error(
           `CSV row for ${row.shortName} references unknown parent ${row.parentShortName}.`,
@@ -289,10 +351,28 @@ export const parseSkillTreeCsvTemplate = (csvText, options = {}) => {
       )
       row.parentShortName = null
       row.parentLabel = null
-      continue
+    } else {
+      row.parentLabel = row.parentShortName ? rowsByShortName.get(row.parentShortName)[0].label : null
     }
 
-    row.parentLabel = row.parentShortName ? byShortName.get(row.parentShortName).label : null
+    for (const duplicateRow of groupedRows.slice(1)) {
+      const mismatchedFields = []
+      if (duplicateRow.label !== row.label) mismatchedFields.push('Name')
+      if (duplicateRow.level !== row.level) mismatchedFields.push('Ebene')
+      if (duplicateRow.segment !== row.segment) mismatchedFields.push('Segment')
+      if (duplicateRow.parentShortName !== row.parentShortName) mismatchedFields.push('Parent')
+      if (duplicateRow.additionalDependencies.join(',') !== row.additionalDependencies.join(',')) {
+        mismatchedFields.push('AdditionalDependency')
+      }
+
+      if (mismatchedFields.length > 0) {
+        throw new Error(
+          `CSV rows for ${shortName} must share the same node identity fields (${mismatchedFields.join(', ')} differ).`,
+        )
+      }
+    }
+
+    rows.push(row)
   }
 
   const segments = []
@@ -321,6 +401,7 @@ export const parseSkillTreeCsvTemplate = (csvText, options = {}) => {
 
   return {
     rows,
+    levelRows,
     segments,
     roots,
     children,
@@ -385,6 +466,16 @@ export const getSelectedNodeId = async (page) => {
   const inspector = page.locator('.skill-panel--inspector').first()
   await inspector.waitFor({ state: 'attached', timeout: 10_000 })
   return inspector.getAttribute('data-selected-node-id')
+}
+
+export const selectInspectorLevel = async (page, level = 1) => {
+  const inspector = page.locator('.skill-panel--inspector').first()
+  await inspector.waitFor({ state: 'attached', timeout: 10_000 })
+
+  const tab = inspector.getByRole('tab', { name: `L${level}` })
+  if (await tab.count() > 0) {
+    await tab.first().click()
+  }
 }
 
 const escapeCssAttribute = (value) => String(value).replace(/\\/g, '\\\\').replace(/"/g, '\\"')
@@ -665,7 +756,7 @@ export const trySetSelectValueByLabel = async (page, label, option) => {
 }
 
 export const applyNodeSettings = async (page, row, options = {}) => {
-  const { ignoreManualLevels = false } = options
+  const { ignoreManualLevels = false, level = 1 } = options
   await waitForInspector(page)
   const inspector = page.locator('.skill-panel--inspector')
   await inspector.getByLabel('Name', { exact: true }).fill(row.label)
@@ -680,6 +771,7 @@ export const applyNodeSettings = async (page, row, options = {}) => {
   if (!ignoreManualLevels) {
     await trySetSelectValueByLabel(page, 'Ebene', `Ebene ${row.level}`)
   }
+  await selectInspectorLevel(page, level)
   await trySetSelectValueByLabel(page, 'Segment', row.segment)
   if (row.scope && String(row.scope).trim().length > 0) {
     await trySetScopeByLabel(page, row.scope)

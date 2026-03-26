@@ -18,6 +18,7 @@ import {
   readDownload,
   selectSegmentByLabel,
   selectNodeById,
+  selectInspectorLevel,
   setSelectValueByLabel,
   setSelectedSegmentName,
   trySetSelectValueByLabel,
@@ -64,17 +65,10 @@ const fillCenterMetadata = async (page) => {
 
 const fillReleaseNoteForNode = async (page, nodeId, note, level = 1) => {
   await selectNodeById(page, nodeId)
-  const inspector = page.locator('.skill-panel--inspector').first()
-  await inspector.waitFor({ state: 'attached', timeout: 10_000 })
-
-  // Ensure the correct level tab is active so the Release Note field targets the right level
-  // Click only when the requested level tab exists; otherwise keep current tab.
-  const tab = inspector.getByRole('tab', { name: `L${level}` })
-  if (await tab.count() > 0) {
-    await tab.first().click()
-  }
+  await selectInspectorLevel(page, level)
 
   // Target the Markdown textarea directly (robust against label/translation issues)
+  const inspector = page.locator('.skill-panel--inspector').first()
   const releaseTextarea = inspector.locator('textarea').last()
   await releaseTextarea.waitFor({ state: 'visible', timeout: 5_000 })
   await releaseTextarea.scrollIntoViewIfNeeded()
@@ -111,7 +105,7 @@ const metricsOutputDir = process.env.SKILLTREE_E2E_METRICS_DIR
 
 const ignoreManualLevels = process.env.SKILLTREE_E2E_IGNORE_MANUAL_LEVELS !== '0'
 const ignoreSegments = process.env.SKILLTREE_E2E_IGNORE_SEGMENTS !== '0'
-const skipReleaseNotes = process.env.SKILLTREE_E2E_SKIP_RELEASE_NOTES === '1'
+const skipReleaseNotes = process.env.SKILLTREE_E2E_SKIP_RELEASE_NOTES === '1' || datasetName === 'large'
 
 const ALL_PHASES = ['statuses', 'scopes', 'segments', 'roundtrip']
 const configuredPhases = String(process.env.SKILLTREE_E2E_PHASES ?? 'all').trim().toLowerCase()
@@ -181,6 +175,24 @@ const collectDocumentMetrics = (document) => {
     maxDepth,
     segmentCount: segmentIds.size,
     scopeCount: scopeIds.size,
+  }
+}
+
+const ensureNodeProgressLevels = async (page, nodeId, targetLevelCount) => {
+  const desiredCount = Math.max(1, Number(targetLevelCount ?? 1))
+  await selectNodeById(page, nodeId)
+  const inspector = page.locator('.skill-panel--inspector').first()
+  await inspector.waitFor({ state: 'attached', timeout: 10_000 })
+
+  for (;;) {
+    const currentCount = await inspector.getByRole('tab').count()
+    if (currentCount >= desiredCount) {
+      break
+    }
+
+    const addButton = inspector.getByRole('button', { name: 'Level hinzufügen' }).first()
+    await addButton.click()
+    await page.waitForTimeout(150)
   }
 }
 
@@ -351,6 +363,59 @@ const toComparableSnapshot = (snapshot) => ({
   scope: snapshot.scope ?? null,
 })
 
+const groupProgressRowsByShortName = (rows) => {
+  const grouped = new Map()
+
+  for (const row of rows ?? []) {
+    const current = grouped.get(row.shortName) ?? []
+    current.push(row)
+    grouped.set(row.shortName, current)
+  }
+
+  return grouped
+}
+
+const collectExpectedProgressSnapshots = (rows) => {
+  const grouped = groupProgressRowsByShortName(rows)
+
+  return new Map(
+    [...grouped.entries()].map(([shortName, groupedRows]) => [shortName, groupedRows.map((row) => ({
+      level: Number(row.progressLevel ?? 1),
+      status: row.status,
+      scope: row.scope ? String(row.scope).trim() : null,
+      releaseNote: row.releaseNote ? String(row.releaseNote).trim() : null,
+    })).sort((left, right) => left.level - right.level)]),
+  )
+}
+
+const collectActualProgressSnapshots = (document) => {
+  const scopesById = new Map((document.scopes ?? []).map((scope) => [scope.id, scope.label]))
+  const snapshots = new Map()
+
+  const visit = (nodes) => {
+    for (const node of nodes ?? []) {
+      const levelSnapshots = Array.isArray(node.levels) ? node.levels : []
+      snapshots.set(node.shortName, levelSnapshots.map((level, index) => ({
+        level: index + 1,
+        status: String(level?.status ?? '').trim().toLowerCase(),
+        scope: (Array.isArray(level?.scopeIds) ? level.scopeIds : [])
+          .map((scopeId) => scopesById.get(scopeId) ?? null)
+          .filter(Boolean)
+          .map((value) => String(value).trim())
+          .filter(Boolean)
+          .sort()
+          .join('|') || null,
+        releaseNote: String(level?.releaseNote ?? '').trim() || null,
+      })))
+
+      visit(node.children)
+    }
+  }
+
+  visit(document.children ?? [])
+  return snapshots
+}
+
 test.describe('CSV template roundtrip via builder UI', () => {
   test.afterEach(async ({ page }) => {
     try {
@@ -361,7 +426,7 @@ test.describe('CSV template roundtrip via builder UI', () => {
   })
 
   test('creates the tree from CSV, exports HTML, imports it again, and preserves structure + settings', async ({ page, browser }) => {
-    test.setTimeout(900_000)
+    test.setTimeout(datasetName === 'large' ? 1_800_000 : 900_000)
     test.skip(!existsSync(csvTemplatePath), `CSV template not found: ${csvTemplatePath}`)
     const logStep = (message) => {
       console.log(`[csv-roundtrip:${datasetName}] ${message}`)
@@ -381,6 +446,13 @@ test.describe('CSV template roundtrip via builder UI', () => {
     const csvText = readFileSync(csvTemplatePath, 'utf-8')
     const template = parseSkillTreeCsvTemplate(csvText)
     const rowsByCsvShortName = new Map(template.rows.map((row) => [row.shortName, row]))
+    const levelRowsByShortName = groupProgressRowsByShortName(template.levelRows ?? [])
+    const maxProgressLevelByShortName = new Map(
+      [...levelRowsByShortName.entries()].map(([shortName, rows]) => [
+        shortName,
+        Math.max(1, ...rows.map((row) => Number(row.progressLevel ?? 1))),
+      ]),
+    )
     // If tests run with ignoreManualLevels, compute levels from parent chain
     // and reorder roots/children so parents are created before their children.
     if (ignoreManualLevels) {
@@ -442,13 +514,18 @@ test.describe('CSV template roundtrip via builder UI', () => {
     expect(template.roots.length).toBeGreaterThan(0)
     await clickInitialRootAddControl(page)
     await applyNodeIdentity(page, template.roots[0])
+    await ensureNodeProgressLevels(
+      page,
+      await getSelectedNodeId(page),
+      maxProgressLevelByShortName.get(template.roots[0].shortName) ?? 1,
+    )
     nodeIdByCsvShortName.set(template.roots[0].shortName, await getSelectedNodeId(page))
     if (!ignoreSegments) {
       await setSelectValueByLabel(page, 'Segment', template.roots[0].segment)
     }
     await fillCenterMetadata(page)
     logStep('center metadata filled')
-    const seededScopeLabels = [...new Set(template.rows.map((row) => String(row.scope ?? '').trim()).filter(Boolean))]
+    const seededScopeLabels = [...new Set((template.levelRows ?? []).map((row) => String(row.scope ?? '').trim()).filter(Boolean))]
     await ensureScopesExist(page, seededScopeLabels)
 
     const waitForNewSelectedNode = async (previousNodeId) => {
@@ -519,6 +596,11 @@ test.describe('CSV template roundtrip via builder UI', () => {
       const anchorRootNodeId = await getSelectedNodeId(page)
       await createNodeFromSelected(anchorRootNodeId, () => clickRootAddNearSelected(page))
       await applyNodeIdentity(page, template.roots[index])
+      await ensureNodeProgressLevels(
+        page,
+        await getSelectedNodeId(page),
+        maxProgressLevelByShortName.get(template.roots[index].shortName) ?? 1,
+      )
       nodeIdByCsvShortName.set(template.roots[index].shortName, await getSelectedNodeId(page))
     }
 
@@ -528,6 +610,11 @@ test.describe('CSV template roundtrip via builder UI', () => {
         const anchorRootNodeId = await getSelectedNodeId(page)
         await createNodeFromSelected(anchorRootNodeId, () => clickRootAddNearSelected(page))
         await applyNodeIdentity(page, rootRow)
+        await ensureNodeProgressLevels(
+          page,
+          await getSelectedNodeId(page),
+          maxProgressLevelByShortName.get(rootRow.shortName) ?? 1,
+        )
         nodeIdByCsvShortName.set(rootRow.shortName, await getSelectedNodeId(page))
       }
     }
@@ -545,6 +632,11 @@ test.describe('CSV template roundtrip via builder UI', () => {
         )
       }
       await applyNodeIdentity(page, row)
+      await ensureNodeProgressLevels(
+        page,
+        await getSelectedNodeId(page),
+        maxProgressLevelByShortName.get(row.shortName) ?? 1,
+      )
       nodeIdByCsvShortName.set(row.shortName, await getSelectedNodeId(page))
     }
 
@@ -572,16 +664,9 @@ test.describe('CSV template roundtrip via builder UI', () => {
       return level
     }
 
-    const rowsForSettings = [...template.rows].sort((left, right) => {
-      const leftLevel = ignoreManualLevels ? computeLevelFromParent(left) : left.level
-      const rightLevel = ignoreManualLevels ? computeLevelFromParent(right) : right.level
-      if (leftLevel !== rightLevel) {
-        return leftLevel - rightLevel
-      }
-      return left.order - right.order
-    })
+    const levelRowsForSettings = [...(template.levelRows ?? [])].sort((left, right) => left.order - right.order)
 
-    const rowsWithReleaseNotes = rowsForSettings.map((row, index) => {
+    const rowsWithReleaseNotes = levelRowsForSettings.map((row, index) => {
       const generated = [
         `# ${row.label}`,
         '',
@@ -625,11 +710,12 @@ test.describe('CSV template roundtrip via builder UI', () => {
     // toggled via SKILLTREE_E2E_PHASES.
     if (isPhaseEnabled('statuses')) {
       const phaseStart = Date.now()
-      for (const row of rowsForSettings) {
+      for (const row of levelRowsForSettings) {
         await selectNodeById(page, nodeIdByCsvShortName.get(row.shortName))
         if (!ignoreManualLevels) {
           await trySetSelectValueByLabel(page, 'Ebene', `Ebene ${row.level}`)
         }
+        await selectInspectorLevel(page, row.progressLevel ?? 1)
         await setSelectValueByLabel(page, 'Status', row.status[0].toUpperCase() + row.status.slice(1))
       }
 
@@ -654,8 +740,9 @@ test.describe('CSV template roundtrip via builder UI', () => {
 
     if (isPhaseEnabled('scopes')) {
       const phaseStart = Date.now()
-      for (const row of rowsForSettings) {
+      for (const row of levelRowsForSettings) {
         await selectNodeById(page, nodeIdByCsvShortName.get(row.shortName))
+        await selectInspectorLevel(page, row.progressLevel ?? 1)
         if (row.scope && String(row.scope).trim().length > 0) {
           await trySetScopeByLabel(page, row.scope)
         }
@@ -682,7 +769,7 @@ test.describe('CSV template roundtrip via builder UI', () => {
 
     if (isPhaseEnabled('segments')) {
       const phaseStart = Date.now()
-      for (const row of rowsForSettings) {
+      for (const row of template.rows) {
         await selectNodeById(page, nodeIdByCsvShortName.get(row.shortName))
         if (!ignoreSegments) {
           await trySetSelectValueByLabel(page, 'Segment', row.segment)
@@ -715,7 +802,7 @@ test.describe('CSV template roundtrip via builder UI', () => {
         continue
       }
 
-      await fillReleaseNoteForNode(page, nodeIdByCsvShortName.get(row.shortName), row.releaseNote, row.level)
+      await fillReleaseNoteForNode(page, nodeIdByCsvShortName.get(row.shortName), row.releaseNote, row.progressLevel ?? 1)
     }
     phaseTimingsMs.releaseNotes = Date.now() - phaseStartReleaseNotes
 
@@ -814,6 +901,8 @@ test.describe('CSV template roundtrip via builder UI', () => {
 
       const expectedSnapshots = collectExpectedNodeSnapshots(template.rows, { ignoreManualLevels })
       const actualImportedSnapshots = collectActualNodeSnapshots(payload.document)
+      const expectedProgressSnapshots = collectExpectedProgressSnapshots(rowsWithReleaseNotes)
+      const actualProgressSnapshots = collectActualProgressSnapshots(payload.document)
 
       expect(actualImportedSnapshots).toHaveLength(expectedSnapshots.length)
 
@@ -895,6 +984,23 @@ test.describe('CSV template roundtrip via builder UI', () => {
       } else {
         expect(unexpectedSnapshots).toEqual([])
         expect(missingSnapshots).toEqual([])
+      }
+
+      for (const [shortName, expectedLevels] of expectedProgressSnapshots.entries()) {
+        const actualLevels = actualProgressSnapshots.get(shortName) ?? []
+        expect(actualLevels, `Missing progress levels for ${shortName}`).toHaveLength(expectedLevels.length)
+
+        for (let index = 0; index < expectedLevels.length; index += 1) {
+          const expectedLevel = expectedLevels[index]
+          const actualLevel = actualLevels[index]
+          expect(actualLevel.level, `${shortName} level index`).toBe(expectedLevel.level)
+          expect(actualLevel.status, `${shortName} level ${expectedLevel.level} status`).toBe(expectedLevel.status)
+          expect(actualLevel.scope, `${shortName} level ${expectedLevel.level} scope`).toBe(expectedLevel.scope)
+
+          if (!skipReleaseNotes) {
+            expect(actualLevel.releaseNote, `${shortName} level ${expectedLevel.level} release note`).toBe(expectedLevel.releaseNote)
+          }
+        }
       }
 
       phaseTimingsMs.roundtrip = Date.now() - phaseStart

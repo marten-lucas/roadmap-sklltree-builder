@@ -1,73 +1,10 @@
-ShortName,Name,Scope,Ebene,Segment,Parent,AdditionalDependency,Status,ReleaseNotes
-PLT,Platform Core,Platform,1,Core,,, ,"## Release Notes
-- Core platform foundations
-- **Note:** cross-team"
-DAT,Data Core,Data,1,Core,,, ,"## Release Notes
-- Core data models
-- **Planned:** data lineage"
-OPS,Operations Core,Operations,1,Core,,, ,"## Release Notes
-- Operations workflows
-- **Now:** runbooks"
-UIM,UI Module,Frontend,2,Experience,PLT,,now,"## Release Notes
-- UI module start
-- **Now:** componentization"
-UXR,UX Research,Frontend,2,Experience,PLT,,next,"## Release Notes
-- UX spikes
-- **Next:** user testing"
-API,API Layer,Backend,2,Delivery,DAT,,now,"## Release Notes
-- API layer defined
-- **Important:** backward compat"
-ETL,ETL Jobs,Data,2,Delivery,DAT,,next,"## Release Notes
-- ETL pipelines
-- **Next:** monitoring"
-MON,Monitoring,Operations,2,Reliability,OPS,,now,"## Release Notes
-- Monitoring setup
-- **Status:** now"
-SEC,Security Baseline,Security,2,Reliability,OPS,,next,"## Release Notes
-- Security baseline
-- **Planned:** audits"
-DOC,Docs Hub,Enablement,2,Enablement,PLT,,later,"## Release Notes
-- Docs hub
-- **Later:** tutorials"
-CMP,Component Library,Frontend,3,Experience,UIM,,now,"## Release Notes
-- Component library
-- **Status:** now"
-DSN,Design System,Frontend,3,Experience,UIM,,next,"## Release Notes
-- Design system
-- **Next:** tokens sync"
-GAT,Gateway Service,Backend,3,Delivery,API,,now,"## Release Notes
-- Gateway implemented
-- **Now:** routing rules"
-AUT,Auth Service,Backend,3,Delivery,API,,next,"## Release Notes
-- Auth service
-- **Next:** SSO"
-STR,Streaming Jobs,Data,3,Delivery,ETL,,next,"## Release Notes
-- Streaming jobs
-- **Planned:** scale tests"
-DWH,Warehouse Models,Data,3,Delivery,ETL,,later,"## Release Notes
-- Warehouse models
-- **Later:** optimization"
-ALR,Alerting Rules,Operations,3,Reliability,MON,,now,"## Release Notes
-- Alerting rules
-- **Status:** now"
-BKP,Backup Policy,Operations,3,Reliability,MON,,next,"## Release Notes
-- Backup policy
-- **Next:** restore drills"
-THR,Threat Modeling,Security,3,Reliability,SEC,,next,"## Release Notes
-- Threat modeling
-- **Next:** workshops"
-TLS,TLS Hardening,Security,3,Reliability,SEC,,later,"## Release Notes
-- TLS hardening
-- **Later:** cert rotation"
-E2E,End to End Suite,Quality,4,Enablement,AUT,"CMP, ALR",next,"## Release Notes
-- E2E coverage
-- **Next:** flaky fixes"
-REG,Regression Gates,Quality,5,Enablement,E2E,"THR, DWH",later,"## Release Notes
-- Regression gates
-- **Planned:** gate tuning"
-RLS,Release Dashboard,Enablement,5,Enablement,REG,,next,"## Release Notes
-- Release dashboard
-- **Now:** metrics"
-KPI,KPI Pack,Enablement,6,Enablement,RLS,,later,"## Release Notes
-- KPI pack
-- **Later:** stakeholder review"
+ShortName,Name,Scope,Ebene,Segment,Parent,AdditionalDependency,ProgressLevel,Status,ReleaseNotes
+MID,Medium Root,Alpha,1,Core,,,1,now,
+MID,Medium Root,Beta,1,Core,,,2,next,
+MID,Medium Root,Gamma,1,Core,,,3,later,
+M1,Medium Child One,Frontend,2,Delivery,MID,,1,done,
+M1,Medium Child One,Backend,2,Delivery,MID,,2,now,
+M1,Medium Child One,Quality,2,Delivery,MID,,3,next,
+M2,Medium Child Two,Data,2,Reliability,MID,,1,now,
+M2,Medium Child Two,Operations,2,Reliability,MID,,2,next,
+M2,Medium Child Two,Security,2,Reliability,MID,,3,later,
