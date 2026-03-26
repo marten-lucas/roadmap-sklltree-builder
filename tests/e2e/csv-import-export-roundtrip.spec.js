@@ -7,7 +7,6 @@ import {
   clickChildAddForSelectedNode,
   clickInitialRootAddControl,
   clickInitialSegmentAddControl,
-  clickRootAddNearSelected,
   clickRootAddNearSelectedWithDirection,
   clickSegmentAddNearSelected,
   confirmAndReset,

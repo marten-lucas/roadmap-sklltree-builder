@@ -3,8 +3,10 @@ import { collectReleaseNoteEntries } from './pdfExport'
 import { renderMarkdownToHtml } from './markdown'
 import { serializeSvgElementForExport } from './svgExport'
 import { VIEWPORT_DEFAULTS } from './viewport'
+import htmlToImageBundle from 'html-to-image/dist/html-to-image.js?raw'
 
 export const HTML_EXPORT_DATA_SCRIPT_ID = 'skilltree-export-data'
+const HTML_TO_IMAGE_BUNDLE = String(htmlToImageBundle).replace(/<\/script/gi, '<\\/script')
 
 const XML_PREFIX_PATTERN = /^<\?xml[^>]*\?>\s*/i
 
@@ -235,6 +237,7 @@ const buildViewerScript = () => `
       const scopeFilterSelect = document.getElementById('html-export-filter-scope')
       const releaseFilterSelect = document.getElementById('html-export-filter-release')
       const printButton = document.getElementById('html-export-print')
+      const pngButton = document.getElementById('html-export-png')
       const svgButton = document.getElementById('html-export-svg')
       const cleanSvgButton = document.getElementById('html-export-svg-clean')
       const exportDataScript = document.getElementById('${HTML_EXPORT_DATA_SCRIPT_ID}')
@@ -997,9 +1000,24 @@ const buildViewerScript = () => `
         })
       }
 
-      const downloadSvg = (sourceSvg, fileName, { clean = false } = {}) => {
+      const getExportBackgroundColor = () => {
+        const element = treeShell ?? document.body
+
+        if (!element || typeof window.getComputedStyle !== 'function') {
+          return null
+        }
+
+        const backgroundColor = window.getComputedStyle(element).backgroundColor
+        if (!backgroundColor || backgroundColor === 'transparent' || backgroundColor === 'rgba(0, 0, 0, 0)') {
+          return null
+        }
+
+        return backgroundColor
+      }
+
+      const prepareSvgCloneForExport = (sourceSvg, { clean = false } = {}) => {
         if (!sourceSvg) {
-          return
+          return null
         }
 
         const clone = sourceSvg.cloneNode(true)
@@ -1011,6 +1029,7 @@ const buildViewerScript = () => `
         clone.style.transformOrigin = ''
         clone.style.cursor = ''
         clone.style.touchAction = ''
+
         if (clean) {
           clone.querySelectorAll('.skill-node-tooltip-layer').forEach((node) => node.remove())
           clone.querySelectorAll('style').forEach((style) => {
@@ -1020,6 +1039,30 @@ const buildViewerScript = () => `
           })
         }
 
+        return { clone, visibleBounds }
+      }
+
+      const downloadBlob = (blob, fileName) => {
+        const objectUrl = URL.createObjectURL(blob)
+        const anchor = document.createElement('a')
+
+        anchor.href = objectUrl
+        anchor.download = fileName
+        anchor.style.display = 'none'
+
+        document.body.appendChild(anchor)
+        anchor.click()
+        document.body.removeChild(anchor)
+        URL.revokeObjectURL(objectUrl)
+      }
+
+      const downloadSvg = (sourceSvg, fileName, { clean = false } = {}) => {
+        const prepared = prepareSvgCloneForExport(sourceSvg, { clean })
+        if (!prepared) {
+          return
+        }
+
+        const { clone } = prepared
         const svgMarkup = '<?xml version="1.0" encoding="UTF-8"?>\\n' + clone.outerHTML
         const blob = new Blob([svgMarkup], { type: 'image/svg+xml;charset=utf-8' })
         const objectUrl = URL.createObjectURL(blob)
@@ -1033,8 +1076,53 @@ const buildViewerScript = () => `
         URL.revokeObjectURL(objectUrl)
       }
 
+      const downloadPng = async (sourceSvg, fileName) => {
+        const prepared = prepareSvgCloneForExport(sourceSvg)
+        if (!prepared || !window.htmlToImage?.toBlob) {
+          return
+        }
+
+        const { clone } = prepared
+        const tempContainer = document.createElement('div')
+        tempContainer.style.position = 'fixed'
+        tempContainer.style.left = '-100000px'
+        tempContainer.style.top = '-100000px'
+        tempContainer.style.width = '0'
+        tempContainer.style.height = '0'
+        tempContainer.style.overflow = 'hidden'
+        tempContainer.style.pointerEvents = 'none'
+        tempContainer.appendChild(clone)
+        document.body.appendChild(tempContainer)
+
+        try {
+          if (document.fonts?.ready) {
+            await document.fonts.ready
+          }
+
+          const backgroundColor = getExportBackgroundColor()
+          const pngBlob = await window.htmlToImage.toBlob(clone, {
+            cacheBust: true,
+            skipFonts: true,
+            skipAutoScale: true,
+            backgroundColor: backgroundColor ?? undefined,
+          })
+
+          if (!pngBlob) {
+            return
+          }
+
+          downloadBlob(pngBlob, fileName)
+        } finally {
+          tempContainer.remove()
+        }
+      }
+
       printButton?.addEventListener('click', () => {
         window.print()
+      })
+
+      pngButton?.addEventListener('click', () => {
+        void downloadPng(svgRoot, 'skilltree-roadmap.png')
       })
 
       svgButton?.addEventListener('click', () => {
@@ -1667,6 +1755,7 @@ export const buildHtmlExportDocument = ({
           <div class="html-export__menu-panel">
             <div class="html-export__menu-actions">
               <button id="html-export-print" class="html-export__menu-action" type="button">PDF</button>
+              <button id="html-export-png" class="html-export__menu-action" type="button">PNG</button>
               <button id="html-export-svg" class="html-export__menu-action" type="button">SVG (interactive)</button>
               <button id="html-export-svg-clean" class="html-export__menu-action" type="button">SVG clean</button>
             </div>
@@ -1755,6 +1844,7 @@ export const buildHtmlExportDocument = ({
   </main>
 
   <script id="${HTML_EXPORT_DATA_SCRIPT_ID}" type="application/json">${canonicalPayloadJson}</script>
+  <script>${HTML_TO_IMAGE_BUNDLE}</script>
   <script>${buildViewerScript()}</script>
 </body>
 </html>`

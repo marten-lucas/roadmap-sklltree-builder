@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test'
+import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { startFresh, exportHtml, getBuilderNodeLabels, readDownload } from './helpers.js'
 
@@ -169,6 +170,22 @@ const downloadViewerSvg = async (exportPage) => {
   ])
 
   return readDownload(download)
+}
+
+const downloadViewerPng = async (exportPage) => {
+  await exportPage.getByLabel('Export', { exact: true }).click()
+  await expect(exportPage.locator('#html-export-png')).toBeVisible()
+
+  const [download] = await Promise.all([
+    exportPage.waitForEvent('download'),
+    exportPage.locator('#html-export-png').click(),
+  ])
+
+  const filePath = await download.path()
+  return {
+    fileBuffer: readFileSync(filePath),
+    suggestedFilename: download.suggestedFilename(),
+  }
 }
 
 const openPdfPopup = async (page) => {
@@ -344,6 +361,23 @@ test.describe('Rendered export viewer', () => {
       const exportedSvgDom = await canonicalizeSvgMarkup(exportPage, exportedSvgMarkup)
 
       expect(exportedSvgDom).toBe(builderSvgDom)
+    } finally {
+      await exportPage.close()
+      await exportContext.close()
+    }
+  })
+
+  test('png export downloads a png from the html export viewer', async ({ page, browser }) => {
+    await startFresh(page)
+
+    const { exportPage, exportContext } = await openExportViewer(page, browser)
+    try {
+      const { fileBuffer, suggestedFilename } = await downloadViewerPng(exportPage)
+      const pngSignature = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
+
+      expect(suggestedFilename).toBe('skilltree-roadmap.png')
+      expect(fileBuffer.subarray(0, 8)).toEqual(pngSignature)
+      expect(fileBuffer.length).toBeGreaterThan(8)
     } finally {
       await exportPage.close()
       await exportContext.close()

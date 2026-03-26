@@ -49,8 +49,10 @@ describe('htmlExport', () => {
     expect(html).toContain('<svg viewBox="0 0 100 100"></svg>')
     expect(html).toContain(`id="${HTML_EXPORT_DATA_SCRIPT_ID}"`)
     expect(html).toContain('PDF')
+    expect(html).toContain('PNG')
     expect(html).toContain('SVG (interactive)')
     expect(html).toContain('SVG clean')
+    expect(html).toContain('id="html-export-png"')
     expect(html).toContain('html-export__panel--roadmap')
     expect(html).toContain('height: 78vh;')
     expect(html).toContain('min-height: 58vh;')
@@ -77,6 +79,7 @@ describe('htmlExport', () => {
     expect(html).toContain('const getOccupiedBounds = () =>')
     expect(html).toContain('let contentGroupBounds = null')
     expect(html).toContain('const getVisibleViewportBounds = () =>')
+    expect(html).toContain('window.htmlToImage?.toBlob')
   })
 
   it('omits level labels for single-level release notes and keeps them for multi-level nodes', () => {
