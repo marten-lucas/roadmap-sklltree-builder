@@ -426,6 +426,32 @@ export const getE2eExportDir = () => resolve(
 
 const getVisibleLocator = (locator) => locator.filter({ visible: true })
 
+const clickSvgControl = async (control) => {
+  let lastError = null
+
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      await control.waitFor({ state: 'visible', timeout: 8_000 })
+      await control.scrollIntoViewIfNeeded()
+      await control.click({ force: true, timeout: 5_000 })
+      return
+    } catch (error) {
+      lastError = error
+      // Fallback for SVG groups that sometimes ignore pointer click in headed mode.
+      try {
+        await control.dispatchEvent('click')
+        return
+      } catch {
+        // Retry after a short delay.
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, 180))
+    }
+  }
+
+  throw lastError ?? new Error('Failed to click SVG control')
+}
+
 export const confirmAndReset = async (page) => {
   page.once('dialog', (dialog) => dialog.accept())
   await page.getByRole('button', { name: 'Reset' }).click()
@@ -471,7 +497,29 @@ export const selectNodeByShortName = async (page, shortName) => {
 export const selectNodeById = async (page, nodeId) => {
   const node = page.locator(`foreignObject.skill-node-export-anchor[data-node-id="${escapeCssAttribute(nodeId)}"] .skill-node-button`).first()
   await node.waitFor({ state: 'attached', timeout: 10_000 })
-  await node.dispatchEvent('click')
+
+  let clicked = false
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      await node.scrollIntoViewIfNeeded()
+      await node.click({ force: true, timeout: 5_000 })
+      clicked = true
+      break
+    } catch {
+      try {
+        await node.dispatchEvent('click')
+        clicked = true
+        break
+      } catch {
+        await new Promise((resolve) => setTimeout(resolve, 120))
+      }
+    }
+  }
+
+  if (!clicked) {
+    throw new Error(`Could not select node by id: ${nodeId}`)
+  }
+
   await waitForInspector(page)
   await waitForSelectedNodeId(page, nodeId)
 }
@@ -540,7 +588,7 @@ export const clickInitialSegmentAddControl = async (page) => {
   const control = getVisibleLocator(
     page.locator('svg.skill-tree-canvas g[data-add-control="segment-initial"]'),
   ).first()
-  await control.dispatchEvent('click')
+  await clickSvgControl(control)
   await page.waitForSelector('.skill-panel--segment', { timeout: 10_000 })
 }
 
@@ -548,7 +596,7 @@ export const clickSegmentAddNearSelected = async (page) => {
   const control = getVisibleLocator(
     page.locator('svg.skill-tree-canvas g[data-add-control="segment-near"][data-direction="right"]'),
   ).first()
-  await control.dispatchEvent('click')
+  await clickSvgControl(control)
   await page.waitForSelector('.skill-panel--segment', { timeout: 10_000 })
 }
 
@@ -569,30 +617,50 @@ export const clickInitialRootAddControl = async (page) => {
   const control = getVisibleLocator(
     page.locator('svg.skill-tree-canvas g[data-add-control="root-initial"]'),
   ).first()
-  await control.dispatchEvent('click')
+  await clickSvgControl(control)
   await waitForInspector(page)
 }
 
-export const clickRootAddNearSelected = async (page) => {
-  const selectedNodeId = await getSelectedNodeId(page)
+export const clickRootAddNearSelected = async (page, anchorNodeId = null) => {
+  const selectedNodeId = anchorNodeId ?? await getSelectedNodeId(page)
   const control = getVisibleLocator(
     page.locator(
       `svg.skill-tree-canvas g[data-add-control="root-near"][data-node-id="${escapeCssAttribute(selectedNodeId)}"][data-direction="right"]`,
     ),
   ).first()
-  await control.dispatchEvent('click')
+  await clickSvgControl(control)
   await waitForInspector(page)
 }
 
-export const clickChildAddForSelectedNode = async (page) => {
-  const selectedNodeId = await getSelectedNodeId(page)
+export const clickRootAddNearSelectedWithDirection = async (page, direction, anchorNodeId = null) => {
+  const selectedNodeId = anchorNodeId ?? await getSelectedNodeId(page)
+  const safeDirection = direction === 'left' ? 'left' : 'right'
   const control = getVisibleLocator(
     page.locator(
-      `svg.skill-tree-canvas g[data-add-control="child"][data-node-id="${escapeCssAttribute(selectedNodeId)}"]`,
+      `svg.skill-tree-canvas g[data-add-control="root-near"][data-node-id="${escapeCssAttribute(selectedNodeId)}"][data-direction="${safeDirection}"]`,
     ),
   ).first()
-  await control.dispatchEvent('click')
+  await clickSvgControl(control)
   await waitForInspector(page)
+}
+
+export const clickChildAddForSelectedNode = async (page, anchorNodeId = null) => {
+  const selectedNodeId = anchorNodeId ?? await getSelectedNodeId(page)
+  const control = getVisibleLocator(
+    page.locator(
+      `svg.skill-tree-canvas g[data-add-control="child"][data-root-id="${escapeCssAttribute(selectedNodeId)}"]`,
+    ),
+  ).first()
+  await clickSvgControl(control)
+  await waitForInspector(page)
+}
+
+export const getVisibleChildAddControlCountForNode = async (page, anchorNodeId) => {
+  return getVisibleLocator(
+    page.locator(
+      `svg.skill-tree-canvas g[data-add-control="child"][data-root-id="${escapeCssAttribute(anchorNodeId)}"]`,
+    ),
+  ).count()
 }
 
 export const setSelectValueByLabel = async (page, label, option) => {

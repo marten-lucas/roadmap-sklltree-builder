@@ -8,17 +8,20 @@ import {
   clickInitialRootAddControl,
   clickInitialSegmentAddControl,
   clickRootAddNearSelected,
+  clickRootAddNearSelectedWithDirection,
   clickSegmentAddNearSelected,
   confirmAndReset,
   extractJsonPayload,
   ensureScopesExist,
   getSelectedNodeId,
+  getVisibleChildAddControlCountForNode,
   parseSkillTreeCsvTemplate,
   persistTextFile,
   readDownload,
   selectSegmentByLabel,
   selectNodeById,
   selectInspectorLevel,
+  searchAndSelectNode,
   setSelectValueByLabel,
   setSelectedSegmentName,
   trySetSelectValueByLabel,
@@ -33,7 +36,27 @@ const ONE_YEAR_FROM_TODAY = () => {
 
 const fillCenterMetadata = async (page) => {
   const centerIcon = page.locator('.skill-tree-center-icon').first()
-  await centerIcon.click()
+
+  // Inspector overlays can intercept pointer events in headed mode.
+  // Use progressively stronger click strategies to open the center panel.
+  let opened = false
+  try {
+    await centerIcon.click({ timeout: 3_000 })
+    opened = true
+  } catch {
+    try {
+      await centerIcon.dispatchEvent('click')
+      opened = true
+    } catch {
+      await centerIcon.evaluate((el) => el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })))
+      opened = true
+    }
+  }
+
+  if (!opened) {
+    throw new Error('Could not open center metadata panel')
+  }
+
   await page.waitForSelector('.skill-panel--icon', { timeout: 10_000 })
 
   const panel = page.locator('.skill-panel--icon')
@@ -59,7 +82,24 @@ const fillCenterMetadata = async (page) => {
   const skipIcon = process.env.SKILLTREE_E2E_SKIP_ICON === '1'
   if (!skipIcon) {
     await panel.locator('input[type="file"][accept=".svg,image/svg+xml"]').setInputFiles(iconPath)
-    await page.waitForTimeout(300)
+    // Wait for the SVG to be stored as a data URI in the document state.
+    // 300ms is not enough when the click was dispatched synthetically.
+    try {
+      await page.waitForFunction(
+        () => {
+          const raw = localStorage.getItem('roadmap-skilltree.document.v1')
+          if (!raw) return false
+          try {
+            const doc = JSON.parse(raw)
+            return String(doc.document?.centerIconSrc ?? '').startsWith('data:')
+          } catch { return false }
+        },
+        { timeout: 5_000 },
+      )
+    } catch {
+      // icon may not have reached localStorage yet; continue anyway
+      await page.waitForTimeout(600)
+    }
   }
 }
 
@@ -104,7 +144,8 @@ const metricsOutputDir = process.env.SKILLTREE_E2E_METRICS_DIR
   : resolve(exportOutputDir, 'metrics')
 
 const ignoreProgressLevels = (process.env.SKILLTREE_E2E_IGNORE_PROGRESS_LEVELS
-  ?? process.env.SKILLTREE_E2E_IGNORE_MANUAL_LEVELS) !== '0'
+  ?? process.env.SKILLTREE_E2E_IGNORE_MANUAL_LEVELS
+  ?? '1') !== '0'
 const ignoreSegments = process.env.SKILLTREE_E2E_IGNORE_SEGMENTS !== '0'
 const skipReleaseNotes = process.env.SKILLTREE_E2E_SKIP_RELEASE_NOTES === '1' || datasetName === 'large'
 
@@ -461,12 +502,110 @@ test.describe('CSV template roundtrip via builder UI', () => {
   test('creates the tree from CSV, exports HTML, imports it again, and preserves structure + settings', async ({ page }) => {
     test.setTimeout(datasetName === 'large' ? 1_800_000 : 900_000)
     test.skip(!existsSync(csvTemplatePath), `CSV template not found: ${csvTemplatePath}`)
+    const isVerbose = process.env.SKILLTREE_E2E_VERBOSE === '1'
     const logStep = (message) => {
       console.log(`[csv-roundtrip:${datasetName}] ${message}`)
+    }
+    const verboseLog = (message) => {
+      if (isVerbose) {
+        logStep(`[verbose] ${message}`)
+      }
+    }
+    const logCreatedNode = (kind, shortName, nodeId) => {
+      verboseLog(`node-created kind=${kind} short=${shortName} nodeId=${nodeId}`)
+    }
+    const triggerExportDownload = async (reason) => {
+      const attemptClickExport = async () => {
+        const [download] = await Promise.all([
+          page.waitForEvent('download', { timeout: 12_000 }),
+          page.getByRole('button', { name: 'Export', exact: true }).click(),
+        ])
+        return download
+      }
+
+      const attemptKeyboardExport = async () => {
+        const [download] = await Promise.all([
+          page.waitForEvent('download', { timeout: 12_000 }),
+          page.keyboard.press('Control+s'),
+        ])
+        return download
+      }
+
+      try {
+        verboseLog(`export trigger click start reason=${reason}`)
+        return await attemptClickExport()
+      } catch (error) {
+        verboseLog(`export trigger click failed reason=${reason} error=${error.message}`)
+      }
+
+      try {
+        await page.keyboard.press('Escape')
+      } catch {
+        // ignore
+      }
+
+      verboseLog(`export trigger keyboard fallback reason=${reason}`)
+      return attemptKeyboardExport()
+    }
+    const triggerSvgExportDownload = async (reason) => {
+      const exportButton = page.getByRole('button', { name: 'Export', exact: true }).first()
+      const svgMenuItem = page.getByRole('menuitem', { name: 'SVG (interactive)', exact: true }).filter({ visible: true }).first()
+
+      verboseLog(`svg export open menu start reason=${reason}`)
+      await exportButton.hover({ timeout: 5_000 })
+
+      await svgMenuItem.waitFor({ state: 'visible', timeout: 5_000 })
+      verboseLog(`svg export click start reason=${reason}`)
+
+      const [download] = await Promise.all([
+        page.waitForEvent('download', { timeout: 12_000 }),
+        svgMenuItem.click({ force: true }),
+      ])
+
+      return download
+    }
+    const selectNodeForSettings = async (row) => {
+      const expectedNodeId = nodeIdByCsvShortName.get(row.shortName)
+      expect(expectedNodeId, `Missing nodeId mapping for ${row.shortName}`).toBeTruthy()
+
+      verboseLog(`selectNodeForSettings start short=${row.shortName} expected=${expectedNodeId}`)
+
+      let selectedNodeId = null
+      try {
+        await selectNodeById(page, expectedNodeId)
+        selectedNodeId = await getSelectedNodeId(page)
+      } catch (error) {
+        verboseLog(`selectNodeForSettings canvas-failed short=${row.shortName} error=${error.message}`)
+      }
+
+      if (selectedNodeId !== expectedNodeId) {
+        verboseLog(`selectNodeForSettings search-fallback short=${row.shortName} expected=${expectedNodeId} actual=${selectedNodeId}`)
+        selectedNodeId = await searchAndSelectNode(page, row.shortName)
+      }
+
+      if (selectedNodeId !== expectedNodeId) {
+        verboseLog(`selection mismatch short=${row.shortName} expected=${expectedNodeId} actual=${selectedNodeId}`)
+        await searchAndSelectNode(page, row.shortName)
+      }
+
+      await expect
+        .poll(async () => getSelectedNodeId(page), {
+          timeout: 8_000,
+          message: `Expected selected node for ${row.shortName}`,
+        })
+        .toBe(expectedNodeId)
+
+      verboseLog(`selectNodeForSettings done short=${row.shortName}`)
     }
     const pageErrors = []
     page.on('pageerror', (error) => {
       pageErrors.push(error)
+      logStep(`[pageerror] ${error.message}`)
+    })
+    page.on('console', (msg) => {
+      if (isVerbose || msg.type() === 'error' || msg.type() === 'warn') {
+        logStep(`[browser:${msg.type()}] ${msg.text().slice(0, 200)}`)
+      }
     })
     const assertNoPageErrors = (stage) => {
       expect(pageErrors, `Unexpected page errors ${stage}`).toHaveLength(0)
@@ -523,8 +662,8 @@ test.describe('CSV template roundtrip via builder UI', () => {
     await expect(page.locator('foreignObject.skill-node-export-anchor')).toHaveCount(0)
     assertNoPageErrors('after reset')
 
-    expect(template.segments.length).toBeGreaterThan(0)
     if (!ignoreSegments) {
+      expect(template.segments.length).toBeGreaterThan(0)
       await clickInitialSegmentAddControl(page)
       await setSelectedSegmentName(page, template.segments[0])
 
@@ -535,19 +674,23 @@ test.describe('CSV template roundtrip via builder UI', () => {
 
       for (const segmentName of template.segments) {
         const existingSegmentCount = await page
-        logStep('phase segments setup done')
           .locator('.skill-tree-segment-label', { hasText: segmentName })
           .count()
 
-      logStep('root creation start')
         if (existingSegmentCount === 0) {
           await selectSegmentByLabel(page, template.segments[0])
           await clickSegmentAddNearSelected(page)
           await setSelectedSegmentName(page, segmentName)
         }
       }
+
+      logStep('phase segments setup done')
     }
+
+    logStep('root creation start')
     expect(template.roots.length).toBeGreaterThan(0)
+    const seededScopeLabels = [...new Set((template.levelRows ?? []).map((row) => String(row.scope ?? '').trim()).filter(Boolean))]
+
     await clickInitialRootAddControl(page)
     await applyNodeIdentity(page, template.roots[0])
     await ensureNodeProgressLevels(
@@ -555,14 +698,12 @@ test.describe('CSV template roundtrip via builder UI', () => {
       await getSelectedNodeId(page),
       maxProgressLevelByShortName.get(template.roots[0].shortName) ?? 1,
     )
-    nodeIdByCsvShortName.set(template.roots[0].shortName, await getSelectedNodeId(page))
+    const firstRootNodeId = await getSelectedNodeId(page)
+    nodeIdByCsvShortName.set(template.roots[0].shortName, firstRootNodeId)
+    logCreatedNode('root-initial', template.roots[0].shortName, firstRootNodeId)
     if (!ignoreSegments) {
       await setSelectValueByLabel(page, 'Segment', template.roots[0].segment)
     }
-    await fillCenterMetadata(page)
-    logStep('center metadata filled')
-    const seededScopeLabels = [...new Set((template.levelRows ?? []).map((row) => String(row.scope ?? '').trim()).filter(Boolean))]
-    await ensureScopesExist(page, seededScopeLabels)
 
     const waitForNewSelectedNode = async (previousNodeId) => {
       await page.waitForFunction(
@@ -580,11 +721,13 @@ test.describe('CSV template roundtrip via builder UI', () => {
       // More robust creation: wait for a new foreignObject anchor to appear
       // and select it. Fall back to existing inspector-change detection.
       for (let attempt = 0; attempt < 3; attempt += 1) {
+        verboseLog(`createNodeFromSelected parent=${previousNodeId} attempt=${attempt + 1}`)
         const beforeIds = await page
           .locator('foreignObject.skill-node-export-anchor')
           .evaluateAll((els) => els.map((el) => el.getAttribute('data-node-id')))
+        verboseLog(`nodes-before=${beforeIds.length}`)
 
-        await triggerCreate()
+        await triggerCreate(previousNodeId)
 
         try {
           // Prefer detecting a new DOM anchor rather than only relying on inspector attr
@@ -603,6 +746,7 @@ test.describe('CSV template roundtrip via builder UI', () => {
 
           if (newNodeId) {
             const nid = String(newNodeId)
+            verboseLog(`new-node-detected=${nid}`)
             // click the new node's button to ensure inspector selection
             const selector = `foreignObject.skill-node-export-anchor[data-node-id="${nid}"] .skill-node-button`
             const node = page.locator(selector).first()
@@ -616,8 +760,10 @@ test.describe('CSV template roundtrip via builder UI', () => {
           }
 
           // Fallback: wait for inspector's selected node to change
+          verboseLog(`no-dom-diff node for parent=${previousNodeId}, fallback to inspector selection diff`)
           return await waitForNewSelectedNode(previousNodeId)
         } catch (error) {
+          verboseLog(`create attempt failed parent=${previousNodeId} attempt=${attempt + 1} error=${error.message}`)
           if (attempt === 2) {
             throw new Error(`Failed to create a new node from ${previousNodeId}: ${error.message}`)
           }
@@ -626,57 +772,107 @@ test.describe('CSV template roundtrip via builder UI', () => {
         }
       }
     }
-
     for (let index = 1; index < template.roots.length; index += 1) {
       await selectNodeById(page, nodeIdByCsvShortName.get(template.roots[0].shortName))
       const anchorRootNodeId = await getSelectedNodeId(page)
-      await createNodeFromSelected(anchorRootNodeId, () => clickRootAddNearSelected(page))
+      await createNodeFromSelected(anchorRootNodeId, async (nodeId) => {
+        try {
+          await clickRootAddNearSelectedWithDirection(page, 'right', nodeId)
+        } catch {
+          await clickRootAddNearSelectedWithDirection(page, 'left', nodeId)
+        }
+      })
       await applyNodeIdentity(page, template.roots[index])
       await ensureNodeProgressLevels(
         page,
         await getSelectedNodeId(page),
         maxProgressLevelByShortName.get(template.roots[index].shortName) ?? 1,
       )
-      nodeIdByCsvShortName.set(template.roots[index].shortName, await getSelectedNodeId(page))
+      const createdRootNodeId = await getSelectedNodeId(page)
+      nodeIdByCsvShortName.set(template.roots[index].shortName, createdRootNodeId)
+      logCreatedNode('root-sibling', template.roots[index].shortName, createdRootNodeId)
     }
 
     for (const rootRow of template.roots) {
       if (!nodeIdByCsvShortName.has(rootRow.shortName)) {
         await selectNodeById(page, nodeIdByCsvShortName.get(template.roots[0].shortName))
         const anchorRootNodeId = await getSelectedNodeId(page)
-        await createNodeFromSelected(anchorRootNodeId, () => clickRootAddNearSelected(page))
+        await createNodeFromSelected(anchorRootNodeId, async (nodeId) => {
+          try {
+            await clickRootAddNearSelectedWithDirection(page, 'right', nodeId)
+          } catch {
+            await clickRootAddNearSelectedWithDirection(page, 'left', nodeId)
+          }
+        })
         await applyNodeIdentity(page, rootRow)
         await ensureNodeProgressLevels(
           page,
           await getSelectedNodeId(page),
           maxProgressLevelByShortName.get(rootRow.shortName) ?? 1,
         )
-        nodeIdByCsvShortName.set(rootRow.shortName, await getSelectedNodeId(page))
+        const createdMissingRootNodeId = await getSelectedNodeId(page)
+        nodeIdByCsvShortName.set(rootRow.shortName, createdMissingRootNodeId)
+        logCreatedNode('root-recovery', rootRow.shortName, createdMissingRootNodeId)
       }
     }
 
     for (const row of template.children) {
       const parentRow = rowsByCsvShortName.get(row.parentShortName)
       expect(parentRow, `Missing parent CSV row for ${row.shortName}`).toBeTruthy()
+      verboseLog(`create-child start short=${row.shortName} parentShort=${row.parentShortName}`)
 
       await selectNodeById(page, nodeIdByCsvShortName.get(row.parentShortName))
+      const selectedParentId = await getSelectedNodeId(page)
+      expect(selectedParentId, `Could not select parent for ${row.shortName}`).toBe(nodeIdByCsvShortName.get(row.parentShortName))
+      verboseLog(`selected-parent-id=${selectedParentId}`)
+
+      const childHandleCount = await getVisibleChildAddControlCountForNode(page, selectedParentId)
+      verboseLog(`child-handle-visible-count parent=${selectedParentId} count=${childHandleCount}`)
+      if (childHandleCount === 0) {
+        const addControlDebug = await page.evaluate((parentId) => {
+          const allControls = Array.from(document.querySelectorAll('g[data-add-control="child"]') ?? [])
+          return {
+            parentId,
+            controls: allControls.map((control) => ({
+              rootId: control.getAttribute('data-root-id'),
+              display: control instanceof HTMLElement ? control.style.display : '',
+            })),
+          }
+        }, selectedParentId)
+
+        persistTextFile(
+          resolve(exportOutputDir, `missing-child-handle-${row.shortName}.json`),
+          JSON.stringify(addControlDebug, null, 2),
+        )
+      }
+
       try {
-        await createNodeFromSelected(await getSelectedNodeId(page), () => clickChildAddForSelectedNode(page))
+        await createNodeFromSelected(selectedParentId, (nodeId) => clickChildAddForSelectedNode(page, nodeId))
       } catch (error) {
+        verboseLog(`create-child failed short=${row.shortName} parent=${row.parentShortName} error=${error.message}`)
         throw new Error(
           `Failed to create child ${row.shortName} (${row.label}) under ${row.parentShortName} (${row.parentLabel}): ${error.message}`,
         )
       }
+      verboseLog(`create-child success short=${row.shortName}`)
       await applyNodeIdentity(page, row)
       await ensureNodeProgressLevels(
         page,
         await getSelectedNodeId(page),
         maxProgressLevelByShortName.get(row.shortName) ?? 1,
       )
-      nodeIdByCsvShortName.set(row.shortName, await getSelectedNodeId(page))
+      const createdChildNodeId = await getSelectedNodeId(page)
+      nodeIdByCsvShortName.set(row.shortName, createdChildNodeId)
+      logCreatedNode('child', row.shortName, createdChildNodeId)
     }
 
+    await fillCenterMetadata(page)
+    logStep('center metadata filled')
+    await ensureScopesExist(page, seededScopeLabels)
+    verboseLog(`scopes ensured count=${seededScopeLabels.length}`)
+
     await page.waitForTimeout(900)
+    verboseLog('post-creation settle complete')
 
     const rowsWithReleaseNotes = levelRowsForSettings.map((row, index) => {
       const generated = [
@@ -697,48 +893,32 @@ test.describe('CSV template roundtrip via builder UI', () => {
       }
     })
 
-    // TEMPORARY: create an export once all nodes exist and have identity
-    // (name + shortname). This allows tests to continue even if scope
-    // assignment is flaky; scope-related fixes will follow later.
-    {
-      const [download] = await Promise.all([
-        page.waitForEvent('download'),
-        page.getByRole('button', { name: 'Export', exact: true }).click(),
-      ])
-      const exportedHtmlEarly = await readDownload(download)
-      const persistedExportPathEarly = persistHtmlExport(exportedHtmlEarly)
-      const exportedPayloadEarly = extractJsonPayload(exportedHtmlEarly)
-      const actualExportedSnapshotsEarly = collectActualNodeSnapshots(exportedPayloadEarly.document)
-
-      expect(actualExportedSnapshotsEarly).toHaveLength(template.rows.length)
-      expect(existsSync(persistedExportPathEarly)).toBe(true)
-
-      // make the persisted export path available for the import step later
-      // by reusing the variable name the later code expects
-      persistedExportPath = persistedExportPathEarly
-    }
-
     // Phase strategy: the execution order remains fixed, but each phase can be
     // toggled via SKILLTREE_E2E_PHASES.
     if (isPhaseEnabled('statuses')) {
       const phaseStart = Date.now()
+      verboseLog(`phase statuses start rows=${levelRowsForSettings.length}`)
       for (const row of levelRowsForSettings) {
-        await selectNodeById(page, nodeIdByCsvShortName.get(row.shortName))
+        verboseLog(`phase statuses row short=${row.shortName} level=${ignoreProgressLevels ? 1 : (row.progressLevel ?? 1)} status=${row.status}`)
+        await selectNodeForSettings(row)
+        verboseLog(`phase statuses selected short=${row.shortName}`)
         if (!ignoreProgressLevels) {
+          verboseLog(`phase statuses set level select short=${row.shortName} level=${row.level}`)
           await trySetSelectValueByLabel(page, 'Ebene', `Ebene ${row.level}`)
         }
+        verboseLog(`phase statuses set inspector level short=${row.shortName} level=${ignoreProgressLevels ? 1 : (row.progressLevel ?? 1)}`)
         await selectInspectorLevel(page, ignoreProgressLevels ? 1 : (row.progressLevel ?? 1))
+        verboseLog(`phase statuses set status short=${row.shortName} status=${row.status}`)
         await setSelectValueByLabel(page, 'Status', row.status[0].toUpperCase() + row.status.slice(1))
+        verboseLog(`phase statuses done row short=${row.shortName}`)
       }
 
-      const [downloadPhase] = await Promise.all([
-        page.waitForEvent('download'),
-        page.getByRole('button', { name: 'Export', exact: true }).click(),
-      ])
+      const downloadPhase = await triggerExportDownload('statuses')
       const exported = await readDownload(downloadPhase)
       const payload = extractJsonPayload(exported)
       persistPhaseExport(exported, 'statuses')
       phaseTimingsMs.statuses = Date.now() - phaseStart
+      verboseLog(`phase statuses done durationMs=${phaseTimingsMs.statuses}`)
       persistMetrics('statuses', {
         runId,
         datasetName,
@@ -752,22 +932,24 @@ test.describe('CSV template roundtrip via builder UI', () => {
 
     if (isPhaseEnabled('scopes')) {
       const phaseStart = Date.now()
+      verboseLog(`phase scopes start rows=${levelRowsForSettings.length}`)
       for (const row of levelRowsForSettings) {
-        await selectNodeById(page, nodeIdByCsvShortName.get(row.shortName))
+        verboseLog(`phase scopes row short=${row.shortName} level=${ignoreProgressLevels ? 1 : (row.progressLevel ?? 1)} scope=${row.scope ?? ''}`)
+        await selectNodeForSettings(row)
+        verboseLog(`phase scopes selected short=${row.shortName}`)
         await selectInspectorLevel(page, ignoreProgressLevels ? 1 : (row.progressLevel ?? 1))
         if (row.scope && String(row.scope).trim().length > 0) {
+          verboseLog(`phase scopes set scope short=${row.shortName} scope=${row.scope}`)
           await trySetScopeByLabel(page, row.scope)
         }
       }
 
-      const [downloadPhase] = await Promise.all([
-        page.waitForEvent('download'),
-        page.getByRole('button', { name: 'Export', exact: true }).click(),
-      ])
+      const downloadPhase = await triggerExportDownload('scopes')
       const exported = await readDownload(downloadPhase)
       const payload = extractJsonPayload(exported)
       persistPhaseExport(exported, 'scopes')
       phaseTimingsMs.scopes = Date.now() - phaseStart
+      verboseLog(`phase scopes done durationMs=${phaseTimingsMs.scopes}`)
       persistMetrics('scopes', {
         runId,
         datasetName,
@@ -781,22 +963,24 @@ test.describe('CSV template roundtrip via builder UI', () => {
 
     if (isPhaseEnabled('segments')) {
       const phaseStart = Date.now()
+      verboseLog(`phase segments start rows=${template.rows.length}`)
       for (const row of template.rows) {
-        await selectNodeById(page, nodeIdByCsvShortName.get(row.shortName))
+        verboseLog(`phase segments row short=${row.shortName} segment=${row.segment}`)
+        await selectNodeForSettings(row)
+        verboseLog(`phase segments selected short=${row.shortName}`)
         if (!ignoreSegments) {
+          verboseLog(`phase segments set segment short=${row.shortName} segment=${row.segment}`)
           await trySetSelectValueByLabel(page, 'Segment', row.segment)
         }
       }
 
-      const [downloadPhase] = await Promise.all([
-        page.waitForEvent('download'),
-        page.getByRole('button', { name: 'Export', exact: true }).click(),
-      ])
+      const downloadPhase = await triggerExportDownload('segments')
       const exported = await readDownload(downloadPhase)
       const payload = extractJsonPayload(exported)
       // make the persisted export for the import step the final-phase export
       persistedExportPath = persistPhaseExport(exported, 'segments')
       phaseTimingsMs.segments = Date.now() - phaseStart
+      verboseLog(`phase segments done durationMs=${phaseTimingsMs.segments}`)
       persistMetrics('segments', {
         runId,
         datasetName,
@@ -809,10 +993,15 @@ test.describe('CSV template roundtrip via builder UI', () => {
     }
 
     const phaseStartReleaseNotes = Date.now()
+    verboseLog(`phase releaseNotes start rows=${rowsWithReleaseNotes.length} skip=${skipReleaseNotes}`)
     for (const row of rowsWithReleaseNotes) {
       if (skipReleaseNotes) {
         continue
       }
+
+      verboseLog(`phase releaseNotes row short=${row.shortName} level=${ignoreProgressLevels ? 1 : (row.progressLevel ?? 1)}`)
+
+      await selectNodeForSettings(row)
 
       await fillReleaseNoteForNode(
         page,
@@ -822,6 +1011,7 @@ test.describe('CSV template roundtrip via builder UI', () => {
       )
     }
     phaseTimingsMs.releaseNotes = Date.now() - phaseStartReleaseNotes
+    verboseLog(`phase releaseNotes done durationMs=${phaseTimingsMs.releaseNotes}`)
 
     const actualCount = await page.locator('foreignObject.skill-node-export-anchor').count()
     const actualNodes = await page.locator('foreignObject.skill-node-export-anchor').evaluateAll((elements) => (
@@ -854,29 +1044,34 @@ test.describe('CSV template roundtrip via builder UI', () => {
       )
     }
 
-    const [download] = await Promise.all([
-      page.waitForEvent('download'),
-      page.getByRole('button', { name: 'Export', exact: true }).click(),
-    ])
+    const download = await triggerExportDownload('final')
+    verboseLog('final export start')
     const exportedHtml = await readDownload(download)
+    verboseLog(`final export html length=${exportedHtml.length}`)
     persistedExportPath = persistHtmlExport(exportedHtml)
     const exportedPayload = extractJsonPayload(exportedHtml)
     const actualExportedSnapshots = collectActualNodeSnapshots(exportedPayload.document)
 
+    verboseLog(`assert: snapshots.length=${actualExportedSnapshots.length} expected=${template.rows.length}`)
     expect(actualExportedSnapshots).toHaveLength(template.rows.length)
+    verboseLog('assert: no export-exclude marker')
     expect(exportedHtml).not.toContain('skill-tree-export-exclude')
+    verboseLog('assert: no root-initial marker')
     expect(exportedHtml).not.toContain('data-add-control="root-initial"')
+    verboseLog('assert: no segment-initial marker')
     expect(exportedHtml).not.toContain('data-add-control="segment-initial"')
-    expect(exportedHtml).toContain('data:image/svg+xml')
-    expect(exportedHtml).not.toContain('/blob.svg')
-    expect(exportedPayload.document.centerIconSrc).toContain('data:image/svg+xml')
+    const hasIconInHtml = exportedHtml.includes('data:image/svg+xml')
+    const hasIconInPayload = String(exportedPayload.document?.centerIconSrc ?? '').startsWith('data:')
+    verboseLog(`assert: icon hasIconInHtml=${hasIconInHtml} hasIconInPayload=${hasIconInPayload} skipIcon=${process.env.SKILLTREE_E2E_SKIP_ICON}`)
+    if (process.env.SKILLTREE_E2E_SKIP_ICON !== '1') {
+      expect(exportedHtml).toContain('data:image/svg+xml')
+      expect(exportedHtml).not.toContain('/blob.svg')
+      expect(exportedPayload.document.centerIconSrc).toContain('data:image/svg+xml')
+    }
+    verboseLog('assert: no selected node buttons')
     expect(page.locator('.skill-node-button--selected')).toHaveCount(0)
 
-    await page.getByRole('button', { name: 'Export', exact: true }).hover()
-    const [svgDownload] = await Promise.all([
-      page.waitForEvent('download'),
-      page.getByRole('menuitem', { name: 'SVG', exact: true }).click(),
-    ])
+    const svgDownload = await triggerSvgExportDownload('final')
     const exportedSvg = await readDownload(svgDownload)
 
     expect(exportedSvg).toContain('data:image/svg+xml')
@@ -905,6 +1100,7 @@ test.describe('CSV template roundtrip via builder UI', () => {
     expect(Number.isFinite(svgCenterGeometry.centerY)).toBe(true)
 
     expect(existsSync(persistedExportPath)).toBe(true)
+    verboseLog(`final export done nodes=${actualExportedSnapshots.length}`)
 
     const persistedScopeLabels = await page.evaluate(() => {
       const raw = localStorage.getItem('roadmap-skilltree.document.v1')
@@ -920,21 +1116,23 @@ test.describe('CSV template roundtrip via builder UI', () => {
 
     if (isPhaseEnabled('roundtrip')) {
       const phaseStart = Date.now()
+      verboseLog('phase roundtrip start')
 
       await confirmAndReset(page)
       await expect(page.locator('foreignObject.skill-node-export-anchor')).toHaveCount(0)
       assertNoPageErrors('before import')
+      verboseLog('roundtrip reset complete')
 
+      verboseLog('roundtrip import start')
       await page.locator('input[type="file"][accept="text/html,.html"]').setInputFiles(persistedExportPath)
       await page.waitForSelector('foreignObject.skill-node-export-anchor', { timeout: 10_000 })
       assertNoPageErrors('after import')
+      verboseLog('roundtrip import complete')
 
-      const [importedDownload] = await Promise.all([
-        page.waitForEvent('download'),
-        page.getByRole('button', { name: 'Export', exact: true }).click(),
-      ])
+      const importedDownload = await triggerExportDownload('roundtrip-reexport')
       const importedHtml = await readDownload(importedDownload)
       const payload = extractJsonPayload(importedHtml)
+      verboseLog('roundtrip re-export complete')
 
       const expectedSnapshots = collectExpectedNodeSnapshots(template.rows, { ignoreManualLevels: ignoreProgressLevels })
       const actualImportedSnapshots = collectActualNodeSnapshots(payload.document)
@@ -1041,6 +1239,7 @@ test.describe('CSV template roundtrip via builder UI', () => {
       }
 
       phaseTimingsMs.roundtrip = Date.now() - phaseStart
+      verboseLog(`phase roundtrip done durationMs=${phaseTimingsMs.roundtrip}`)
       persistMetrics('roundtrip', {
         runId,
         datasetName,
