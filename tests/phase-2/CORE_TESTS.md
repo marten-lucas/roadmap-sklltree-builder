@@ -1,10 +1,10 @@
-# Phase 2 — Core Tests Manifest
+# Builder Workflow E2E Tests Manifest
 
-This document lists the core tests that form the Phase‑2 minimal E2E surface.
+This document lists the core tests that form the builder workflow E2E surface.
 
 Purpose:
 - Provide a small, high-signal regression suite for critical flows.
-- Run locally via `npm run test:phase2` or in CI via the Phase‑2 workflow.
+- Run locally via `npm run test:builder-workflow` or in CI via the builder workflow job.
 
 Core specs included:
 
@@ -17,7 +17,7 @@ How to run locally:
 
 ```bash
 npm install
-npm run test:phase2
+npm run test:builder-workflow
 ```
 
 Artifacts are written into `tests/results/` by default.

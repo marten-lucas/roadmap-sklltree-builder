@@ -68,7 +68,7 @@ const escapeHtml = (value) => String(value ?? '')
 
 const escapeJsonForScriptTag = (value) => value
   .replace(/</g, '\\u003c')
-  .replace(/-->/g, '--\\>')
+  .replace(/-->/g, '--\\u003e')
 
 const formatDisplayDate = (value) => {
   const rawValue = String(value ?? '').trim()
@@ -534,9 +534,21 @@ const buildViewerScript = () => `
         const contentWidth = Math.max(1, occupied.maxX - occupied.minX)
         const contentHeight = Math.max(1, occupied.maxY - occupied.minY)
         const centerGroup = svgRoot?.querySelector('.skill-tree-center-icon')
-        const centerMatch = centerGroup?.getAttribute('transform')?.match(/translate\(([-0-9.]+),\s*([-0-9.]+)\)/)
-        const centerX = centerMatch ? Number.parseFloat(centerMatch[1]) : contentMinX + contentWidth / 2
-        const centerY = centerMatch ? Number.parseFloat(centerMatch[2]) : contentMinY + contentHeight / 2
+        const centerTransform = String(centerGroup?.getAttribute('transform') ?? '').trim()
+        let centerX = contentMinX + contentWidth / 2
+        let centerY = contentMinY + contentHeight / 2
+
+        if (centerTransform.startsWith('translate(') && centerTransform.endsWith(')')) {
+          const [rawX, rawY] = centerTransform
+            .slice('translate('.length, -1)
+            .split(',')
+            .map((value) => value.trim())
+          const parsedX = Number.parseFloat(rawX)
+          const parsedY = Number.parseFloat(rawY)
+
+          if (Number.isFinite(parsedX)) centerX = parsedX
+          if (Number.isFinite(parsedY)) centerY = parsedY
+        }
         const halfWidth = Math.max(centerX - occupied.minX, occupied.maxX - centerX)
         const halfHeight = Math.max(centerY - occupied.minY, occupied.maxY - centerY)
         const fittedBoundsWidth = Math.max(contentWidth, halfWidth * 2)

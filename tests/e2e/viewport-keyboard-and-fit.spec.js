@@ -24,23 +24,6 @@ const parseMatrix = (transform) => {
   }
 }
 
-const computeExpectedTransform = (bounds, viewportWidth, viewportHeight, padding = 72) => {
-  const width = Math.max(1, Number(bounds.width) || 1)
-  const height = Math.max(1, Number(bounds.height) || 1)
-  const scale = Math.min(
-    viewportWidth / (width + padding * 2),
-    viewportHeight / (height + padding * 2),
-  )
-  const centerX = (Number(bounds.x) || 0) + width / 2
-  const centerY = (Number(bounds.y) || 0) + height / 2
-
-  return {
-    scale,
-    x: viewportWidth / 2 - centerX * scale,
-    y: viewportHeight / 2 - centerY * scale,
-  }
-}
-
 test.describe('Viewport keyboard and fit interactions', () => {
   test.beforeEach(async ({ page }) => {
     await startFresh(page)

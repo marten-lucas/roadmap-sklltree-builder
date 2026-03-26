@@ -458,7 +458,7 @@ test.describe('CSV template roundtrip via builder UI', () => {
     }
   })
 
-  test('creates the tree from CSV, exports HTML, imports it again, and preserves structure + settings', async ({ page, browser }) => {
+  test('creates the tree from CSV, exports HTML, imports it again, and preserves structure + settings', async ({ page }) => {
     test.setTimeout(datasetName === 'large' ? 1_800_000 : 900_000)
     test.skip(!existsSync(csvTemplatePath), `CSV template not found: ${csvTemplatePath}`)
     const logStep = (message) => {
@@ -677,28 +677,6 @@ test.describe('CSV template roundtrip via builder UI', () => {
     }
 
     await page.waitForTimeout(900)
-
-    const computedLevelByShortName = new Map()
-    const computeLevelFromParent = (row, stack = new Set()) => {
-      const shortName = row.shortName
-
-      if (computedLevelByShortName.has(shortName)) {
-        return computedLevelByShortName.get(shortName)
-      }
-
-      if (stack.has(shortName)) {
-        return 1
-      }
-
-      stack.add(shortName)
-      const parent = row.parentShortName
-        ? rowsByCsvShortName.get(row.parentShortName)
-        : null
-      const level = parent ? computeLevelFromParent(parent, stack) + 1 : 1
-      stack.delete(shortName)
-      computedLevelByShortName.set(shortName, level)
-      return level
-    }
 
     const rowsWithReleaseNotes = levelRowsForSettings.map((row, index) => {
       const generated = [

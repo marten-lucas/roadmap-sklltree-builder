@@ -75,7 +75,7 @@ export const saveDocumentToLocalStorage = (document, storage = globalThis?.local
   } catch (err) {
     // Fail gracefully if storage quota is exceeded or other storage errors occur.
     // Tests will detect persistence failures via other means if required.
-    // eslint-disable-next-line no-console
+     
     console.warn('saveDocumentToLocalStorage failed:', err)
     return false
   }

@@ -225,7 +225,7 @@ const createToolbarScope = async (page, label) => {
   await waitForPersistedScopeLabel(page, label)
 }
 
-test.describe('Phase 3 regressions', () => {
+test.describe('Inspector and layout regressions', () => {
   test.beforeEach(async ({ page }) => {
     await startFresh(page)
   })

@@ -1,9 +1,6 @@
 import { test, expect } from '@playwright/test'
 import {
   startFresh,
-  confirmAndReset,
-  clickInitialRootAddControl,
-  clickRootAddNearSelected,
   selectNodeByShortName,
   setSelectValueByLabel,
 } from './helpers.js'
@@ -27,10 +24,6 @@ test.describe('Multiselect regression', () => {
       const el = document.querySelector('.skill-panel__title--large')
       return el && /Ausgewählt/.test(el.textContent || '')
     }, null, { timeout: 5000 })
-
-    // debug: log inspector header and available labels
-    // eslint-disable-next-line no-console
-    console.log('INSPECTOR_HTML:', await page.locator('.skill-panel--inspector').first().innerHTML())
 
     // Set Status (für alle) to Done — confirm the bulk-apply dialog
     page.once('dialog', (dialog) => dialog.accept())
@@ -60,7 +53,7 @@ test.describe('Multiselect regression', () => {
         const statusA = (a.levels && a.levels[0] && a.levels[0].status) || a.status
         const statusB = (b.levels && b.levels[0] && b.levels[0].status) || b.status
         return statusA === 'done' && statusB === 'done'
-      } catch (e) {
+      } catch {
         return false
       }
     }, null, { timeout: 5000 })
@@ -68,16 +61,6 @@ test.describe('Multiselect regression', () => {
     const stored = await page.evaluate(() => localStorage.getItem('roadmap-skilltree.document.v1'))
     const parsed = JSON.parse(stored)
     const doc = parsed.document ?? parsed
-
-    const findByLabel = (nodes, label) => {
-      if (!Array.isArray(nodes)) return null
-      for (const n of nodes) {
-        if (n.label === label) return n
-        const found = findByLabel(n.children, label)
-        if (found) return found
-      }
-      return null
-    }
 
     const findByShort = (nodes, short) => {
       if (!Array.isArray(nodes)) return null

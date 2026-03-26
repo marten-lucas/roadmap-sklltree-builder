@@ -129,11 +129,6 @@ const replaceCenterIconForeignObject = (svgRoot) => {
     return
   }
 
-  const x = centerForeign.getAttribute('x') ?? '0'
-  const y = centerForeign.getAttribute('y') ?? '0'
-  const width = centerForeign.getAttribute('width') ?? '0'
-  const height = centerForeign.getAttribute('height') ?? '0'
-
   const image = createSvgElement('image')
   image.setAttribute('class', 'skill-tree-center-icon__image')
   const exportSize = CENTER_ICON_EXPORT_SIZE
@@ -699,7 +694,7 @@ const injectExportTooltipStyles = (svgRoot) => {
   defs.appendChild(style)
 }
 
-const buildTooltipGroup = ({ id, centerX, centerY, title, entries }) => {
+const buildTooltipGroup = ({ centerX, centerY, title, entries }) => {
   const group = createSvgElement('g')
   group.setAttribute('class', 'skill-node-tooltip-group')
   group.setAttribute('opacity', '0')

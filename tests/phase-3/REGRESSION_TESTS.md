@@ -1,6 +1,6 @@
-# Phase 3 — Regression Tests
+# Inspector and Layout Regression Tests
 
-Phase 3 locks down the refactored core with fast regression coverage before any remaining E2E work.
+This suite locks down the refactored core with fast regression coverage before any remaining E2E work.
 
 Included suites:
 
@@ -25,5 +25,5 @@ Included suites:
 Local run:
 
 ```bash
-npm run test:phase3
+npm run test:inspector-layout
 ```
