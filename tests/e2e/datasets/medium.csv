@@ -1,10 +1,51 @@
 ShortName,Name,Scope,Ebene,Segment,Parent,AdditionalDependency,ProgressLevel,Status,ReleaseNotes
-MID,Medium Root,Alpha,1,Core,,,1,now,
-MID,Medium Root,Beta,1,Core,,,2,next,
-MID,Medium Root,Gamma,1,Core,,,3,later,
-M1,Medium Child One,Frontend,2,Delivery,MID,,1,done,
-M1,Medium Child One,Backend,2,Delivery,MID,,2,now,
-M1,Medium Child One,Quality,2,Delivery,MID,,3,next,
-M2,Medium Child Two,Data,2,Reliability,MID,,1,now,
-M2,Medium Child Two,Operations,2,Reliability,MID,,2,next,
-M2,Medium Child Two,Security,2,Reliability,MID,,3,later,
+MID,Medium Root,Alpha,1,Core,,,1,now,"# Medium Root
+
+The root rollout is **ready**.
+
+- planning done
+- implementation started"
+MID,Medium Root,Beta,1,Core,,,2,next,"# Medium Root - Beta
+
+This level keeps the node identity stable.
+
+Remember:  two  spaces stay intact."
+MID,Medium Root,Gamma,1,Core,,,3,later,"# Medium Root - Gamma
+
+Release notes roundtrip with a short paragraph.
+
+1. first item
+2. second item"
+M1,Medium Child One,Frontend,2,Delivery,MID,,1,done,"# Medium Child One
+
+Child one ships with **done** status.
+
+- frontend tasks
+- backend follow-up"
+M1,Medium Child One,Backend,2,Delivery,MID,,2,now,"# Medium Child One - Backend
+
+This backend step is `in progress`.
+
+Needs review before merge."
+M1,Medium Child One,Quality,2,Delivery,MID,,3,next,"# Medium Child One - Quality
+
+Quality gating remains:
+
+- smoke test
+- docs check"
+M2,Medium Child Two,Data,2,Reliability,MID,,1,now,"# Medium Child Two
+
+Data work is underway.
+
+Line breaks should survive import."
+M2,Medium Child Two,Operations,2,Reliability,MID,,2,next,"# Medium Child Two - Operations
+
+Ops notes:
+
+- rollout window
+- monitoring"
+M2,Medium Child Two,Security,2,Reliability,MID,,3,later,"# Medium Child Two - Security
+
+Security tasks are pending.
+
+This line has  two  spaces intentionally."

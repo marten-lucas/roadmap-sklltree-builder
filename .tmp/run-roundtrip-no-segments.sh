@@ -20,6 +20,6 @@ case "$dataset" in
 esac
 
 export SKILLTREE_E2E_IGNORE_SEGMENTS=1
-export SKILLTREE_E2E_IGNORE_MANUAL_LEVELS=1
+export SKILLTREE_E2E_IGNORE_PROGRESS_LEVELS=1
 export SKILLTREE_E2E_HOLD_OPEN=1
 npx playwright test tests/e2e/csv-import-export-roundtrip.spec.js -c playwright.config.js --headed --project=chromium --trace=on --workers=1 --reporter=list

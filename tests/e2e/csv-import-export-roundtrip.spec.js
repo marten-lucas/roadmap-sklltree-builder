@@ -103,7 +103,8 @@ const metricsOutputDir = process.env.SKILLTREE_E2E_METRICS_DIR
   ? resolve(process.env.SKILLTREE_E2E_METRICS_DIR)
   : resolve(exportOutputDir, 'metrics')
 
-const ignoreManualLevels = process.env.SKILLTREE_E2E_IGNORE_MANUAL_LEVELS !== '0'
+const ignoreProgressLevels = (process.env.SKILLTREE_E2E_IGNORE_PROGRESS_LEVELS
+  ?? process.env.SKILLTREE_E2E_IGNORE_MANUAL_LEVELS) !== '0'
 const ignoreSegments = process.env.SKILLTREE_E2E_IGNORE_SEGMENTS !== '0'
 const skipReleaseNotes = process.env.SKILLTREE_E2E_SKIP_RELEASE_NOTES === '1' || datasetName === 'large'
 
@@ -123,6 +124,22 @@ if (ignoreSegments) {
 }
 
 const isPhaseEnabled = (phaseName) => selectedPhases.has(phaseName)
+
+const getPrimaryProgressRows = (rows) => {
+  const groupedByShortName = groupProgressRowsByShortName(rows)
+
+  return [...groupedByShortName.values()]
+    .map((groupedRows) => [...groupedRows].sort((left, right) => {
+      const leftLevel = Number(left.progressLevel ?? 1)
+      const rightLevel = Number(right.progressLevel ?? 1)
+      if (leftLevel !== rightLevel) {
+        return leftLevel - rightLevel
+      }
+
+      return left.order - right.order
+    })[0])
+    .sort((left, right) => left.order - right.order)
+}
 
 const persistHtmlExport = (htmlText) => {
   const fileName = `skilltree-roundtrip-${Date.now()}.html`
@@ -446,16 +463,19 @@ test.describe('CSV template roundtrip via builder UI', () => {
     const csvText = readFileSync(csvTemplatePath, 'utf-8')
     const template = parseSkillTreeCsvTemplate(csvText)
     const rowsByCsvShortName = new Map(template.rows.map((row) => [row.shortName, row]))
-    const levelRowsByShortName = groupProgressRowsByShortName(template.levelRows ?? [])
+    const allLevelRowsForSettings = [...(template.levelRows ?? [])].sort((left, right) => left.order - right.order)
+    const levelRowsForSettings = ignoreProgressLevels
+      ? getPrimaryProgressRows(allLevelRowsForSettings)
+      : allLevelRowsForSettings
     const maxProgressLevelByShortName = new Map(
-      [...levelRowsByShortName.entries()].map(([shortName, rows]) => [
-        shortName,
-        Math.max(1, ...rows.map((row) => Number(row.progressLevel ?? 1))),
+      levelRowsForSettings.map((row) => [
+        row.shortName,
+        ignoreProgressLevels ? 1 : Math.max(1, Number(row.progressLevel ?? 1)),
       ]),
     )
-    // If tests run with ignoreManualLevels, compute levels from parent chain
+    // If tests run with ignoreProgressLevels, compute levels from parent chain
     // and reorder roots/children so parents are created before their children.
-    if (ignoreManualLevels) {
+    if (ignoreProgressLevels) {
       const computedLevelByShortName = new Map()
       const computeLevel = (row, stack = new Set()) => {
         if (computedLevelByShortName.has(row.shortName)) return computedLevelByShortName.get(row.shortName)
@@ -664,8 +684,6 @@ test.describe('CSV template roundtrip via builder UI', () => {
       return level
     }
 
-    const levelRowsForSettings = [...(template.levelRows ?? [])].sort((left, right) => left.order - right.order)
-
     const rowsWithReleaseNotes = levelRowsForSettings.map((row, index) => {
       const generated = [
         `# ${row.label}`,
@@ -712,10 +730,10 @@ test.describe('CSV template roundtrip via builder UI', () => {
       const phaseStart = Date.now()
       for (const row of levelRowsForSettings) {
         await selectNodeById(page, nodeIdByCsvShortName.get(row.shortName))
-        if (!ignoreManualLevels) {
+        if (!ignoreProgressLevels) {
           await trySetSelectValueByLabel(page, 'Ebene', `Ebene ${row.level}`)
         }
-        await selectInspectorLevel(page, row.progressLevel ?? 1)
+        await selectInspectorLevel(page, ignoreProgressLevels ? 1 : (row.progressLevel ?? 1))
         await setSelectValueByLabel(page, 'Status', row.status[0].toUpperCase() + row.status.slice(1))
       }
 
@@ -742,7 +760,7 @@ test.describe('CSV template roundtrip via builder UI', () => {
       const phaseStart = Date.now()
       for (const row of levelRowsForSettings) {
         await selectNodeById(page, nodeIdByCsvShortName.get(row.shortName))
-        await selectInspectorLevel(page, row.progressLevel ?? 1)
+        await selectInspectorLevel(page, ignoreProgressLevels ? 1 : (row.progressLevel ?? 1))
         if (row.scope && String(row.scope).trim().length > 0) {
           await trySetScopeByLabel(page, row.scope)
         }
@@ -802,7 +820,12 @@ test.describe('CSV template roundtrip via builder UI', () => {
         continue
       }
 
-      await fillReleaseNoteForNode(page, nodeIdByCsvShortName.get(row.shortName), row.releaseNote, row.progressLevel ?? 1)
+      await fillReleaseNoteForNode(
+        page,
+        nodeIdByCsvShortName.get(row.shortName),
+        row.releaseNote,
+        ignoreProgressLevels ? 1 : (row.progressLevel ?? 1),
+      )
     }
     phaseTimingsMs.releaseNotes = Date.now() - phaseStartReleaseNotes
 
@@ -899,7 +922,7 @@ test.describe('CSV template roundtrip via builder UI', () => {
       const importedHtml = await readDownload(importedDownload)
       const payload = extractJsonPayload(importedHtml)
 
-      const expectedSnapshots = collectExpectedNodeSnapshots(template.rows, { ignoreManualLevels })
+      const expectedSnapshots = collectExpectedNodeSnapshots(template.rows, { ignoreManualLevels: ignoreProgressLevels })
       const actualImportedSnapshots = collectActualNodeSnapshots(payload.document)
       const expectedProgressSnapshots = collectExpectedProgressSnapshots(rowsWithReleaseNotes)
       const actualProgressSnapshots = collectActualProgressSnapshots(payload.document)
@@ -1019,7 +1042,7 @@ test.describe('CSV template roundtrip via builder UI', () => {
       runId,
       datasetName,
       phasesEnabled: Array.from(selectedPhases),
-      ignoreManualLevels,
+      ignoreManualLevels: ignoreProgressLevels,
       ignoreSegments,
       phaseTimingsMs,
       totalDurationMs: Date.now() - runStartedAtMs,
