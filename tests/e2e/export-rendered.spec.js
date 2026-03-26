@@ -187,7 +187,54 @@ test.describe('Rendered export viewer', () => {
   test('export viewer pan zoom and filter controls respond to input', async ({ page, browser }) => {
     const { exportPage, exportContext } = await openExportViewer(page, browser)
     try {
+      const shell = exportPage.locator('#html-export-tree-shell')
+      await expect(shell).toHaveCSS('cursor', 'grab')
+
       const transformBefore = await exportPage.locator('#html-export-tree-canvas').evaluate((element) => element.style.transform)
+
+      await exportPage.locator('#html-export-zoom-toggle').click()
+      await expect(exportPage.locator('#html-export-zoom-slider')).toBeVisible()
+
+      await exportPage.locator('#html-export-zoom-in').click()
+      const transformAfterZoomIn = await exportPage.locator('#html-export-tree-canvas').evaluate((element) => element.style.transform)
+      expect(transformAfterZoomIn).not.toBe(transformBefore)
+
+      await exportPage.locator('#html-export-zoom-out').click()
+      const transformAfterZoomOut = await exportPage.locator('#html-export-tree-canvas').evaluate((element) => element.style.transform)
+      expect(transformAfterZoomOut).not.toBe(transformAfterZoomIn)
+
+      await exportPage.locator('#html-export-zoom-slider').evaluate((element) => {
+        element.value = '150'
+        element.dispatchEvent(new Event('input', { bubbles: true }))
+        element.dispatchEvent(new Event('change', { bubbles: true }))
+      })
+
+      await expect(exportPage.locator('#html-export-zoom-value')).toHaveText('150%')
+
+      await exportPage.locator('#html-export-fit').click()
+      const transformAfterFit = await exportPage.locator('#html-export-tree-canvas').evaluate((element) => element.style.transform)
+      expect(transformAfterFit).not.toBe('translate(0px, 0px) scale(1)')
+
+      await exportPage.keyboard.press('Control+0')
+      const transformAfterHotkeyFit = await exportPage.locator('#html-export-tree-canvas').evaluate((element) => element.style.transform)
+      expect(transformAfterHotkeyFit).toBeTruthy()
+
+      await exportPage.keyboard.down(' ')
+      const shellBox = await shell.boundingBox()
+      expect(shellBox).toBeTruthy()
+      await exportPage.mouse.move(shellBox.x + 40, shellBox.y + 40)
+      await exportPage.mouse.down()
+      await exportPage.mouse.move(shellBox.x + 90, shellBox.y + 75)
+      await exportPage.mouse.up()
+      await exportPage.keyboard.up(' ')
+
+      const transformAfterSpacePan = await exportPage.locator('#html-export-tree-canvas').evaluate((element) => element.style.transform)
+      expect(transformAfterSpacePan).not.toBe(transformAfterHotkeyFit)
+
+      await exportPage.mouse.dblclick(shellBox.x + 20, shellBox.y + 20)
+      const transformAfterDoubleClickFit = await exportPage.locator('#html-export-tree-canvas').evaluate((element) => element.style.transform)
+      expect(transformAfterDoubleClickFit).toBeTruthy()
+
       await exportPage.locator('.html-export__menu-button').last().click()
       await expect(exportPage.locator('.html-export__menu-panel--filters')).toBeVisible()
       await exportPage.locator('#html-export-filter-release').selectOption('now')

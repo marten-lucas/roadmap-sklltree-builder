@@ -152,6 +152,7 @@ const buildViewerScript = () => `
       }
       const SCOPE_FILTER_ALL = '__all__'
       const MINIMAL_NODE_SCALE = 0.32
+      const VIEWPORT_ZOOM_STEPS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 2]
       const VIEWPORT = {
         minScale: ${VIEWPORT_DEFAULTS.minScale},
         maxScale: ${VIEWPORT_DEFAULTS.maxScale},
@@ -225,6 +226,12 @@ const buildViewerScript = () => `
       const treeCanvas = document.getElementById('html-export-tree-canvas')
       const svgRoot = treeCanvas?.querySelector('svg')
       const treeShell = document.getElementById('html-export-tree-shell')
+      const zoomToggleButton = document.getElementById('html-export-zoom-toggle')
+      const zoomOutButton = document.getElementById('html-export-zoom-out')
+      const zoomInButton = document.getElementById('html-export-zoom-in')
+      const zoomSlider = document.getElementById('html-export-zoom-slider')
+      const zoomValue = document.getElementById('html-export-zoom-value')
+      const fitButton = document.getElementById('html-export-fit')
       const scopeFilterSelect = document.getElementById('html-export-filter-scope')
       const releaseFilterSelect = document.getElementById('html-export-filter-release')
       const printButton = document.getElementById('html-export-print')
@@ -287,6 +294,7 @@ const buildViewerScript = () => `
         translateX: 0,
         translateY: 0,
         isDragging: false,
+        isPanModeActive: false,
         dragStartX: 0,
         dragStartY: 0,
         dragOriginX: 0,
@@ -294,6 +302,57 @@ const buildViewerScript = () => `
       }
 
       const clamp = (value, min, max) => Math.max(min, Math.min(max, value))
+
+      const snapScaleToStep = (value, steps = VIEWPORT_ZOOM_STEPS) => {
+        if (!Number.isFinite(value)) {
+          return steps[0]
+        }
+
+        return steps.reduce((closest, step) => (
+          Math.abs(step - value) < Math.abs(closest - value) ? step : closest
+        ), steps[0])
+      }
+
+      const findStepIndex = (value, steps = VIEWPORT_ZOOM_STEPS) => {
+        const snapped = snapScaleToStep(value, steps)
+        const exactIndex = steps.findIndex((step) => step === snapped)
+        return exactIndex >= 0 ? exactIndex : 0
+      }
+
+      const getNextZoomStep = (currentScale, direction, steps = VIEWPORT_ZOOM_STEPS) => {
+        const clampedCurrent = clamp(currentScale, VIEWPORT.minScale, VIEWPORT.maxScale)
+        const currentIndex = findStepIndex(clampedCurrent, steps)
+
+        if (direction > 0) {
+          return clamp(steps[Math.min(steps.length - 1, currentIndex + 1)], VIEWPORT.minScale, VIEWPORT.maxScale)
+        }
+
+        if (direction < 0) {
+          return clamp(steps[Math.max(0, currentIndex - 1)], VIEWPORT.minScale, VIEWPORT.maxScale)
+        }
+
+        return clamp(snapScaleToStep(clampedCurrent, steps), VIEWPORT.minScale, VIEWPORT.maxScale)
+      }
+
+      const getViewportKeyboardAction = ({ key, ctrlKey = false, metaKey = false, shiftKey = false, isEditableTarget = false }) => {
+        if (isEditableTarget) {
+          return null
+        }
+
+        const normalizedKey = String(key ?? '').toLowerCase()
+        const hasPrimaryModifier = ctrlKey || metaKey
+
+        if (shiftKey && normalizedKey === 'arrowleft') return 'pan-left'
+        if (shiftKey && normalizedKey === 'arrowright') return 'pan-right'
+        if (shiftKey && normalizedKey === 'arrowup') return 'pan-up'
+        if (shiftKey && normalizedKey === 'arrowdown') return 'pan-down'
+        if (!hasPrimaryModifier) return null
+
+        if (normalizedKey === '+' || normalizedKey === '=' || normalizedKey === 'add') return 'zoom-in'
+        if (normalizedKey === '-' || normalizedKey === '_' || normalizedKey === 'subtract') return 'zoom-out'
+        if (normalizedKey === '0') return 'fit'
+        return null
+      }
 
       const getSvgMetrics = () => {
         const viewBox = svgRoot?.viewBox?.baseVal
@@ -323,6 +382,10 @@ const buildViewerScript = () => `
         }
 
         nodeAnchors.forEach((anchor) => {
+          if (anchor.style.display === 'none') {
+            return
+          }
+
           includeRect(
             Number.parseFloat(anchor.getAttribute('x') ?? ''),
             Number.parseFloat(anchor.getAttribute('y') ?? ''),
@@ -394,6 +457,53 @@ const buildViewerScript = () => `
         treeCanvas.style.transformOrigin = '0 0'
         treeCanvas.style.transform = 'translate(' + panZoomState.translateX + 'px, ' + panZoomState.translateY + 'px) scale(' + panZoomState.scale + ')'
         treeCanvas.style.visibility = 'visible'
+
+        if (zoomSlider) {
+          zoomSlider.value = String(Math.round(panZoomState.scale * 100))
+        }
+
+        if (zoomValue) {
+          zoomValue.textContent = Math.round(panZoomState.scale * 100) + '%'
+        }
+
+        if (treeShell) {
+          treeShell.style.cursor = panZoomState.isDragging ? 'grabbing' : 'grab'
+        }
+      }
+
+      const zoomToScale = (nextScale, anchorX, anchorY) => {
+        if (!treeShell || !treeCanvas) {
+          return
+        }
+
+        const nextClampedScale = clamp(nextScale, VIEWPORT.minScale, VIEWPORT.maxScale)
+        const scaleRatio = nextClampedScale / panZoomState.scale
+
+        panZoomState.translateX = anchorX - (anchorX - panZoomState.translateX) * scaleRatio
+        panZoomState.translateY = anchorY - (anchorY - panZoomState.translateY) * scaleRatio
+        panZoomState.scale = nextClampedScale
+        applyPanZoom()
+      }
+
+      const zoomAtPoint = (clientX, clientY, factor) => {
+        if (!treeShell || !treeCanvas) {
+          return
+        }
+
+        const rect = treeShell.getBoundingClientRect()
+        const pointX = clientX - rect.left
+        const pointY = clientY - rect.top
+        zoomToScale(panZoomState.scale * factor, pointX, pointY)
+      }
+
+      const zoomByDirection = (direction) => {
+        const nextScale = getNextZoomStep(panZoomState.scale, direction)
+        const rect = treeShell?.getBoundingClientRect()
+        if (!rect) {
+          return
+        }
+
+        zoomToScale(nextScale, rect.width / 2, rect.height / 2)
       }
 
       const fitToWidth = () => {
@@ -423,25 +533,9 @@ const buildViewerScript = () => `
         applyPanZoom()
       }
 
-      const zoomAtPoint = (clientX, clientY, factor) => {
-        if (!treeShell || !treeCanvas) {
-          return
-        }
-
-        const rect = treeShell.getBoundingClientRect()
-        const pointX = clientX - rect.left
-        const pointY = clientY - rect.top
-        const nextScale = clamp(panZoomState.scale * factor, VIEWPORT.minScale, VIEWPORT.maxScale)
-        const scaleRatio = nextScale / panZoomState.scale
-
-        panZoomState.translateX = pointX - (pointX - panZoomState.translateX) * scaleRatio
-        panZoomState.translateY = pointY - (pointY - panZoomState.translateY) * scaleRatio
-        panZoomState.scale = nextScale
-        applyPanZoom()
-      }
-
       const beginDrag = (event) => {
-        if (!treeShell || !treeCanvas || event.button !== 0) {
+        const isBackgroundTarget = event.target === treeShell || event.target === svgRoot
+        if (!treeShell || !treeCanvas || event.button !== 0 || (!panZoomState.isPanModeActive && !isBackgroundTarget)) {
           return
         }
 
@@ -474,13 +568,22 @@ const buildViewerScript = () => `
         panZoomState.isDragging = false
         if (treeShell) {
           treeShell.removeAttribute('data-dragging')
-          treeShell.style.cursor = ''
+          treeShell.style.cursor = 'grab'
         }
+      }
+
+      const isEditableTarget = (target) => {
+        if (!target || typeof target.matches !== 'function') {
+          return false
+        }
+
+        return target.matches('input, textarea, select, [contenteditable="true"]')
       }
 
       if (treeShell && treeCanvas) {
         treeCanvas.style.touchAction = 'none'
         treeCanvas.style.cursor = 'grab'
+        treeShell.style.cursor = 'grab'
         treeCanvas.style.visibility = 'hidden'
         treeShell.addEventListener('pointerdown', beginDrag)
         window.addEventListener('pointermove', moveDrag)
@@ -491,6 +594,100 @@ const buildViewerScript = () => `
           const zoomFactor = event.deltaY < 0 ? 1.08 : 0.92
           zoomAtPoint(event.clientX, event.clientY, zoomFactor)
         }, { passive: false })
+
+        treeShell.addEventListener('dblclick', (event) => {
+          if (event.target !== treeShell && event.target !== svgRoot) {
+            return
+          }
+
+          event.preventDefault()
+          fitToWidth()
+        })
+
+        window.addEventListener('keydown', (event) => {
+          const editableTarget = isEditableTarget(event.target)
+          const action = getViewportKeyboardAction({
+            key: event.key,
+            ctrlKey: event.ctrlKey,
+            metaKey: event.metaKey,
+            shiftKey: event.shiftKey,
+            isEditableTarget: editableTarget,
+          })
+
+          if (!action) {
+            if (event.key === ' ' && !editableTarget) {
+              event.preventDefault()
+              panZoomState.isPanModeActive = true
+            }
+            return
+          }
+
+          event.preventDefault()
+
+          if (action === 'zoom-in') {
+            zoomByDirection(1)
+            return
+          }
+
+          if (action === 'zoom-out') {
+            zoomByDirection(-1)
+            return
+          }
+
+          if (action === 'fit') {
+            fitToWidth()
+            return
+          }
+
+          if (action === 'pan-left') {
+            panZoomState.translateX += 48
+            applyPanZoom()
+            return
+          }
+
+          if (action === 'pan-right') {
+            panZoomState.translateX -= 48
+            applyPanZoom()
+            return
+          }
+
+          if (action === 'pan-up') {
+            panZoomState.translateY += 48
+            applyPanZoom()
+            return
+          }
+
+          if (action === 'pan-down') {
+            panZoomState.translateY -= 48
+            applyPanZoom()
+            return
+          }
+        })
+
+        window.addEventListener('keyup', (event) => {
+          if (event.key === ' ') {
+            panZoomState.isPanModeActive = false
+          }
+        })
+
+        zoomToggleButton?.addEventListener('click', () => {
+          zoomToggleButton.setAttribute('aria-expanded', String(zoomToggleButton.getAttribute('aria-expanded') !== 'true'))
+        })
+
+        zoomOutButton?.addEventListener('click', () => zoomByDirection(-1))
+        zoomInButton?.addEventListener('click', () => zoomByDirection(1))
+        fitButton?.addEventListener('click', () => fitToWidth())
+
+        zoomSlider?.addEventListener('input', (event) => {
+          const nextValue = Number.parseFloat(event.currentTarget.value) / 100
+          zoomToScale(snapScaleToStep(nextValue, VIEWPORT_ZOOM_STEPS), treeShell.clientWidth / 2, treeShell.clientHeight / 2)
+        })
+
+        zoomSlider?.addEventListener('change', (event) => {
+          const nextValue = Number.parseFloat(event.currentTarget.value) / 100
+          zoomToScale(snapScaleToStep(nextValue, VIEWPORT_ZOOM_STEPS), treeShell.clientWidth / 2, treeShell.clientHeight / 2)
+        })
+
         window.addEventListener('resize', () => {
           if (panZoomState.scale <= 1.6) {
             fitToWidth()
@@ -895,6 +1092,10 @@ export const buildHtmlExportDocument = ({
       box-shadow: 0 18px 36px rgba(2, 6, 23, 0.35);
     }
 
+    .html-export__menu-panel--zoom {
+      min-width: 330px;
+    }
+
     .html-export__menu-panel--filters {
       min-width: 280px;
     }
@@ -903,6 +1104,25 @@ export const buildHtmlExportDocument = ({
       display: flex;
       flex-direction: column;
       gap: 8px;
+    }
+
+    .html-export__zoom-controls {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .html-export__zoom-slider {
+      flex: 1 1 auto;
+      min-width: 160px;
+      accent-color: #67e8f9;
+    }
+
+    .html-export__zoom-value {
+      min-width: 52px;
+      color: #e2e8f0;
+      text-align: right;
+      font-variant-numeric: tabular-nums;
     }
 
     .html-export__menu-action {
@@ -914,6 +1134,17 @@ export const buildHtmlExportDocument = ({
       color: #ecfeff;
       text-align: left;
       cursor: pointer;
+    }
+
+    .html-export__menu-action--icon {
+      width: 40px;
+      min-width: 40px;
+      padding-inline: 0;
+      text-align: center;
+    }
+
+    .html-export__action--fit {
+      align-self: center;
     }
 
     .html-export__menu-action:hover {
@@ -1265,6 +1496,25 @@ export const buildHtmlExportDocument = ({
         <p class="html-export__section-subtitle">${escapeHtml(subtitleBits.filter(Boolean).join(' · '))}</p>
       </div>
       <div class="html-export__actions">
+        <button id="html-export-fit" class="html-export__action html-export__action--fit" type="button" aria-label="Fit to screen">Fit</button>
+        <details class="html-export__menu html-export__menu--zoom">
+          <summary id="html-export-zoom-toggle" class="html-export__menu-button" aria-label="Zoom" aria-expanded="false">
+            <span class="html-export__menu-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="11" cy="11" r="7" />
+                <path d="M20 20l-3.5-3.5" />
+              </svg>
+            </span>
+          </summary>
+          <div class="html-export__menu-panel html-export__menu-panel--zoom">
+            <div class="html-export__zoom-controls">
+              <button id="html-export-zoom-out" class="html-export__menu-action html-export__menu-action--icon" type="button" aria-label="Zoom out">−</button>
+              <input id="html-export-zoom-slider" class="html-export__zoom-slider" type="range" min="25" max="200" step="1" value="100" aria-label="Zoom">
+              <span id="html-export-zoom-value" class="html-export__zoom-value">100%</span>
+              <button id="html-export-zoom-in" class="html-export__menu-action html-export__menu-action--icon" type="button" aria-label="Zoom in">+</button>
+            </div>
+          </div>
+        </details>
         <details class="html-export__menu">
           <summary class="html-export__menu-button" aria-label="Export">
             <span class="html-export__menu-icon" aria-hidden="true">

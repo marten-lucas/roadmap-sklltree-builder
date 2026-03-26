@@ -70,9 +70,18 @@ import {
   getReleaseVisibilityMode,
   nodeMatchesScopeFilter,
 } from './utils/visibility'
-import { VIEWPORT_DEFAULTS, computeFitScale } from './utils/viewport'
+import {
+  VIEWPORT_DEFAULTS,
+  VIEWPORT_ZOOM_STEPS,
+  clampScale,
+  computeFitScale,
+  getViewportKeyboardAction,
+  getNextZoomStep,
+  snapScaleToStep,
+} from './utils/viewport'
 import { getInitialRoadmapDocument } from './utils/document'
 import { resolveInspectorSelectedNode } from './utils/selection'
+import { shouldCenterInspectorOnCommit } from './utils/inspectorCommit'
 
 // `resolveInspectorSelectedNode` is exported from `src/components/utils/selection.js`
 // Tests/importers should import from that module instead of re-exporting from here.
@@ -93,6 +102,9 @@ export function SkillTree() {
   const csvDocumentFileInputRef = useRef(null)
   const canvasSvgRef = useRef(null)
   const [lastSavedAt, setLastSavedAt] = useState(null)
+  const transformApiRef = useRef(null)
+  const [currentZoomScale, setCurrentZoomScale] = useState(1)
+  const [isPanModeActive, setIsPanModeActive] = useState(false)
 
   const {
     selectedNodeId,
@@ -145,6 +157,119 @@ export function SkillTree() {
   }, [canvas.height, canvas.width, viewportHeight, viewportWidth])
   const initialPositionX = viewportWidth / 2 - canvas.origin.x * initialViewScale
   const initialPositionY = viewportHeight / 2 - canvas.origin.y * initialViewScale
+
+  useEffect(() => {
+    setCurrentZoomScale(initialViewScale)
+  }, [initialViewScale])
+
+  const getZoomAnchorPoint = () => {
+    const selectedLayout = selectedNodeId ? layoutNodesById.get(selectedNodeId) : null
+
+    if (selectedLayout?.x != null && selectedLayout?.y != null) {
+      return { x: selectedLayout.x, y: selectedLayout.y }
+    }
+
+    return {
+      x: viewportWidth / 2,
+      y: viewportHeight / 2,
+    }
+  }
+
+  const handleZoomToScale = (nextScale) => {
+    const api = transformApiRef.current
+    if (!api) {
+      return
+    }
+
+    const snapped = snapScaleToStep(
+      clampScale(nextScale, VIEWPORT_DEFAULTS.minScale, VIEWPORT_DEFAULTS.maxScale),
+      VIEWPORT_ZOOM_STEPS,
+    )
+
+    const anchor = getZoomAnchorPoint()
+    api.zoomToElement?.(undefined)
+    api.zoomToPoint?.(snapped, anchor.x, anchor.y, 160, 'easeOut')
+
+    if (!api.zoomToPoint) {
+      const previousScale = api.state.scale || 1
+      const ratio = snapped / previousScale
+      const nextX = anchor.x - (anchor.x - api.state.positionX) * ratio
+      const nextY = anchor.y - (anchor.y - api.state.positionY) * ratio
+      api.setTransform(nextX, nextY, snapped, 160, 'easeOut')
+    }
+  }
+
+  const handleFitToScreen = () => {
+    const api = transformApiRef.current
+    if (!api) {
+      setTransformKey((current) => current + 1)
+      return
+    }
+
+    const nodeHalf = TREE_CONFIG.nodeSize / 2
+    let minX = canvas.origin.x - centerIconSize / 2
+    let maxX = canvas.origin.x + centerIconSize / 2
+    let minY = canvas.origin.y - centerIconSize / 2
+    let maxY = canvas.origin.y + centerIconSize / 2
+
+    for (const node of renderedNodes) {
+      minX = Math.min(minX, node.x - nodeHalf)
+      maxX = Math.max(maxX, node.x + nodeHalf)
+      minY = Math.min(minY, node.y - nodeHalf)
+      maxY = Math.max(maxY, node.y + nodeHalf)
+    }
+
+    const fitScale = computeFitScale({
+      contentWidth: maxX - minX,
+      contentHeight: maxY - minY,
+      viewportWidth,
+      viewportHeight,
+      minScale: VIEWPORT_DEFAULTS.minScale,
+      maxScale: VIEWPORT_DEFAULTS.maxScale,
+    })
+
+    const centerX = (minX + maxX) / 2
+    const centerY = (minY + maxY) / 2
+    const nextX = viewportWidth / 2 - centerX * fitScale
+    const nextY = viewportHeight / 2 - centerY * fitScale
+
+    api.setTransform(nextX, nextY, fitScale, 220, 'easeOut')
+  }
+
+  const handleZoomByDirection = (direction) => {
+    const nextScale = getNextZoomStep(
+      currentZoomScale,
+      direction,
+      VIEWPORT_ZOOM_STEPS,
+      VIEWPORT_DEFAULTS.minScale,
+      VIEWPORT_DEFAULTS.maxScale,
+    )
+
+    handleZoomToScale(nextScale)
+  }
+
+  const centerNodeInViewport = (nodeId) => {
+    const api = transformApiRef.current
+    const layoutNode = layoutNodesById.get(nodeId)
+
+    if (!api || !layoutNode) {
+      return
+    }
+
+    const scale = api.state.scale || currentZoomScale || 1
+    const nextX = viewportWidth / 2 - layoutNode.x * scale
+    const nextY = viewportHeight / 2 - layoutNode.y * scale
+    api.setTransform(nextX, nextY, scale, 180, 'easeOut')
+  }
+
+  const handlePanByKeyboard = (dx, dy) => {
+    const api = transformApiRef.current
+    if (!api) {
+      return
+    }
+
+    api.setTransform(api.state.positionX + dx, api.state.positionY + dy, api.state.scale, 120, 'easeOut')
+  }
   const centerIconSource = roadmapData.centerIconSrc ?? DEFAULT_CENTER_ICON_SRC
 
   const centerIconSize = useMemo(() => {
@@ -1005,6 +1130,58 @@ export function SkillTree() {
         return
       }
 
+      const isEditableTarget = isEditableElement(event.target)
+
+      const viewportAction = getViewportKeyboardAction({
+        key: event.key,
+        ctrlKey: event.ctrlKey,
+        metaKey: event.metaKey,
+        shiftKey: event.shiftKey,
+        isEditableTarget,
+      })
+
+      if (viewportAction === 'zoom-in') {
+        event.preventDefault()
+        handleZoomByDirection(1)
+        return
+      }
+
+      if (viewportAction === 'zoom-out') {
+        event.preventDefault()
+        handleZoomByDirection(-1)
+        return
+      }
+
+      if (viewportAction === 'fit') {
+        event.preventDefault()
+        handleFitToScreen()
+        return
+      }
+
+      if (viewportAction === 'pan-left') {
+        event.preventDefault()
+        handlePanByKeyboard(48, 0)
+        return
+      }
+
+      if (viewportAction === 'pan-right') {
+        event.preventDefault()
+        handlePanByKeyboard(-48, 0)
+        return
+      }
+
+      if (viewportAction === 'pan-up') {
+        event.preventDefault()
+        handlePanByKeyboard(0, 48)
+        return
+      }
+
+      if (viewportAction === 'pan-down') {
+        event.preventDefault()
+        handlePanByKeyboard(0, -48)
+        return
+      }
+
       if (action === 'export-html') {
         event.preventDefault()
         void (async () => {
@@ -1057,10 +1234,35 @@ export function SkillTree() {
       }
     }
 
+    const handlePanModeKeyDown = (event) => {
+      if (event.repeat) {
+        return
+      }
+
+      const isEditableTarget = isEditableElement(event.target)
+      const action = getViewportKeyboardAction({ key: event.key, spaceKey: event.key === ' ', isEditableTarget })
+      if (action === 'pan-hold') {
+        event.preventDefault()
+        setIsPanModeActive(true)
+      }
+    }
+
+    const handlePanModeKeyUp = (event) => {
+      if (event.key === ' ') {
+        setIsPanModeActive(false)
+      }
+    }
+
     window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
+    window.addEventListener('keydown', handlePanModeKeyDown)
+    window.addEventListener('keyup', handlePanModeKeyUp)
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown)
+      window.removeEventListener('keydown', handlePanModeKeyDown)
+      window.removeEventListener('keyup', handlePanModeKeyUp)
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [canRedo, canUndo, roadmapData, selectedSegmentId])
+  }, [canRedo, canUndo, roadmapData, selectedSegmentId, selectedNodeId, currentZoomScale])
 
   const autosaveLabel = lastSavedAt
     ? `Autosave ${lastSavedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}`
@@ -1504,6 +1706,16 @@ export function SkillTree() {
     setSelectedPortalKey(null)
   }
 
+  const handleInspectorCommit = (commitResult, commitSource) => {
+    if (!shouldCenterInspectorOnCommit(commitResult, commitSource)) {
+      return
+    }
+
+    if (selectedNodeId) {
+      centerNodeInViewport(selectedNodeId)
+    }
+  }
+
   // Global toast state (listens for window events dispatched by child components)
   const [globalToast, setGlobalToast] = useState({ visible: false, message: '', type: 'info' })
 
@@ -1578,6 +1790,11 @@ export function SkillTree() {
         autosaveLabel={autosaveLabel}
         allNodesById={allNodesById}
         onSelectNode={handleSelectNode}
+        currentZoomScale={currentZoomScale}
+        onZoomIn={() => handleZoomByDirection(1)}
+        onZoomOut={() => handleZoomByDirection(-1)}
+        onZoomToScale={handleZoomToScale}
+        onFitToScreen={handleFitToScreen}
       />
 
       <TransformWrapper
@@ -1590,8 +1807,16 @@ export function SkillTree() {
         wheel={{ step: VIEWPORT_DEFAULTS.wheelStep }}
         limitToBounds={false}
         centerOnInit={false}
+        onInit={(api) => {
+          transformApiRef.current = api
+          setCurrentZoomScale(api.state.scale)
+        }}
+        onTransformed={(api) => {
+          setCurrentZoomScale(api.state.scale)
+        }}
       >
         <TransformComponent
+            wrapperStyle={{ cursor: isPanModeActive ? 'grab' : 'default' }}
           wrapperClass="skill-tree-transform-wrapper"
           contentClass="skill-tree-transform-content"
         >
@@ -1623,6 +1848,9 @@ export function SkillTree() {
               selectNodeId(null)
               selectSegmentId(null)
               setSelectedPortalKey(null)
+            }}
+            onCanvasDoubleClick={() => {
+              handleFitToScreen()
             }}
             onOpenCenterIconPanel={handleOpenCenterIconPanel}
             onSelectSegment={handleSelectSegment}
@@ -1695,6 +1923,7 @@ export function SkillTree() {
         onAdditionalDependenciesChange={handleAdditionalDependenciesChange}
         onDeleteNodeOnly={handleDeleteNodeOnly}
         onDeleteNodeBranch={handleDeleteNodeBranch}
+        onInspectorCommit={handleInspectorCommit}
         />
       )}
 

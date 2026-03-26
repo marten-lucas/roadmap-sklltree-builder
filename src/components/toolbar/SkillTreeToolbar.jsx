@@ -1,4 +1,4 @@
-import { ActionIcon, Menu, Paper, Text } from '@mantine/core'
+import { ActionIcon, Menu, Paper, Slider, Text } from '@mantine/core'
 import { useMemo, useState } from 'react'
 import {
   IconArrowBackUp,
@@ -10,8 +10,13 @@ import {
   IconFilters,
   IconPercentage20,
   IconRefresh,
+  IconSearch,
+  IconScreenShare,
+  IconZoomIn,
+  IconZoomOut,
   IconUpload,
 } from '@tabler/icons-react'
+import { VIEWPORT_ZOOM_STEPS } from '../utils/viewport'
 import { Tooltip } from '../tooltip'
 
 const TOOLBAR_ICON_PROPS = {
@@ -60,8 +65,14 @@ export function SkillTreeToolbar({
   autosaveLabel,
   allNodesById,
   onSelectNode,
+  currentZoomScale = 1,
+  onZoomIn,
+  onZoomOut,
+  onZoomToScale,
+  onFitToScreen,
 }) {
   const [toolbarSearch, setToolbarSearch] = useState('')
+  const [isZoomMenuOpen, setIsZoomMenuOpen] = useState(false)
 
   const searchResults = useMemo(() => {
     const q = String(toolbarSearch ?? '').trim().toLowerCase()
@@ -78,6 +89,13 @@ export function SkillTreeToolbar({
     }
     return results
   }, [allNodesById, toolbarSearch])
+
+  const zoomPercentage = Math.round((currentZoomScale ?? 1) * 100)
+  const zoomSliderValue = Math.round((currentZoomScale ?? 1) * 100)
+  const zoomMarks = VIEWPORT_ZOOM_STEPS.map((step) => ({
+    value: Math.round(step * 100),
+    label: '',
+  }))
 
   return (
     <Paper
@@ -174,6 +192,70 @@ export function SkillTreeToolbar({
                 </Menu.Item>
               </Menu.Dropdown>
             </Menu>
+          </div>
+
+          <div className="skill-tree-toolbar__cluster">
+            <Tooltip label={isZoomMenuOpen ? 'Zoom-Menü ausblenden' : 'Zoom-Menü einblenden'} position="top" middlewares={TOOLBAR_TOOLTIP_MIDDLEWARES}>
+              <ActionIcon
+                size="md"
+                variant="default"
+                aria-label={isZoomMenuOpen ? 'Zoom-Menü ausblenden' : 'Zoom-Menü einblenden'}
+                onClick={() => setIsZoomMenuOpen((open) => !open)}
+              >
+                <IconSearch {...TOOLBAR_ICON_PROPS} />
+              </ActionIcon>
+            </Tooltip>
+
+            <Tooltip label="Fit to screen" position="top" middlewares={TOOLBAR_TOOLTIP_MIDDLEWARES}>
+              <ActionIcon
+                size="md"
+                variant="default"
+                aria-label="Fit to screen"
+                onClick={onFitToScreen}
+              >
+                <IconScreenShare {...TOOLBAR_ICON_PROPS} />
+              </ActionIcon>
+            </Tooltip>
+
+            <div className={isZoomMenuOpen ? 'skill-tree-toolbar__zoom-menu skill-tree-toolbar__zoom-menu--open' : 'skill-tree-toolbar__zoom-menu'}>
+              <Tooltip label="Zoom out" position="top" middlewares={TOOLBAR_TOOLTIP_MIDDLEWARES}>
+                <ActionIcon
+                  size="md"
+                  variant="default"
+                  aria-label="Zoom out"
+                  onClick={onZoomOut}
+                >
+                  <IconZoomOut {...TOOLBAR_ICON_PROPS} />
+                </ActionIcon>
+              </Tooltip>
+
+              <div className="skill-tree-toolbar__zoom-slider">
+                <Slider
+                  aria-label="Zoom"
+                  min={Math.round(VIEWPORT_ZOOM_STEPS[0] * 100)}
+                  max={Math.round(VIEWPORT_ZOOM_STEPS[VIEWPORT_ZOOM_STEPS.length - 1] * 100)}
+                  step={1}
+                  value={zoomSliderValue}
+                  marks={zoomMarks}
+                  label={(value) => `${value}%`}
+                  onChange={(value) => onZoomToScale?.(value / 100)}
+                />
+              </div>
+
+              <Text className="skill-tree-toolbar__zoom-value">{zoomPercentage}%</Text>
+
+              <Tooltip label="Zoom in" position="top" middlewares={TOOLBAR_TOOLTIP_MIDDLEWARES}>
+                <ActionIcon
+                  size="md"
+                  variant="default"
+                  aria-label="Zoom in"
+                  onClick={onZoomIn}
+                >
+                  <IconZoomIn {...TOOLBAR_ICON_PROPS} />
+                </ActionIcon>
+              </Tooltip>
+
+            </div>
           </div>
 
           <div className="skill-tree-toolbar__cluster">

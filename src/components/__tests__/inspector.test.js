@@ -2,7 +2,8 @@ import { describe, it, expect, vi } from 'vitest'
 import { createElement } from 'react'
 import { renderToString } from 'react-dom/server'
 import { MantineProvider } from '@mantine/core'
-import { InspectorPanel, commitInspectorDrafts } from '../panels/InspectorPanel'
+import { InspectorPanel } from '../panels/InspectorPanel'
+import { commitInspectorDrafts, shouldCenterInspectorOnCommit } from '../utils/inspectorCommit'
 import { resolveInspectorSelectedNode } from '../utils/selection'
 
 describe('inspector resolver', () => {
@@ -105,5 +106,13 @@ describe('commitInspectorDrafts', () => {
     expect(onNameChange).toHaveBeenCalledWith('Node A')
     expect(onShortNameChange).not.toHaveBeenCalled()
     expect(onReleaseNoteChange).toHaveBeenCalledWith('Release notes')
+  })
+})
+
+describe('shouldCenterInspectorOnCommit', () => {
+  it('centers only on real inspector edits and not on selection-change cleanup', () => {
+    expect(shouldCenterInspectorOnCommit({ nameCommitted: true }, 'explicit')).toBe(true)
+    expect(shouldCenterInspectorOnCommit({ nameCommitted: false, shortNameCommitted: false, releaseNoteCommitted: false }, 'explicit')).toBe(false)
+    expect(shouldCenterInspectorOnCommit({ nameCommitted: true }, 'selection-change')).toBe(false)
   })
 })

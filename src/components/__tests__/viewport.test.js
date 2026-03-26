@@ -4,6 +4,7 @@ import {
   VIEWPORT_ZOOM_STEPS,
   clampScale,
   computeFitScale,
+  getViewportKeyboardAction,
   getNextZoomStep,
   snapScaleToStep,
 } from '../utils/viewport'
@@ -42,5 +43,17 @@ describe('viewport utils', () => {
     expect(fit).toBeGreaterThanOrEqual(VIEWPORT_DEFAULTS.minScale)
     expect(fit).toBeLessThanOrEqual(VIEWPORT_DEFAULTS.maxScale)
     expect(VIEWPORT_ZOOM_STEPS.includes(fit)).toBe(false)
+  })
+
+  it('maps viewport keyboard actions for pan, zoom and fit', () => {
+    expect(getViewportKeyboardAction({ key: 'ArrowLeft', shiftKey: true })).toBe('pan-left')
+    expect(getViewportKeyboardAction({ key: 'ArrowRight', shiftKey: true })).toBe('pan-right')
+    expect(getViewportKeyboardAction({ key: 'ArrowUp', shiftKey: true })).toBe('pan-up')
+    expect(getViewportKeyboardAction({ key: 'ArrowDown', shiftKey: true })).toBe('pan-down')
+    expect(getViewportKeyboardAction({ key: '+', ctrlKey: true })).toBe('zoom-in')
+    expect(getViewportKeyboardAction({ key: '-', metaKey: true })).toBe('zoom-out')
+    expect(getViewportKeyboardAction({ key: '0', ctrlKey: true })).toBe('fit')
+    expect(getViewportKeyboardAction({ key: ' ', spaceKey: true })).toBe('pan-hold')
+    expect(getViewportKeyboardAction({ key: '+', ctrlKey: true, isEditableTarget: true })).toBeNull()
   })
 })

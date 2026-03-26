@@ -71,3 +71,46 @@ export const computeFitScale = ({
   const fittedScale = Math.min(viewWidth / (width + padding * 2), viewHeight / (height + padding * 2))
   return clampScale(fittedScale, minScale, maxScale)
 }
+
+export const getViewportKeyboardAction = ({
+  key,
+  ctrlKey = false,
+  metaKey = false,
+  shiftKey = false,
+  spaceKey = false,
+  isEditableTarget = false,
+}) => {
+  if (isEditableTarget) {
+    return null
+  }
+
+  if (spaceKey || key === ' ') {
+    return 'pan-hold'
+  }
+
+  const normalizedKey = String(key ?? '').toLowerCase()
+  const hasPrimaryModifier = ctrlKey || metaKey
+
+  if (shiftKey && normalizedKey === 'arrowleft') return 'pan-left'
+  if (shiftKey && normalizedKey === 'arrowright') return 'pan-right'
+  if (shiftKey && normalizedKey === 'arrowup') return 'pan-up'
+  if (shiftKey && normalizedKey === 'arrowdown') return 'pan-down'
+
+  if (!hasPrimaryModifier) {
+    return null
+  }
+
+  if (normalizedKey === '+' || normalizedKey === '=' || normalizedKey === 'add') {
+    return 'zoom-in'
+  }
+
+  if (normalizedKey === '-' || normalizedKey === '_' || normalizedKey === 'subtract') {
+    return 'zoom-out'
+  }
+
+  if (normalizedKey === '0') {
+    return 'fit'
+  }
+
+  return null
+}

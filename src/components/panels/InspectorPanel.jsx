@@ -2,49 +2,9 @@ import { ActionIcon, Alert, Badge, Button, Divider, Group, MultiSelect, Paper, S
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { normalizeStatusKey, STATUS_LABELS } from '../config'
 import { UNASSIGNED_SEGMENT_ID } from '../utils/layoutShared'
-import { commitReleaseNoteDraft } from '../utils/releaseNoteDraft'
+import { commitInspectorDrafts } from '../utils/inspectorCommit'
 import { MarkdownField } from './MarkdownField'
 import { Tooltip } from '../tooltip'
-
-export const commitInspectorDrafts = ({
-  nameDraft,
-  currentName,
-  onNameChange,
-  shortNameDraft,
-  currentShortName,
-  onShortNameChange,
-  releaseNoteDraft,
-  currentReleaseNote,
-  onReleaseNoteChange,
-}) => {
-  let nameCommitted = false
-  let shortNameCommitted = false
-  let releaseNoteCommitted = false
-
-  const nextName = String(nameDraft ?? '')
-  const previousName = String(currentName ?? '')
-  if (nextName !== previousName) {
-    onNameChange?.(nextName)
-    nameCommitted = true
-  }
-
-  const nextShortName = String(shortNameDraft ?? '')
-  const previousShortName = String(currentShortName ?? '')
-  if (nextShortName !== previousShortName) {
-    onShortNameChange?.(nextShortName)
-    shortNameCommitted = true
-  }
-
-  if (commitReleaseNoteDraft({ draft: releaseNoteDraft, currentValue: currentReleaseNote, onCommit: onReleaseNoteChange })) {
-    releaseNoteCommitted = true
-  }
-
-  return {
-    nameCommitted,
-    shortNameCommitted,
-    releaseNoteCommitted,
-  }
-}
 
 const TablerInfoCircleIcon = ({ size = 16 }) => (
   <svg
@@ -166,6 +126,7 @@ export function InspectorPanel({
   onDeleteNodeOnly,
   onDeleteNodeBranch,
   onFocusNode,
+  onInspectorCommit,
 }) {
   const [scopeManagerOpen, setScopeManagerOpen] = useState(false)
   const [scopeDraft, setScopeDraft] = useState('')
@@ -204,12 +165,14 @@ export function InspectorPanel({
     shortNameDraftRef.current = nextShortName
     releaseNoteDraftRef.current = nextReleaseNote
 
+    /* eslint-disable react-hooks/set-state-in-effect */
     setNameDraft(nextName)
     setShortNameDraft(nextShortName)
     setReleaseNoteDraft(nextReleaseNote)
-  }, [selectedNode?.id])
+    /* eslint-enable react-hooks/set-state-in-effect */
+  }, [selectedNode])
 
-  const commitCurrentDrafts = useCallback((showToast = false) => {
+  const commitCurrentDrafts = useCallback((showToast = false, commitSource = 'explicit') => {
     if (!selectedNode) {
       return { nameCommitted: false, shortNameCommitted: false, releaseNoteCommitted: false }
     }
@@ -240,7 +203,7 @@ export function InspectorPanel({
       setTimeout(() => setSaveToast({ visible: false, message: '' }), 1400)
       try {
         window.dispatchEvent(new CustomEvent('roadmap-skilltree.toast', { detail: { type: 'success', message: 'Name gespeichert' } }))
-      } catch (e) {
+      } catch {
         // ignore
       }
     }
@@ -248,7 +211,7 @@ export function InspectorPanel({
     if (showToast && commitResult.shortNameCommitted) {
       try {
         window.dispatchEvent(new CustomEvent('roadmap-skilltree.toast', { detail: { type: 'success', message: 'Shortname gespeichert' } }))
-      } catch (e) {
+      } catch {
         // ignore if window not available
       }
 
@@ -259,7 +222,7 @@ export function InspectorPanel({
         if (sanitized && sanitized.length > 3) {
           window.dispatchEvent(new CustomEvent('roadmap-skilltree.toast', { detail: { type: 'warning', message: 'Shortname länger als 3 Zeichen (nur Warnung)' } }))
         }
-      } catch (e) {
+      } catch {
         // ignore
       }
     }
@@ -269,17 +232,19 @@ export function InspectorPanel({
       setTimeout(() => setSaveToast({ visible: false, message: '' }), 1400)
       try {
         window.dispatchEvent(new CustomEvent('roadmap-skilltree.toast', { detail: { type: 'success', message: 'Release Note gespeichert' } }))
-      } catch (e) {
+      } catch {
         // ignore
       }
     }
 
+    onInspectorCommit?.(commitResult, commitSource)
+
     return commitResult
-  }, [onLabelChange, onReleaseNoteChange, onShortNameChange, selectedNode?.id])
+  }, [onInspectorCommit, onLabelChange, onReleaseNoteChange, onShortNameChange, selectedNode])
 
   useEffect(() => {
     return () => {
-      commitCurrentDrafts(false)
+      commitCurrentDrafts(false, 'selection-change')
     }
   }, [commitCurrentDrafts])
 
@@ -318,7 +283,7 @@ export function InspectorPanel({
       })
 
       localStorage.setItem(key, JSON.stringify(trace))
-    } catch (err) {
+    } catch {
       // ignore tracing errors during normal runtime
     }
   }, [onScopeIdsChange, selectedNode, selectedProgressLevelId])
@@ -607,7 +572,7 @@ export function InspectorPanel({
           <Text className="skill-panel__title skill-panel__title--large">Skill bearbeiten</Text>
         </div>
         <div className="skill-panel__header-actions">
-          <ActionIcon variant="subtle" color="gray" onClick={() => { commitCurrentDrafts(false); onClose?.() }} aria-label="Inspector schließen">
+          <ActionIcon variant="subtle" color="gray" onClick={() => { commitCurrentDrafts(false, 'explicit'); onClose?.() }} aria-label="Inspector schließen">
             ✕
           </ActionIcon>
         </div>
@@ -630,7 +595,7 @@ export function InspectorPanel({
               setNameDraft(nextValue)
             }}
             onBlur={() => {
-              commitCurrentDrafts(true)
+              commitCurrentDrafts(true, 'explicit')
             }}
             minRows={2}
             maxRows={4}
@@ -650,7 +615,7 @@ export function InspectorPanel({
               setShortNameDraft(nextValue)
             }}
             onBlur={() => {
-              commitCurrentDrafts(true)
+              commitCurrentDrafts(true, 'explicit')
             }}
             /* allow longer input; show a warning on blur if >3 */
             classNames={{
@@ -1028,7 +993,7 @@ export function InspectorPanel({
               setReleaseNoteDraft(nextValue)
             }}
             onBlur={() => {
-              commitCurrentDrafts(true)
+              commitCurrentDrafts(true, 'explicit')
             }}
           />
 
