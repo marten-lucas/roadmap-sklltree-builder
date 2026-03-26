@@ -1,10 +1,50 @@
 import { ActionIcon, Alert, Badge, Button, Divider, Group, MultiSelect, Paper, Select, Stack, Tabs, Text, TextInput, Textarea } from '@mantine/core'
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { normalizeStatusKey, STATUS_LABELS } from '../config'
 import { UNASSIGNED_SEGMENT_ID } from '../utils/layoutShared'
 import { commitReleaseNoteDraft } from '../utils/releaseNoteDraft'
 import { MarkdownField } from './MarkdownField'
 import { Tooltip } from '../tooltip'
+
+export const commitInspectorDrafts = ({
+  nameDraft,
+  currentName,
+  onNameChange,
+  shortNameDraft,
+  currentShortName,
+  onShortNameChange,
+  releaseNoteDraft,
+  currentReleaseNote,
+  onReleaseNoteChange,
+}) => {
+  let nameCommitted = false
+  let shortNameCommitted = false
+  let releaseNoteCommitted = false
+
+  const nextName = String(nameDraft ?? '')
+  const previousName = String(currentName ?? '')
+  if (nextName !== previousName) {
+    onNameChange?.(nextName)
+    nameCommitted = true
+  }
+
+  const nextShortName = String(shortNameDraft ?? '')
+  const previousShortName = String(currentShortName ?? '')
+  if (nextShortName !== previousShortName) {
+    onShortNameChange?.(nextShortName)
+    shortNameCommitted = true
+  }
+
+  if (commitReleaseNoteDraft({ draft: releaseNoteDraft, currentValue: currentReleaseNote, onCommit: onReleaseNoteChange })) {
+    releaseNoteCommitted = true
+  }
+
+  return {
+    nameCommitted,
+    shortNameCommitted,
+    releaseNoteCommitted,
+  }
+}
 
 const TablerInfoCircleIcon = ({ size = 16 }) => (
   <svg
@@ -137,6 +177,14 @@ export function InspectorPanel({
   const [releaseNoteDraft, setReleaseNoteDraft] = useState(
     Array.isArray(selectedNode?.levels) && selectedNode.levels[0] ? (selectedNode.levels[0].releaseNote ?? '') : ''
   )
+  const nameDraftRef = useRef(nameDraft)
+  const shortNameDraftRef = useRef(shortNameDraft)
+  const releaseNoteDraftRef = useRef(releaseNoteDraft)
+  const committedNameRef = useRef(selectedNode?.label ?? '')
+  const committedShortNameRef = useRef(selectedNode?.shortName ?? '')
+  const committedReleaseNoteRef = useRef(
+    Array.isArray(selectedNode?.levels) && selectedNode.levels[0] ? (selectedNode.levels[0].releaseNote ?? '') : ''
+  )
   const [saveToast, setSaveToast] = useState({ visible: false, message: '' })
   const [segmentManagerOpen, setSegmentManagerOpen] = useState(false)
   const [segmentDraft, setSegmentDraft] = useState('')
@@ -145,10 +193,95 @@ export function InspectorPanel({
   const [editingSegmentLabel, setEditingSegmentLabel] = useState('')
 
   useEffect(() => {
-    setNameDraft(selectedNode?.label ?? '')
-    setShortNameDraft(selectedNode?.shortName ?? '')
-    setReleaseNoteDraft(Array.isArray(selectedNode?.levels) && selectedNode.levels[0] ? (selectedNode.levels[0].releaseNote ?? '') : '')
-  }, [selectedNode])
+    const nextName = selectedNode?.label ?? ''
+    const nextShortName = selectedNode?.shortName ?? ''
+    const nextReleaseNote = Array.isArray(selectedNode?.levels) && selectedNode.levels[0] ? (selectedNode.levels[0].releaseNote ?? '') : ''
+
+    committedNameRef.current = nextName
+    committedShortNameRef.current = nextShortName
+    committedReleaseNoteRef.current = nextReleaseNote
+    nameDraftRef.current = nextName
+    shortNameDraftRef.current = nextShortName
+    releaseNoteDraftRef.current = nextReleaseNote
+
+    setNameDraft(nextName)
+    setShortNameDraft(nextShortName)
+    setReleaseNoteDraft(nextReleaseNote)
+  }, [selectedNode?.id])
+
+  const commitCurrentDrafts = useCallback((showToast = false) => {
+    if (!selectedNode) {
+      return { nameCommitted: false, shortNameCommitted: false, releaseNoteCommitted: false }
+    }
+
+    const commitResult = commitInspectorDrafts({
+      nameDraft: nameDraftRef.current,
+      currentName: committedNameRef.current,
+      onNameChange: (nextName) => {
+        committedNameRef.current = nextName
+        onLabelChange?.(nextName)
+      },
+      shortNameDraft: shortNameDraftRef.current,
+      currentShortName: committedShortNameRef.current,
+      onShortNameChange: (nextShortName) => {
+        committedShortNameRef.current = nextShortName
+        onShortNameChange?.(nextShortName, selectedNode.id)
+      },
+      releaseNoteDraft: releaseNoteDraftRef.current,
+      currentReleaseNote: committedReleaseNoteRef.current,
+      onReleaseNoteChange: (nextReleaseNote) => {
+        committedReleaseNoteRef.current = nextReleaseNote
+        onReleaseNoteChange?.(nextReleaseNote)
+      },
+    })
+
+    if (showToast && commitResult.nameCommitted) {
+      setSaveToast({ visible: true, message: 'Name gespeichert' })
+      setTimeout(() => setSaveToast({ visible: false, message: '' }), 1400)
+      try {
+        window.dispatchEvent(new CustomEvent('roadmap-skilltree.toast', { detail: { type: 'success', message: 'Name gespeichert' } }))
+      } catch (e) {
+        // ignore
+      }
+    }
+
+    if (showToast && commitResult.shortNameCommitted) {
+      try {
+        window.dispatchEvent(new CustomEvent('roadmap-skilltree.toast', { detail: { type: 'success', message: 'Shortname gespeichert' } }))
+      } catch (e) {
+        // ignore if window not available
+      }
+
+      try {
+        const sanitized = String(shortNameDraftRef.current ?? '')
+          .replace(/[^A-Za-z0-9]/g, '')
+          .toUpperCase()
+        if (sanitized && sanitized.length > 3) {
+          window.dispatchEvent(new CustomEvent('roadmap-skilltree.toast', { detail: { type: 'warning', message: 'Shortname länger als 3 Zeichen (nur Warnung)' } }))
+        }
+      } catch (e) {
+        // ignore
+      }
+    }
+
+    if (showToast && commitResult.releaseNoteCommitted) {
+      setSaveToast({ visible: true, message: 'Release Note gespeichert' })
+      setTimeout(() => setSaveToast({ visible: false, message: '' }), 1400)
+      try {
+        window.dispatchEvent(new CustomEvent('roadmap-skilltree.toast', { detail: { type: 'success', message: 'Release Note gespeichert' } }))
+      } catch (e) {
+        // ignore
+      }
+    }
+
+    return commitResult
+  }, [onLabelChange, onReleaseNoteChange, onShortNameChange, selectedNode?.id])
+
+  useEffect(() => {
+    return () => {
+      commitCurrentDrafts(false)
+    }
+  }, [commitCurrentDrafts])
 
   const handleScopeIdsChange = useCallback((nextScopeIds) => {
     const levels = Array.isArray(selectedNode?.levels) ? selectedNode.levels : []
@@ -336,26 +469,6 @@ export function InspectorPanel({
     label: scope.label,
   }))
 
-  const commitActiveReleaseNoteDraft = useCallback((showToast = false) => {
-    const didCommit = commitReleaseNoteDraft({
-      draft: releaseNoteDraft,
-      currentValue: activeProgressLevel?.releaseNote ?? '',
-      onCommit: onReleaseNoteChange,
-    })
-
-    if (didCommit && showToast) {
-      setSaveToast({ visible: true, message: 'Release Note gespeichert' })
-      setTimeout(() => setSaveToast({ visible: false, message: '' }), 1400)
-      try {
-        window.dispatchEvent(new CustomEvent('roadmap-skilltree.toast', { detail: { type: 'success', message: 'Release Note gespeichert' } }))
-      } catch (e) {
-        // ignore
-      }
-    }
-
-    return didCommit
-  }, [activeProgressLevel?.releaseNote, onReleaseNoteChange, releaseNoteDraft])
-
   const handleCreateScope = () => {
     const result = onCreateScope?.(scopeDraft)
 
@@ -494,7 +607,7 @@ export function InspectorPanel({
           <Text className="skill-panel__title skill-panel__title--large">Skill bearbeiten</Text>
         </div>
         <div className="skill-panel__header-actions">
-          <ActionIcon variant="subtle" color="gray" onClick={() => { commitActiveReleaseNoteDraft(false); onClose?.() }} aria-label="Inspector schließen">
+          <ActionIcon variant="subtle" color="gray" onClick={() => { commitCurrentDrafts(false); onClose?.() }} aria-label="Inspector schließen">
             ✕
           </ActionIcon>
         </div>
@@ -511,18 +624,13 @@ export function InspectorPanel({
             label="Name"
             placeholder="Skill-Name eingeben …"
             value={nameDraft}
-            onChange={(event) => setNameDraft(event.currentTarget.value)}
+            onChange={(event) => {
+              const nextValue = event.currentTarget.value
+              nameDraftRef.current = nextValue
+              setNameDraft(nextValue)
+            }}
             onBlur={() => {
-              if (nameDraft !== (selectedNode.label ?? '')) {
-                onLabelChange?.(nameDraft)
-                setSaveToast({ visible: true, message: 'Name gespeichert' })
-                setTimeout(() => setSaveToast({ visible: false, message: '' }), 1400)
-                try {
-                  window.dispatchEvent(new CustomEvent('roadmap-skilltree.toast', { detail: { type: 'success', message: 'Name gespeichert' } }))
-                } catch (e) {
-                  // ignore
-                }
-              }
+              commitCurrentDrafts(true)
             }}
             minRows={2}
             maxRows={4}
@@ -536,29 +644,13 @@ export function InspectorPanel({
             label="Shortname"
             placeholder="z.B. API"
             value={shortNameDraft}
-            onChange={(event) => setShortNameDraft(event.currentTarget.value)}
+            onChange={(event) => {
+              const nextValue = event.currentTarget.value
+              shortNameDraftRef.current = nextValue
+              setShortNameDraft(nextValue)
+            }}
             onBlur={() => {
-              if (shortNameDraft !== (selectedNode.shortName ?? '')) {
-                onShortNameChange?.(shortNameDraft, selectedNode.id)
-                // dispatch a global toast event so the window (app) can show a global toast
-                try {
-                  window.dispatchEvent(new CustomEvent('roadmap-skilltree.toast', { detail: { type: 'success', message: 'Shortname gespeichert' } }))
-                } catch (e) {
-                  // ignore if window not available
-                }
-
-                // validation: warn if sanitized shortname exceeds 3 characters
-                try {
-                  const sanitized = String(shortNameDraft ?? '')
-                    .replace(/[^A-Za-z0-9]/g, '')
-                    .toUpperCase()
-                  if (sanitized && sanitized.length > 3) {
-                    window.dispatchEvent(new CustomEvent('roadmap-skilltree.toast', { detail: { type: 'warning', message: 'Shortname länger als 3 Zeichen (nur Warnung)' } }))
-                  }
-                } catch (e) {
-                  // ignore
-                }
-              }
+              commitCurrentDrafts(true)
             }}
             /* allow longer input; show a warning on blur if >3 */
             classNames={{
@@ -931,9 +1023,12 @@ export function InspectorPanel({
             label="Release Note"
             placeholder="Beschreibe aus Kundensicht, was in dieser Ausbaustufe geliefert wurde oder als Nächstes kommt ..."
             value={releaseNoteDraft}
-            onChange={(nextValue) => setReleaseNoteDraft(nextValue)}
+            onChange={(nextValue) => {
+              releaseNoteDraftRef.current = nextValue
+              setReleaseNoteDraft(nextValue)
+            }}
             onBlur={() => {
-              commitActiveReleaseNoteDraft(true)
+              commitCurrentDrafts(true)
             }}
           />
 

@@ -1,8 +1,8 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { createElement } from 'react'
 import { renderToString } from 'react-dom/server'
 import { MantineProvider } from '@mantine/core'
-import { InspectorPanel } from '../panels/InspectorPanel'
+import { InspectorPanel, commitInspectorDrafts } from '../panels/InspectorPanel'
 import { resolveInspectorSelectedNode } from '../utils/selection'
 
 describe('inspector resolver', () => {
@@ -76,5 +76,34 @@ describe('InspectorPanel render', () => {
 
     expect(html).toContain('Inspector')
     expect(html).toContain('Skill bearbeiten')
+  })
+})
+
+describe('commitInspectorDrafts', () => {
+  it('commits only the drafts that changed', () => {
+    const onNameChange = vi.fn()
+    const onShortNameChange = vi.fn()
+    const onReleaseNoteChange = vi.fn()
+
+    const result = commitInspectorDrafts({
+      nameDraft: 'Node A',
+      currentName: 'Node B',
+      onNameChange,
+      shortNameDraft: 'NA',
+      currentShortName: 'NA',
+      onShortNameChange,
+      releaseNoteDraft: 'Release notes',
+      currentReleaseNote: 'Old notes',
+      onReleaseNoteChange,
+    })
+
+    expect(result).toEqual({
+      nameCommitted: true,
+      shortNameCommitted: false,
+      releaseNoteCommitted: true,
+    })
+    expect(onNameChange).toHaveBeenCalledWith('Node A')
+    expect(onShortNameChange).not.toHaveBeenCalled()
+    expect(onReleaseNoteChange).toHaveBeenCalledWith('Release notes')
   })
 })
