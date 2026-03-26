@@ -17,6 +17,10 @@ const createDocument = () => ({
   segments: [
     { id: 'segment-frontend', label: 'Frontend' },
   ],
+  scopes: [
+    { id: 'scope-frontend', label: 'Frontend' },
+    { id: 'scope-platform', label: 'Platform' },
+  ],
   children: [
     {
       id: 'node-1',
@@ -25,7 +29,7 @@ const createDocument = () => ({
       status: 'now',
       segmentId: 'segment-frontend',
       levels: [
-        { id: 'level-1', label: 'Level 1', status: 'now', releaseNote: '## Release Impact\nRollout fuer die neue Plattform laeuft. **Now** is live.' },
+        { id: 'level-1', label: 'Level 1', status: 'now', releaseNote: '## Release Impact\nRollout fuer die neue Plattform laeuft. **Now** is live.', scopeIds: ['scope-frontend', 'scope-platform'] },
       ],
       children: [],
     },
@@ -48,6 +52,8 @@ describe('htmlExport', () => {
     expect(html).toContain('Release Notes')
     expect(html).toContain('<svg viewBox="0 0 100 100"></svg>')
     expect(html).toContain(`id="${HTML_EXPORT_DATA_SCRIPT_ID}"`)
+    expect(html).toContain('Frontend')
+    expect(html).toContain('Platform')
     expect(html).toContain('PDF')
     expect(html).toContain('PNG')
     expect(html).toContain('SVG (interactive)')

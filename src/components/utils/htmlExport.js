@@ -1,6 +1,7 @@
 import { buildPersistedDocumentPayload, parseDocumentPayload } from './documentPersistence'
 import { collectReleaseNoteEntries } from './pdfExport'
 import { renderMarkdownToHtml } from './markdown'
+import { renderScopeLabelsMarkup } from './scopeDisplay'
 import { serializeSvgElementForExport } from './svgExport'
 import { VIEWPORT_DEFAULTS } from './viewport'
 import htmlToImageBundle from 'html-to-image/dist/html-to-image.js?raw'
@@ -130,6 +131,7 @@ const buildReleaseNotesMarkup = (entries, introductionMarkdown = '') => {
       : escapeHtml(entry.nodeLabel)
     const levelText = entry.levelCount > 1 ? escapeHtml(entry.levelLabel) : ''
     const statusText = escapeHtml(entry.statusLabel)
+    const scopeMarkup = renderScopeLabelsMarkup(entry.scopeLabels)
 
     parts.push(`
       <article class="html-export__note-card">
@@ -137,6 +139,7 @@ const buildReleaseNotesMarkup = (entries, introductionMarkdown = '') => {
           <strong>${title}</strong>
           <span>${levelText ? `${levelText} · ` : ''}${statusText}</span>
         </header>
+        ${scopeMarkup ? `<div class="skill-node-tooltip__scopes" aria-label="Scopes">${scopeMarkup}</div>` : ''}
         <div class="html-export__note-markdown">${renderMarkdownToHtml(entry.releaseNote)}</div>
       </article>
     `)

@@ -44,6 +44,22 @@ export const TOOLTIP_HTML_NOTE_STYLES = {
   whiteSpace: 'pre-wrap',
 }
 
+export const TOOLTIP_HTML_SCOPE_LIST_STYLES = {
+  marginTop: '0.4rem',
+  gap: '0.3rem',
+}
+
+export const TOOLTIP_HTML_SCOPE_ITEM_STYLES = {
+  padding: '0.16rem 0.48rem',
+  background: 'rgba(15, 23, 42, 0.72)',
+  border: '1px solid rgba(56, 189, 248, 0.25)',
+  color: '#a5f3fc',
+  fontSize: '0.68rem',
+  fontWeight: 700,
+  lineHeight: 1.2,
+  letterSpacing: '0.02em',
+}
+
 export const TOOLTIP_SVG_STYLES = {
   backgroundFill: 'rgba(2, 6, 23, 0.96)',
   borderStroke: 'rgba(56, 189, 248, 0.25)',

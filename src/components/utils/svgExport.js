@@ -1,12 +1,15 @@
 import {
   TOOLTIP_HTML_BOX_STYLES,
   TOOLTIP_HTML_NOTE_STYLES,
+  TOOLTIP_HTML_SCOPE_ITEM_STYLES,
+  TOOLTIP_HTML_SCOPE_LIST_STYLES,
   TOOLTIP_HTML_TITLE_STYLES,
   TOOLTIP_FONT_FAMILY,
   TOOLTIP_SVG_LAYOUT,
   TOOLTIP_SVG_STYLES,
 } from '../tooltip/tooltipStyles'
 import { renderMarkdownToHtml } from './markdown'
+import { renderScopeLabelsMarkup } from './scopeDisplay'
 
 const SVG_XML_PREFIX = '<?xml version="1.0" encoding="UTF-8"?>\n'
 const SVG_NS = 'http://www.w3.org/2000/svg'
@@ -65,6 +68,9 @@ const parseLevelTooltipData = (anchor) => {
             status: normalizeLevelStatusKey(entry?.status),
             statusLabel: sanitizeText(entry?.statusLabel) || formatStatusLabel(entry?.status),
             releaseNote: String(entry?.releaseNote ?? '').trim(),
+            scopeLabels: Array.isArray(entry?.scopeLabels)
+              ? entry.scopeLabels.map((scopeLabel) => sanitizeText(scopeLabel)).filter(Boolean)
+              : [],
           }))
           .filter((entry) => entry.id || entry.label || entry.releaseNote)
       }
@@ -80,7 +86,37 @@ const parseLevelTooltipData = (anchor) => {
     status: 'later',
     statusLabel: 'Later',
     releaseNote: fallbackNote,
+    scopeLabels: [],
   }]
+}
+
+const estimateScopeBlockHeight = (scopeLabels) => {
+  const labels = Array.isArray(scopeLabels)
+    ? scopeLabels.map((label) => sanitizeText(label)).filter(Boolean)
+    : []
+
+  if (labels.length === 0) {
+    return 0
+  }
+
+  const availableWidth = Math.max(120, TOOLTIP_SVG_LAYOUT.width - (TOOLTIP_SVG_LAYOUT.paddingX * 2))
+  let rowWidth = 0
+  let rowCount = 1
+
+  labels.forEach((label) => {
+    const badgeWidth = 20 + (label.length * 7)
+    const gapWidth = rowWidth > 0 ? 6 : 0
+
+    if (rowWidth + gapWidth + badgeWidth > availableWidth) {
+      rowCount += 1
+      rowWidth = badgeWidth
+      return
+    }
+
+    rowWidth += gapWidth + badgeWidth
+  })
+
+  return (rowCount * 18) + 4
 }
 
 const polarPoint = (centerX, centerY, radius, angleDegrees) => {
@@ -112,8 +148,9 @@ const estimateTooltipCardHeight = (entry) => {
   const rendered = renderMarkdownToHtml(entry?.releaseNote) || '<p>Keine Release Note hinterlegt.</p>'
   const blockCount = Math.max(1, (rendered.match(/<(p|h[1-6]|ul)\b/gi) || []).length)
   const listItemCount = (rendered.match(/<li\b/gi) || []).length
+  const scopeHeight = estimateScopeBlockHeight(entry?.scopeLabels)
 
-  return 40 + (blockCount * 18) + (listItemCount * 12)
+  return 40 + (blockCount * 18) + (listItemCount * 12) + scopeHeight
 }
 
 const replaceCenterIconForeignObject = (svgRoot) => {
@@ -623,6 +660,27 @@ const injectExportTooltipStyles = (svgRoot) => {
       line-height: ${TOOLTIP_HTML_NOTE_STYLES.lineHeight};
     }
 
+    .skill-node-tooltip__scopes {
+      display: flex;
+      flex-wrap: wrap;
+      gap: ${TOOLTIP_HTML_SCOPE_LIST_STYLES.gap};
+      margin-top: ${TOOLTIP_HTML_SCOPE_LIST_STYLES.marginTop};
+    }
+
+    .skill-node-tooltip__scope {
+      display: inline-flex;
+      align-items: center;
+      padding: ${TOOLTIP_HTML_SCOPE_ITEM_STYLES.padding};
+      border-radius: 999px;
+      border: ${TOOLTIP_HTML_SCOPE_ITEM_STYLES.border};
+      background: ${TOOLTIP_HTML_SCOPE_ITEM_STYLES.background};
+      color: ${TOOLTIP_HTML_SCOPE_ITEM_STYLES.color};
+      font-size: ${TOOLTIP_HTML_SCOPE_ITEM_STYLES.fontSize};
+      font-weight: ${TOOLTIP_HTML_SCOPE_ITEM_STYLES.fontWeight};
+      line-height: ${TOOLTIP_HTML_SCOPE_ITEM_STYLES.lineHeight};
+      letter-spacing: ${TOOLTIP_HTML_SCOPE_ITEM_STYLES.letterSpacing};
+    }
+
     .skill-node-tooltip__note {
       margin-top: ${TOOLTIP_HTML_NOTE_STYLES.marginTop};
       color: ${TOOLTIP_HTML_NOTE_STYLES.color};
@@ -745,6 +803,14 @@ const buildTooltipGroup = ({ centerX, centerY, title, entries }) => {
     const noteWrapper = document.createElementNS('http://www.w3.org/1999/xhtml', 'div')
     noteWrapper.setAttribute('class', 'skill-node-tooltip__note skill-node-tooltip__note--markdown')
     noteWrapper.innerHTML = renderMarkdownToHtml(entry.releaseNote) || '<p>Keine Release Note hinterlegt.</p>'
+
+    if (Array.isArray(entry.scopeLabels) && entry.scopeLabels.length > 0) {
+      const scopeWrapper = document.createElementNS('http://www.w3.org/1999/xhtml', 'div')
+      scopeWrapper.setAttribute('class', 'skill-node-tooltip__scopes')
+      scopeWrapper.setAttribute('aria-label', 'Scopes')
+      scopeWrapper.innerHTML = renderScopeLabelsMarkup(entry.scopeLabels)
+      card.appendChild(scopeWrapper)
+    }
 
     card.appendChild(header)
     card.appendChild(noteWrapper)

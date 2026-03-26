@@ -13,6 +13,11 @@ const createDocument = () => ({
     { id: 'segment-frontend', label: 'Frontend' },
     { id: 'segment-backend', label: 'Backend' },
   ],
+  scopes: [
+    { id: 'scope-frontend', label: 'Frontend' },
+    { id: 'scope-platform', label: 'Platform' },
+    { id: 'scope-backend', label: 'Backend' },
+  ],
   children: [
     {
       id: 'node-1',
@@ -21,7 +26,7 @@ const createDocument = () => ({
       status: 'now',
       segmentId: 'segment-frontend',
       levels: [
-        { id: 'level-1', label: 'Level 1', status: 'now', releaseNote: '## Release Impact\nRollout fuer die neue Plattform laeuft. **Now** is live.' },
+        { id: 'level-1', label: 'Level 1', status: 'now', releaseNote: '## Release Impact\nRollout fuer die neue Plattform laeuft. **Now** is live.', scopeIds: ['scope-frontend', 'scope-platform'] },
         { id: 'level-2', label: 'Level 2', status: 'next', releaseNote: '' },
       ],
       children: [],
@@ -50,6 +55,7 @@ describe('pdfExport', () => {
       nodeLabel: 'React Platform',
       shortName: 'RCT',
       statusLabel: 'Now',
+      scopeLabels: ['Frontend', 'Platform'],
     })
   })
 
@@ -68,6 +74,8 @@ describe('pdfExport', () => {
     expect(html).toContain('<svg viewBox="0 0 100 100"></svg>')
     expect(html).toContain('React Platform')
     expect(html).toContain('<strong>markdown</strong>')
+    expect(html).toContain('Frontend')
+    expect(html).toContain('Platform')
     expect(html).toContain('<h1>Release Overview</h1>')
     expect(html).toContain('<h2>Release Impact</h2>')
     expect(html).toContain('window.print()')

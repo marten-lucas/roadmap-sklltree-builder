@@ -1,6 +1,7 @@
 import { Paper, Text } from '@mantine/core'
 import { STATUS_STYLES } from '../config'
 import { getDisplayStatusKey, getLevelStatusKeys } from '../utils/nodeStatus'
+import { resolveScopeLabels } from '../utils/scopeDisplay'
 import { MarkdownTooltipContent, Tooltip } from '../tooltip'
 
 const getShortName = (node) => {
@@ -17,21 +18,24 @@ const getShortName = (node) => {
   return letters || 'SKL'
 }
 
-const getTooltipReleaseNote = (node) => {
+const getTooltipLevel = (node) => {
   const levels = Array.isArray(node?.levels) ? node.levels : []
   const levelStatusKeys = getLevelStatusKeys(node)
   const preferredStatus = getDisplayStatusKey(node)
-  const preferredLevel = levels.find((level, index) => levelStatusKeys[index] === preferredStatus)
-  const preferredNote = String(preferredLevel?.releaseNote ?? '').trim()
+  const preferredLevel = levels.find((level, index) => levelStatusKeys[index] === preferredStatus && String(level?.releaseNote ?? '').trim())
 
-  if (preferredNote) {
-    return preferredNote
+  if (preferredLevel) {
+    return preferredLevel
   }
 
-  const fallbackLevel = levels.find((level) => String(level?.releaseNote ?? '').trim())
-  const fallbackNote = String(fallbackLevel?.releaseNote ?? '').trim()
+  return levels.find((level) => String(level?.releaseNote ?? '').trim()) ?? null
+}
 
-  return fallbackNote || 'Keine Release Note hinterlegt.'
+const getTooltipReleaseNote = (node) => {
+  const tooltipLevel = getTooltipLevel(node)
+  const releaseNote = String(tooltipLevel?.releaseNote ?? '').trim()
+
+  return releaseNote || 'Keine Release Note hinterlegt.'
 }
 
 const buildSegmentConicStyle = (statusKeys, colorGetter) => {
@@ -62,14 +66,16 @@ const buildSegmentConicStyle = (statusKeys, colorGetter) => {
   }
 }
 
-export function SkillNode({ node, nodeSize, isSelected, onSelect, onSelectLevel, displayMode = 'full' }) {
+export function SkillNode({ node, nodeSize, isSelected, onSelect, onSelectLevel, displayMode = 'full', scopeOptions = [] }) {
   const isMinimal = displayMode === 'minimal'
   const glowPadding = isMinimal ? 8 : 18
   const renderSize = nodeSize + glowPadding * 2
   const statusKey = getDisplayStatusKey(node)
   const statusStyles = STATUS_STYLES[statusKey] ?? STATUS_STYLES.later
   const shortName = getShortName(node)
+  const tooltipLevel = getTooltipLevel(node)
   const tooltipReleaseNote = getTooltipReleaseNote(node)
+  const tooltipScopeLabels = resolveScopeLabels(tooltipLevel?.scopeIds, scopeOptions)
   const levelStatusKeys = getLevelStatusKeys(node)
   const levelRingStyle = buildSegmentConicStyle(
     levelStatusKeys,
@@ -82,6 +88,7 @@ export function SkillNode({ node, nodeSize, isSelected, onSelect, onSelectLevel,
       status: String(level?.status ?? 'later').trim().toLowerCase(),
       statusLabel: STATUS_STYLES[String(level?.status ?? 'later').trim().toLowerCase()]?.label ?? String(level?.status ?? 'Later'),
       releaseNote: String(level?.releaseNote ?? ''),
+      scopeLabels: resolveScopeLabels(level?.scopeIds, scopeOptions),
     }))
     : []
   const levelGlowStyle = buildSegmentConicStyle(
@@ -145,7 +152,7 @@ export function SkillNode({ node, nodeSize, isSelected, onSelect, onSelectLevel,
           closeDelay={40}
           transitionProps={{ transition: 'fade', duration: 120 }}
           classNames={{ tooltip: 'skill-node-tooltip', arrow: 'skill-node-tooltip__arrow' }}
-          label={<MarkdownTooltipContent title={node.label} markdown={tooltipReleaseNote} />}
+          label={<MarkdownTooltipContent title={node.label} markdown={tooltipReleaseNote} scopeLabels={tooltipScopeLabels} />}
         >
           <Paper
             component="button"

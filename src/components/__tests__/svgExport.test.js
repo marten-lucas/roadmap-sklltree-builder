@@ -195,6 +195,16 @@ describe('svgExport', () => {
     foreignObject.setAttribute('data-node-id', 'node-1')
     foreignObject.setAttribute('data-export-label', 'React Platform')
     foreignObject.setAttribute('data-export-note', 'Now is **live**')
+    foreignObject.setAttribute('data-export-levels', JSON.stringify([
+      {
+        id: 'level-now',
+        label: 'Level 1',
+        status: 'now',
+        statusLabel: 'Now',
+        releaseNote: 'Now is **live**',
+        scopeLabels: ['Frontend', 'Platform'],
+      },
+    ]))
     svg.appendChild(foreignObject)
 
     const serialized = serializeSvgElementForExport(svg)
@@ -205,7 +215,11 @@ describe('svgExport', () => {
     expect(serialized).toContain('skill-node-tooltip__stack')
     expect(serialized).toContain('skill-node-tooltip__card')
     expect(serialized).toContain('skill-node-tooltip__title')
+    expect(serialized).toContain('skill-node-tooltip__scopes')
+    expect(serialized).toContain('skill-node-tooltip__scope')
     expect(serialized).toContain('skill-node-tooltip__note')
+    expect(serialized).toContain('Frontend')
+    expect(serialized).toContain('Platform')
   })
 
   it('uses builder-like tooltip colors, font and sizing', () => {
@@ -459,6 +473,47 @@ describe('svgExport', () => {
     expect(serialized).toContain('.skill-node-tooltip-trigger:hover + .skill-node-tooltip-group')
     expect(serialized).not.toContain('<animate')
     expect(serialized).not.toContain('begin="export-tooltip-trigger-1.mouseover"')
+  })
+
+  it('renders multiple scope badges for each tooltip card', () => {
+    installSvgDomShim()
+
+    const svg = new MockElement('svg')
+    const foreignObject = new MockElement('foreignObject')
+
+    foreignObject.setAttribute('class', 'skill-node-export-anchor')
+    foreignObject.setAttribute('x', '10')
+    foreignObject.setAttribute('y', '20')
+    foreignObject.setAttribute('width', '120')
+    foreignObject.setAttribute('height', '120')
+    foreignObject.setAttribute('data-node-id', 'node-1')
+    foreignObject.setAttribute('data-export-label', 'React Platform')
+    foreignObject.setAttribute('data-export-levels', JSON.stringify([
+      {
+        id: 'level-now',
+        label: 'Level 1',
+        status: 'now',
+        statusLabel: 'Now',
+        releaseNote: 'Ready for **launch**.',
+        scopeLabels: ['Frontend', 'Platform'],
+      },
+      {
+        id: 'level-next',
+        label: 'Level 2',
+        status: 'next',
+        statusLabel: 'Next',
+        releaseNote: 'Prepared for rollout.',
+        scopeLabels: ['Backend'],
+      },
+    ]))
+    svg.appendChild(foreignObject)
+
+    const serialized = serializeSvgElementForExport(svg)
+
+    expect(serialized).toContain('Frontend')
+    expect(serialized).toContain('Platform')
+    expect(serialized).toContain('Backend')
+    expect((serialized.match(/skill-node-tooltip__scope/g) ?? []).length).toBeGreaterThanOrEqual(3)
   })
 
   it('embeds source styles when exporting a standalone svg', () => {

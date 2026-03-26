@@ -663,6 +663,27 @@
     line-height: 1.25;
 }
 
+.skill-node-tooltip__scopes {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.3rem;
+    margin-top: 0.4rem;
+}
+
+.skill-node-tooltip__scope {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.16rem 0.48rem;
+    border-radius: 999px;
+    border: 1px solid rgba(56, 189, 248, 0.25);
+    background: rgba(15, 23, 42, 0.72);
+    color: #a5f3fc;
+    font-size: 0.62rem;
+    font-weight: 700;
+    line-height: 1.2;
+    letter-spacing: 0.02em;
+}
+
 .skill-node-tooltip__note {
     margin-top: 0.35rem;
     color: #cbd5e1;

@@ -1,5 +1,6 @@
 import { STATUS_LABELS, normalizeStatusKey } from '../config'
 import { renderMarkdownToHtml } from './markdown'
+import { resolveScopeLabels, renderScopeLabelsMarkup } from './scopeDisplay'
 import { getExportViewportBounds } from './svgExport'
 
 const escapeHtml = (value) => String(value ?? '')
@@ -65,6 +66,7 @@ const formatDisplayDate = (value) => {
 
 export const collectReleaseNoteEntries = (roadmapDocument) => {
   const segmentLabelById = new Map((roadmapDocument?.segments ?? []).map((segment) => [segment.id, segment.label]))
+  const scopes = Array.isArray(roadmapDocument?.scopes) ? roadmapDocument.scopes : []
   const entries = []
   const walk = (node) => {
     if (!node) {
@@ -90,6 +92,7 @@ export const collectReleaseNoteEntries = (roadmapDocument) => {
         levelLabel: level.label ?? `Level ${index + 1}`,
         statusLabel: STATUS_LABELS[statusKey] ?? STATUS_LABELS.now,
         releaseNote,
+        scopeLabels: resolveScopeLabels(level.scopeIds, scopes),
       })
     })
 
@@ -128,6 +131,7 @@ const buildReleaseNotesMarkup = (entries, introductionMarkdown = '') => {
     const badge = entry.shortName ? `${escapeHtml(entry.nodeLabel)} (${escapeHtml(entry.shortName)})` : escapeHtml(entry.nodeLabel)
     const levelText = entry.levelCount > 1 ? escapeHtml(entry.levelLabel) : ''
     const statusText = escapeHtml(entry.statusLabel)
+    const scopeMarkup = renderScopeLabelsMarkup(entry.scopeLabels)
     parts.push(`
       <article class="pdf-export__note-card">
         <div class="pdf-export__note-meta">
@@ -135,6 +139,7 @@ const buildReleaseNotesMarkup = (entries, introductionMarkdown = '') => {
           ${levelText ? `<span>${levelText}</span>` : ''}
           <span>${statusText}</span>
         </div>
+        ${scopeMarkup ? `<div class="skill-node-tooltip__scopes" aria-label="Scopes">${scopeMarkup}</div>` : ''}
         <div class="pdf-export__note-markdown">${renderMarkdownToHtml(entry.releaseNote)}</div>
       </article>
     `)

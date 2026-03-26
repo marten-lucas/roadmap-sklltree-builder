@@ -2028,6 +2028,7 @@ export function SkillTree() {
             emptySegmentAddControl={emptySegmentAddControl}
             nodeSize={TREE_CONFIG.nodeSize}
             minimalNodeSize={MINIMAL_NODE_SIZE}
+            scopeOptions={scopeOptions}
             onCanvasClick={() => {
               selectNodeId(null)
               selectSegmentId(null)

@@ -172,6 +172,21 @@ const downloadViewerSvg = async (exportPage) => {
   return readDownload(download)
 }
 
+const collectVisibleLinkPairs = async (page) => page.locator('path[data-link-source-id][data-link-target-id]').evaluateAll((elements) => {
+  return elements
+    .filter((element) => {
+      const computedStyle = window.getComputedStyle(element)
+      return computedStyle.display !== 'none' && computedStyle.visibility !== 'hidden'
+    })
+    .map((element) => `${element.getAttribute('data-link-source-id')}->${element.getAttribute('data-link-target-id')}`)
+    .sort()
+})
+
+const openBuilderFilterMenu = async (page) => {
+  await page.getByRole('button', { name: 'Filter', exact: true }).click()
+  await expect(page.getByRole('menu').filter({ visible: true }).first()).toBeVisible()
+}
+
 const downloadViewerPng = async (exportPage) => {
   await exportPage.getByLabel('Export', { exact: true }).click()
   await expect(exportPage.locator('#html-export-png')).toBeVisible()
@@ -530,6 +545,49 @@ test.describe('Rendered export viewer', () => {
 
       await exportPage.locator('#html-export-filter-scope').selectOption(String(target.scopeId))
       await expect(exportPage.locator(`foreignObject.skill-node-export-anchor[data-short-name="${target.shortName}"] .skill-node-button`)).toBeVisible()
+    } finally {
+      await exportPage.close()
+      await exportContext.close()
+    }
+  })
+
+  test('export viewer keeps visible connections aligned with the builder for a selected scope', async ({ page, browser }) => {
+    const target = await page.evaluate(() => {
+      const raw = localStorage.getItem('roadmap-skilltree.document.v1')
+      if (!raw) {
+        return null
+      }
+
+      const parsed = JSON.parse(raw)
+      const scopes = Array.isArray(parsed.document?.scopes) ? parsed.document.scopes : []
+      const scope = scopes.find((entry) => entry?.id && String(entry.label ?? '').trim()) ?? null
+      if (!scope) {
+        return null
+      }
+
+      return {
+        scopeId: scope.id,
+        scopeLabel: String(scope.label ?? '').trim(),
+      }
+    })
+
+    expect(target?.scopeId).toBeTruthy()
+    expect(target?.scopeLabel).toBeTruthy()
+
+    await openBuilderFilterMenu(page)
+    await page.getByRole('menuitem', { name: target.scopeLabel, exact: true }).click()
+
+    const builderLinks = await collectVisibleLinkPairs(page)
+    expect(builderLinks.length).toBeGreaterThan(0)
+
+    const { exportPage, exportContext } = await openExportViewer(page, browser)
+    try {
+      await exportPage.locator('.html-export__menu-button').last().click()
+      await expect(exportPage.locator('.html-export__menu-panel--filters')).toBeVisible()
+      await exportPage.locator('#html-export-filter-scope').selectOption(String(target.scopeId))
+
+      const exportedLinks = await collectVisibleLinkPairs(exportPage)
+      expect(exportedLinks).toEqual(builderLinks)
     } finally {
       await exportPage.close()
       await exportContext.close()

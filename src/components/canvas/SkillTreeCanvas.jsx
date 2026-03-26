@@ -32,6 +32,7 @@ export function SkillTreeCanvas({
   emptySegmentAddControl,
   nodeSize = TREE_CONFIG.nodeSize,
   minimalNodeSize = 36,
+  scopeOptions = [],
   onCanvasClick,
   onCanvasDoubleClick,
   onOpenCenterIconPanel,
@@ -194,6 +195,7 @@ export function SkillTreeCanvas({
               nodeSize={renderNodeSize}
               displayMode={visibilityMode}
               isSelected={node.id === selectedNodeId || selectedNodeIds.includes(node.id)}
+              scopeOptions={scopeOptions}
               onSelect={onSelectNode}
             />
           )
