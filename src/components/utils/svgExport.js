@@ -1,8 +1,12 @@
 import {
+  TOOLTIP_HTML_BOX_STYLES,
+  TOOLTIP_HTML_NOTE_STYLES,
+  TOOLTIP_HTML_TITLE_STYLES,
   TOOLTIP_FONT_FAMILY,
   TOOLTIP_SVG_LAYOUT,
   TOOLTIP_SVG_STYLES,
 } from '../tooltip/tooltipStyles'
+import { renderMarkdownToHtml } from './markdown'
 
 const SVG_XML_PREFIX = '<?xml version="1.0" encoding="UTF-8"?>\n'
 const SVG_NS = 'http://www.w3.org/2000/svg'
@@ -24,6 +28,83 @@ const toNumber = (value, fallback = 0) => {
 }
 
 const sanitizeText = (value) => String(value ?? '').replace(/\s+/g, ' ').trim()
+
+const normalizeLevelStatusKey = (value) => {
+  const normalized = sanitizeText(value).toLowerCase()
+  if (normalized === 'fertig') return 'done'
+  if (normalized === 'jetzt') return 'now'
+  if (normalized === 'spaeter' || normalized === 'später') return 'later'
+  return normalized || 'later'
+}
+
+const formatStatusLabel = (value) => {
+  const statusKey = normalizeLevelStatusKey(value)
+  const labels = {
+    done: 'Done',
+    now: 'Now',
+    next: 'Next',
+    later: 'Later',
+  }
+
+  return labels[statusKey] ?? statusKey
+}
+
+const parseLevelTooltipData = (anchor) => {
+  const raw = String(anchor.getAttribute('data-export-levels') ?? '').trim()
+
+  if (raw) {
+    try {
+      const parsed = JSON.parse(raw)
+      if (Array.isArray(parsed)) {
+        return parsed
+          .map((entry) => ({
+            id: sanitizeText(entry?.id),
+            label: sanitizeText(entry?.label),
+            status: normalizeLevelStatusKey(entry?.status),
+            statusLabel: sanitizeText(entry?.statusLabel) || formatStatusLabel(entry?.status),
+            releaseNote: String(entry?.releaseNote ?? '').trim(),
+          }))
+          .filter((entry) => entry.id || entry.label || entry.releaseNote)
+      }
+    } catch {
+      // fall back to legacy single-note export data
+    }
+  }
+
+  const fallbackNote = String(anchor.getAttribute('data-export-note') ?? '').trim()
+  return [{
+    id: sanitizeText(anchor.getAttribute('data-node-id')) || 'node',
+    label: sanitizeText(anchor.getAttribute('data-export-label')) || 'Skill',
+    status: 'later',
+    statusLabel: 'Later',
+    releaseNote: fallbackNote,
+  }]
+}
+
+const polarPoint = (centerX, centerY, radius, angleDegrees) => {
+  const angleRadians = ((angleDegrees - 90) * Math.PI) / 180
+  return {
+    x: centerX + radius * Math.cos(angleRadians),
+    y: centerY + radius * Math.sin(angleRadians),
+  }
+}
+
+const buildDonutSectorPath = (centerX, centerY, innerRadius, outerRadius, startAngle, endAngle) => {
+  const safeSpan = Math.max(0.01, endAngle - startAngle)
+  const largeArc = safeSpan > 180 ? 1 : 0
+  const outerStart = polarPoint(centerX, centerY, outerRadius, startAngle)
+  const outerEnd = polarPoint(centerX, centerY, outerRadius, endAngle)
+  const innerEnd = polarPoint(centerX, centerY, innerRadius, endAngle)
+  const innerStart = polarPoint(centerX, centerY, innerRadius, startAngle)
+
+  return [
+    `M ${outerStart.x} ${outerStart.y}`,
+    `A ${outerRadius} ${outerRadius} 0 ${largeArc} 1 ${outerEnd.x} ${outerEnd.y}`,
+    `L ${innerEnd.x} ${innerEnd.y}`,
+    `A ${innerRadius} ${innerRadius} 0 ${largeArc} 0 ${innerStart.x} ${innerStart.y}`,
+    'Z',
+  ].join(' ')
+}
 
 const replaceCenterIconForeignObject = (svgRoot) => {
   const centerForeign = svgRoot.querySelector('.skill-tree-center-icon__foreign')
@@ -273,41 +354,6 @@ const injectExportStyles = (svgRoot, styleText) => {
   defs.appendChild(style)
 }
 
-const parseTooltipMarkdownLines = (value) => {
-  const normalized = String(value ?? '').replace(/\r\n?/g, '\n').trim()
-  if (!normalized) {
-    return []
-  }
-
-  const blocks = []
-
-  for (const rawLine of normalized.split('\n')) {
-    const line = rawLine.trim()
-    if (!line) {
-      blocks.push({ type: 'spacer' })
-      continue
-    }
-
-    const headingMatch = line.match(/^(#{1,6})\s+(.+)$/)
-    if (headingMatch) {
-      blocks.push({
-        type: 'heading',
-        text: headingMatch[2],
-      })
-      continue
-    }
-
-    splitIntoLines(line).forEach((wrappedLine) => {
-      blocks.push({
-        type: 'body',
-        text: wrappedLine,
-      })
-    })
-  }
-
-  return blocks
-}
-
 export const splitIntoLines = (text, maxChars = 52, maxLines = 3) => {
   const normalized = sanitizeText(text)
   if (!normalized) {
@@ -358,31 +404,131 @@ const injectExportTooltipStyles = (svgRoot) => {
       pointer-events: all;
     }
 
-    .skill-node-tooltip {
-      fill: ${TOOLTIP_SVG_STYLES.backgroundFill};
-      stroke: ${TOOLTIP_SVG_STYLES.borderStroke};
-      stroke-width: ${TOOLTIP_SVG_STYLES.borderWidth};
-      filter: ${TOOLTIP_SVG_STYLES.boxShadow};
+    .skill-node-tooltip-group {
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .skill-node-tooltip__panel {
+      max-width: ${TOOLTIP_HTML_BOX_STYLES.maxWidth};
+      padding: ${TOOLTIP_HTML_BOX_STYLES.padding};
+      color: ${TOOLTIP_HTML_BOX_STYLES.color};
+      background: ${TOOLTIP_HTML_BOX_STYLES.backgroundColor};
+      border: ${TOOLTIP_HTML_BOX_STYLES.border};
+      box-shadow: ${TOOLTIP_HTML_BOX_STYLES.boxShadow};
+      backdrop-filter: ${TOOLTIP_HTML_BOX_STYLES.backdropFilter};
+      -webkit-backdrop-filter: ${TOOLTIP_HTML_BOX_STYLES.WebkitBackdropFilter};
+      border-radius: ${TOOLTIP_HTML_BOX_STYLES.borderRadius};
+      box-sizing: border-box;
+      overflow: hidden;
+      font-family: ${TOOLTIP_FONT_FAMILY};
     }
 
     .skill-node-tooltip__title {
-      fill: ${TOOLTIP_SVG_STYLES.titleFill};
-      font-size: ${TOOLTIP_SVG_STYLES.titleFontSize};
-      font-weight: 700;
+      margin: 0;
+      color: ${TOOLTIP_HTML_TITLE_STYLES.color};
+      font-size: ${TOOLTIP_HTML_TITLE_STYLES.fontSize};
+      font-weight: ${TOOLTIP_HTML_TITLE_STYLES.fontWeight};
+      line-height: ${TOOLTIP_HTML_TITLE_STYLES.lineHeight};
       font-family: ${TOOLTIP_FONT_FAMILY};
+    }
+
+    .skill-node-tooltip__stack {
+      display: flex;
+      flex-direction: column;
+      gap: 0.45rem;
+      margin-top: 0.35rem;
+    }
+
+    .skill-node-tooltip__card {
+      border-top: 1px solid rgba(56, 189, 248, 0.12);
+      padding-top: 0.4rem;
+    }
+
+    .skill-node-tooltip__card:first-child {
+      border-top: 0;
+      padding-top: 0;
+    }
+
+    .skill-node-tooltip__card-header {
+      display: flex;
+      justify-content: space-between;
+      gap: 0.75rem;
+      align-items: baseline;
+      margin-bottom: 0.35rem;
+      color: ${TOOLTIP_HTML_TITLE_STYLES.color};
+      font-size: ${TOOLTIP_HTML_TITLE_STYLES.fontSize};
+      font-weight: ${TOOLTIP_HTML_TITLE_STYLES.fontWeight};
+      line-height: ${TOOLTIP_HTML_TITLE_STYLES.lineHeight};
+      font-family: ${TOOLTIP_FONT_FAMILY};
+    }
+
+    .skill-node-tooltip__card-header span {
+      color: ${TOOLTIP_HTML_NOTE_STYLES.color};
+      font-size: ${TOOLTIP_HTML_NOTE_STYLES.fontSize};
+      font-weight: 600;
+      line-height: ${TOOLTIP_HTML_NOTE_STYLES.lineHeight};
     }
 
     .skill-node-tooltip__note {
-      fill: ${TOOLTIP_SVG_STYLES.noteFill};
-      font-size: ${TOOLTIP_SVG_STYLES.noteFontSize};
+      margin-top: ${TOOLTIP_HTML_NOTE_STYLES.marginTop};
+      color: ${TOOLTIP_HTML_NOTE_STYLES.color};
+      font-size: ${TOOLTIP_HTML_NOTE_STYLES.fontSize};
+      line-height: ${TOOLTIP_HTML_NOTE_STYLES.lineHeight};
+      white-space: ${TOOLTIP_HTML_NOTE_STYLES.whiteSpace};
       font-family: ${TOOLTIP_FONT_FAMILY};
     }
 
-    .skill-node-tooltip__heading {
-      fill: ${TOOLTIP_SVG_STYLES.titleFill};
-      font-size: ${TOOLTIP_SVG_STYLES.headingFontSize};
-      font-weight: 700;
-      font-family: ${TOOLTIP_FONT_FAMILY};
+    .skill-node-tooltip__note--markdown p,
+    .skill-node-tooltip__note--markdown h1,
+    .skill-node-tooltip__note--markdown h2,
+    .skill-node-tooltip__note--markdown h3,
+    .skill-node-tooltip__note--markdown h4,
+    .skill-node-tooltip__note--markdown h5,
+    .skill-node-tooltip__note--markdown h6 {
+      margin: 0;
+    }
+
+    .skill-node-tooltip__note--markdown p + p,
+    .skill-node-tooltip__note--markdown h1 + p,
+    .skill-node-tooltip__note--markdown h2 + p,
+    .skill-node-tooltip__note--markdown h3 + p,
+    .skill-node-tooltip__note--markdown h4 + p,
+    .skill-node-tooltip__note--markdown h5 + p,
+    .skill-node-tooltip__note--markdown h6 + p,
+    .skill-node-tooltip__note--markdown p + ul,
+    .skill-node-tooltip__note--markdown h1 + ul,
+    .skill-node-tooltip__note--markdown h2 + ul,
+    .skill-node-tooltip__note--markdown h3 + ul,
+    .skill-node-tooltip__note--markdown h4 + ul,
+    .skill-node-tooltip__note--markdown h5 + ul,
+    .skill-node-tooltip__note--markdown h6 + ul,
+    .skill-node-tooltip__note--markdown ul + p,
+    .skill-node-tooltip__note--markdown ul + ul {
+      margin-top: 0.35rem;
+    }
+
+    .skill-node-tooltip__note--markdown ul {
+      padding-left: 1rem;
+      margin-left: 0;
+    }
+
+    .skill-node-tooltip__note--markdown li {
+      margin: 0;
+    }
+
+    .skill-node-tooltip__note--markdown a {
+      color: #7dd3fc;
+      text-decoration: underline;
+      text-underline-offset: 2px;
+    }
+
+    .skill-node-tooltip__note--markdown code {
+      padding: 0.05rem 0.22rem;
+      border-radius: 0.25rem;
+      background: rgba(15, 23, 42, 0.9);
+      color: #e2e8f0;
+      font-size: 0.92em;
     }
   `
 
@@ -395,59 +541,62 @@ const injectExportTooltipStyles = (svgRoot) => {
   defs.appendChild(style)
 }
 
-const buildTooltipGroup = ({ id, centerX, centerY, title, note }) => {
+const buildTooltipGroup = ({ id, centerX, centerY, title, entries }) => {
   const group = createSvgElement('g')
-  group.setAttribute('class', 'skill-node-tooltip')
+  group.setAttribute('class', 'skill-node-tooltip-group')
   group.setAttribute('opacity', '0')
   group.setAttribute('pointer-events', 'none')
 
-  const textBlocks = parseTooltipMarkdownLines(note)
-  const lineCount = Math.max(1, textBlocks.filter((block) => block.type !== 'spacer').length)
   const tooltipWidth = TOOLTIP_SVG_LAYOUT.width
-  const tooltipHeight = TOOLTIP_SVG_LAYOUT.heightBase + lineCount * TOOLTIP_SVG_LAYOUT.rowHeight
+  const tooltipHeight = TOOLTIP_SVG_LAYOUT.heightBase + (entries.length * 76) + Math.max(0, (entries.length - 1) * 8)
   const boxX = centerX - tooltipWidth / 2
   const boxY = centerY - TOOLTIP_SVG_LAYOUT.centerGap - tooltipHeight
 
-  const rect = createSvgElement('rect')
-  rect.setAttribute('class', 'skill-node-tooltip')
-  rect.setAttribute('x', String(boxX))
-  rect.setAttribute('y', String(boxY))
-  rect.setAttribute('width', String(tooltipWidth))
-  rect.setAttribute('height', String(tooltipHeight))
-  rect.setAttribute('rx', '10')
+  const foreignObject = createSvgElement('foreignObject')
+  foreignObject.setAttribute('x', String(boxX))
+  foreignObject.setAttribute('y', String(boxY))
+  foreignObject.setAttribute('width', String(tooltipWidth))
+  foreignObject.setAttribute('height', String(tooltipHeight))
 
-  const titleText = createSvgElement('text')
+  const wrapper = document.createElementNS('http://www.w3.org/1999/xhtml', 'div')
+  wrapper.setAttribute('xmlns', 'http://www.w3.org/1999/xhtml')
+  wrapper.setAttribute('class', 'skill-node-tooltip__panel')
+
+  const titleText = document.createElementNS('http://www.w3.org/1999/xhtml', 'div')
   titleText.setAttribute('class', 'skill-node-tooltip__title')
-  titleText.setAttribute('x', String(boxX + TOOLTIP_SVG_LAYOUT.paddingX))
-  titleText.setAttribute('y', String(boxY + TOOLTIP_SVG_LAYOUT.titleOffsetY))
   titleText.textContent = title || 'Skill'
+  wrapper.appendChild(titleText)
 
-  const noteText = createSvgElement('text')
-  noteText.setAttribute('class', 'skill-node-tooltip__note')
-  noteText.setAttribute('x', String(boxX + TOOLTIP_SVG_LAYOUT.paddingX))
-  noteText.setAttribute('y', String(boxY + TOOLTIP_SVG_LAYOUT.noteOffsetY))
+  const stack = document.createElementNS('http://www.w3.org/1999/xhtml', 'div')
+  stack.setAttribute('class', 'skill-node-tooltip__stack')
 
-  if (textBlocks.length === 0) {
-    noteText.textContent = 'Keine Release Note hinterlegt.'
-  } else {
-    let lineIndex = 0
-    textBlocks.forEach((block) => {
-      if (block.type === 'spacer') {
-        lineIndex += 0.6
-        return
-      }
+  entries.forEach((entry) => {
+    const card = document.createElementNS('http://www.w3.org/1999/xhtml', 'article')
+    card.setAttribute('class', 'skill-node-tooltip__card')
 
-      const tspan = createSvgElement('tspan')
-      tspan.setAttribute('x', String(boxX + TOOLTIP_SVG_LAYOUT.paddingX))
-      tspan.setAttribute('dy', lineIndex === 0 ? '0' : String(TOOLTIP_SVG_LAYOUT.rowHeight))
-      if (block.type === 'heading') {
-        tspan.setAttribute('class', 'skill-node-tooltip__heading')
-      }
-      tspan.textContent = block.text
-      noteText.appendChild(tspan)
-      lineIndex += 1
-    })
-  }
+    const header = document.createElementNS('http://www.w3.org/1999/xhtml', 'header')
+    header.setAttribute('class', 'skill-node-tooltip__card-header')
+
+    const headerTitle = document.createElementNS('http://www.w3.org/1999/xhtml', 'strong')
+    headerTitle.textContent = entry.label || title || 'Skill'
+
+    const statusLabel = document.createElementNS('http://www.w3.org/1999/xhtml', 'span')
+    statusLabel.textContent = entry.statusLabel || ''
+
+    header.appendChild(headerTitle)
+    header.appendChild(statusLabel)
+
+    const noteWrapper = document.createElementNS('http://www.w3.org/1999/xhtml', 'div')
+    noteWrapper.setAttribute('class', 'skill-node-tooltip__note skill-node-tooltip__note--markdown')
+    noteWrapper.innerHTML = renderMarkdownToHtml(entry.releaseNote) || '<p>Keine Release Note hinterlegt.</p>'
+
+    card.appendChild(header)
+    card.appendChild(noteWrapper)
+    stack.appendChild(card)
+  })
+
+  wrapper.appendChild(stack)
+  foreignObject.appendChild(wrapper)
 
   const fadeIn = createSvgElement('animate')
   fadeIn.setAttribute('attributeName', 'opacity')
@@ -465,14 +614,28 @@ const buildTooltipGroup = ({ id, centerX, centerY, title, note }) => {
   fadeOut.setAttribute('begin', `${id}.mouseout`)
   fadeOut.setAttribute('fill', 'freeze')
 
-  group.appendChild(rect)
-  group.appendChild(titleText)
-  group.appendChild(noteText)
+  group.appendChild(foreignObject)
   group.appendChild(fadeIn)
   group.appendChild(fadeOut)
 
   return group
 }
+
+const buildCenterTooltipGroup = ({ id, centerX, centerY, title, levelEntries }) => buildTooltipGroup({
+  id,
+  centerX,
+  centerY,
+  title,
+  entries: levelEntries,
+})
+
+const buildLevelTooltipGroup = ({ id, centerX, centerY, title, entry }) => buildTooltipGroup({
+  id,
+  centerX,
+  centerY,
+  title,
+  entries: [entry],
+})
 
 const appendAnimatedTooltips = (svgRoot) => {
   const anchors = Array.from(svgRoot.querySelectorAll('foreignObject.skill-node-export-anchor'))
@@ -488,14 +651,22 @@ const appendAnimatedTooltips = (svgRoot) => {
     const y = toNumber(anchor.getAttribute('y'))
     const width = toNumber(anchor.getAttribute('width'))
     const height = toNumber(anchor.getAttribute('height'))
+    const buttonWidth = toNumber(anchor.getAttribute('data-orig-button-width'), width)
 
     const centerX = x + width / 2
     const centerY = y + height / 2
 
     const label = sanitizeText(anchor.getAttribute('data-export-label')) || 'Skill'
-    const note = sanitizeText(anchor.getAttribute('data-export-note')) || 'Keine Release Note hinterlegt.'
     const nodeId = sanitizeText(anchor.getAttribute('data-node-id'))
     const triggerId = `export-tooltip-trigger-${index + 1}`
+    const levelEntries = parseLevelTooltipData(anchor)
+    const centerEntries = levelEntries.length > 0 ? levelEntries : [{
+      id: nodeId || 'node',
+      label,
+      status: 'later',
+      statusLabel: 'Later',
+      releaseNote: 'Keine Release Note hinterlegt.',
+    }]
 
     const trigger = createSvgElement('circle')
     trigger.setAttribute('id', triggerId)
@@ -507,22 +678,50 @@ const appendAnimatedTooltips = (svgRoot) => {
     trigger.setAttribute('cy', String(centerY))
     trigger.setAttribute('r', String(Math.max(26, width * 0.28)))
 
-    const title = createSvgElement('title')
-    title.textContent = `${label} - ${note}`
-    trigger.appendChild(title)
-
-    const tooltipGroup = buildTooltipGroup({
+    const tooltipGroup = buildCenterTooltipGroup({
       id: triggerId,
       centerX,
       centerY,
       title: label,
-      note,
+      levelEntries: centerEntries,
     })
     if (nodeId) {
       tooltipGroup.setAttribute('data-tooltip-node-id', nodeId)
     }
     overlayLayer.appendChild(tooltipGroup)
     overlayLayer.appendChild(trigger)
+
+    if (levelEntries.length > 1) {
+      const ringInnerRadius = Math.max(0, buttonWidth * 0.37)
+      const ringOuterRadius = Math.max(ringInnerRadius + 8, buttonWidth / 2)
+      const angleSlice = 360 / levelEntries.length
+
+      levelEntries.forEach((entry, levelIndex) => {
+        const startAngle = levelIndex * angleSlice
+        const endAngle = (levelIndex + 1) * angleSlice
+        const sector = createSvgElement('path')
+        const sectorId = `export-tooltip-trigger-${index + 1}-level-${levelIndex + 1}`
+        sector.setAttribute('id', sectorId)
+        sector.setAttribute('class', 'skill-node-tooltip-trigger')
+        if (nodeId) {
+          sector.setAttribute('data-tooltip-node-id', nodeId)
+        }
+        sector.setAttribute('d', buildDonutSectorPath(centerX, centerY, ringInnerRadius, ringOuterRadius, startAngle, endAngle))
+
+        const sectorGroup = buildLevelTooltipGroup({
+          id: sectorId,
+          centerX,
+          centerY,
+          title: label,
+          entry,
+        })
+        if (nodeId) {
+          sectorGroup.setAttribute('data-tooltip-node-id', nodeId)
+        }
+        overlayLayer.appendChild(sectorGroup)
+        overlayLayer.appendChild(sector)
+      })
+    }
   })
 
   svgRoot.appendChild(overlayLayer)

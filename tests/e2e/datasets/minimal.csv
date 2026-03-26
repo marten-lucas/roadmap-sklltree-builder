@@ -10,18 +10,18 @@ Next step is below."
 MIN,Minimal Node,Beta,1,Core,,,2,next,"# Minimal Node - Beta
 
 This level keeps the same node identity and checks multiline import."
-MIN,Minimal Node,Gamma,1,Core,,,3,later,"# Minimal Node - Gamma
+MIN,Minimal Node,,1,Core,,,3,later,"# Minimal Node - Gamma
 
 Formatting stays intact across
 
 1. ordered item
 2. second item"
-SUP,Support Node,Alpha,2,Core,MIN,,1,now,"# Support Node
+SUP,Support Node,Alpha,2,Side,MIN,,1,now,"# Support Node
 
 Support work is **in progress**.
 
 Remember: spacing  matters."
-API,API Adapter,Alpha,3,Core,SUP,MIN,1,next,"# API Adapter
+API,API Adapter,,3,Side,SUP,MIN,1,next,"# API Adapter
 
 API handoff is `clean` and ready.
 

@@ -75,6 +75,15 @@ export function SkillNode({ node, nodeSize, isSelected, onSelect, onSelectLevel,
     levelStatusKeys,
     (key) => STATUS_STYLES[key]?.ringBand ?? STATUS_STYLES.later.ringBand,
   )
+  const exportLevelEntries = Array.isArray(node?.levels)
+    ? node.levels.map((level, index) => ({
+      id: level?.id ?? `level-${index + 1}`,
+      label: String(level?.label ?? `Level ${index + 1}`),
+      status: String(level?.status ?? 'later').trim().toLowerCase(),
+      statusLabel: STATUS_STYLES[String(level?.status ?? 'later').trim().toLowerCase()]?.label ?? String(level?.status ?? 'Later'),
+      releaseNote: String(level?.releaseNote ?? ''),
+    }))
+    : []
   const levelGlowStyle = buildSegmentConicStyle(
     levelStatusKeys,
     (key) => STATUS_STYLES[key]?.glowSegment ?? 'transparent',
@@ -122,6 +131,7 @@ export function SkillNode({ node, nodeSize, isSelected, onSelect, onSelectLevel,
       data-short-name={shortName}
       data-selected={isSelected ? 'true' : 'false'}
       data-export-note={tooltipReleaseNote}
+      data-export-levels={JSON.stringify(exportLevelEntries)}
     >
       <div
         xmlns="http://www.w3.org/1999/xhtml"

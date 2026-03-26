@@ -7,7 +7,17 @@ class MockElement {
     this.attributes = new Map()
     this.children = []
     this.textContent = ''
+    this._innerHTML = ''
     this.parentNode = null
+  }
+
+  set innerHTML(value) {
+    this._innerHTML = String(value ?? '')
+    this.children = []
+  }
+
+  get innerHTML() {
+    return this._innerHTML
   }
 
   setAttribute(name, value) {
@@ -119,7 +129,7 @@ class MockElement {
       .join('')
     const children = this.children.map((child) => child.outerHTML).join('')
     const text = this.textContent || ''
-    return `<${this.tagName}${attrs}>${text}${children}</${this.tagName}>`
+    return `<${this.tagName}${attrs}>${text}${this._innerHTML}${children}</${this.tagName}>`
   }
 }
 
@@ -191,7 +201,9 @@ describe('svgExport', () => {
 
     expect(serialized).toContain('skill-node-tooltip-layer')
     expect(serialized).toContain('skill-node-tooltip-trigger')
-    expect(serialized).toContain('skill-node-tooltip')
+    expect(serialized).toContain('skill-node-tooltip__panel')
+    expect(serialized).toContain('skill-node-tooltip__stack')
+    expect(serialized).toContain('skill-node-tooltip__card')
     expect(serialized).toContain('skill-node-tooltip__title')
     expect(serialized).toContain('skill-node-tooltip__note')
   })
@@ -216,11 +228,12 @@ describe('svgExport', () => {
 
     expect(serialized).toContain('rgba(2, 6, 23, 0.96)')
     expect(serialized).toContain('rgba(56, 189, 248, 0.25)')
-    expect(serialized).toContain('filter: drop-shadow(0 18px 40px rgba(2, 6, 23, 0.45))')
+    expect(serialized).toContain('box-shadow: 0 18px 40px rgba(2, 6, 23, 0.45)')
     expect(serialized).toContain('font-family: "Space Grotesk", "Rajdhani", sans-serif')
-    expect(serialized).toContain('font-size: 13px')
-    expect(serialized).toContain('font-size: 12px')
-    expect(serialized).toContain('height="62"')
+    expect(serialized).toContain('font-size: 0.82rem')
+    expect(serialized).toContain('font-size: 0.76rem')
+    expect(serialized).toContain('border-radius: 10px')
+    expect(serialized).toContain('height="122"')
   })
 
   it('keeps the center icon inside the exported viewport', () => {
@@ -322,8 +335,50 @@ describe('svgExport', () => {
 
     const serialized = serializeSvgElementForExport(svg)
 
-    expect(serialized).toContain('skill-node-tooltip__heading')
-    expect(serialized).toContain('Release Impact')
+    expect(serialized).toContain('skill-node-tooltip__note--markdown')
+    expect(serialized).toContain('<h1>Release Impact</h1>')
+    expect(serialized).toContain('<p>Rollout is live.</p>')
+  })
+
+  it('serializes stacked level notes and level-specific hover triggers', () => {
+    installSvgDomShim()
+
+    const svg = new MockElement('svg')
+    const foreignObject = new MockElement('foreignObject')
+
+    foreignObject.setAttribute('class', 'skill-node-export-anchor')
+    foreignObject.setAttribute('x', '10')
+    foreignObject.setAttribute('y', '20')
+    foreignObject.setAttribute('width', '120')
+    foreignObject.setAttribute('height', '120')
+    foreignObject.setAttribute('data-node-id', 'node-1')
+    foreignObject.setAttribute('data-export-label', 'React Platform')
+    foreignObject.setAttribute('data-export-levels', JSON.stringify([
+      {
+        id: 'level-now',
+        label: 'Level One',
+        status: 'now',
+        statusLabel: 'Now',
+        releaseNote: 'Ready for **launch**.',
+      },
+      {
+        id: 'level-next',
+        label: 'Level Two',
+        status: 'next',
+        statusLabel: 'Next',
+        releaseNote: '- draft\n- review',
+      },
+    ]))
+    svg.appendChild(foreignObject)
+
+    const serialized = serializeSvgElementForExport(svg)
+
+    expect(serialized).toContain('skill-node-tooltip__stack')
+    expect(serialized).toContain('skill-node-tooltip__card')
+    expect(serialized).toContain('export-tooltip-trigger-1-level-1')
+    expect(serialized).toContain('export-tooltip-trigger-1-level-2')
+    expect(serialized).toContain('<strong>launch</strong>')
+    expect(serialized).toContain('<ul><li>draft</li><li>review</li></ul>')
   })
 
   it('embeds source styles when exporting a standalone svg', () => {

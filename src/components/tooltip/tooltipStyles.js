@@ -13,6 +13,34 @@ export const TOOLTIP_THEME_STYLES = {
 
 export const TOOLTIP_ARROW_BORDER_COLOR = 'rgba(56, 189, 248, 0.25)'
 
+export const TOOLTIP_HTML_BOX_STYLES = {
+  maxWidth: '20rem',
+  padding: '0.7rem 0.8rem',
+  color: '#e2e8f0',
+  backgroundColor: 'rgba(2, 6, 23, 0.96)',
+  border: '1px solid rgba(56, 189, 248, 0.25)',
+  boxShadow: '0 18px 40px rgba(2, 6, 23, 0.45)',
+  backdropFilter: 'blur(14px)',
+  WebkitBackdropFilter: 'blur(14px)',
+  borderRadius: '10px',
+}
+
+export const TOOLTIP_HTML_TITLE_STYLES = {
+  margin: 0,
+  color: '#f8fafc',
+  fontSize: '0.82rem',
+  fontWeight: 700,
+  lineHeight: 1.25,
+}
+
+export const TOOLTIP_HTML_NOTE_STYLES = {
+  marginTop: '0.35rem',
+  color: '#cbd5e1',
+  fontSize: '0.76rem',
+  lineHeight: 1.45,
+  whiteSpace: 'pre-wrap',
+}
+
 export const TOOLTIP_SVG_STYLES = {
   backgroundFill: 'rgba(2, 6, 23, 0.96)',
   borderStroke: 'rgba(56, 189, 248, 0.25)',

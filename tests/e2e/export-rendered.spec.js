@@ -99,7 +99,7 @@ test.describe('Rendered export viewer', () => {
       await expect(exportPage.locator('#html-export-tree-shell')).toHaveCSS('overflow-y', 'hidden')
       await expect(exportPage.getByText('Visualisierung')).toHaveCount(0)
       await expect(exportPage.locator('.html-export__section-title')).toHaveCount(0)
-      await expect(exportPage.locator('img[alt="Center Icon"]')).toBeVisible()
+      await expect(exportPage.locator('.skill-tree-center-icon__image')).toBeVisible()
       await expect(exportPage.locator('.html-export__tree-shell .skill-tree-center-icon')).toBeVisible()
 
       const canvas = exportPage.locator('#html-export-tree-canvas')
