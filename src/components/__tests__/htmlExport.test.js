@@ -49,7 +49,7 @@ describe('htmlExport', () => {
     expect(html).toContain('<svg viewBox="0 0 100 100"></svg>')
     expect(html).toContain(`id="${HTML_EXPORT_DATA_SCRIPT_ID}"`)
     expect(html).toContain('PDF')
-    expect(html).toContain('SVG interaktiv')
+    expect(html).toContain('SVG (interactive)')
     expect(html).toContain('SVG clean')
     expect(html).toContain('html-export__panel--roadmap')
     expect(html).toContain('height: 50vh;')

@@ -1,9 +1,12 @@
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { test, expect } from '@playwright/test'
 import {
   clickInitialRootAddControl,
   clickInitialSegmentAddControl,
   confirmAndReset,
   getInspectorScopeLabels,
+  parseSkillTreeCsvTemplate,
   selectNodeByShortName,
   setSelectValueByLabel,
   startFresh,
@@ -52,6 +55,9 @@ const getNodeAnchor = (page, shortName) => (
 const getNodeButton = (page, shortName) => (
   getNodeAnchor(page, shortName).locator('.skill-node-button').first()
 )
+
+const largeDatasetCsvPath = resolve(process.cwd(), 'tests/e2e/datasets/large.csv')
+const largeDatasetTemplate = parseSkillTreeCsvTemplate(readFileSync(largeDatasetCsvPath, 'utf-8'))
 
 const waitForPersistedNodeLabel = async (page, label) => {
   await page.waitForFunction(({ key, value }) => {
@@ -472,5 +478,51 @@ test.describe('Phase 3 regressions', () => {
     const afterPan = await node.boundingBox()
     expect(afterPan.x).not.toBe(before.x)
     expect(afterPan.y).not.toBe(before.y)
+  })
+
+  test('imports the large dataset and keeps the center icon aligned with the radial center', async ({ page }) => {
+    const pageErrors = []
+    page.on('pageerror', (error) => {
+      pageErrors.push(error)
+    })
+
+    await confirmAndReset(page)
+    await expect(page.locator('foreignObject.skill-node-export-anchor')).toHaveCount(0)
+
+    await page.getByRole('button', { name: 'HTML importieren', exact: true }).hover()
+    await expect(page.getByRole('menuitem', { name: 'CSV', exact: true })).toBeVisible()
+
+    await page.locator('input[type="file"][accept="text/csv,.csv"]').setInputFiles(largeDatasetCsvPath)
+
+    const dialog = page.getByRole('dialog', { name: 'CSV-Import Optionen' })
+    await expect(dialog).toBeVisible()
+    await dialog.getByRole('button', { name: 'Importieren' }).click()
+    await expect(dialog).toBeHidden()
+
+    await expect(page.locator('foreignObject.skill-node-export-anchor')).toHaveCount(largeDatasetTemplate.rows.length, { timeout: 120_000 })
+
+    const geometry = await page.evaluate(() => {
+      const halo = document.querySelector('circle[fill="url(#nodeHalo)"]')
+      const centerForeign = document.querySelector('.skill-tree-center-icon__foreign')
+
+      if (!halo || !centerForeign) {
+        return null
+      }
+
+      const haloRect = halo.getBoundingClientRect()
+      const centerRect = centerForeign.getBoundingClientRect()
+
+      return {
+        haloCenterX: haloRect.x + haloRect.width / 2,
+        haloCenterY: haloRect.y + haloRect.height / 2,
+        iconCenterX: centerRect.x + centerRect.width / 2,
+        iconCenterY: centerRect.y + centerRect.height / 2,
+      }
+    })
+
+    expect(geometry).toBeTruthy()
+    expect(Math.abs(geometry.iconCenterX - geometry.haloCenterX)).toBeLessThan(1)
+    expect(Math.abs(geometry.iconCenterY - geometry.haloCenterY)).toBeLessThan(1)
+    expect(pageErrors).toHaveLength(0)
   })
 })

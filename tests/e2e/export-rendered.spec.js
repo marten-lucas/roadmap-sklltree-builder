@@ -90,7 +90,7 @@ test.describe('Rendered export viewer', () => {
       await expect(exportPage.locator('#html-export-tree-shell')).toBeVisible()
       await expect(exportPage.getByRole('heading', { name: 'myKyana' })).toBeVisible()
       await expect(exportPage.locator('.html-export__subtitle')).toContainText('July 2026 Release')
-      await expect(exportPage.locator('.html-export__menu-button')).toHaveCount(2)
+      await expect(exportPage.locator('.html-export__menu-button')).toHaveCount(3)
       await expect(exportPage.getByText('Roadmap')).toBeVisible()
       await expect(exportPage.getByText('Release Notes')).toBeVisible()
       await expect(exportPage.locator('.html-export__section-subtitle').first()).toContainText('Reich & Schön')

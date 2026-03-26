@@ -229,7 +229,7 @@ test.describe('HTML export – viewer page shows same content as builder', () =>
 test.describe('SVG export modes', () => {
   const openExportMenu = async (page) => {
     await page.getByRole('button', { name: 'Export', exact: true }).hover()
-    await expect(page.getByRole('menuitem', { name: 'SVG', exact: true })).toBeVisible()
+    await expect(page.getByRole('menuitem', { name: 'SVG (interactive)', exact: true })).toBeVisible()
   }
 
   test.beforeEach(async ({ page }) => {
@@ -243,7 +243,7 @@ test.describe('SVG export modes', () => {
 
     const [download] = await Promise.all([
       page.waitForEvent('download'),
-      page.getByRole('menuitem', { name: 'SVG', exact: true }).click(),
+      page.getByRole('menuitem', { name: 'SVG (interactive)', exact: true }).click(),
     ])
     const svgContent = await readDownload(download)
 
@@ -283,7 +283,7 @@ test.describe('SVG export modes', () => {
 
     const [download] = await Promise.all([
       page.waitForEvent('download'),
-      page.getByRole('menuitem', { name: 'SVG', exact: true }).click(),
+      page.getByRole('menuitem', { name: 'SVG (interactive)', exact: true }).click(),
     ])
     const svgContent = await readDownload(download)
 

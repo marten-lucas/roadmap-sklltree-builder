@@ -70,7 +70,7 @@ import {
   getReleaseVisibilityMode,
   nodeMatchesScopeFilter,
 } from './utils/visibility'
-import { VIEWPORT_DEFAULTS, computeFitScale, getNextZoomStep, getViewportKeyboardAction } from './utils/viewport'
+import { VIEWPORT_DEFAULTS, computeFitScale, computeFitTransform, getNextZoomStep, getViewportKeyboardAction } from './utils/viewport'
 import { getInitialRoadmapDocument } from './utils/document'
 import { resolveInspectorSelectedNode } from './utils/selection'
 
@@ -672,6 +672,118 @@ export function SkillTree() {
     }
   }, [roadmapData.segments, canvas.origin.x, canvas.origin.y, canvas.maxRadius])
 
+  const fitContentBounds = useMemo(() => {
+    const bounds = {
+      minX: Number.POSITIVE_INFINITY,
+      minY: Number.POSITIVE_INFINITY,
+      maxX: Number.NEGATIVE_INFINITY,
+      maxY: Number.NEGATIVE_INFINITY,
+    }
+
+    const includeRect = (x, y, width, height) => {
+      if (![x, y, width, height].every(Number.isFinite)) {
+        return
+      }
+
+      bounds.minX = Math.min(bounds.minX, x)
+      bounds.minY = Math.min(bounds.minY, y)
+      bounds.maxX = Math.max(bounds.maxX, x + width)
+      bounds.maxY = Math.max(bounds.maxY, y + height)
+    }
+
+    includeRect(
+      canvas.origin.x - centerIconSize / 2 - 8,
+      canvas.origin.y - centerIconSize / 2 - 8,
+      centerIconSize + 16,
+      centerIconSize + 16,
+    )
+
+    for (const node of renderedNodes) {
+      const visibilityMode = nodeVisibilityModeById.get(node.id) ?? 'full'
+      const glowPadding = visibilityMode === 'minimal' ? 8 : 18
+      const nodeSizeForFit = (visibilityMode === 'minimal' ? MINIMAL_NODE_SIZE : TREE_CONFIG.nodeSize) + glowPadding * 2
+
+      includeRect(
+        node.x - nodeSizeForFit / 2,
+        node.y - nodeSizeForFit / 2,
+        nodeSizeForFit,
+        nodeSizeForFit,
+      )
+    }
+
+    for (const segmentLabel of filteredSegmentLabels) {
+      const labelWidth = Math.max(88, String(segmentLabel.text ?? '').length * 10)
+      includeRect(segmentLabel.x - (labelWidth / 2) - 10, segmentLabel.y - 12, labelWidth + 20, 24)
+    }
+
+    for (const separator of filteredSegmentSeparators) {
+      const path = String(separator.path ?? '')
+      const matches = [...path.matchAll(/[-0-9.]+/g)].map((match) => Number.parseFloat(match[0]))
+      if (matches.length >= 4) {
+        const xs = matches.filter((_, index) => index % 2 === 0)
+        const ys = matches.filter((_, index) => index % 2 === 1)
+        includeRect(Math.min(...xs), Math.min(...ys), Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys))
+      }
+    }
+
+    for (const portal of visibleDependencyPortals) {
+      includeRect(portal.x - 30, portal.y - 30, 60, 60)
+    }
+
+    if (emptyStateAddControl) {
+      includeRect(emptyStateAddControl.x - 22, emptyStateAddControl.y - 22, 44, 82)
+    }
+
+    if (emptySegmentAddControl) {
+      includeRect(emptySegmentAddControl.x - 18, emptySegmentAddControl.y - 18, 36, 68)
+    }
+
+    if (selectedControlGeometry) {
+      includeRect(selectedControlGeometry.child.x - 18, selectedControlGeometry.child.y - 18, 36, 36)
+      includeRect(selectedControlGeometry.left.x - 18, selectedControlGeometry.left.y - 18, 36, 36)
+      includeRect(selectedControlGeometry.right.x - 18, selectedControlGeometry.right.y - 18, 36, 36)
+    }
+
+    if (selectedSegmentControlGeometry) {
+      includeRect(selectedSegmentControlGeometry.left.x - 16, selectedSegmentControlGeometry.left.y - 16, 32, 32)
+      includeRect(selectedSegmentControlGeometry.right.x - 16, selectedSegmentControlGeometry.right.y - 16, 32, 32)
+    }
+
+    if (!Number.isFinite(bounds.minX) || !Number.isFinite(bounds.minY) || !Number.isFinite(bounds.maxX) || !Number.isFinite(bounds.maxY)) {
+      return {
+        x: canvas.origin.x - centerIconSize / 2 - 8,
+        y: canvas.origin.y - centerIconSize / 2 - 8,
+        width: centerIconSize + 16,
+        height: centerIconSize + 16,
+      }
+    }
+
+    const centerX = canvas.origin.x
+    const centerY = canvas.origin.y
+    const halfWidth = Math.max(centerX - bounds.minX, bounds.maxX - centerX)
+    const halfHeight = Math.max(centerY - bounds.minY, bounds.maxY - centerY)
+
+    return {
+      x: centerX - halfWidth,
+      y: centerY - halfHeight,
+      width: halfWidth * 2,
+      height: halfHeight * 2,
+    }
+  }, [
+    canvas.origin.x,
+    canvas.origin.y,
+    centerIconSize,
+    emptySegmentAddControl,
+    emptyStateAddControl,
+    filteredSegmentLabels,
+    filteredSegmentSeparators,
+    nodeVisibilityModeById,
+    renderedNodes,
+    selectedControlGeometry,
+    selectedSegmentControlGeometry,
+    visibleDependencyPortals,
+  ])
+
   const handleOpenCenterIconPanel = (event) => {
     event.stopPropagation()
     // Toggle center panel; ensure only one right-side panel visible
@@ -1125,19 +1237,15 @@ export function SkillTree() {
     if (!transformApiRef.current) return
     const vw = window.innerWidth
     const vh = window.innerHeight
-    const scale = computeFitScale({
-      contentWidth: canvas.width,
-      contentHeight: canvas.height,
+    const { positionX, positionY, scale } = computeFitTransform({
+      contentBounds: fitContentBounds,
       viewportWidth: vw,
       viewportHeight: vh,
+      padding: VIEWPORT_DEFAULTS.fitPadding,
+      minScale: VIEWPORT_DEFAULTS.minScale,
+      maxScale: VIEWPORT_DEFAULTS.maxScale,
     })
-    transformApiRef.current.setTransform(
-      vw / 2 - canvas.origin.x * scale,
-      vh / 2 - canvas.origin.y * scale,
-      scale,
-      300,
-      'easeOut',
-    )
+    transformApiRef.current.setTransform(positionX, positionY, scale, 300, 'easeOut')
   }
 
   const handleZoomToScale = (scale) => {
@@ -1164,61 +1272,44 @@ export function SkillTree() {
     handleZoomToScale(getNextZoomStep(transformApiRef.current.state.scale, -1))
   }
 
-  const getConnectedNodeIdByArrowKey = (nodeId, key) => {
-    if (!nodeId) return null
+  const compareNodesForKeyboardNavigation = (leftNode, rightNode) => (
+    leftNode.angle - rightNode.angle
+    || leftNode.x - rightNode.x
+    || String(leftNode.label ?? '').localeCompare(String(rightNode.label ?? ''))
+  )
 
-    const connectedIds = new Set()
-
-    for (const link of filteredLinks) {
-      if (link.sourceId === nodeId && link.targetId) {
-        connectedIds.add(link.targetId)
-      }
-      if (link.targetId === nodeId && link.sourceId) {
-        connectedIds.add(link.sourceId)
-      }
-    }
-
-    if (connectedIds.size === 0) {
+  const getKeyboardNavigationTarget = (nodeId, key) => {
+    const currentNode = layoutNodesById.get(nodeId)
+    if (!currentNode) {
       return null
     }
 
-    const currentLayoutNode = layoutNodesById.get(nodeId)
-    if (!currentLayoutNode) {
-      return null
+    const siblings = nodes
+      .filter((candidate) => candidate.parentId === currentNode.parentId && candidate.id !== nodeId)
+      .sort(compareNodesForKeyboardNavigation)
+    const children = nodes
+      .filter((candidate) => candidate.parentId === nodeId)
+      .sort(compareNodesForKeyboardNavigation)
+
+    if (key === 'ArrowLeft') {
+      const leftSibling = [...siblings].reverse().find((candidate) => candidate.x < currentNode.x)
+      return leftSibling?.id ?? null
     }
 
-    const axis = key === 'ArrowLeft' || key === 'ArrowRight' ? 'x' : 'y'
-    const direction = key === 'ArrowLeft' || key === 'ArrowUp' ? -1 : 1
-    let bestMatch = null
-
-    for (const connectedId of connectedIds) {
-      const target = layoutNodesById.get(connectedId)
-      if (!target) continue
-
-      const delta = target[axis] - currentLayoutNode[axis]
-      if (direction < 0 && delta >= 0) continue
-      if (direction > 0 && delta <= 0) continue
-
-      const distance = Math.hypot(target.x - currentLayoutNode.x, target.y - currentLayoutNode.y)
-      const directionalDistance = Math.abs(delta)
-
-      if (!bestMatch) {
-        bestMatch = { id: connectedId, directionalDistance, distance }
-        continue
-      }
-
-      if (
-        directionalDistance < bestMatch.directionalDistance
-        || (
-          directionalDistance === bestMatch.directionalDistance
-          && distance < bestMatch.distance
-        )
-      ) {
-        bestMatch = { id: connectedId, directionalDistance, distance }
-      }
+    if (key === 'ArrowRight') {
+      const rightSibling = siblings.find((candidate) => candidate.x > currentNode.x)
+      return rightSibling?.id ?? null
     }
 
-    return bestMatch?.id ?? null
+    if (key === 'ArrowUp') {
+      return children[0]?.id ?? null
+    }
+
+    if (key === 'ArrowDown') {
+      return currentNode.parentId ?? null
+    }
+
+    return null
   }
 
   useEffect(() => {
@@ -1226,19 +1317,15 @@ export function SkillTree() {
       if (!transformApiRef.current) return
       const vw = window.innerWidth
       const vh = window.innerHeight
-      const scale = computeFitScale({
-        contentWidth: canvas.width,
-        contentHeight: canvas.height,
+      const { positionX, positionY, scale } = computeFitTransform({
+        contentBounds: fitContentBounds,
         viewportWidth: vw,
         viewportHeight: vh,
+        padding: VIEWPORT_DEFAULTS.fitPadding,
+        minScale: VIEWPORT_DEFAULTS.minScale,
+        maxScale: VIEWPORT_DEFAULTS.maxScale,
       })
-      transformApiRef.current.setTransform(
-        vw / 2 - canvas.origin.x * scale,
-        vh / 2 - canvas.origin.y * scale,
-        scale,
-        300,
-        'easeOut',
-      )
+      transformApiRef.current.setTransform(positionX, positionY, scale, 300, 'easeOut')
     }
 
     const zoomByStep = (direction) => {
@@ -1268,7 +1355,7 @@ export function SkillTree() {
         || (Array.isArray(selectedNodeIds) && selectedNodeIds.length > 0)
 
       if (selectedNodeId && (event.key === 'ArrowLeft' || event.key === 'ArrowRight' || event.key === 'ArrowUp' || event.key === 'ArrowDown') && !event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey && !isEditableElement(event.target)) {
-        const nextNodeId = getConnectedNodeIdByArrowKey(selectedNodeId, event.key)
+        const nextNodeId = getKeyboardNavigationTarget(selectedNodeId, event.key)
         if (nextNodeId) {
           event.preventDefault()
           handleSelectNode(nextNodeId)
@@ -1314,7 +1401,7 @@ export function SkillTree() {
       window.removeEventListener('keyup', handleViewportKeyUp)
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [canvas.width, canvas.height, canvas.origin.x, canvas.origin.y, selectedNodeId, selectedNodeIds, selectedSegmentId, filteredLinks, layoutNodesById])
+  }, [canvas.width, canvas.height, canvas.origin.x, canvas.origin.y, selectedNodeId, selectedNodeIds, selectedSegmentId, layoutNodesById, nodes])
 
   const handleAddChild = (parentId) => {
     const result = addChildNodeWithResult(roadmapData, parentId)

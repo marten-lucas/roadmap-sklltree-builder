@@ -448,6 +448,20 @@ const waitForSelectedNodeId = async (page, nodeId) => {
 
 export const selectNodeByShortName = async (page, shortName) => {
   const normalizedShortName = normalizeShortNameLikeApp(shortName, shortName)
+  const directNode = page.locator(`foreignObject.skill-node-export-anchor[data-short-name="${normalizedShortName}"] .skill-node-button`).first()
+
+  try {
+    await directNode.waitFor({ state: 'visible', timeout: 10_000 })
+    await directNode.click()
+    const directSelectedNodeId = await getSelectedNodeId(page)
+    if (directSelectedNodeId) {
+      await waitForSelectedNodeId(page, directSelectedNodeId)
+      return
+    }
+  } catch {
+    // Fall back to toolbar search when the node is not directly clickable yet.
+  }
+
   const selectedNodeId = await searchAndSelectNode(page, normalizedShortName)
   if (selectedNodeId) {
     await waitForSelectedNodeId(page, selectedNodeId)
@@ -496,12 +510,21 @@ export const searchAndSelectNode = async (page, query) => {
   await searchBox.waitFor({ state: 'visible', timeout: 10_000 })
   await searchBox.fill(q)
 
-  // Wait for the dropdown to populate and click the first visible option
   const option = page.getByRole('option').filter({ visible: true }).first()
-  await option.waitFor({ state: 'visible', timeout: 5_000 })
-  // Use mouse down then mouse up to better emulate user click and avoid focus loss
-  await option.dispatchEvent('mousedown')
-  await option.dispatchEvent('mouseup')
+  try {
+    await option.waitFor({ state: 'visible', timeout: 5_000 })
+    await option.click()
+  } catch {
+    const normalizedShortName = normalizeShortNameLikeApp(q, q)
+    const fallbackNode = page.locator(`foreignObject.skill-node-export-anchor[data-short-name="${normalizedShortName}"] .skill-node-button`).first()
+    await fallbackNode.waitFor({ state: 'visible', timeout: 10_000 })
+    await fallbackNode.click()
+  }
+
+  const selectedNodeId = await getSelectedNodeId(page)
+  if (selectedNodeId) {
+    return selectedNodeId
+  }
 
   // Wait for inspector to show and return the selected node id
   try {

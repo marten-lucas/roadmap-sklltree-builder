@@ -533,15 +533,23 @@ const buildViewerScript = () => `
         const contentMinY = occupied.minY - (viewBox?.y ?? 0)
         const contentWidth = Math.max(1, occupied.maxX - occupied.minX)
         const contentHeight = Math.max(1, occupied.maxY - occupied.minY)
+        const centerGroup = svgRoot?.querySelector('.skill-tree-center-icon')
+        const centerMatch = centerGroup?.getAttribute('transform')?.match(/translate\(([-0-9.]+),\s*([-0-9.]+)\)/)
+        const centerX = centerMatch ? Number.parseFloat(centerMatch[1]) : contentMinX + contentWidth / 2
+        const centerY = centerMatch ? Number.parseFloat(centerMatch[2]) : contentMinY + contentHeight / 2
+        const halfWidth = Math.max(centerX - occupied.minX, occupied.maxX - centerX)
+        const halfHeight = Math.max(centerY - occupied.minY, occupied.maxY - centerY)
+        const fittedBoundsWidth = Math.max(contentWidth, halfWidth * 2)
+        const fittedBoundsHeight = Math.max(contentHeight, halfHeight * 2)
         const fittedScale = clamp(
-          Math.min(shellWidth / (contentWidth + padding * 2), shellHeight / (contentHeight + padding * 2)),
+            Math.min(shellWidth / (fittedBoundsWidth + padding * 2), shellHeight / (fittedBoundsHeight + padding * 2)),
           VIEWPORT.minScale,
           VIEWPORT.maxScale,
         )
 
         panZoomState.scale = fittedScale
-        panZoomState.translateX = ((shellWidth - contentWidth * fittedScale) / 2) - contentMinX * fittedScale
-        panZoomState.translateY = ((shellHeight - contentHeight * fittedScale) / 2) - contentMinY * fittedScale
+          panZoomState.translateX = ((shellWidth - fittedBoundsWidth * fittedScale) / 2) - (centerX - halfWidth) * fittedScale
+          panZoomState.translateY = ((shellHeight - fittedBoundsHeight * fittedScale) / 2) - (centerY - halfHeight) * fittedScale
         applyPanZoom()
       }
 
@@ -1320,6 +1328,10 @@ export const buildHtmlExportDocument = ({
 
     .html-export__tree-shell .skill-tree-center-icon__image {
       display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      object-position: center center;
     }
 
     .html-export__intro {
@@ -1540,7 +1552,7 @@ export const buildHtmlExportDocument = ({
           <div class="html-export__menu-panel">
             <div class="html-export__menu-actions">
               <button id="html-export-print" class="html-export__menu-action" type="button">PDF</button>
-              <button id="html-export-svg" class="html-export__menu-action" type="button">SVG interaktiv</button>
+              <button id="html-export-svg" class="html-export__menu-action" type="button">SVG (interactive)</button>
               <button id="html-export-svg-clean" class="html-export__menu-action" type="button">SVG clean</button>
             </div>
           </div>

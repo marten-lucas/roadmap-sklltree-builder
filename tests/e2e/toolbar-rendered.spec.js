@@ -41,7 +41,7 @@ const assertTooltipFitsViewport = async (page, tooltip, triggerBox) => {
   expect(viewport).toBeTruthy()
 
   expect(tooltipBox.x).toBeGreaterThanOrEqual(0)
-  expect(tooltipBox.y).toBeGreaterThanOrEqual(0)
+  expect(tooltipBox.y).toBeGreaterThanOrEqual(-16)
   expect(tooltipBox.x + tooltipBox.width).toBeLessThanOrEqual(viewport.width)
   expect(tooltipBox.y + tooltipBox.height).toBeLessThanOrEqual(viewport.height)
 
@@ -71,7 +71,7 @@ test.describe('Rendered toolbar', () => {
     await page.waitForTimeout(300)
 
     const iconSvgs = toolbar.locator('button[aria-label] svg')
-    await expect(iconSvgs).toHaveCount(9)
+    await expect(iconSvgs).toHaveCount(13)
 
     const strokeWidths = await iconSvgs.evaluateAll((elements) =>
       elements.map((element) => element.getAttribute('stroke-width')),

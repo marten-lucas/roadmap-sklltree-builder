@@ -154,7 +154,7 @@ export function SkillTreeToolbar({
                   PDF
                 </Menu.Item>
                 <Menu.Item onClick={onExportSvg}>
-                  SVG
+                  SVG (interactive)
                 </Menu.Item>
                 <Menu.Item onClick={onExportPng}>
                   PNG
