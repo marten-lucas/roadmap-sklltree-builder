@@ -59,8 +59,9 @@ import { SkillTreeToolbar } from './toolbar'
 import { useSkillTreeUiState } from '../hooks/useSkillTreeUiState'
 import { isAngleNear } from './utils/angle'
 import { uniqueArray } from './utils/array'
+import { downloadDocumentCsv, readDocumentFromCsvText } from './utils/csv'
 import { isEditableElement } from './utils/dom'
-import { getHtmlImportErrorMessage, confirmResetDocument } from './utils/messages'
+import { getCsvExportErrorMessage, getCsvImportErrorMessage, getHtmlImportErrorMessage, confirmResetDocument } from './utils/messages'
 import { readFileAsText, readFileAsDataUrl, isValidSvgMarkup } from './utils/file'
 import {
   RELEASE_FILTER_LABELS,
@@ -89,6 +90,7 @@ export function SkillTree() {
   const canUndo = documentHistory.past.length > 0
   const canRedo = documentHistory.future.length > 0
   const documentFileInputRef = useRef(null)
+  const csvDocumentFileInputRef = useRef(null)
   const canvasSvgRef = useRef(null)
   const [lastSavedAt, setLastSavedAt] = useState(null)
 
@@ -771,6 +773,10 @@ export function SkillTree() {
     documentFileInputRef.current?.click()
   }
 
+  const handleOpenCsvDocumentPicker = () => {
+    csvDocumentFileInputRef.current?.click()
+  }
+
   const handleUndo = () => {
     if (!canUndo) {
       return
@@ -873,6 +879,19 @@ export function SkillTree() {
     }
   }
 
+  const handleExportCsv = () => {
+    try {
+      const exported = downloadDocumentCsv(roadmapData)
+      if (!exported) {
+        window.alert('CSV-Export fehlgeschlagen.')
+      }
+    } catch (error) {
+      console.error('CSV export failed', error)
+      const message = getCsvExportErrorMessage(error)
+      window.alert(message)
+    }
+  }
+
   const handleExportPdf = async () => {
     if (!canvasSvgRef.current) {
       window.alert('PDF-Export derzeit nicht verfuegbar.')
@@ -919,6 +938,28 @@ export function SkillTree() {
     } catch (error) {
       console.error('HTML import failed', error)
       const message = getHtmlImportErrorMessage(error)
+      window.alert(message)
+    } finally {
+      event.target.value = ''
+    }
+  }
+
+  const handleCsvDocumentFileSelected = async (event) => {
+    const file = event.target.files?.[0]
+
+    if (!file) {
+      return
+    }
+
+    try {
+      const rawText = await file.text()
+      const nextDocument = readDocumentFromCsvText(rawText)
+      dispatchDocument({ type: 'replace', document: nextDocument })
+      setTransformKey((current) => current + 1)
+      resetSelections()
+    } catch (error) {
+      console.error('CSV import failed', error)
+      const message = getCsvImportErrorMessage(error)
       window.alert(message)
     } finally {
       event.target.value = ''
@@ -1489,6 +1530,14 @@ export function SkillTree() {
         onChange={handleDocumentFileSelected}
       />
 
+      <input
+        ref={csvDocumentFileInputRef}
+        type="file"
+        accept="text/csv,.csv"
+        style={{ display: 'none' }}
+        onChange={handleCsvDocumentFileSelected}
+      />
+
       {globalToast.visible && (
         <div style={{ position: 'fixed', top: 12, left: '50%', transform: 'translateX(-50%)', zIndex: 9999 }}>
           <Alert color={globalToast.type === 'warning' ? 'yellow' : globalToast.type === 'success' ? 'teal' : 'blue'}>
@@ -1503,7 +1552,9 @@ export function SkillTree() {
           setIsToolbarCollapsed((prev) => !prev)
         }}
         onOpenDocumentPicker={handleOpenDocumentPicker}
+        onOpenCsvDocumentPicker={handleOpenCsvDocumentPicker}
         onExportHtml={() => void handleExportHtml()}
+        onExportCsv={handleExportCsv}
         onExportPdf={() => void handleExportPdf()}
         onExportSvg={() => void handleExportSvg()}
         onExportCleanSvg={() => void handleExportCleanSvg()}

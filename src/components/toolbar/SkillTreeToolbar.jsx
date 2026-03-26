@@ -37,7 +37,9 @@ export function SkillTreeToolbar({
   isCollapsed,
   onToggleCollapsed,
   onOpenDocumentPicker,
+  onOpenCsvDocumentPicker,
   onExportHtml,
+  onExportCsv,
   onExportPdf,
   onExportSvg,
   onExportCleanSvg,
@@ -122,6 +124,12 @@ export function SkillTreeToolbar({
 
               <Menu.Dropdown>
                 <Menu.Label>Export</Menu.Label>
+                <Menu.Item onClick={onExportHtml}>
+                  HTML
+                </Menu.Item>
+                <Menu.Item onClick={onExportCsv}>
+                  CSV
+                </Menu.Item>
                 <Menu.Item onClick={onExportPdf}>
                   PDF
                 </Menu.Item>
@@ -134,16 +142,38 @@ export function SkillTreeToolbar({
               </Menu.Dropdown>
             </Menu>
 
-            <Tooltip label="HTML importieren (Ctrl+O)" position="top" middlewares={TOOLBAR_TOOLTIP_MIDDLEWARES}>
-              <ActionIcon
-                size="md"
-                variant="default"
-                aria-label="HTML importieren"
-                onClick={onOpenDocumentPicker}
-              >
-                <IconDownload {...TOOLBAR_ICON_PROPS} />
-              </ActionIcon>
-            </Tooltip>
+            <Menu
+              shadow="md"
+              width={180}
+              position="bottom-start"
+              withArrow
+              trigger="hover"
+              openDelay={100}
+              closeDelay={180}
+            >
+              <Menu.Target>
+                <Tooltip label="HTML importieren (Ctrl+O)" position="top" middlewares={TOOLBAR_TOOLTIP_MIDDLEWARES}>
+                  <ActionIcon
+                    size="md"
+                    variant="default"
+                    aria-label="HTML importieren"
+                    onClick={onOpenDocumentPicker}
+                  >
+                    <IconDownload {...TOOLBAR_ICON_PROPS} />
+                  </ActionIcon>
+                </Tooltip>
+              </Menu.Target>
+
+              <Menu.Dropdown>
+                <Menu.Label>Import</Menu.Label>
+                <Menu.Item onClick={onOpenDocumentPicker}>
+                  HTML
+                </Menu.Item>
+                <Menu.Item onClick={onOpenCsvDocumentPicker}>
+                  CSV
+                </Menu.Item>
+              </Menu.Dropdown>
+            </Menu>
           </div>
 
           <div className="skill-tree-toolbar__cluster">
