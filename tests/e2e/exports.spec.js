@@ -209,9 +209,14 @@ test.describe('HTML export – viewer page shows same content as builder', () =>
 
       await expect(exportPage.locator('#html-export-tree-shell')).toHaveCSS('overflow-x', 'hidden')
       await expect(exportPage.locator('#html-export-tree-shell')).toHaveCSS('overflow-y', 'hidden')
+      await expect(exportPage.locator('#html-export-tree-shell')).toHaveCSS('padding-top', '16px')
 
       const firstNode = exportPage.locator('foreignObject.skill-node-export-anchor').first()
       await expect(firstNode).toBeVisible()
+
+      const centerIconImage = exportPage.locator('.html-export__tree-shell .skill-tree-center-icon__image')
+      await expect(centerIconImage).toHaveCSS('width', '156px')
+      await expect(centerIconImage).toHaveCSS('height', '156px')
     } finally {
       await exportPage.close()
       await exportContext.close()

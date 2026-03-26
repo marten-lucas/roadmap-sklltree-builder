@@ -384,11 +384,13 @@ const buildViewerScript = () => `
 
       const getOccupiedBounds = () => {
         const contentGroup = svgRoot?.querySelector('.skill-tree-canvas__content')
+        let contentGroupBounds = null
+
         if (contentGroup && typeof contentGroup.getBBox === 'function') {
           try {
             const bounds = contentGroup.getBBox()
             if (Number.isFinite(bounds.x) && Number.isFinite(bounds.y) && Number.isFinite(bounds.width) && Number.isFinite(bounds.height)) {
-              return bounds
+              contentGroupBounds = bounds
             }
           } catch {
             // Fall back to manual bounds collection below.
@@ -411,6 +413,15 @@ const buildViewerScript = () => `
           bounds.minY = Math.min(bounds.minY, y)
           bounds.maxX = Math.max(bounds.maxX, x + width)
           bounds.maxY = Math.max(bounds.maxY, y + height)
+        }
+
+        if (contentGroupBounds) {
+          includeRect(
+            contentGroupBounds.x,
+            contentGroupBounds.y,
+            contentGroupBounds.width,
+            contentGroupBounds.height,
+          )
         }
 
         nodeAnchors.forEach((anchor) => {
@@ -602,6 +613,24 @@ const buildViewerScript = () => `
         panZoomState.translateX = ((shellWidth - fittedBoundsWidth * fittedScale) / 2) - (fittedBoundsX * fittedScale)
         panZoomState.translateY = ((shellHeight - fittedBoundsHeight * fittedScale) / 2) - (fittedBoundsY * fittedScale)
         applyPanZoom()
+      }
+
+      const getVisibleViewportBounds = () => {
+        const { baseWidth, baseHeight } = getSvgMetrics()
+        const shellWidth = treeShell?.clientWidth || baseWidth
+        const shellHeight = treeShell?.clientHeight || baseHeight
+        const scale = Number.isFinite(panZoomState.scale) && panZoomState.scale > 0 ? panZoomState.scale : 1
+        const translateX = Number.isFinite(panZoomState.translateX) ? panZoomState.translateX : 0
+        const translateY = Number.isFinite(panZoomState.translateY) ? panZoomState.translateY : 0
+
+        return {
+          x: -translateX / scale,
+          y: -translateY / scale,
+          width: shellWidth / scale,
+          height: shellHeight / scale,
+          shellWidth,
+          shellHeight,
+        }
       }
 
       const beginDrag = (event) => {
@@ -974,6 +1003,10 @@ const buildViewerScript = () => `
         }
 
         const clone = sourceSvg.cloneNode(true)
+        const visibleBounds = getVisibleViewportBounds()
+        clone.setAttribute('viewBox', String(visibleBounds.x) + ' ' + String(visibleBounds.y) + ' ' + String(visibleBounds.width) + ' ' + String(visibleBounds.height))
+        clone.setAttribute('width', String(visibleBounds.shellWidth))
+        clone.setAttribute('height', String(visibleBounds.shellHeight))
         clone.style.transform = ''
         clone.style.transformOrigin = ''
         clone.style.cursor = ''
@@ -1377,13 +1410,13 @@ export const buildHtmlExportDocument = ({
       z-index: 0;
       flex: 0 0 auto;
       display: block;
-      height: 70vh;
-      min-height: 50vh;
+      height: 78vh;
+      min-height: 58vh;
       overflow: hidden;
       overscroll-behavior: none;
       border-radius: 16px;
       background: #000000;
-      padding: 10px;
+      padding: 16px;
       scrollbar-width: none;
     }
 
@@ -1415,10 +1448,16 @@ export const buildHtmlExportDocument = ({
       overflow: visible;
     }
 
+    .html-export__tree-shell .skill-tree-center-icon {
+      overflow: visible;
+    }
+
     .html-export__tree-shell .skill-tree-center-icon__image {
       display: block;
-      width: 100%;
-      height: 100%;
+      width: 156px;
+      height: 156px;
+      max-width: none;
+      max-height: none;
       object-fit: contain;
       object-position: center center;
     }
@@ -1588,8 +1627,10 @@ export const buildHtmlExportDocument = ({
 
       .html-export__tree-shell {
         background: #ffffff;
+        height: auto;
         min-height: auto;
         overflow: hidden;
+        padding: 0;
       }
 
       .html-export__note-card strong {

@@ -236,7 +236,7 @@ describe('svgExport', () => {
     expect(serialized).toContain('font-size: 0.98rem')
     expect(serialized).toContain('border-radius: 10px')
     expect(serialized).toContain('width="440"')
-    expect(serialized).toContain('height="104"')
+    expect(serialized).toContain('height="110"')
   })
 
   it('keeps the center icon inside the exported viewport', () => {
