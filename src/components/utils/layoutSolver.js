@@ -78,9 +78,10 @@ const computeSpreadScaleMultiplier = (subtreeSpan, maxAngleSpread) => {
     return 1
   }
 
-  // Damped growth keeps large datasets from over-inflating ring radii in one pass.
-  const damped = 1 + (overflowRatio - 1) * 0.48
-  return clamp(damped, 1.04, 1.6)
+  // Adaptive damping: strong for extreme overflow, milder for moderate overflow.
+  const dampingFactor = overflowRatio >= 1.7 ? 0.4 : 0.48
+  const damped = 1 + (overflowRatio - 1) * dampingFactor
+  return clamp(damped, 1.03, 1.55)
 }
 
 const buildSeparatorPathWithDetours = ({
@@ -530,7 +531,22 @@ export const solveSkillTreeLayout = (data, config) => {
     return acc
   }, new Map())
 
-  const minimumArcGap = config.nodeSize * config.minArcGapFactor
+  const segmentLevelCounts = allHierarchyNodes.reduce((acc, node) => {
+    const level = getEffectiveLevel(node)
+    const segmentId = getGroupedSegmentId(node.data.segmentId ?? null)
+    const key = `${level}|${segmentId}`
+    acc.set(key, (acc.get(key) ?? 0) + 1)
+    return acc
+  }, new Map())
+
+  const maxNodesPerSegmentLevel = Math.max(1, ...segmentLevelCounts.values())
+  const denseGapScale =
+    maxNodesPerSegmentLevel >= 12 ? 0.84
+      : maxNodesPerSegmentLevel >= 8 ? 0.9
+        : maxNodesPerSegmentLevel >= 5 ? 0.95
+          : 1
+
+  const minimumArcGap = config.nodeSize * config.minArcGapFactor * denseGapScale
   const sortedLevels = Array.from(levelCounts.keys()).sort((a, b) => a - b)
   const firstNodeLevel = sortedLevels[0] ?? 1
   const maxEstimatedSegmentLabelHeightPx = getMaxEstimatedSegmentLabelHeightPx()
