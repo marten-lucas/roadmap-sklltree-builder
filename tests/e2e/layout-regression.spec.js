@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync } from 'node:fs'
 import { basename, extname, resolve } from 'node:path'
 import process from 'node:process'
 import { expect, test } from '@playwright/test'
@@ -16,6 +16,10 @@ import {
   readDownload,
   selectNodeByShortName,
 } from './helpers.js'
+
+const BASELINE_SCHEMA_VERSION = 1
+const BASELINE_PROFILE = 'layout-regression-phase-a'
+const runStamp = Date.now()
 
 const defaultDatasetEntries = [
   { key: 'minimal', label: 'minimal', path: resolve(process.cwd(), 'tests/e2e/datasets/minimal.csv') },
@@ -75,7 +79,40 @@ const datasetEntries = defaultDatasetEntries.filter((entry, index, all) => (
 
 const exportDir = resolve(process.cwd(), 'tests/results/e2e-exports/layout-regression')
 const reportDir = resolve(process.cwd(), 'tests/results/reports')
+const screenshotDir = resolve(process.cwd(), 'tests/results/screenshots/layout-regression', String(runStamp))
 const reportEntries = []
+const screenshotEntries = []
+
+const ensureArtifactDirs = () => {
+  mkdirSync(exportDir, { recursive: true })
+  mkdirSync(reportDir, { recursive: true })
+  mkdirSync(screenshotDir, { recursive: true })
+}
+
+const normalizeFilenamePart = (value) => String(value ?? '').replace(/[^a-z0-9-]+/gi, '_').toLowerCase()
+
+const fitToScreenIfAvailable = async (page) => {
+  try {
+    await page.getByRole('button', { name: 'Fit to screen' }).click({ timeout: 1_500 })
+    await page.waitForTimeout(220)
+  } catch {
+    // Keep baseline resilient if the control is not rendered in a specific state.
+  }
+}
+
+const captureBuilderScreenshot = async (page, datasetKey) => {
+  const path = resolve(screenshotDir, `${normalizeFilenamePart(datasetKey)}-builder.png`)
+  await page.screenshot({ path, fullPage: true })
+  return path
+}
+
+const captureExportScreenshot = async (page, datasetKey, exportedHtml) => {
+  const path = resolve(screenshotDir, `${normalizeFilenamePart(datasetKey)}-export.png`)
+  await page.setContent(exportedHtml)
+  await page.waitForSelector('#html-export-tree-canvas svg', { timeout: 10_000 })
+  await page.screenshot({ path, fullPage: true })
+  return path
+}
 
 const exportHtmlFromPage = async (page) => {
   const [download] = await Promise.all([
@@ -153,11 +190,32 @@ test.describe('CSV import/export layout regression metrics', () => {
       return
     }
 
-    const reportPath = resolve(reportDir, `layout-regression-report-${Date.now()}.json`)
+    ensureArtifactDirs()
+
+    const reportPath = resolve(reportDir, `layout-regression-report-${runStamp}.json`)
     persistTextFile(reportPath, JSON.stringify({
+      schemaVersion: BASELINE_SCHEMA_VERSION,
+      profile: BASELINE_PROFILE,
+      runStamp,
       generatedAt: new Date().toISOString(),
+      datasetMatrix: datasetEntries.map((dataset) => ({
+        key: dataset.key,
+        label: dataset.label,
+        path: dataset.path,
+      })),
       datasetCount: reportEntries.length,
       datasets: reportEntries,
+    }, null, 2))
+
+    const screenshotIndexPath = resolve(reportDir, `layout-regression-screenshot-index-${runStamp}.json`)
+    persistTextFile(screenshotIndexPath, JSON.stringify({
+      schemaVersion: BASELINE_SCHEMA_VERSION,
+      profile: BASELINE_PROFILE,
+      runStamp,
+      generatedAt: new Date().toISOString(),
+      screenshotDir,
+      datasetCount: screenshotEntries.length,
+      datasets: screenshotEntries,
     }, null, 2))
   })
 
@@ -173,6 +231,8 @@ test.describe('CSV import/export layout regression metrics', () => {
       const csvText = readFileSync(dataset.path, 'utf-8')
       const template = parseSkillTreeCsvTemplate(csvText)
       const startedAt = Date.now()
+
+      ensureArtifactDirs()
 
       await page.goto('/')
       await confirmAndReset(page)
@@ -192,13 +252,16 @@ test.describe('CSV import/export layout regression metrics', () => {
         expect(rootAddControlCount).toBeGreaterThan(0)
       }
 
+      await fitToScreenIfAvailable(page)
       const liveCanvasMetrics = await collectCanvasGeometryMetrics(page)
+      const builderScreenshotPath = await captureBuilderScreenshot(page, dataset.key)
 
       const exportStartedAt = Date.now()
       const exportedHtml = await exportHtmlFromPage(page)
       const exportDurationMs = Date.now() - exportStartedAt
-      const exportPath = resolve(exportDir, `${dataset.key}-${Date.now()}.html`)
+      const exportPath = resolve(exportDir, `${dataset.key}-${runStamp}.html`)
       persistTextFile(exportPath, exportedHtml)
+      const exportScreenshotPath = await captureExportScreenshot(page, dataset.key, exportedHtml)
 
       const payload = extractJsonPayload(exportedHtml)
       const exportLayout = extractLayoutMetrics(exportedHtml)
@@ -235,6 +298,17 @@ test.describe('CSV import/export layout regression metrics', () => {
         exportLayout,
         connections: connectionMetrics,
         exportPath,
+        screenshots: {
+          builder: builderScreenshotPath,
+          export: exportScreenshotPath,
+        },
+      })
+
+      screenshotEntries.push({
+        datasetKey: dataset.key,
+        datasetLabel: dataset.label,
+        builderScreenshotPath,
+        exportScreenshotPath,
       })
     })
   }
