@@ -388,6 +388,7 @@ export const solveSkillTreeLayout = (data, config) => {
       improved = false
       safety += 1
 
+      // First smooth with cheap local swaps.
       for (let index = 0; index < best.length - 1; index += 1) {
         const candidate = [...best]
         const tmp = candidate[index]
@@ -399,6 +400,26 @@ export const solveSkillTreeLayout = (data, config) => {
           best = candidate
           bestScore = candidateScore
           improved = true
+        }
+      }
+
+      // Then try single-item relocation moves to escape local swap optima.
+      for (let from = 0; from < best.length; from += 1) {
+        for (let to = 0; to < best.length; to += 1) {
+          if (from === to) {
+            continue
+          }
+
+          const candidate = [...best]
+          const [moved] = candidate.splice(from, 1)
+          candidate.splice(to, 0, moved)
+          const candidateScore = scoreChildOrder(parentNode, candidate)
+
+          if (candidateScore < bestScore - 1e-6) {
+            best = candidate
+            bestScore = candidateScore
+            improved = true
+          }
         }
       }
     }
@@ -557,6 +578,21 @@ export const solveSkillTreeLayout = (data, config) => {
 
   const sortedLevels = Array.from(levelCounts.keys()).sort((a, b) => a - b)
   const firstNodeLevel = sortedLevels[0] ?? 1
+  const maxNodeLevel = sortedLevels[sortedLevels.length - 1] ?? firstNodeLevel
+  const depthAlignedLevelCount = allHierarchyNodes.filter((node) => (
+    node.data.ebene === node.depth
+  )).length
+  const depthAlignedLevelCoverage = depthAlignedLevelCount / Math.max(1, allHierarchyNodes.length)
+  const shouldCompressDeepTreeSpacing = depthAlignedLevelCoverage < 0.8
+
+  // Phase C: deep trees get a gentle global spacing compression to curb outer-radius growth,
+  // but only when levels are not mostly depth-aligned (no-manual-levels variants set ebene=depth).
+  const deepTreeSpacingCompression = shouldCompressDeepTreeSpacing
+    ? maxNodeLevel >= 14 ? 0.88
+      : maxNodeLevel >= 10 ? 0.92
+        : maxNodeLevel >= 8 ? 0.96
+          : 1
+    : 1
   const maxEstimatedSegmentLabelHeightPx = getMaxEstimatedSegmentLabelHeightPx()
   const minimumFirstLevelRadiusForLabelBand =
     centerIconRadiusPx
@@ -571,7 +607,7 @@ export const solveSkillTreeLayout = (data, config) => {
 
     for (const level of sortedLevels) {
       const count = levelCounts.get(level)
-      const spacing = config.levelSpacing * spacingScale
+      const spacing = config.levelSpacing * spacingScale * deepTreeSpacingCompression
       const baseRadius = Math.max(level * spacing, previousRadius + spacing)
       const minimumRadiusForSpread =
         count <= 1

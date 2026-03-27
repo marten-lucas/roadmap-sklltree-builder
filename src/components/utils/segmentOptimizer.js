@@ -143,6 +143,7 @@ export const buildOptimizedSegmentIdOrder = ({ root, explicitSegments, includeUn
     improved = false
     safety += 1
 
+    // Phase C: first optimize with adjacent swaps for quick local smoothing.
     for (let index = 0; index < best.length - 1; index += 1) {
       const candidate = [...best]
       const left = candidate[index]
@@ -154,6 +155,26 @@ export const buildOptimizedSegmentIdOrder = ({ root, explicitSegments, includeUn
         best = candidate
         bestScore = candidateScore
         improved = true
+      }
+    }
+
+    // Then run single-item relocation moves to escape local swap optima.
+    for (let from = 0; from < best.length; from += 1) {
+      for (let to = 0; to < best.length; to += 1) {
+        if (from === to) {
+          continue
+        }
+
+        const candidate = [...best]
+        const [moved] = candidate.splice(from, 1)
+        candidate.splice(to, 0, moved)
+        const candidateScore = scoreOrder(candidate)
+
+        if (candidateScore > bestScore + 1e-6) {
+          best = candidate
+          bestScore = candidateScore
+          improved = true
+        }
       }
     }
   }
