@@ -257,32 +257,41 @@ export function InspectorPanel({
     onScopeIdsChange?.(nextScopeIds)
 
     try {
-      const key = 'roadmap-skilltree.e2e.scopeTrace'
-      const raw = localStorage.getItem(key)
-      const trace = raw ? JSON.parse(raw) : []
-      // include a compact node snapshot so immediate E2E dumps capture
-      // the node state at the moment of the scope assignment
-      const nodeSnapshot = {
-        id: selectedNode.id,
-        label: selectedNode.label,
-        shortName: selectedNode.shortName ?? null,
-        segmentId: selectedNode.segmentId ?? null,
-        parentId: selectedNode.parentId ?? null,
-        levels: Array.isArray(selectedNode.levels)
-          ? selectedNode.levels.map((l) => ({ id: l.id, scopeIds: Array.isArray(l.scopeIds) ? l.scopeIds : [] }))
-          : [],
+      const traceKey = 'roadmap-skilltree.e2e.scopeTrace'
+      const traceEnabled = localStorage.getItem('roadmap-skilltree.e2e.traceEnabled') === '1'
+      if (traceEnabled) {
+        const raw = localStorage.getItem(traceKey)
+        const trace = raw ? JSON.parse(raw) : []
+        // include a compact node snapshot so immediate E2E dumps capture
+        // the node state at the moment of the scope assignment
+        const nodeSnapshot = {
+          id: selectedNode.id,
+          label: selectedNode.label,
+          shortName: selectedNode.shortName ?? null,
+          segmentId: selectedNode.segmentId ?? null,
+          parentId: selectedNode.parentId ?? null,
+          levels: Array.isArray(selectedNode.levels)
+            ? selectedNode.levels.map((l) => ({ id: l.id, scopeIds: Array.isArray(l.scopeIds) ? l.scopeIds : [] }))
+            : [],
+        }
+
+        trace.push({
+          ts: Date.now(),
+          nodeId: selectedNode.id,
+          shortName: selectedNode.shortName ?? null,
+          prev: prevScopeIds,
+          next: nextScopeIds,
+          nodeSnapshot,
+        })
+
+        // Cap trace to avoid unbounded localStorage growth.
+        const MAX_SCOPE_TRACE_ENTRIES = 200
+        if (trace.length > MAX_SCOPE_TRACE_ENTRIES) {
+          trace.splice(0, trace.length - MAX_SCOPE_TRACE_ENTRIES)
+        }
+
+        localStorage.setItem(traceKey, JSON.stringify(trace))
       }
-
-      trace.push({
-        ts: Date.now(),
-        nodeId: selectedNode.id,
-        shortName: selectedNode.shortName ?? null,
-        prev: prevScopeIds,
-        next: nextScopeIds,
-        nodeSnapshot,
-      })
-
-      localStorage.setItem(key, JSON.stringify(trace))
     } catch {
       // ignore tracing errors during normal runtime
     }

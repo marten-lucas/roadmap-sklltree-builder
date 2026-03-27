@@ -162,8 +162,6 @@ export function SkillNode({ node, nodeSize, isSelected, onSelect, onSelectLevel,
             radius="xl"
             withBorder={false}
             style={{
-              border: 'none',
-              boxShadow: 'none',
               background: nodeBackground,
               width: `${nodeSize}px`,
               height: `${nodeSize}px`,
