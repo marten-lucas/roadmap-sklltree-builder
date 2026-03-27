@@ -151,8 +151,29 @@ const fitToScreenIfAvailable = async (page) => {
   }
 }
 
+const collapseToolbarIfExpanded = async (page) => {
+  try {
+    const collapseButton = page.getByRole('button', { name: 'Menü einklappen' }).first()
+    if (await collapseButton.isVisible({ timeout: 800 })) {
+      await collapseButton.click({ timeout: 1_200 })
+      await page.waitForTimeout(180)
+    }
+  } catch {
+    // Non-blocking for environments/locales where the toolbar control differs.
+  }
+}
+
+const prepareBuilderScreenshotView = async (page) => {
+  await collapseToolbarIfExpanded(page)
+  await fitToScreenIfAvailable(page)
+}
+
 const captureBuilderScreenshot = async (page, datasetKey) => {
-  const path = resolve(screenshotDir, `${normalizeFilenamePart(datasetKey)}-builder.png`)
+  const [baseKey, variantKey = 'full'] = String(datasetKey).split('__')
+  const path = resolve(
+    screenshotDir,
+    `${normalizeFilenamePart(variantKey)}__${normalizeFilenamePart(baseKey)}-builder.png`,
+  )
   await page.screenshot({ path, fullPage: true })
   return path
 }
@@ -312,7 +333,7 @@ test.describe('CSV import/export layout regression metrics', () => {
         expect(rootAddControlCount).toBeGreaterThan(0)
       }
 
-      await fitToScreenIfAvailable(page)
+      await prepareBuilderScreenshotView(page)
       const liveCanvasMetrics = await collectCanvasGeometryMetrics(page)
       const warningMetrics = await collectCanvasWarningMetrics(page)
       const builderScreenshotPath = await captureBuilderScreenshot(page, dataset.key)

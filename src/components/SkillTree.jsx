@@ -160,15 +160,17 @@ export function SkillTree() {
   const centerIconSize = useMemo(() => {
     const firstLevelNode = nodes.find((node) => node.level === 1)
     const firstLevelRadius = firstLevelNode?.radius ?? TREE_CONFIG.levelSpacing
-    const innerGap = TREE_CONFIG.nodeSize * 0.2
-    const minSize = TREE_CONFIG.nodeSize * 1.15
-    const preferredSize = firstLevelRadius * 1.16
-    const maxAllowedSize = Math.max(
-      minSize,
-      (firstLevelRadius - TREE_CONFIG.nodeSize / 2 - innerGap) * 2,
+    const additionalDependencyPortalAllowance = TREE_CONFIG.nodeSize * 0.2
+    const levelOneNodeClearance = TREE_CONFIG.nodeSize * 0.5 + additionalDependencyPortalAllowance
+    const minRadius = TREE_CONFIG.nodeSize * 0.5
+    const preferredRadius = TREE_CONFIG.nodeSize * 0.72
+    const maxAllowedRadius = Math.max(
+      minRadius,
+      firstLevelRadius - levelOneNodeClearance - 20,
     )
+    const radius = Math.max(minRadius, Math.min(preferredRadius, maxAllowedRadius))
 
-    return Math.max(minSize, Math.min(preferredSize, maxAllowedSize))
+    return radius * 2
   }, [nodes])
 
   const selectedNode = useMemo(

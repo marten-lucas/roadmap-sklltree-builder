@@ -18,6 +18,9 @@ import { buildOptimizedSegmentIdOrder } from './segmentOptimizer'
 
 const EPSILON = 0.01
 const MAX_SEGMENT_LABEL_CHARS_PER_LINE = 15
+const CENTER_LABEL_GAP_PX = 12
+const LABEL_LEVEL_ONE_GAP_PX = 14
+const LABEL_RADIUS_OUTER_BIAS = 0.68
 
 const estimateWrappedLineCount = (text) => {
   const words = String(text ?? '').trim().split(/\s+/).filter(Boolean)
@@ -45,6 +48,26 @@ const estimateWrappedLineCount = (text) => {
   }
 
   return Math.max(lineCount, 1)
+}
+
+const normalizeAngleDeg = (angle) => {
+  const normalized = ((Number(angle) % 360) + 360) % 360
+  return Number.isFinite(normalized) ? normalized : 0
+}
+
+const getReadableRadialLabelRotation = (anchorAngleDeg) => {
+  const normalized = normalizeAngleDeg(anchorAngleDeg)
+  if (normalized > 90 && normalized < 270) {
+    return normalized + 180
+  }
+
+  return normalized
+}
+
+const computeLabelBandRadius = (innerRadius, outerRadius) => {
+  const clampedOuter = Math.max(outerRadius, innerRadius)
+  const available = Math.max(0, clampedOuter - innerRadius)
+  return innerRadius + available * LABEL_RADIUS_OUTER_BIAS
 }
 
 const buildSeparatorPathWithDetours = ({
@@ -198,6 +221,13 @@ export const solveSkillTreeLayout = (data, config) => {
     const lineCount = estimateWrappedLineCount(getSegmentLabelText(segmentId))
     return 24 + Math.max(0, lineCount - 1) * 16
   }
+  const getMaxEstimatedSegmentLabelHeightPx = () => Math.max(
+    config.nodeSize * 0.4,
+    ...explicitSegments.map((segment) => getEstimatedSegmentLabelHeightPx(segment.id)),
+  )
+  const centerIconRadiusPx = config.nodeSize * 0.72
+  const additionalDependencyPortalAllowancePx = config.nodeSize * 0.2
+  const levelOneNodeClearancePx = config.nodeSize * 0.5 + additionalDependencyPortalAllowancePx
   const toAngleSpan = (pixelWidth, radius) => {
     return toDegrees(pixelWidth / Math.max(radius, 1))
   }
@@ -380,13 +410,14 @@ export const solveSkillTreeLayout = (data, config) => {
     }
     const separatorInnerRadius = Math.max(config.nodeSize * 0.9, config.levelSpacing * 0.9)
     const separatorOuterRadius = config.levelSpacing + 120
-    const maxLabelHeightPx = Math.max(
-      config.nodeSize * 0.4,
-      ...explicitSegments.map((segment) => getEstimatedSegmentLabelHeightPx(segment.id)),
-    )
+    const maxLabelHeightPx = getMaxEstimatedSegmentLabelHeightPx()
+    const labelHalfHeight = maxLabelHeightPx / 2
+    const labelInnerLimit = centerIconRadiusPx + CENTER_LABEL_GAP_PX + labelHalfHeight
+    const labelOuterLimit =
+      config.levelSpacing - levelOneNodeClearancePx - LABEL_LEVEL_ONE_GAP_PX - labelHalfHeight
     const segmentLabelRadius = Math.max(
-      separatorInnerRadius + config.nodeSize * 0.55,
-      separatorInnerRadius + maxLabelHeightPx * 0.55,
+      labelInnerLimit,
+      computeLabelBandRadius(labelInnerLimit, labelOuterLimit),
     )
     const emptySpread =
       explicitSegments.length > 1
@@ -403,11 +434,6 @@ export const solveSkillTreeLayout = (data, config) => {
       const slot = emptySlotBySegmentId.get(segment.id)
       const anchorAngle = slot?.center ?? centerAngle
       const point = toCartesian(anchorAngle, segmentLabelRadius, origin)
-      let rotation = anchorAngle + 90
-
-      if (rotation > 90 && rotation < 270) {
-        rotation += 180
-      }
 
       return {
         id: `segment-label-${segment.id}`,
@@ -415,7 +441,7 @@ export const solveSkillTreeLayout = (data, config) => {
         text: segment.label,
         x: point.x,
         y: point.y,
-        rotation,
+        rotation: getReadableRadialLabelRotation(anchorAngle),
         anchorAngle,
       }
     })
@@ -493,6 +519,14 @@ export const solveSkillTreeLayout = (data, config) => {
 
   const minimumArcGap = config.nodeSize * config.minArcGapFactor
   const sortedLevels = Array.from(levelCounts.keys()).sort((a, b) => a - b)
+  const firstNodeLevel = sortedLevels[0] ?? 1
+  const maxEstimatedSegmentLabelHeightPx = getMaxEstimatedSegmentLabelHeightPx()
+  const minimumFirstLevelRadiusForLabelBand =
+    centerIconRadiusPx
+    + CENTER_LABEL_GAP_PX
+    + maxEstimatedSegmentLabelHeightPx
+    + LABEL_LEVEL_ONE_GAP_PX
+    + levelOneNodeClearancePx
 
   const buildRadiusByLevel = (spacingScale = 1) => {
     const radiusByLevel = new Map()
@@ -506,7 +540,11 @@ export const solveSkillTreeLayout = (data, config) => {
         count <= 1
           ? 0
           : (((count - 1) * minimumArcGap) / toRadians(config.maxAngleSpread))
-      const radius = Math.max(baseRadius, minimumRadiusForSpread)
+      const radius = Math.max(
+        baseRadius,
+        minimumRadiusForSpread,
+        level === firstNodeLevel ? minimumFirstLevelRadiusForLabelBand : 0,
+      )
       radiusByLevel.set(level, radius)
       previousRadius = radius
     }
@@ -796,13 +834,13 @@ export const solveSkillTreeLayout = (data, config) => {
   const getAngleForNode = (node) => packedAngleByNodeId.get(node.data.id) ?? centerAngle
   const separatorInnerRadius = Math.max(config.nodeSize * 0.9, config.levelSpacing * 0.9)
   let separatorOuterRadius = maxRadius + 120
-  const getMaxEstimatedSegmentLabelHeightPx = () => Math.max(
-    config.nodeSize * 0.4,
-    ...explicitSegments.map((segment) => getEstimatedSegmentLabelHeightPx(segment.id)),
-  )
+  const firstLevelRadius = getRadiusForLevel(firstNodeLevel)
+  const labelHalfHeight = maxEstimatedSegmentLabelHeightPx / 2
+  const labelInnerRadius = centerIconRadiusPx + CENTER_LABEL_GAP_PX + labelHalfHeight
+  const labelOuterRadius = firstLevelRadius - levelOneNodeClearancePx - LABEL_LEVEL_ONE_GAP_PX - labelHalfHeight
   let segmentLabelRadius = Math.max(
-    separatorInnerRadius + config.nodeSize * 0.55,
-    separatorInnerRadius + getMaxEstimatedSegmentLabelHeightPx() * 0.55,
+    labelInnerRadius,
+    computeLabelBandRadius(labelInnerRadius, labelOuterRadius),
   )
   let origin = { x: 0, y: 0 }
 
@@ -1058,9 +1096,12 @@ export const solveSkillTreeLayout = (data, config) => {
 
   maxRadius = Math.max(config.levelSpacing, ...radiusByLevel.values())
   separatorOuterRadius = maxRadius + 120
+  const recomputedFirstLevelRadius = getRadiusForLevel(firstNodeLevel)
+  const recomputedLabelOuterRadius =
+    recomputedFirstLevelRadius - levelOneNodeClearancePx - LABEL_LEVEL_ONE_GAP_PX - labelHalfHeight
   segmentLabelRadius = Math.max(
-    separatorInnerRadius + config.nodeSize * 0.55,
-    separatorInnerRadius + getMaxEstimatedSegmentLabelHeightPx() * 0.55,
+    labelInnerRadius,
+    computeLabelBandRadius(labelInnerRadius, recomputedLabelOuterRadius),
   )
 
   const observedSegmentRangesMap = new Map()
@@ -1069,19 +1110,23 @@ export const solveSkillTreeLayout = (data, config) => {
     const segmentId = getGroupedSegmentId(node.data.segmentId ?? null)
 
     const angle = getAngleForNode(node)
+    const level = getEffectiveLevel(node)
+    const radius = getRadiusForLevel(level)
+    const halfNodeWithPortalPx = config.nodeSize * 0.5 + additionalDependencyPortalAllowancePx
+    const angularHalfSpan = toDegrees(halfNodeWithPortalPx / Math.max(radius, 1))
     const existing = observedSegmentRangesMap.get(segmentId)
 
     if (!existing) {
       observedSegmentRangesMap.set(segmentId, {
         id: segmentId,
-        min: angle,
-        max: angle,
+        min: angle - angularHalfSpan,
+        max: angle + angularHalfSpan,
       })
       continue
     }
 
-    existing.min = Math.min(existing.min, angle)
-    existing.max = Math.max(existing.max, angle)
+    existing.min = Math.min(existing.min, angle - angularHalfSpan)
+    existing.max = Math.max(existing.max, angle + angularHalfSpan)
   }
 
   const finalOrderedSegments = orderedSegments.map((segment) => {
@@ -1212,23 +1257,31 @@ export const solveSkillTreeLayout = (data, config) => {
 
   const segmentLabels = finalOrderedSegments
     .filter((segment) => !segment.isVirtual)
-    .map((segment) => {
+    .map((segment, index, visibleSegments) => {
       const estimatedLabelWidthPx = getEstimatedSegmentLabelWidthPx(segment.id)
       const angularHalfSpan = toDegrees((estimatedLabelWidthPx * 0.5) / Math.max(segmentLabelRadius, 1))
       const wedgeMin = segment.wedgeMin ?? segment.slotMin ?? segment.anchorAngle
       const wedgeMax = segment.wedgeMax ?? segment.slotMax ?? segment.anchorAngle
       const safeMin = wedgeMin + angularHalfSpan
       const safeMax = wedgeMax - angularHalfSpan
-      const preferredAnchorAngle = segment.wedgeCenter ?? segment.anchorAngle
+      const isFirstVisible = index === 0
+      const isLastVisible = index === visibleSegments.length - 1
+
+      let preferredAnchorAngle
+      if (visibleSegments.length > 1 && isFirstVisible) {
+        const outerNodeEdge = segment.observedMin ?? wedgeMin
+        preferredAnchorAngle = (wedgeMax + outerNodeEdge) / 2
+      } else if (visibleSegments.length > 1 && isLastVisible) {
+        const outerNodeEdge = segment.observedMax ?? wedgeMax
+        preferredAnchorAngle = (wedgeMin + outerNodeEdge) / 2
+      } else {
+        preferredAnchorAngle = (wedgeMin + wedgeMax) / 2
+      }
+
       const anchorAngle = safeMin <= safeMax
         ? clamp(preferredAnchorAngle, safeMin, safeMax)
         : preferredAnchorAngle
       const point = toCartesian(anchorAngle, segmentLabelRadius, origin)
-      let rotation = anchorAngle + 90
-
-      if (rotation > 90 && rotation < 270) {
-        rotation += 180
-      }
 
       return {
         id: `segment-label-${segment.id}`,
@@ -1236,7 +1289,7 @@ export const solveSkillTreeLayout = (data, config) => {
         text: segment.label,
         x: point.x,
         y: point.y,
-        rotation,
+        rotation: getReadableRadialLabelRotation(anchorAngle),
         anchorAngle,
       }
     })
