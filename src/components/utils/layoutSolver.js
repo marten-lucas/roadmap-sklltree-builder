@@ -57,11 +57,16 @@ const normalizeAngleDeg = (angle) => {
 
 const getReadableRadialLabelRotation = (anchorAngleDeg) => {
   const normalized = normalizeAngleDeg(anchorAngleDeg)
+  // Radial orientation: text points along the spoke outward from centre.
+  // SVG 0°=right, angles increase clockwise, so a radial label at angle θ
+  // needs rotation θ−90 (top of text faces outward). In the left half
+  // (90°<θ<270°) flip by +180 so text is never upside-down.
+  const radial = normalized - 90
   if (normalized > 90 && normalized < 270) {
-    return normalized + 180
+    return radial + 180
   }
 
-  return normalized
+  return radial
 }
 
 const computeLabelBandRadius = (innerRadius, outerRadius) => {
@@ -547,6 +552,9 @@ export const solveSkillTreeLayout = (data, config) => {
           : 1
 
   const minimumArcGap = config.nodeSize * config.minArcGapFactor * denseGapScale
+
+  const crossSegmentGapFactor = 2.4
+
   const sortedLevels = Array.from(levelCounts.keys()).sort((a, b) => a - b)
   const firstNodeLevel = sortedLevels[0] ?? 1
   const maxEstimatedSegmentLabelHeightPx = getMaxEstimatedSegmentLabelHeightPx()
@@ -596,7 +604,7 @@ export const solveSkillTreeLayout = (data, config) => {
     const baseGap = Math.max(gapByLevel.get(left.level), gapByLevel.get(right.level))
     const leftSegmentId = getGroupedSegmentId(left.node.data.segmentId ?? null)
     const rightSegmentId = getGroupedSegmentId(right.node.data.segmentId ?? null)
-    const segmentGapMultiplier = leftSegmentId === rightSegmentId ? 1 : 2.4
+    const segmentGapMultiplier = leftSegmentId === rightSegmentId ? 1 : crossSegmentGapFactor
 
     return (left.span + right.span) / 2 + baseGap * segmentGapMultiplier
   }

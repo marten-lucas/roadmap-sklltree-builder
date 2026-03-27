@@ -104,12 +104,12 @@ export function SkillTreeCanvas({
           ))}
         </g>
 
-        {filteredSegmentLabels.map((segmentLabel) => {
+        {filteredSegmentLabels.filter((segmentLabel) => segmentLabel.text).map((segmentLabel) => {
           const isSelected = segmentLabel.segmentId === selectedSegmentId
           
           // Wrap text with max line width
           const maxLineWidth = 15 // characters per line
-          const words = segmentLabel.text.split(' ')
+          const words = String(segmentLabel.text).split(' ')
           const lines = []
           let currentLine = ''
           

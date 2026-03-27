@@ -272,10 +272,16 @@ const buildDatasetAssertions = ({
   if (datasetBaseKey === 'single-chain') {
     expect(connectionMetrics.directCount).toBeGreaterThan(0)
     expect(exportLayout.usedAngleDeg).toBeLessThan(180)
+    // Direction guard: single-root chain has no adjacent level-1 nodes,
+    // therefore no tangential ring arcs are expected.
+    expect(connectionMetrics.ringCount).toBe(0)
   }
 
   if (datasetBaseKey === 'multi-level-ray') {
     expect(connectionMetrics.directCount).toBeGreaterThan(0)
+    // Direction guard: single-root ray layout has no adjacent level-1 nodes,
+    // therefore no tangential ring arcs are expected.
+    expect(connectionMetrics.ringCount).toBe(0)
   }
 
   if (datasetBaseKey === 'direct-threshold') {
