@@ -1216,6 +1216,18 @@ export const solveSkillTreeLayout = (data, config) => {
     }
   })
 
+  const segmentSpanDegById = new Map(
+    finalOrderedSegments.map((segment) => {
+      const min = segment.wedgeMin ?? segment.slotMin ?? segment.anchorAngle
+      const max = segment.wedgeMax ?? segment.slotMax ?? segment.anchorAngle
+      return [segment.id, Math.max(1, max - min)]
+    }),
+  )
+  const getSegmentSpanDeg = (segmentId) => {
+    const groupedSegmentId = getGroupedSegmentId(segmentId ?? null)
+    return segmentSpanDegById.get(groupedSegmentId) ?? config.maxAngleSpread
+  }
+
   const outerContentRadius = Math.max(
     maxRadius + config.nodeSize,
     separatorOuterRadius + config.nodeSize * 0.35,
@@ -1258,6 +1270,7 @@ export const solveSkillTreeLayout = (data, config) => {
     getAngleForNode,
     getRadiusForLevel,
     getSegmentOrderIndex,
+    getSegmentSpanDeg,
   })
 
   const nodesById = new Map(nodes.map((node) => [node.id, node]))
@@ -1277,7 +1290,7 @@ export const solveSkillTreeLayout = (data, config) => {
       sourceDepth: 1,
       sourceId: node.parentId ?? null,
       targetId: node.id,
-      path: buildArcRadialPath(centerAngle, levelOneRadius, node.angle, node.radius, origin),
+      path: buildRadialArcPath(node.angle, levelOneRadius, node.angle, node.radius, origin),
     }))
 
   const levelOneNodes = nodes

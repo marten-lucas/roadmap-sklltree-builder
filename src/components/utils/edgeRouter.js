@@ -2,6 +2,23 @@ import { buildRadialArcPath, toCartesian, toDegrees } from './layoutMath'
 import { getGroupedSegmentId } from './layoutShared'
 
 const DEFAULT_CLUSTER_ANGLE_DEG = 18
+const DEFAULT_SEGMENT_SPAN_DEG = 24
+
+const ROUTING_PROFILES = {
+  balanced: {
+    maxSharedSegmentGap: 1,
+    crossSegmentThresholdMultiplier: 1,
+  },
+  strict: {
+    maxSharedSegmentGap: 0,
+    crossSegmentThresholdMultiplier: 0.82,
+  },
+}
+
+const resolveRoutingProfile = (config) => {
+  const profileName = String(config?.routingProfile ?? 'balanced').toLowerCase()
+  return ROUTING_PROFILES[profileName] ?? ROUTING_PROFILES.balanced
+}
 
 const getEdgeId = (parentId, childId) => `${parentId}=>${childId}`
 
@@ -28,15 +45,23 @@ const canShareTrunk = ({
   cluster,
   angle,
   segmentIndex,
+  segmentSpanDeg,
   clusterThresholdDeg,
+  routingProfile,
 }) => {
   const angleGap = angle - cluster.maxAngle
   const previousSegmentIndex = cluster.segmentIndexes[cluster.segmentIndexes.length - 1]
   const segmentGap = Math.abs(segmentIndex - previousSegmentIndex)
   const sameSegment = segmentGap === 0
-  const threshold = sameSegment ? clusterThresholdDeg * 2.8 : clusterThresholdDeg
+  const spanScale = Math.max(
+    0.75,
+    Math.min(1.45, segmentSpanDeg / DEFAULT_SEGMENT_SPAN_DEG),
+  )
+  const threshold = sameSegment
+    ? clusterThresholdDeg * 2.8 * spanScale
+    : clusterThresholdDeg * routingProfile.crossSegmentThresholdMultiplier
 
-  return angleGap <= threshold && segmentGap <= 1
+  return angleGap <= threshold && segmentGap <= routingProfile.maxSharedSegmentGap
 }
 
 // For n children, pick the gap midpoint closest to the mean angle.
@@ -100,7 +125,9 @@ export const buildEdgeRoutingModel = ({
   getAngleForNode,
   getRadiusForLevel,
   getSegmentOrderIndex,
+  getSegmentSpanDeg,
 }) => {
+  const routingProfile = resolveRoutingProfile(config)
   const groupedByParent = new Map()
 
   for (const link of root.links().filter((link) => link.source.depth > 0)) {
@@ -140,9 +167,19 @@ export const buildEdgeRoutingModel = ({
     for (const child of sortedChildren) {
       const angle = getAngleForNode(child)
       const segmentIndex = getSegmentOrderIndex(child.data.segmentId ?? null)
+      const segmentSpanDeg = Number(
+        getSegmentSpanDeg?.(child.data.segmentId ?? null) ?? DEFAULT_SEGMENT_SPAN_DEG,
+      )
       const last = clusters[clusters.length - 1]
 
-      if (!last || !canShareTrunk({ cluster: last, angle, segmentIndex, clusterThresholdDeg })) {
+      if (!last || !canShareTrunk({
+        cluster: last,
+        angle,
+        segmentIndex,
+        segmentSpanDeg,
+        clusterThresholdDeg,
+        routingProfile,
+      })) {
         clusters.push(createCluster(child, angle, segmentIndex))
         continue
       }
