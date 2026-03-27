@@ -178,6 +178,40 @@ const captureBuilderScreenshot = async (page, datasetKey) => {
   return path
 }
 
+const captureSvgExport = async (page, datasetKey) => {
+  const [baseKey, variantKey = 'full'] = String(datasetKey).split('__')
+  const path = resolve(
+    screenshotDir,
+    `${normalizeFilenamePart(variantKey)}__${normalizeFilenamePart(baseKey)}.svg`,
+  )
+  const markup = await page.evaluate(() => {
+    const svgEl = document.querySelector('svg.skill-tree-canvas')
+    if (!svgEl) return null
+    const clone = svgEl.cloneNode(true)
+    clone.removeAttribute('class')
+    clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg')
+    clone.setAttribute('xmlns:xlink', 'http://www.w3.org/1999/xlink')
+    const vb = svgEl.viewBox?.baseVal
+    if (vb && vb.width > 0 && vb.height > 0) {
+      clone.setAttribute('viewBox', `${vb.x} ${vb.y} ${vb.width} ${vb.height}`)
+      clone.setAttribute('width', String(Math.ceil(vb.width)))
+      clone.setAttribute('height', String(Math.ceil(vb.height)))
+    }
+    clone.querySelectorAll('.skill-tree-export-exclude').forEach((el) => el.remove())
+    const styleText = [...document.styleSheets].flatMap((sheet) => {
+      try { return [...sheet.cssRules].map((r) => r.cssText) } catch { return [] }
+    }).join('\n')
+    const styleEl = document.createElementNS('http://www.w3.org/2000/svg', 'style')
+    styleEl.textContent = styleText
+    clone.prepend(styleEl)
+    return new XMLSerializer().serializeToString(clone)
+  })
+  if (markup) {
+    persistTextFile(path, markup)
+  }
+  return path
+}
+
 const exportHtmlFromPage = async (page) => {
   const [download] = await Promise.all([
     page.waitForEvent('download', { timeout: 15_000 }),
@@ -266,6 +300,8 @@ const buildDatasetAssertions = ({
 }
 
 test.describe('CSV import/export layout regression metrics', () => {
+  test.use({ viewport: { width: 1920, height: 1080 }, deviceScaleFactor: 2 })
+
   test.afterAll(async () => {
     if (reportEntries.length === 0) {
       return
@@ -342,6 +378,7 @@ test.describe('CSV import/export layout regression metrics', () => {
       const liveCanvasMetrics = await collectCanvasGeometryMetrics(page)
       const warningMetrics = await collectCanvasWarningMetrics(page)
       const builderScreenshotPath = await captureBuilderScreenshot(page, dataset.key)
+      const svgExportPath = await captureSvgExport(page, dataset.key)
 
       const exportStartedAt = Date.now()
       const exportedHtml = await exportHtmlFromPage(page)
@@ -396,6 +433,7 @@ test.describe('CSV import/export layout regression metrics', () => {
         exportPath,
         screenshots: {
           builder: builderScreenshotPath,
+          svg: svgExportPath,
         },
       })
 
