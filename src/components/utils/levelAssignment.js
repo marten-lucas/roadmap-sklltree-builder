@@ -1,6 +1,35 @@
 import { getGroupedSegmentId } from './layoutShared'
 
-export const buildAutoPromotedLevels = ({ root, segmentOrderIndexById }) => {
+const PROMOTION_BASE_OFFSET = 1
+
+const PROMOTION_PROFILES = {
+  stable: {
+    distanceWeight: 1,
+    distanceDiscountThreshold: Number.POSITIVE_INFINITY,
+    distanceDiscount: 0,
+    maxPromotionDelta: Number.POSITIVE_INFINITY,
+  },
+  balanced: {
+    distanceWeight: 1,
+    distanceDiscountThreshold: Number.POSITIVE_INFINITY,
+    distanceDiscount: 0,
+    maxPromotionDelta: 5,
+  },
+  aggressive: {
+    distanceWeight: 0.8,
+    distanceDiscountThreshold: 4,
+    distanceDiscount: 1,
+    maxPromotionDelta: 4,
+  },
+}
+
+const resolvePromotionProfile = (config) => {
+  const profileName = String(config?.promotionProfile ?? 'stable').toLowerCase()
+  return PROMOTION_PROFILES[profileName] ?? PROMOTION_PROFILES.stable
+}
+
+export const buildAutoPromotedLevels = ({ root, segmentOrderIndexById, config }) => {
+  const profile = resolvePromotionProfile(config)
   const promotedLevelById = new Map()
   const baseLevelById = new Map()
   const promotedByConflict = new Map()
@@ -43,8 +72,15 @@ export const buildAutoPromotedLevels = ({ root, segmentOrderIndexById }) => {
       const sourceLevel = promotedLevelById.get(sourceId) ?? baseLevelById.get(sourceId) ?? link.source.depth
       const baseTargetLevel = baseLevelById.get(targetId) ?? link.target.depth
       const currentTargetLevel = promotedLevelById.get(targetId) ?? baseTargetLevel
-      const requiredTargetLevel = sourceLevel + 1 + (segmentDistance - 1)
-      const nextTargetLevel = Math.max(baseTargetLevel, requiredTargetLevel)
+      const rawDistancePenalty = Math.max(0, segmentDistance - 1)
+      const weightedPenalty = Math.ceil(rawDistancePenalty * profile.distanceWeight)
+      const discount = segmentDistance >= profile.distanceDiscountThreshold
+        ? profile.distanceDiscount
+        : 0
+      const discountedPenalty = Math.max(0, weightedPenalty - discount)
+      const requiredTargetLevel = sourceLevel + PROMOTION_BASE_OFFSET + discountedPenalty
+      const cappedTargetLevel = Math.min(requiredTargetLevel, baseTargetLevel + profile.maxPromotionDelta)
+      const nextTargetLevel = Math.max(baseTargetLevel, cappedTargetLevel)
 
       if (currentTargetLevel < nextTargetLevel) {
         promotedLevelById.set(targetId, nextTargetLevel)

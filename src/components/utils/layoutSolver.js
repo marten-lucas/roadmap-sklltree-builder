@@ -200,6 +200,7 @@ export const solveSkillTreeLayout = (data, config) => {
   } = buildAutoPromotedLevels({
     root,
     segmentOrderIndexById,
+    config,
   })
 
   const segmentLabelById = new Map(explicitSegments.map((segment) => [segment.id, segment.label]))

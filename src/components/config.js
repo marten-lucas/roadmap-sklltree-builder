@@ -77,6 +77,7 @@ export const TREE_CONFIG = {
   maxAngleSpread: 270,
   nodeSize: 120,
   minArcGapFactor: 1.08,
+  promotionProfile: 'balanced',
   levelSpacing: 180,
   horizontalPadding: 600,
   topPadding: 600,
