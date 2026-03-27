@@ -106,7 +106,26 @@ export function SkillTreeCanvas({
 
         {filteredSegmentLabels.map((segmentLabel) => {
           const isSelected = segmentLabel.segmentId === selectedSegmentId
-          const labelWidth = Math.max(88, segmentLabel.text.length * 10)
+          
+          // Wrap text with max line width
+          const maxLineWidth = 15 // characters per line
+          const words = segmentLabel.text.split(' ')
+          const lines = []
+          let currentLine = ''
+          
+          for (const word of words) {
+            const testLine = currentLine ? `${currentLine} ${word}` : word
+            if (testLine.length <= maxLineWidth) {
+              currentLine = testLine
+            } else {
+              if (currentLine) lines.push(currentLine)
+              currentLine = word
+            }
+          }
+          if (currentLine) lines.push(currentLine)
+          
+          const labelWidth = Math.max(88, Math.max(...lines.map(l => l.length * 10)))
+          const labelHeight = 24 + (lines.length - 1) * 16
 
           return (
             <g
@@ -122,9 +141,9 @@ export function SkillTreeCanvas({
             >
               <rect
                 x={-(labelWidth / 2) - 10}
-                y={-12}
+                y={-(labelHeight / 2)}
                 width={labelWidth + 20}
-                height={24}
+                height={labelHeight}
                 rx={12}
                 fill={isSelected ? 'rgba(34, 211, 238, 0.12)' : 'transparent'}
                 stroke={isSelected ? 'rgba(103, 232, 249, 0.6)' : 'transparent'}
@@ -132,12 +151,16 @@ export function SkillTreeCanvas({
               />
               <text
                 x="0"
-                y="1"
+                y={-(lines.length - 1) * 8}
                 textAnchor="middle"
                 dominantBaseline="middle"
                 className={isSelected ? 'skill-tree-segment-label skill-tree-segment-label--selected' : 'skill-tree-segment-label'}
               >
-                {segmentLabel.text}
+                {lines.map((line, i) => (
+                  <tspan key={i} x="0" dy={i === 0 ? 0 : 16}>
+                    {line}
+                  </tspan>
+                ))}
               </text>
             </g>
           )

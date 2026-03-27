@@ -420,6 +420,93 @@ export const persistTextFile = (filePath, text) => {
   return filePath
 }
 
+const csvEscape = (value) => {
+  const text = value == null ? '' : String(value)
+  if (/[",\n\r]/.test(text)) {
+    return `"${text.replace(/"/g, '""')}"`
+  }
+  return text
+}
+
+const computeParentChainLevel = (row, rowsByShortName, cache, stack = new Set()) => {
+  const key = normalizeShortNameLikeApp(row.shortName, row.label)
+
+  if (cache.has(key)) {
+    return cache.get(key)
+  }
+
+  if (stack.has(key)) {
+    return 1
+  }
+
+  stack.add(key)
+  const parentKey = row.parentShortName
+    ? normalizeShortNameLikeApp(row.parentShortName, row.parentLabel)
+    : null
+  const parent = parentKey ? rowsByShortName.get(parentKey) ?? null : null
+  const level = parent ? computeParentChainLevel(parent, rowsByShortName, cache, stack) + 1 : 1
+  stack.delete(key)
+  cache.set(key, level)
+  return level
+}
+
+export const buildLayoutVariantCsv = (csvText, options = {}) => {
+  const {
+    ignoreManualLevels = false,
+    ignoreSegments = false,
+    unifiedSegmentName = 'Unified',
+  } = options
+
+  const template = parseSkillTreeCsvTemplate(csvText)
+  const rowsByShortName = new Map(
+    template.rows.map((row) => [normalizeShortNameLikeApp(row.shortName, row.label), row]),
+  )
+  const computedLevelCache = new Map()
+
+  const rows = template.rows.map((row) => {
+    const nextLevel = ignoreManualLevels
+      ? computeParentChainLevel(row, rowsByShortName, computedLevelCache)
+      : row.level
+
+    return {
+      ...row,
+      level: nextLevel,
+      segment: ignoreSegments ? unifiedSegmentName : row.segment,
+    }
+  })
+
+  const header = [
+    'ShortName',
+    'Name',
+    'Scope',
+    'Ebene',
+    'Segment',
+    'Parent',
+    'AdditionalDependency',
+    'ProgressLevel',
+    'Status',
+    'ReleaseNotes',
+  ]
+
+  const lines = [header.join(',')]
+  for (const row of rows.sort((left, right) => left.order - right.order)) {
+    lines.push([
+      csvEscape(row.shortName),
+      csvEscape(row.label),
+      csvEscape(row.scope ?? ''),
+      csvEscape(row.level),
+      csvEscape(row.segment),
+      csvEscape(row.parentShortName ?? ''),
+      csvEscape((row.additionalDependencies ?? []).join(',')),
+      csvEscape(row.progressLevel ?? 1),
+      csvEscape(row.status),
+      csvEscape(row.releaseNote ?? ''),
+    ].join(','))
+  }
+
+  return lines.join('\n')
+}
+
 export const getE2eExportDir = () => resolve(
   process.env.SKILLTREE_E2E_EXPORT_DIR ?? resolveWorkspacePath('tests/results', 'e2e-exports'),
 )
@@ -1351,6 +1438,157 @@ export const collectCanvasGeometryMetrics = async (page) => {
       centerRadius: radii.length > 0 ? Math.max(...radii) : 0,
       nodeAngleSpread,
       usedAngleDeg: nodeAngleSpread,
+    }
+  })
+}
+
+export const collectCanvasWarningMetrics = async (page) => {
+  return page.evaluate(() => {
+    const svg = document.querySelector('svg.skill-tree-canvas')
+    if (!svg) {
+      return {
+        linkNodeOverlapCount: 0,
+        linkLinkIntersectionCount: 0,
+        segmentLabelOutsideCount: 0,
+      }
+    }
+
+    const parseTranslate = (transform) => {
+      const match = String(transform ?? '').match(/translate\(([-\d.]+)[ ,]([-\d.]+)\)/)
+      return match ? { x: Number(match[1]), y: Number(match[2]) } : { x: 0, y: 0 }
+    }
+
+    const samplePath = (pathEl, samples = 40) => {
+      let length = 0
+      try {
+        length = pathEl.getTotalLength()
+      } catch {
+        return []
+      }
+
+      if (!Number.isFinite(length) || length <= 0) {
+        return []
+      }
+
+      const points = []
+      const count = Math.max(2, samples)
+      for (let index = 0; index <= count; index += 1) {
+        const point = pathEl.getPointAtLength((length * index) / count)
+        points.push({ x: point.x, y: point.y })
+      }
+      return points
+    }
+
+    const distancePointToSegment = (point, start, end) => {
+      const dx = end.x - start.x
+      const dy = end.y - start.y
+      const lengthSquared = dx * dx + dy * dy
+      if (lengthSquared <= 0.0001) {
+        return Math.hypot(point.x - start.x, point.y - start.y)
+      }
+
+      const t = Math.max(0, Math.min(1, ((point.x - start.x) * dx + (point.y - start.y) * dy) / lengthSquared))
+      const projection = {
+        x: start.x + t * dx,
+        y: start.y + t * dy,
+      }
+      return Math.hypot(point.x - projection.x, point.y - projection.y)
+    }
+
+    const nodeBoxes = Array.from(document.querySelectorAll('foreignObject.skill-node-export-anchor')).map((anchor) => {
+      const x = Number(anchor.getAttribute('x') ?? 0)
+      const y = Number(anchor.getAttribute('y') ?? 0)
+      const width = Number(anchor.getAttribute('width') ?? 0)
+      const height = Number(anchor.getAttribute('height') ?? 0)
+      return {
+        left: x,
+        right: x + width,
+        top: y,
+        bottom: y + height,
+        cx: x + width / 2,
+        cy: y + height / 2,
+        radius: Math.max(width, height) * 0.48,
+      }
+    })
+
+    const linkPaths = Array.from(document.querySelectorAll('path[data-link-source-id][data-link-target-id]'))
+    const sampledLinks = linkPaths.map((pathEl) => ({
+      element: pathEl,
+      points: samplePath(pathEl, 48),
+    }))
+
+    let linkNodeOverlapCount = 0
+    for (const link of sampledLinks) {
+      const points = link.points.slice(2, -2)
+      let overlapsNode = false
+      for (const point of points) {
+        if (nodeBoxes.some((node) => Math.hypot(point.x - node.cx, point.y - node.cy) < node.radius * 0.82)) {
+          overlapsNode = true
+          break
+        }
+      }
+      if (overlapsNode) {
+        linkNodeOverlapCount += 1
+      }
+    }
+
+    let linkLinkIntersectionCount = 0
+    for (let leftIndex = 0; leftIndex < sampledLinks.length; leftIndex += 1) {
+      const left = sampledLinks[leftIndex]
+      for (let rightIndex = leftIndex + 1; rightIndex < sampledLinks.length; rightIndex += 1) {
+        const right = sampledLinks[rightIndex]
+        let intersects = false
+        for (let i = 0; i < left.points.length - 1 && !intersects; i += 1) {
+          for (let j = 0; j < right.points.length - 1; j += 1) {
+            const d1 = distancePointToSegment(left.points[i], right.points[j], right.points[j + 1])
+            const d2 = distancePointToSegment(left.points[i + 1], right.points[j], right.points[j + 1])
+            const d3 = distancePointToSegment(right.points[j], left.points[i], left.points[i + 1])
+            const d4 = distancePointToSegment(right.points[j + 1], left.points[i], left.points[i + 1])
+            if (Math.min(d1, d2, d3, d4) < 3.5) {
+              intersects = true
+              break
+            }
+          }
+        }
+        if (intersects) {
+          linkLinkIntersectionCount += 1
+        }
+      }
+    }
+
+    const segmentLabelOutsideCount = Array.from(document.querySelectorAll('g[data-segment-id]')).filter((labelGroup) => {
+      const labelTransform = parseTranslate(labelGroup.getAttribute('transform'))
+      const segmentId = labelGroup.getAttribute('data-segment-id')
+      const separatorLeft = Array.from(document.querySelectorAll(`path[data-segment-left="${segmentId}"]`)).at(-1)
+      const separatorRight = Array.from(document.querySelectorAll(`path[data-segment-right="${segmentId}"]`)).at(0)
+
+      const collectAngles = (pathEl) => {
+        if (!pathEl) return []
+        return samplePath(pathEl, 20).map((point) => {
+          const centerGroup = document.querySelector('.skill-tree-center-icon')
+          const center = parseTranslate(centerGroup?.getAttribute('transform'))
+          return Math.atan2(point.y - center.y, point.x - center.x)
+        })
+      }
+
+      const leftAngles = collectAngles(separatorLeft)
+      const rightAngles = collectAngles(separatorRight)
+      if (leftAngles.length === 0 || rightAngles.length === 0) {
+        return false
+      }
+
+      const centerGroup = document.querySelector('.skill-tree-center-icon')
+      const center = parseTranslate(centerGroup?.getAttribute('transform'))
+      const labelAngle = Math.atan2(labelTransform.y - center.y, labelTransform.x - center.x)
+      const minAngle = Math.min(...leftAngles, ...rightAngles)
+      const maxAngle = Math.max(...leftAngles, ...rightAngles)
+      return labelAngle < minAngle || labelAngle > maxAngle
+    }).length
+
+    return {
+      linkNodeOverlapCount,
+      linkLinkIntersectionCount,
+      segmentLabelOutsideCount,
     }
   })
 }

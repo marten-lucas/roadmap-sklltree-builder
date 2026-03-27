@@ -2,6 +2,7 @@ import { buildLayoutDiagnostics } from './layoutDiagnostics'
 import { buildEdgeRoutingModel, buildRoutedEdgeLinks } from './edgeRouter'
 import { analyzeSegmentLevelFeasibility, buildSegmentLevelGroups } from './layoutFeasibility'
 import {
+  buildArcRadialPath,
   buildRadialArcPath,
   centerAngle,
   clamp,
@@ -14,6 +15,133 @@ import { buildAutoPromotedLevels } from './levelAssignment'
 import { computeWeightedSegmentSlots } from './radialPacker'
 import { UNASSIGNED_SEGMENT_ID, getGroupedSegmentId } from './layoutShared'
 import { buildOptimizedSegmentIdOrder } from './segmentOptimizer'
+
+const EPSILON = 0.01
+const MAX_SEGMENT_LABEL_CHARS_PER_LINE = 15
+
+const estimateWrappedLineCount = (text) => {
+  const words = String(text ?? '').trim().split(/\s+/).filter(Boolean)
+  if (words.length === 0) {
+    return 1
+  }
+
+  let lineCount = 0
+  let currentLine = ''
+  for (const word of words) {
+    const candidate = currentLine ? `${currentLine} ${word}` : word
+    if (candidate.length <= MAX_SEGMENT_LABEL_CHARS_PER_LINE) {
+      currentLine = candidate
+      continue
+    }
+
+    if (currentLine) {
+      lineCount += 1
+    }
+    currentLine = word
+  }
+
+  if (currentLine) {
+    lineCount += 1
+  }
+
+  return Math.max(lineCount, 1)
+}
+
+const buildSeparatorPathWithDetours = ({
+  baseAngle,
+  innerRadius,
+  outerRadius,
+  origin,
+  nodes,
+  allowedMinAngle,
+  allowedMaxAngle,
+  nodeSize,
+  angleSafetyDeg,
+}) => {
+  const clampedBaseAngle = clamp(baseAngle, allowedMinAngle, allowedMaxAngle)
+  const start = toCartesian(clampedBaseAngle, innerRadius, origin)
+  const parts = [`M ${start.x} ${start.y}`]
+
+  let currentAngle = clampedBaseAngle
+  let currentRadius = innerRadius
+
+  const nodeHalfSize = nodeSize * 0.56
+  const radialClearance = Math.max(nodeSize * 0.42, 24)
+  const detourPadding = Math.max(angleSafetyDeg * 0.5, 1.4)
+
+  const blockers = nodes
+    .map((node) => {
+      const blockStartRadius = node.radius - radialClearance
+      const blockEndRadius = node.radius + radialClearance
+
+      if (blockEndRadius <= innerRadius || blockStartRadius >= outerRadius) {
+        return null
+      }
+
+      const angularHalfWidth = toDegrees(nodeHalfSize / Math.max(node.radius, 1))
+      return {
+        angleMin: node.angle - angularHalfWidth,
+        angleMax: node.angle + angularHalfWidth,
+        blockStartRadius,
+        blockEndRadius,
+      }
+    })
+    .filter(Boolean)
+    .sort((left, right) => left.blockStartRadius - right.blockStartRadius)
+
+  const addRaySegmentToRadius = (nextRadius) => {
+    if (nextRadius - currentRadius < EPSILON) {
+      return
+    }
+
+    const point = toCartesian(currentAngle, nextRadius, origin)
+    parts.push(`L ${point.x} ${point.y}`)
+    currentRadius = nextRadius
+  }
+
+  const addArcSegmentToAngle = (nextAngle) => {
+    if (Math.abs(nextAngle - currentAngle) < EPSILON || currentRadius < 1) {
+      return
+    }
+
+    const point = toCartesian(nextAngle, currentRadius, origin)
+    const sweep = nextAngle > currentAngle ? 1 : 0
+    parts.push(`A ${currentRadius} ${currentRadius} 0 0 ${sweep} ${point.x} ${point.y}`)
+    currentAngle = nextAngle
+  }
+
+  for (const blocker of blockers) {
+    if (blocker.blockEndRadius <= currentRadius + EPSILON) {
+      continue
+    }
+
+    const isAngleBlocked =
+      currentAngle >= blocker.angleMin - EPSILON && currentAngle <= blocker.angleMax + EPSILON
+
+    if (!isAngleBlocked) {
+      continue
+    }
+
+    const pivotRadius = clamp(blocker.blockStartRadius, currentRadius, outerRadius)
+    addRaySegmentToRadius(pivotRadius)
+
+    const leftEscape = clamp(blocker.angleMin - detourPadding, allowedMinAngle, allowedMaxAngle)
+    const rightEscape = clamp(blocker.angleMax + detourPadding, allowedMinAngle, allowedMaxAngle)
+
+    const leftDistance = Math.abs(currentAngle - leftEscape)
+    const rightDistance = Math.abs(rightEscape - currentAngle)
+    const nextAngle = leftDistance <= rightDistance ? leftEscape : rightEscape
+
+    addArcSegmentToAngle(nextAngle)
+
+    const exitRadius = clamp(blocker.blockEndRadius, currentRadius, outerRadius)
+    addRaySegmentToRadius(exitRadius)
+  }
+
+  addRaySegmentToRadius(outerRadius)
+
+  return parts.join(' ')
+}
 
 export const solveSkillTreeLayout = (data, config) => {
   const { root, explicitSegments, allHierarchyNodes, hasUnassignedNodes } = buildLayoutModel(data)
@@ -42,9 +170,33 @@ export const solveSkillTreeLayout = (data, config) => {
   }
   const getEstimatedSegmentLabelWidthPx = (segmentId) => {
     const text = getSegmentLabelText(segmentId)
-    const textWidth = Math.max(72, text.length * 9)
+    const words = text.split(/\s+/).filter(Boolean)
+    const wrappedLines = []
+    let currentLine = ''
+
+    for (const word of words) {
+      const candidate = currentLine ? `${currentLine} ${word}` : word
+      if (candidate.length <= MAX_SEGMENT_LABEL_CHARS_PER_LINE) {
+        currentLine = candidate
+      } else {
+        if (currentLine) {
+          wrappedLines.push(currentLine)
+        }
+        currentLine = word
+      }
+    }
+
+    if (currentLine) {
+      wrappedLines.push(currentLine)
+    }
+
+    const textWidth = Math.max(72, ...wrappedLines.map((line) => line.length * 9))
 
     return textWidth + 20
+  }
+  const getEstimatedSegmentLabelHeightPx = (segmentId) => {
+    const lineCount = estimateWrappedLineCount(getSegmentLabelText(segmentId))
+    return 24 + Math.max(0, lineCount - 1) * 16
   }
   const toAngleSpan = (pixelWidth, radius) => {
     return toDegrees(pixelWidth / Math.max(radius, 1))
@@ -228,9 +380,13 @@ export const solveSkillTreeLayout = (data, config) => {
     }
     const separatorInnerRadius = Math.max(config.nodeSize * 0.9, config.levelSpacing * 0.9)
     const separatorOuterRadius = config.levelSpacing + 120
+    const maxLabelHeightPx = Math.max(
+      config.nodeSize * 0.4,
+      ...explicitSegments.map((segment) => getEstimatedSegmentLabelHeightPx(segment.id)),
+    )
     const segmentLabelRadius = Math.max(
-      config.levelSpacing + config.nodeSize * 0.95,
-      separatorInnerRadius + config.nodeSize * 0.7,
+      separatorInnerRadius + config.nodeSize * 0.55,
+      separatorInnerRadius + maxLabelHeightPx * 0.55,
     )
     const emptySpread =
       explicitSegments.length > 1
@@ -266,14 +422,24 @@ export const solveSkillTreeLayout = (data, config) => {
     const emptySegmentSeparators = emptySlots.slice(0, -1).map((slot, index) => {
       const next = emptySlots[index + 1]
       const angle = (slot.max + next.min) / 2
-      const from = toCartesian(angle, separatorInnerRadius, origin)
-      const to = toCartesian(angle, separatorOuterRadius, origin)
+      const safeMinAngle = Math.min(slot.max, next.min)
+      const safeMaxAngle = Math.max(slot.max, next.min)
 
       return {
         id: `segment-separator-${slot.id}-${next.id}`,
         leftSegmentId: slot.id,
         rightSegmentId: next.id,
-        path: `M ${from.x} ${from.y} L ${to.x} ${to.y}`,
+        path: buildSeparatorPathWithDetours({
+          baseAngle: angle,
+          innerRadius: separatorInnerRadius,
+          outerRadius: separatorOuterRadius,
+          origin,
+          nodes: [],
+          allowedMinAngle: safeMinAngle,
+          allowedMaxAngle: safeMaxAngle,
+          nodeSize: config.nodeSize,
+          angleSafetyDeg: 0,
+        }),
       }
     })
 
@@ -630,9 +796,13 @@ export const solveSkillTreeLayout = (data, config) => {
   const getAngleForNode = (node) => packedAngleByNodeId.get(node.data.id) ?? centerAngle
   const separatorInnerRadius = Math.max(config.nodeSize * 0.9, config.levelSpacing * 0.9)
   let separatorOuterRadius = maxRadius + 120
+  const getMaxEstimatedSegmentLabelHeightPx = () => Math.max(
+    config.nodeSize * 0.4,
+    ...explicitSegments.map((segment) => getEstimatedSegmentLabelHeightPx(segment.id)),
+  )
   let segmentLabelRadius = Math.max(
-    maxRadius + config.nodeSize * 0.95,
-    separatorInnerRadius + config.nodeSize * 0.7,
+    separatorInnerRadius + config.nodeSize * 0.55,
+    separatorInnerRadius + getMaxEstimatedSegmentLabelHeightPx() * 0.55,
   )
   let origin = { x: 0, y: 0 }
 
@@ -889,8 +1059,8 @@ export const solveSkillTreeLayout = (data, config) => {
   maxRadius = Math.max(config.levelSpacing, ...radiusByLevel.values())
   separatorOuterRadius = maxRadius + 120
   segmentLabelRadius = Math.max(
-    maxRadius + config.nodeSize * 0.95,
-    separatorInnerRadius + config.nodeSize * 0.7,
+    separatorInnerRadius + config.nodeSize * 0.55,
+    separatorInnerRadius + getMaxEstimatedSegmentLabelHeightPx() * 0.55,
   )
 
   const observedSegmentRangesMap = new Map()
@@ -987,7 +1157,7 @@ export const solveSkillTreeLayout = (data, config) => {
       sourceDepth: 1,
       sourceId: node.parentId ?? null,
       targetId: node.id,
-      path: buildRadialArcPath(centerAngle, levelOneRadius, node.angle, node.radius, origin),
+      path: buildArcRadialPath(centerAngle, levelOneRadius, node.angle, node.radius, origin),
     }))
 
   const levelOneNodes = nodes
@@ -1019,21 +1189,40 @@ export const solveSkillTreeLayout = (data, config) => {
     const angle = leftSafe < rightSafe
       ? (leftSafe + rightSafe) / 2
       : (leftBoundaryAngle + rightBoundaryAngle) / 2
-    const from = toCartesian(angle, separatorInnerRadius, origin)
-    const to = toCartesian(angle, separatorOuterRadius, origin)
+    const safeMinAngle = Math.min(leftSafe, rightSafe)
+    const safeMaxAngle = Math.max(leftSafe, rightSafe)
 
     return {
       id: `segment-separator-${segment.id}-${next.id}`,
       leftSegmentId: segment.id,
       rightSegmentId: next.id,
-      path: `M ${from.x} ${from.y} L ${to.x} ${to.y}`,
+      path: buildSeparatorPathWithDetours({
+        baseAngle: angle,
+        innerRadius: separatorInnerRadius,
+        outerRadius: separatorOuterRadius,
+        origin,
+        nodes,
+        allowedMinAngle: safeMinAngle,
+        allowedMaxAngle: safeMaxAngle,
+        nodeSize: config.nodeSize,
+        angleSafetyDeg: boundarySafetyMarginDeg,
+      }),
     }
   })
 
   const segmentLabels = finalOrderedSegments
     .filter((segment) => !segment.isVirtual)
     .map((segment) => {
-      const anchorAngle = segment.wedgeCenter ?? segment.anchorAngle
+      const estimatedLabelWidthPx = getEstimatedSegmentLabelWidthPx(segment.id)
+      const angularHalfSpan = toDegrees((estimatedLabelWidthPx * 0.5) / Math.max(segmentLabelRadius, 1))
+      const wedgeMin = segment.wedgeMin ?? segment.slotMin ?? segment.anchorAngle
+      const wedgeMax = segment.wedgeMax ?? segment.slotMax ?? segment.anchorAngle
+      const safeMin = wedgeMin + angularHalfSpan
+      const safeMax = wedgeMax - angularHalfSpan
+      const preferredAnchorAngle = segment.wedgeCenter ?? segment.anchorAngle
+      const anchorAngle = safeMin <= safeMax
+        ? clamp(preferredAnchorAngle, safeMin, safeMax)
+        : preferredAnchorAngle
       const point = toCartesian(anchorAngle, segmentLabelRadius, origin)
       let rotation = anchorAngle + 90
 

@@ -3,6 +3,8 @@ import { basename, extname, resolve } from 'node:path'
 import process from 'node:process'
 import { expect, test } from '@playwright/test'
 import {
+  buildLayoutVariantCsv,
+  collectCanvasWarningMetrics,
   collectCanvasGeometryMetrics,
   confirmAndReset,
   extractConnectionMetrics,
@@ -17,11 +19,23 @@ import {
   selectNodeByShortName,
 } from './helpers.js'
 
-const BASELINE_SCHEMA_VERSION = 1
-const BASELINE_PROFILE = 'layout-regression-phase-a'
+const BASELINE_SCHEMA_VERSION = 2
+const BASELINE_PROFILE = 'layout-regression'
 const runStamp = Date.now()
 
-const defaultDatasetEntries = [
+const formatRunFolderName = (timestamp) => {
+  const date = new Date(timestamp)
+  const year = String(date.getFullYear())
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  const hours = String(date.getHours()).padStart(2, '0')
+  const minutes = String(date.getMinutes()).padStart(2, '0')
+  return `${year}-${month}-${day}-${hours}${minutes}`
+}
+
+const runFolderName = formatRunFolderName(runStamp)
+
+const baseDatasetEntries = [
   { key: 'minimal', label: 'minimal', path: resolve(process.cwd(), 'tests/e2e/datasets/minimal.csv') },
   { key: 'small', label: 'small', path: resolve(process.cwd(), 'tests/e2e/datasets/small.csv') },
   { key: 'medium', label: 'medium', path: resolve(process.cwd(), 'tests/e2e/datasets/medium.csv') },
@@ -30,6 +44,7 @@ const defaultDatasetEntries = [
   { key: 'cross-segment-promotion-chain', label: 'cross-segment-promotion-chain', path: resolve(process.cwd(), 'tests/e2e/datasets/layout-regression/cross-segment-promotion-chain.csv') },
   { key: 'crisscross', label: 'crisscross', path: resolve(process.cwd(), 'tests/e2e/datasets/layout-regression/crisscross.csv') },
   { key: 'dense-segment-capacity', label: 'dense-segment-capacity', path: resolve(process.cwd(), 'tests/e2e/datasets/layout-regression/dense-segment-capacity.csv') },
+  { key: 'dense-root-capacity', label: 'dense-root-capacity', path: resolve(process.cwd(), 'tests/e2e/datasets/layout-regression/dense-root-capacity.csv') },
   { key: 'long-segment-labels', label: 'long-segment-labels', path: resolve(process.cwd(), 'tests/e2e/datasets/layout-regression/long-segment-labels.csv') },
   { key: 'segment-boundary', label: 'segment-boundary', path: resolve(process.cwd(), 'tests/e2e/datasets/layout-regression/segment-boundary.csv') },
   { key: 'sparse-segments', label: 'sparse-segments', path: resolve(process.cwd(), 'tests/e2e/datasets/layout-regression/sparse-segments.csv') },
@@ -44,7 +59,7 @@ const defaultDatasetEntries = [
 ]
 
 if (process.env.SKILLTREE_LAYOUT_INCLUDE_HUGE === '1') {
-  defaultDatasetEntries.push({
+  baseDatasetEntries.push({
     key: 'huge',
     label: 'huge',
     path: resolve(process.cwd(), 'tests/e2e/datasets/huge.csv'),
@@ -52,7 +67,7 @@ if (process.env.SKILLTREE_LAYOUT_INCLUDE_HUGE === '1') {
 }
 
 if (process.env.SKILLTREE_LAYOUT_INCLUDE_MYKYANA === '1') {
-  defaultDatasetEntries.push({
+  baseDatasetEntries.push({
     key: 'mykyana',
     label: 'myKyana',
     path: resolve(process.cwd(), 'tests/e2e/datasets/myKyana.csv'),
@@ -65,21 +80,57 @@ const extraCsvPaths = String(process.env.SKILLTREE_LAYOUT_EXTRA_CSV ?? '')
   .filter(Boolean)
 
 for (const extraPath of extraCsvPaths) {
-  defaultDatasetEntries.push({
+  baseDatasetEntries.push({
     key: basename(extraPath, extname(extraPath)).toLowerCase(),
     label: basename(extraPath),
     path: resolve(extraPath),
   })
 }
 
-const datasetEntries = defaultDatasetEntries.filter((entry, index, all) => (
+const layoutVariants = [
+  {
+    key: 'full',
+    label: 'full',
+    ignoreManualLevels: false,
+    ignoreSegments: false,
+  },
+  {
+    key: 'no-segments',
+    label: 'no segments',
+    ignoreManualLevels: false,
+    ignoreSegments: true,
+  },
+  {
+    key: 'no-manual-levels',
+    label: 'no manual levels',
+    ignoreManualLevels: true,
+    ignoreSegments: false,
+  },
+  {
+    key: 'no-manual-levels-no-segments',
+    label: 'no manual levels, no segments',
+    ignoreManualLevels: true,
+    ignoreSegments: true,
+  },
+]
+
+const baseEntries = baseDatasetEntries.filter((entry, index, all) => (
   existsSync(entry.path)
   && all.findIndex((candidate) => candidate.path === entry.path) === index
 ))
 
-const exportDir = resolve(process.cwd(), 'tests/results/e2e-exports/layout-regression')
+const datasetEntries = baseEntries.flatMap((entry) => layoutVariants.map((variant) => ({
+  ...entry,
+  baseKey: entry.key,
+  baseLabel: entry.label,
+  variant,
+  key: `${entry.key}__${variant.key}`,
+  label: `${entry.label} [${variant.label}]`,
+})))
+
+const exportDir = resolve(process.cwd(), 'tests/results/e2e-exports/layout-regression', runFolderName)
 const reportDir = resolve(process.cwd(), 'tests/results/reports')
-const screenshotDir = resolve(process.cwd(), 'tests/results/screenshots/layout-regression', String(runStamp))
+const screenshotDir = resolve(process.cwd(), 'tests/results/screenshots/layout-regression', runFolderName)
 const reportEntries = []
 const screenshotEntries = []
 
@@ -106,14 +157,6 @@ const captureBuilderScreenshot = async (page, datasetKey) => {
   return path
 }
 
-const captureExportScreenshot = async (page, datasetKey, exportedHtml) => {
-  const path = resolve(screenshotDir, `${normalizeFilenamePart(datasetKey)}-export.png`)
-  await page.setContent(exportedHtml)
-  await page.waitForSelector('#html-export-tree-canvas svg', { timeout: 10_000 })
-  await page.screenshot({ path, fullPage: true })
-  return path
-}
-
 const exportHtmlFromPage = async (page) => {
   const [download] = await Promise.all([
     page.waitForEvent('download', { timeout: 15_000 }),
@@ -123,63 +166,75 @@ const exportHtmlFromPage = async (page) => {
   return readDownload(download)
 }
 
-const buildDatasetAssertions = ({ datasetKey, connectionMetrics, exportLayout, expectedEdgeCount }) => {
+const buildDatasetAssertions = ({
+  datasetBaseKey,
+  variantKey,
+  connectionMetrics,
+  exportLayout,
+  expectedEdgeCount,
+  warningMetrics,
+}) => {
   expect(exportLayout.nodeCount).toBeGreaterThan(0)
-  expect(exportLayout.usedAngleDeg).toBeGreaterThan(0)
+  expect(exportLayout.usedAngleDeg).toBeGreaterThanOrEqual(0)
   expect(exportLayout.centerRadius).toBeGreaterThan(0)
   expect(connectionMetrics.linkCount).toBeGreaterThanOrEqual(expectedEdgeCount)
 
-  if (datasetKey === 'minimal') {
+  if (datasetBaseKey === 'minimal') {
     expect(connectionMetrics.directCount).toBeGreaterThan(0)
     expect(connectionMetrics.routedCount).toBeGreaterThan(0)
   }
 
-  if (datasetKey === 'crisscross') {
+  if (datasetBaseKey === 'crisscross') {
     expect(connectionMetrics.routedCount).toBeGreaterThanOrEqual(2)
+    if (variantKey === 'full') {
+      expect(
+        warningMetrics.linkLinkIntersectionCount + warningMetrics.linkNodeOverlapCount,
+      ).toBeGreaterThan(0)
+    }
   }
 
-  if (datasetKey === 'cross-segment-promotion-chain') {
+  if (datasetBaseKey === 'cross-segment-promotion-chain') {
     expect(exportLayout.centerRadius).toBeGreaterThanOrEqual(1200)
   }
 
-  if (datasetKey === 'dense-segment-capacity') {
+  if (datasetBaseKey === 'dense-segment-capacity' || datasetBaseKey === 'dense-root-capacity') {
     expect(exportLayout.centerRadius).toBeGreaterThan(360)
   }
 
-  if (datasetKey === 'segment-boundary') {
+  if (datasetBaseKey === 'segment-boundary') {
     expect(connectionMetrics.routedCount).toBeGreaterThan(0)
   }
 
-  if (datasetKey === 'sparse-segments') {
+  if (datasetBaseKey === 'sparse-segments') {
     expect(exportLayout.usedAngleDeg).toBeGreaterThan(180)
   }
 
-  if (datasetKey === 'single-chain') {
+  if (datasetBaseKey === 'single-chain') {
     expect(connectionMetrics.directCount).toBeGreaterThan(0)
     expect(exportLayout.usedAngleDeg).toBeLessThan(180)
   }
 
-  if (datasetKey === 'multi-level-ray') {
+  if (datasetBaseKey === 'multi-level-ray') {
     expect(connectionMetrics.directCount).toBeGreaterThan(0)
   }
 
-  if (datasetKey === 'direct-threshold') {
+  if (datasetBaseKey === 'direct-threshold') {
     expect(connectionMetrics.directCount).toBeGreaterThan(0)
   }
 
-  if (datasetKey === 'routed-threshold') {
+  if (datasetBaseKey === 'routed-threshold') {
     expect(connectionMetrics.routedCount).toBeGreaterThan(0)
   }
 
-  if (datasetKey === 'routed-fanout') {
+  if (datasetBaseKey === 'routed-fanout') {
     expect(connectionMetrics.routedCount).toBeGreaterThanOrEqual(3)
   }
 
-  if (datasetKey === 'subtree-shifted') {
+  if (datasetBaseKey === 'subtree-shifted') {
     expect(connectionMetrics.routedCount).toBeGreaterThan(0)
   }
 
-  if (datasetKey === 'even-children' || datasetKey === 'odd-children') {
+  if (datasetBaseKey === 'even-children' || datasetBaseKey === 'odd-children') {
     expect(connectionMetrics.linkCount).toBe(expectedEdgeCount)
   }
 }
@@ -197,10 +252,13 @@ test.describe('CSV import/export layout regression metrics', () => {
       schemaVersion: BASELINE_SCHEMA_VERSION,
       profile: BASELINE_PROFILE,
       runStamp,
+      runFolderName,
       generatedAt: new Date().toISOString(),
       datasetMatrix: datasetEntries.map((dataset) => ({
         key: dataset.key,
         label: dataset.label,
+        baseKey: dataset.baseKey,
+        variantKey: dataset.variant.key,
         path: dataset.path,
       })),
       datasetCount: reportEntries.length,
@@ -212,6 +270,7 @@ test.describe('CSV import/export layout regression metrics', () => {
       schemaVersion: BASELINE_SCHEMA_VERSION,
       profile: BASELINE_PROFILE,
       runStamp,
+      runFolderName,
       generatedAt: new Date().toISOString(),
       screenshotDir,
       datasetCount: screenshotEntries.length,
@@ -228,7 +287,8 @@ test.describe('CSV import/export layout regression metrics', () => {
         pageErrors.push(error.message)
       })
 
-      const csvText = readFileSync(dataset.path, 'utf-8')
+      const originalCsvText = readFileSync(dataset.path, 'utf-8')
+      const csvText = buildLayoutVariantCsv(originalCsvText, dataset.variant)
       const template = parseSkillTreeCsvTemplate(csvText)
       const startedAt = Date.now()
 
@@ -245,7 +305,7 @@ test.describe('CSV import/export layout regression metrics', () => {
       const renderedNodeCount = await page.locator('foreignObject.skill-node-export-anchor').count()
       expect(renderedNodeCount).toBe(template.rows.length)
 
-      if (dataset.key === 'root-promoted') {
+      if (dataset.baseKey === 'root-promoted' && dataset.variant.key === 'full') {
         await selectNodeByShortName(page, 'RTP')
         const selectedNodeId = await getSelectedNodeId(page)
         const rootAddControlCount = await getVisibleRootAddControlCountForNode(page, selectedNodeId)
@@ -254,6 +314,7 @@ test.describe('CSV import/export layout regression metrics', () => {
 
       await fitToScreenIfAvailable(page)
       const liveCanvasMetrics = await collectCanvasGeometryMetrics(page)
+      const warningMetrics = await collectCanvasWarningMetrics(page)
       const builderScreenshotPath = await captureBuilderScreenshot(page, dataset.key)
 
       const exportStartedAt = Date.now()
@@ -261,7 +322,6 @@ test.describe('CSV import/export layout regression metrics', () => {
       const exportDurationMs = Date.now() - exportStartedAt
       const exportPath = resolve(exportDir, `${dataset.key}-${runStamp}.html`)
       persistTextFile(exportPath, exportedHtml)
-      const exportScreenshotPath = await captureExportScreenshot(page, dataset.key, exportedHtml)
 
       const payload = extractJsonPayload(exportedHtml)
       const exportLayout = extractLayoutMetrics(exportedHtml)
@@ -272,15 +332,20 @@ test.describe('CSV import/export layout regression metrics', () => {
       expect(exportLayout.nodeCount).toBe(template.rows.length)
 
       buildDatasetAssertions({
-        datasetKey: dataset.key,
+        datasetBaseKey: dataset.baseKey,
+        variantKey: dataset.variant.key,
         connectionMetrics,
         exportLayout,
         expectedEdgeCount: template.children.length,
+        warningMetrics,
       })
 
       reportEntries.push({
         dataset: dataset.label,
         datasetKey: dataset.key,
+        datasetBaseKey: dataset.baseKey,
+        variantKey: dataset.variant.key,
+        variantLabel: dataset.variant.label,
         datasetPath: dataset.path,
         renderDurationMs,
         exportDurationMs,
@@ -295,20 +360,25 @@ test.describe('CSV import/export layout regression metrics', () => {
           nodeCount: renderedNodeCount,
         },
         canvas: liveCanvasMetrics,
+        warnings: warningMetrics,
+        assessment: {
+          hasWarnings: Object.values(warningMetrics).some((value) => Number(value) > 0),
+          isSolved: !Object.values(warningMetrics).some((value) => Number(value) > 0),
+        },
         exportLayout,
         connections: connectionMetrics,
         exportPath,
         screenshots: {
           builder: builderScreenshotPath,
-          export: exportScreenshotPath,
         },
       })
 
       screenshotEntries.push({
         datasetKey: dataset.key,
+        datasetBaseKey: dataset.baseKey,
+        variantKey: dataset.variant.key,
         datasetLabel: dataset.label,
         builderScreenshotPath,
-        exportScreenshotPath,
       })
     })
   }

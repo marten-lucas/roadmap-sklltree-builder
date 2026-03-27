@@ -1,0 +1,13 @@
+ShortName,Name,Scope,Ebene,Segment,Parent,AdditionalDependency,ProgressLevel,Status,ReleaseNotes
+DR1,Dense Root 1,,1,Alpha,,,1,now,"Dense root ring"
+DR2,Dense Root 2,,1,Beta,,,1,next,"Dense root ring"
+DR3,Dense Root 3,,1,Gamma,,,1,later,"Dense root ring"
+DR4,Dense Root 4,,1,Delta,,,1,done,"Dense root ring"
+DR5,Dense Root 5,,1,Epsilon,,,1,now,"Dense root ring"
+DR6,Dense Root 6,,1,Zeta,,,1,next,"Dense root ring"
+DR7,Dense Root 7,,1,Eta,,,1,later,"Dense root ring"
+DR8,Dense Root 8,,1,Theta,,,1,done,"Dense root ring"
+DR9,Dense Root 9,,1,Iota,,,1,now,"Dense root ring"
+D10,Dense Root 10,,1,Kappa,,,1,next,"Dense root ring"
+D11,Dense Root 11,,1,Lambda,,,1,later,"Dense root ring"
+D12,Dense Root 12,,1,Mu,,,1,done,"Dense root ring"
