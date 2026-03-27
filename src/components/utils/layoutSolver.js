@@ -70,6 +70,19 @@ const computeLabelBandRadius = (innerRadius, outerRadius) => {
   return innerRadius + available * LABEL_RADIUS_OUTER_BIAS
 }
 
+const computeSpreadScaleMultiplier = (subtreeSpan, maxAngleSpread) => {
+  const safeSpread = Math.max(maxAngleSpread, 1)
+  const overflowRatio = subtreeSpan / safeSpread
+
+  if (overflowRatio <= 1) {
+    return 1
+  }
+
+  // Damped growth keeps large datasets from over-inflating ring radii in one pass.
+  const damped = 1 + (overflowRatio - 1) * 0.48
+  return clamp(damped, 1.04, 1.6)
+}
+
 const buildSeparatorPathWithDetours = ({
   baseAngle,
   innerRadius,
@@ -818,8 +831,9 @@ export const solveSkillTreeLayout = (data, config) => {
   let radiusByLevel = buildRadiusByLevel(spacingScale)
   let { angleByNodeId, subtreeSpan } = computeAngleLayout(radiusByLevel)
 
-  for (let attempt = 0; attempt < 5 && subtreeSpan > config.maxAngleSpread; attempt += 1) {
-    spacingScale *= subtreeSpan / config.maxAngleSpread + 0.08
+  const spreadTargetUpperBound = config.maxAngleSpread * 1.02
+  for (let attempt = 0; attempt < 6 && subtreeSpan > spreadTargetUpperBound; attempt += 1) {
+    spacingScale *= computeSpreadScaleMultiplier(subtreeSpan, config.maxAngleSpread)
     radiusByLevel = buildRadiusByLevel(spacingScale)
     const nextLayout = computeAngleLayout(radiusByLevel)
     angleByNodeId = nextLayout.angleByNodeId

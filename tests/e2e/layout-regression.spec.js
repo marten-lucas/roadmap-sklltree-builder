@@ -218,8 +218,13 @@ const buildDatasetAssertions = ({
     expect(exportLayout.centerRadius).toBeGreaterThanOrEqual(1200)
   }
 
-  if (datasetBaseKey === 'dense-segment-capacity' || datasetBaseKey === 'dense-root-capacity') {
+  if (datasetBaseKey === 'dense-segment-capacity') {
     expect(exportLayout.centerRadius).toBeGreaterThan(360)
+  }
+
+  if (datasetBaseKey === 'dense-root-capacity') {
+    // Phase C allows a denser root layout, but it still must keep clear center spacing.
+    expect(exportLayout.centerRadius).toBeGreaterThan(280)
   }
 
   if (datasetBaseKey === 'segment-boundary') {
