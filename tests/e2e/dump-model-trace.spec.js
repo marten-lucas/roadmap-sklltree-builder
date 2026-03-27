@@ -7,15 +7,17 @@ const e2eExportDir = getE2eExportDir()
 const seedExportHtmlPath = resolve(process.cwd(), 'tests/results/e2e-exports/skilltree-roundtrip-1774358009970.html')
 
 test('dump model trace', async ({ page }) => {
+  await page.goto('/')
+  await page.evaluate(() => localStorage.setItem('roadmap-skilltree.e2e.traceEnabled', '1'))
+
   const exportedHtml = fs.readFileSync(seedExportHtmlPath, 'utf-8')
   const jsonMatch = exportedHtml.match(/<script[^>]*id="skilltree-export-data"[^>]*>([\s\S]*?)<\/script>/i)
   if (jsonMatch && jsonMatch[1]) {
     const payload = jsonMatch[1].trim()
-    await page.goto('/')
     await page.evaluate((p) => localStorage.setItem('roadmap-skilltree.document.v1', p), payload)
     await page.reload()
   } else {
-    await page.goto('/')
+    await page.reload()
   }
 
   await page.waitForSelector('foreignObject.skill-node-export-anchor', { timeout: 15_000 })

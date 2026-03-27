@@ -1,7 +1,5 @@
 ShortName,Name,Scope,Ebene,Segment,Parent,AdditionalDependency,ProgressLevel,Status,ReleaseNotes
-SML,Small Root,Alpha,1,Platform,,,1,now,
-SML,Small Root,Beta,1,Platform,,,2,next,
-SML,Small Root,Gamma,1,Platform,,,3,later,
-SMC,Small Child,Frontend,2,Platform,SML,,1,done,
-SMC,Small Child,Backend,2,Platform,SML,,2,now,
-SMC,Small Child,Quality,2,Platform,SML,,3,next,
+SML,Small Root,Alpha,1,Seg1,,,1,now,
+SML,Small Root,,1,Seg1,,,2,next,
+SMC,Small Child,Beta,2,Seg2,SML,,1,done,
+SMC,Small Child,Gamma,2,Seg2,SML,,2,later,

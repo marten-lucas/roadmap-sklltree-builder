@@ -1,51 +1,31 @@
 ShortName,Name,Scope,Ebene,Segment,Parent,AdditionalDependency,ProgressLevel,Status,ReleaseNotes
-MID,Medium Root,Alpha,1,Core,,,1,now,"# Medium Root
+MID,Medium Root,ScopeA,1,Seg1,,,1,now,"# Medium Root - Level 1
 
-The root rollout is **ready**.
+The root rollout is **ready**."
+MID,Medium Root,ScopeB,1,Seg1,,,2,next,"# Medium Root - Level 2
 
-- planning done
-- implementation started"
-MID,Medium Root,Beta,1,Core,,,2,next,"# Medium Root - Beta
+This level keeps the node identity stable."
+MID,Medium Root,,1,Seg1,,,3,later,"# Medium Root - Level 3
 
-This level keeps the node identity stable.
+Release notes roundtrip."
+M1,M1 Child,ScopeC,2,Seg2,MID,,1,done,"# M1 Child - Level 1
 
-Remember:  two  spaces stay intact."
-MID,Medium Root,Gamma,1,Core,,,3,later,"# Medium Root - Gamma
+Child one ships with **done** status."
+M1,M1 Child,ScopeD,2,Seg2,MID,,2,now,"# M1 Child - Level 2
 
-Release notes roundtrip with a short paragraph.
+This step is `in progress`."
+M1,M1 Child,,2,Seg2,MID,,3,next,"# M1 Child - Level 3
 
-1. first item
-2. second item"
-M1,Medium Child One,Frontend,2,Delivery,MID,,1,done,"# Medium Child One
+Quality remains active."
+M2,M2 Child,ScopeE,2,Seg3,MID,,1,now,"# M2 Child - Level 1
 
-Child one ships with **done** status.
+Data work is underway."
+M2,M2 Child,,2,Seg3,MID,,2,next,"# M2 Child - Level 2
 
-- frontend tasks
-- backend follow-up"
-M1,Medium Child One,Backend,2,Delivery,MID,,2,now,"# Medium Child One - Backend
+Ops notes are pending."
+M3,M3 Child,,2,Seg4,M1,,1,later,"M3 Level 1"
+M3,M3 Child,ScopeA,2,Seg4,M1,,2,done,"M3 Level 2"
+M4,M4 Child,ScopeB,2,Seg5,M2,,1,now,"# M4 Child - Level 1
 
-This backend step is `in progress`.
-
-Needs review before merge."
-M1,Medium Child One,Quality,2,Delivery,MID,,3,next,"# Medium Child One - Quality
-
-Quality gating remains:
-
-- smoke test
-- docs check"
-M2,Medium Child Two,Data,2,Reliability,MID,,1,now,"# Medium Child Two
-
-Data work is underway.
-
-Line breaks should survive import."
-M2,Medium Child Two,Operations,2,Reliability,MID,,2,next,"# Medium Child Two - Operations
-
-Ops notes:
-
-- rollout window
-- monitoring"
-M2,Medium Child Two,Security,2,Reliability,MID,,3,later,"# Medium Child Two - Security
-
-Security tasks are pending.
-
-This line has  two  spaces intentionally."
+Final child node."
+M4,M4 Child,,2,Seg5,M2,,2,next,"M4 Level 2"

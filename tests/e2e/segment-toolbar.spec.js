@@ -25,22 +25,27 @@ test.describe('Segments – toolbar manager', () => {
     // Click the add button (accessible label used by the manager)
     await page.getByRole('button', { name: 'Segment hinzufügen' }).filter({ visible: true }).first().click()
 
-    // Capture panel HTML and persisted document immediately for debugging
-    const panelHtml = await page.locator('.skill-panel--segments').first().innerHTML()
-    console.log('SEGMENT_PANEL_HTML:', panelHtml.slice(0, 2000))
-
-    const persisted = await page.evaluate(() => localStorage.getItem('roadmap-skilltree.document.v1'))
-    console.log('PERSISTED_DOCUMENT:', persisted ? persisted.slice(0, 2000) : persisted)
-
     // Then wait until the manager panel displays the new segment label
     await page.locator('.skill-panel--segments').getByText(label).first().waitFor({ timeout: 5_000 })
 
-    // Also verify it's present in persisted document (best-effort)
+    // Autosave is debounced, so wait until localStorage reflects the new segment.
+    await page.waitForFunction((expectedLabel) => {
+      try {
+        const persisted = JSON.parse(localStorage.getItem('roadmap-skilltree.document.v1') || '{}')
+        const document = persisted?.document ?? persisted
+        const labels = Array.isArray(document?.segments) ? document.segments.map((s) => String(s?.label ?? '')) : []
+        return labels.includes(expectedLabel)
+      } catch {
+        return false
+      }
+    }, label, { timeout: 10_000 })
+
     const labels = await page.evaluate(() => {
       try {
-        const doc = JSON.parse(localStorage.getItem('roadmap-skilltree.document.v1') || '{}')
-        return Array.isArray(doc.segments) ? doc.segments.map((s) => s.label) : []
-      } catch (e) {
+        const persisted = JSON.parse(localStorage.getItem('roadmap-skilltree.document.v1') || '{}')
+        const document = persisted?.document ?? persisted
+        return Array.isArray(document?.segments) ? document.segments.map((s) => s.label) : []
+      } catch {
         return []
       }
     })

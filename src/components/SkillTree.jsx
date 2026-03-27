@@ -1492,11 +1492,10 @@ export function SkillTree() {
         commitDocument(nextTree)
       }
 
-      if (createdSegmentId) {
-        selectNodeId(null)
-        selectSegmentId(createdSegmentId)
-        setSelectedPortalKey(null)
-      }
+      // Do NOT auto-select the created segment.
+      // The segment manager should stay open and let the user create or edit more segments
+      // without being unmounted by the selection state reset.
+      // Manual selection (if desired) happens via UI interaction, not auto-selection.
 
       return { ok: true }
       } catch {

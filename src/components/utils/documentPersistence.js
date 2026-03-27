@@ -1,5 +1,10 @@
 export const DOCUMENT_SCHEMA_VERSION = 1
 export const LOCAL_STORAGE_DOCUMENT_KEY = 'roadmap-skilltree.document.v1'
+const LOCAL_STORAGE_TRACE_KEYS = [
+  'roadmap-skilltree.e2e.modelTrace',
+  'roadmap-skilltree.e2e.modelTraceLast',
+  'roadmap-skilltree.e2e.scopeTrace',
+]
 
 const isObject = (value) => typeof value === 'object' && value !== null
 
@@ -16,8 +21,34 @@ export const buildPersistedDocumentPayload = (document) => ({
   document,
 })
 
-export const serializeDocumentPayload = (document) =>
-  JSON.stringify(buildPersistedDocumentPayload(document), null, 2)
+export const serializeDocumentPayload = (document, options = {}) => {
+  const { pretty = false } = options
+  return JSON.stringify(buildPersistedDocumentPayload(document), null, pretty ? 2 : 0)
+}
+
+const isQuotaExceededError = (err) => {
+  if (!err || typeof err !== 'object') {
+    return false
+  }
+
+  const name = typeof err.name === 'string' ? err.name : ''
+  const code = Number(err.code)
+  return name === 'QuotaExceededError' || code === 22 || code === 1014
+}
+
+const cleanupStorageTraceKeys = (storage) => {
+  if (!storage || typeof storage.removeItem !== 'function') {
+    return
+  }
+
+  for (const key of LOCAL_STORAGE_TRACE_KEYS) {
+    try {
+      storage.removeItem(key)
+    } catch {
+      // Ignore cleanup failures and continue best-effort.
+    }
+  }
+}
 
 export const parseDocumentPayload = (rawValue) => {
   if (typeof rawValue !== 'string' || rawValue.length === 0) {
@@ -69,13 +100,24 @@ export const saveDocumentToLocalStorage = (document, storage = globalThis?.local
     return false
   }
 
+  const serialized = serializeDocumentPayload(document)
+
   try {
-    storage.setItem(LOCAL_STORAGE_DOCUMENT_KEY, serializeDocumentPayload(document))
+    storage.setItem(LOCAL_STORAGE_DOCUMENT_KEY, serialized)
     return true
   } catch (err) {
+    if (isQuotaExceededError(err)) {
+      cleanupStorageTraceKeys(storage)
+
+      try {
+        storage.setItem(LOCAL_STORAGE_DOCUMENT_KEY, serialized)
+        return true
+      } catch {
+        // Retry failed, fall through to warning below.
+      }
+    }
+
     // Fail gracefully if storage quota is exceeded or other storage errors occur.
-    // Tests will detect persistence failures via other means if required.
-     
     console.warn('saveDocumentToLocalStorage failed:', err)
     return false
   }
@@ -100,7 +142,7 @@ export const downloadDocumentJson = (roadmapDocument, fileName = 'skilltree-road
     return false
   }
 
-  const json = serializeDocumentPayload(roadmapDocument)
+  const json = serializeDocumentPayload(roadmapDocument, { pretty: true })
   const blob = new Blob([json], { type: 'application/json;charset=utf-8' })
   const url = window.URL.createObjectURL(blob)
   const link = window.document.createElement('a')

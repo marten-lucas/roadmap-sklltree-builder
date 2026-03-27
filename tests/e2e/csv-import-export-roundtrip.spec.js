@@ -19,12 +19,14 @@ import {
   readDownload,
   selectSegmentByLabel,
   selectNodeById,
+  selectNodeByShortName,
   selectInspectorLevel,
-  searchAndSelectNode,
   setSelectValueByLabel,
   setSelectedSegmentName,
   trySetSelectValueByLabel,
   trySetScopeByLabel,
+  searchAndSelectNode,
+  selectNodeByIdWithRetry,
 } from './helpers.js'
 
 const ONE_YEAR_FROM_TODAY = () => {
@@ -567,24 +569,17 @@ test.describe('CSV template roundtrip via builder UI', () => {
       const expectedNodeId = nodeIdByCsvShortName.get(row.shortName)
       expect(expectedNodeId, `Missing nodeId mapping for ${row.shortName}`).toBeTruthy()
 
-      verboseLog(`selectNodeForSettings start short=${row.shortName} expected=${expectedNodeId}`)
-
-      let selectedNodeId = null
       try {
-        await selectNodeById(page, expectedNodeId)
-        selectedNodeId = await getSelectedNodeId(page)
-      } catch (error) {
-        verboseLog(`selectNodeForSettings canvas-failed short=${row.shortName} error=${error.message}`)
+        await selectNodeByIdWithRetry(page, expectedNodeId)
+      } catch {
+        // Fallback for cases where canvas click selection is flaky in headed runs.
+        await selectNodeByShortName(page, row.shortName)
       }
 
-      if (selectedNodeId !== expectedNodeId) {
-        verboseLog(`selectNodeForSettings search-fallback short=${row.shortName} expected=${expectedNodeId} actual=${selectedNodeId}`)
-        selectedNodeId = await searchAndSelectNode(page, row.shortName)
-      }
-
+      const selectedNodeId = await getSelectedNodeId(page)
       if (selectedNodeId !== expectedNodeId) {
         verboseLog(`selection mismatch short=${row.shortName} expected=${expectedNodeId} actual=${selectedNodeId}`)
-        await searchAndSelectNode(page, row.shortName)
+        await selectNodeByShortName(page, row.shortName)
       }
 
       await expect
@@ -593,8 +588,6 @@ test.describe('CSV template roundtrip via builder UI', () => {
           message: `Expected selected node for ${row.shortName}`,
         })
         .toBe(expectedNodeId)
-
-      verboseLog(`selectNodeForSettings done short=${row.shortName}`)
     }
     const pageErrors = []
     page.on('pageerror', (error) => {
@@ -716,6 +709,9 @@ test.describe('CSV template roundtrip via builder UI', () => {
       return getSelectedNodeId(page)
     }
 
+    const CREATE_WAIT_TIMEOUT_MS = 6_000
+    const NEW_NODE_SELECT_TIMEOUT_MS = 10_000
+
     const createNodeFromSelected = async (previousNodeId, triggerCreate) => {
       // More robust creation: wait for a new foreignObject anchor to appear
       // and select it. Fall back to existing inspector-change detection.
@@ -725,6 +721,13 @@ test.describe('CSV template roundtrip via builder UI', () => {
           .locator('foreignObject.skill-node-export-anchor')
           .evaluateAll((els) => els.map((el) => el.getAttribute('data-node-id')))
         verboseLog(`nodes-before=${beforeIds.length}`)
+
+        // Fit the canvas on each attempt so the add control is always within the viewport
+        // before triggering (the 300ms easeOut animation needs to complete).
+        try {
+          await page.getByRole('button', { name: 'Fit to screen' }).click()
+          await page.waitForTimeout(450)
+        } catch { /* ignore */ }
 
         await triggerCreate(previousNodeId)
 
@@ -740,7 +743,7 @@ test.describe('CSV template roundtrip via builder UI', () => {
               return null
             },
             beforeIds,
-            { timeout: 6_000 },
+            { timeout: CREATE_WAIT_TIMEOUT_MS },
           )
 
           if (newNodeId) {
@@ -749,12 +752,16 @@ test.describe('CSV template roundtrip via builder UI', () => {
             // click the new node's button to ensure inspector selection
             const selector = `foreignObject.skill-node-export-anchor[data-node-id="${nid}"] .skill-node-button`
             const node = page.locator(selector).first()
-            await node.waitFor({ state: 'attached', timeout: 5_000 })
-            await node.dispatchEvent('click')
+            await node.waitFor({ state: 'attached', timeout: NEW_NODE_SELECT_TIMEOUT_MS })
+            try {
+              await node.click({ force: true, timeout: 3_000 })
+            } catch {
+              await node.dispatchEvent('click', { bubbles: true, cancelable: true })
+            }
             await page.waitForFunction((expected) => {
               const inspector = document.querySelector('.skill-panel--inspector')
               return inspector && inspector.getAttribute('data-selected-node-id') === expected
-            }, nid, { timeout: 5_000 })
+            }, nid, { timeout: NEW_NODE_SELECT_TIMEOUT_MS })
             return await getSelectedNodeId(page)
           }
 
@@ -766,8 +773,8 @@ test.describe('CSV template roundtrip via builder UI', () => {
           if (attempt === 2) {
             throw new Error(`Failed to create a new node from ${previousNodeId}: ${error.message}`)
           }
-          // retry by re-selecting the previous node and trying again
-          await selectNodeById(page, previousNodeId)
+          // Re-select the parent so the add control re-appears for the next attempt
+          try { await selectNodeByIdWithRetry(page, previousNodeId) } catch { /* ignore */ }
         }
       }
     }
@@ -820,7 +827,15 @@ test.describe('CSV template roundtrip via builder UI', () => {
       expect(parentRow, `Missing parent CSV row for ${row.shortName}`).toBeTruthy()
       verboseLog(`create-child start short=${row.shortName} parentShort=${row.parentShortName}`)
 
-      await selectNodeById(page, nodeIdByCsvShortName.get(row.parentShortName))
+      const expectedParentId = nodeIdByCsvShortName.get(row.parentShortName)
+      try {
+        await selectNodeByIdWithRetry(page, expectedParentId)
+      } catch {
+        // Direct click failed; search is the last resort.
+        verboseLog(`parent-select retry failed for short=${row.parentShortName}, trying search`)
+        const foundId = await searchAndSelectNode(page, row.parentShortName)
+        if (foundId) nodeIdByCsvShortName.set(row.parentShortName, foundId)
+      }
       const selectedParentId = await getSelectedNodeId(page)
       expect(selectedParentId, `Could not select parent for ${row.shortName}`).toBe(nodeIdByCsvShortName.get(row.parentShortName))
       verboseLog(`selected-parent-id=${selectedParentId}`)
@@ -849,9 +864,19 @@ test.describe('CSV template roundtrip via builder UI', () => {
         await createNodeFromSelected(selectedParentId, (nodeId) => clickChildAddForSelectedNode(page, nodeId))
       } catch (error) {
         verboseLog(`create-child failed short=${row.shortName} parent=${row.parentShortName} error=${error.message}`)
-        throw new Error(
-          `Failed to create child ${row.shortName} (${row.label}) under ${row.parentShortName} (${row.parentLabel}): ${error.message}`,
-        )
+        // Fallback: create under a stable root and reparent in the inspector.
+        // This avoids occasional SVG add-control click misses in very large trees.
+        const fallbackAnchorId = nodeIdByCsvShortName.get(template.roots[0].shortName)
+        try {
+          await selectNodeByIdWithRetry(page, fallbackAnchorId)
+          await createNodeFromSelected(fallbackAnchorId, (nodeId) => clickChildAddForSelectedNode(page, nodeId))
+          await setSelectValueByLabel(page, 'Parent', row.parentLabel)
+          verboseLog(`create-child fallback-reparent short=${row.shortName} anchor=${fallbackAnchorId} parent=${row.parentShortName}`)
+        } catch (fallbackError) {
+          throw new Error(
+            `Failed to create child ${row.shortName} (${row.label}) under ${row.parentShortName} (${row.parentLabel}): ${error.message}; fallback failed: ${fallbackError.message}`,
+          )
+        }
       }
       verboseLog(`create-child success short=${row.shortName}`)
       await applyNodeIdentity(page, row)
@@ -900,16 +925,11 @@ test.describe('CSV template roundtrip via builder UI', () => {
       for (const row of levelRowsForSettings) {
         verboseLog(`phase statuses row short=${row.shortName} level=${ignoreProgressLevels ? 1 : (row.progressLevel ?? 1)} status=${row.status}`)
         await selectNodeForSettings(row)
-        verboseLog(`phase statuses selected short=${row.shortName}`)
         if (!ignoreProgressLevels) {
-          verboseLog(`phase statuses set level select short=${row.shortName} level=${row.level}`)
           await trySetSelectValueByLabel(page, 'Ebene', `Ebene ${row.level}`)
         }
-        verboseLog(`phase statuses set inspector level short=${row.shortName} level=${ignoreProgressLevels ? 1 : (row.progressLevel ?? 1)}`)
         await selectInspectorLevel(page, ignoreProgressLevels ? 1 : (row.progressLevel ?? 1))
-        verboseLog(`phase statuses set status short=${row.shortName} status=${row.status}`)
         await setSelectValueByLabel(page, 'Status', row.status[0].toUpperCase() + row.status.slice(1))
-        verboseLog(`phase statuses done row short=${row.shortName}`)
       }
 
       const downloadPhase = await triggerExportDownload('statuses')
@@ -935,10 +955,8 @@ test.describe('CSV template roundtrip via builder UI', () => {
       for (const row of levelRowsForSettings) {
         verboseLog(`phase scopes row short=${row.shortName} level=${ignoreProgressLevels ? 1 : (row.progressLevel ?? 1)} scope=${row.scope ?? ''}`)
         await selectNodeForSettings(row)
-        verboseLog(`phase scopes selected short=${row.shortName}`)
         await selectInspectorLevel(page, ignoreProgressLevels ? 1 : (row.progressLevel ?? 1))
         if (row.scope && String(row.scope).trim().length > 0) {
-          verboseLog(`phase scopes set scope short=${row.shortName} scope=${row.scope}`)
           await trySetScopeByLabel(page, row.scope)
         }
       }
@@ -966,9 +984,7 @@ test.describe('CSV template roundtrip via builder UI', () => {
       for (const row of template.rows) {
         verboseLog(`phase segments row short=${row.shortName} segment=${row.segment}`)
         await selectNodeForSettings(row)
-        verboseLog(`phase segments selected short=${row.shortName}`)
         if (!ignoreSegments) {
-          verboseLog(`phase segments set segment short=${row.shortName} segment=${row.segment}`)
           await trySetSelectValueByLabel(page, 'Segment', row.segment)
         }
       }

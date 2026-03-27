@@ -426,7 +426,7 @@ export const getE2eExportDir = () => resolve(
 
 const getVisibleLocator = (locator) => locator.filter({ visible: true })
 
-const clickSvgControl = async (control) => {
+const clickSvgControl = async (control, page = null) => {
   let lastError = null
 
   for (let attempt = 0; attempt < 3; attempt += 1) {
@@ -437,16 +437,29 @@ const clickSvgControl = async (control) => {
       return
     } catch (error) {
       lastError = error
-      // Fallback for SVG groups that sometimes ignore pointer click in headed mode.
-      try {
-        await control.dispatchEvent('click')
-        return
-      } catch {
-        // Retry after a short delay.
-      }
-
-      await new Promise((resolve) => setTimeout(resolve, 180))
     }
+
+    // Fallback: absolute viewport coordinates bypass zoom/pan transform quirks in SVG canvas
+    if (page) {
+      try {
+        const bbox = await control.boundingBox()
+        if (bbox && bbox.width > 0 && bbox.height > 0) {
+          await page.mouse.click(bbox.x + bbox.width / 2, bbox.y + bbox.height / 2)
+          return
+        }
+      } catch {
+        // fall through to dispatchEvent
+      }
+    }
+
+    // Last resort: synthetic event (may not reach all React handlers)
+    try {
+      await control.dispatchEvent('click', { bubbles: true, cancelable: true })
+    } catch {
+      // ignore
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 180))
   }
 
   throw lastError ?? new Error('Failed to click SVG control')
@@ -459,6 +472,10 @@ export const confirmAndReset = async (page) => {
 
 export const waitForInspector = async (page) => {
   await page.waitForSelector('.skill-panel--inspector', { timeout: 30_000 })
+}
+
+const waitForInspectorWithTimeout = async (page, timeout) => {
+  await page.waitForSelector('.skill-panel--inspector', { timeout })
 }
 
 const waitForSelectedNodeId = async (page, nodeId) => {
@@ -478,7 +495,7 @@ export const selectNodeByShortName = async (page, shortName) => {
 
   try {
     await directNode.waitFor({ state: 'visible', timeout: 10_000 })
-    await directNode.click()
+    await directNode.click({ timeout: 5_000 })
     const directSelectedNodeId = await getSelectedNodeId(page)
     if (directSelectedNodeId) {
       await waitForSelectedNodeId(page, directSelectedNodeId)
@@ -495,7 +512,15 @@ export const selectNodeByShortName = async (page, shortName) => {
 }
 
 export const selectNodeById = async (page, nodeId) => {
-  const node = page.locator(`foreignObject.skill-node-export-anchor[data-node-id="${escapeCssAttribute(nodeId)}"] .skill-node-button`).first()
+  const nodeSelector = `foreignObject.skill-node-export-anchor[data-node-id="${escapeCssAttribute(nodeId)}"] .skill-node-button`
+  const node = page.locator(nodeSelector).first()
+  
+  // Ensure the node exists before attempting to click
+  const nodeExists = await node.count()
+  if (nodeExists === 0) {
+    throw new Error(`Node with id ${nodeId} not found in DOM`)
+  }
+  
   await node.waitFor({ state: 'attached', timeout: 10_000 })
 
   let clicked = false
@@ -517,12 +542,89 @@ export const selectNodeById = async (page, nodeId) => {
   }
 
   if (!clicked) {
-    throw new Error(`Could not select node by id: ${nodeId}`)
+    throw new Error(`Could not click node by id: ${nodeId}`)
   }
 
   await waitForInspector(page)
-  await waitForSelectedNodeId(page, nodeId)
+  
+  // Wait for the inspector to show the correct node ID
+  try {
+    await page.waitForFunction(
+      (expectedId) => {
+        const inspector = document.querySelector('.skill-panel--inspector')
+        if (!inspector) return null
+        const actualId = inspector.getAttribute('data-selected-node-id')
+        return actualId === expectedId ? actualId : null
+      },
+      nodeId,
+      { timeout: 30_000 }
+    )
+  } catch (error) {
+    // Provide better diagnostic info on timeout
+    const inspectorNode = await page.locator('.skill-panel--inspector').first()
+    const actualSelectedId = await inspectorNode.getAttribute('data-selected-node-id')
+    throw new Error(
+      `selectNodeById timeout for node ${nodeId}. ` +
+      `Inspector shows: ${actualSelectedId ?? 'null'}. ` +
+      `Node in DOM: ${nodeExists > 0 ? 'yes' : 'no'}. ` +
+      `Original error: ${error.message}`
+    )
+  }
 }
+
+// Retry-aware version of selectNodeById that handles timing issues in large DOM trees
+export const selectNodeByIdWithRetry = async (page, nodeId) => {
+    let lastError = null
+  
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      try {
+        const nodeSelector = `foreignObject.skill-node-export-anchor[data-node-id="${escapeCssAttribute(nodeId)}"] .skill-node-button`
+        const node = page.locator(nodeSelector).first()
+        const nodeExists = await node.count()
+      
+        if (nodeExists === 0) {
+          throw new Error(`Node ${nodeId} not in DOM`)
+        }
+      
+        await node.waitFor({ state: 'attached', timeout: 5_000 })
+      
+        // Try to click
+        try {
+          await node.scrollIntoViewIfNeeded()
+          await node.click({ force: true, timeout: 3_000 })
+        } catch {
+          try {
+            await node.dispatchEvent('click')
+          } catch (dispatchErr) {
+            throw new Error(`Click failed: ${dispatchErr.message}`)
+          }
+        }
+      
+        // Wait for selection to update
+        await page.waitForFunction(
+          (expectedId) => {
+            const inspector = document.querySelector('.skill-panel--inspector')
+            return inspector && inspector.getAttribute('data-selected-node-id') === expectedId
+          },
+          nodeId,
+          { timeout: 5_000 }
+        )
+      
+        return  // Success
+      } catch (error) {
+        lastError = error
+        if (attempt < 2) {
+          await page.waitForTimeout(150)
+        }
+      }
+    }
+  
+    // Failed after all retries
+    const actualId = await page.locator('.skill-panel--inspector').first().getAttribute('data-selected-node-id')
+    throw new Error(
+      `selectNodeById failed for ${nodeId} (inspector shows ${actualId}): ${lastError.message}`
+    )
+  }
 
 export const getSelectedNodeId = async (page) => {
   const inspector = page.locator('.skill-panel--inspector').first()
@@ -536,7 +638,7 @@ export const selectInspectorLevel = async (page, level = 1) => {
 
   const tab = inspector.getByRole('tab', { name: `L${level}` })
   if (await tab.count() > 0) {
-    await tab.first().click()
+    await tab.first().click({ timeout: 5_000 })
   }
 }
 
@@ -561,12 +663,12 @@ export const searchAndSelectNode = async (page, query) => {
   const option = page.getByRole('option').filter({ visible: true }).first()
   try {
     await option.waitFor({ state: 'visible', timeout: 5_000 })
-    await option.click()
+    await option.click({ timeout: 5_000 })
   } catch {
     const normalizedShortName = normalizeShortNameLikeApp(q, q)
     const fallbackNode = page.locator(`foreignObject.skill-node-export-anchor[data-short-name="${normalizedShortName}"] .skill-node-button`).first()
     await fallbackNode.waitFor({ state: 'visible', timeout: 10_000 })
-    await fallbackNode.click()
+    await fallbackNode.click({ timeout: 5_000 })
   }
 
   const selectedNodeId = await getSelectedNodeId(page)
@@ -588,7 +690,7 @@ export const clickInitialSegmentAddControl = async (page) => {
   const control = getVisibleLocator(
     page.locator('svg.skill-tree-canvas g[data-add-control="segment-initial"]'),
   ).first()
-  await clickSvgControl(control)
+  await clickSvgControl(control, page)
   await page.waitForSelector('.skill-panel--segment', { timeout: 10_000 })
 }
 
@@ -596,7 +698,7 @@ export const clickSegmentAddNearSelected = async (page) => {
   const control = getVisibleLocator(
     page.locator('svg.skill-tree-canvas g[data-add-control="segment-near"][data-direction="right"]'),
   ).first()
-  await clickSvgControl(control)
+  await clickSvgControl(control, page)
   await page.waitForSelector('.skill-panel--segment', { timeout: 10_000 })
 }
 
@@ -617,7 +719,7 @@ export const clickInitialRootAddControl = async (page) => {
   const control = getVisibleLocator(
     page.locator('svg.skill-tree-canvas g[data-add-control="root-initial"]'),
   ).first()
-  await clickSvgControl(control)
+  await clickSvgControl(control, page)
   await waitForInspector(page)
 }
 
@@ -628,7 +730,7 @@ export const clickRootAddNearSelected = async (page, anchorNodeId = null) => {
       `svg.skill-tree-canvas g[data-add-control="root-near"][data-node-id="${escapeCssAttribute(selectedNodeId)}"][data-direction="right"]`,
     ),
   ).first()
-  await clickSvgControl(control)
+  await clickSvgControl(control, page)
   await waitForInspector(page)
 }
 
@@ -640,19 +742,31 @@ export const clickRootAddNearSelectedWithDirection = async (page, direction, anc
       `svg.skill-tree-canvas g[data-add-control="root-near"][data-node-id="${escapeCssAttribute(selectedNodeId)}"][data-direction="${safeDirection}"]`,
     ),
   ).first()
-  await clickSvgControl(control)
+  await clickSvgControl(control, page)
   await waitForInspector(page)
 }
 
 export const clickChildAddForSelectedNode = async (page, anchorNodeId = null) => {
   const selectedNodeId = anchorNodeId ?? await getSelectedNodeId(page)
-  const control = getVisibleLocator(
-    page.locator(
-      `svg.skill-tree-canvas g[data-add-control="child"][data-root-id="${escapeCssAttribute(selectedNodeId)}"]`,
-    ),
-  ).first()
-  await clickSvgControl(control)
-  await waitForInspector(page)
+  const selector = `svg.skill-tree-canvas g[data-add-control="child"][data-root-id="${escapeCssAttribute(selectedNodeId)}"]`
+  const control = getVisibleLocator(page.locator(selector)).first()
+
+  // First try: CDP-level click (works at normal zoom levels)
+  await clickSvgControl(control, page)
+
+  // Second try: in-browser dispatchEvent on the exact SVG element.
+  // This bypasses CDP coordinate issues at extreme zoom levels (the element may be
+  // physically tiny or slightly outside the visual viewport after CSS transform).
+  // React 19 delegates events at the root container, so a bubbling MouseEvent IS received.
+  await page.evaluate((sel) => {
+    const el = document.querySelector(sel)
+    if (el) {
+      el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, composed: true }))
+    }
+  }, selector)
+
+  // Use a short timeout so failed clicks fail fast (6s) rather than waiting 30s each attempt
+  await waitForInspectorWithTimeout(page, 6_000)
 }
 
 export const getVisibleChildAddControlCountForNode = async (page, anchorNodeId) => {
@@ -663,15 +777,19 @@ export const getVisibleChildAddControlCountForNode = async (page, anchorNodeId) 
   ).count()
 }
 
-export const setSelectValueByLabel = async (page, label, option) => {
+export const setSelectValueByLabel = async (page, label, option, timeout = 5_000) => {
+  await waitForInspectorWithTimeout(page, timeout)
   const inspector = page.locator('.skill-panel--inspector')
-  const field = inspector.getByLabel(label, { exact: true })
-  await field.click()
-  await page
+  const field = inspector.getByLabel(label, { exact: true }).first()
+  await field.waitFor({ state: 'visible', timeout })
+  await field.click({ timeout })
+
+  const optionLocator = page
     .getByRole('option', { name: option, exact: true })
     .filter({ visible: true })
     .first()
-    .click({ force: true, timeout: 5_000 })
+  await optionLocator.waitFor({ state: 'visible', timeout })
+  await optionLocator.click({ force: true, timeout })
 }
 
 export const ensureScopesExist = async (page, scopeLabels) => {

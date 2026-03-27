@@ -3,6 +3,23 @@ import { generateUUID } from './uuid'
 
 const DEFAULT_NODE_LABEL = 'Neuer Skill'
 const DEFAULT_NODE_STATUS = 'later'
+const E2E_TRACE_ENABLED_KEY = 'roadmap-skilltree.e2e.traceEnabled'
+const E2E_MODEL_TRACE_KEY = 'roadmap-skilltree.e2e.modelTrace'
+const E2E_MODEL_TRACE_LAST_KEY = 'roadmap-skilltree.e2e.modelTraceLast'
+const MAX_MODEL_TRACE_ENTRIES = 200
+const MAX_MODEL_TRACE_BYTES = 256 * 1024
+
+const isModelTraceEnabled = () => {
+  if (typeof window === 'undefined' || !window?.localStorage) {
+    return false
+  }
+
+  try {
+    return window.localStorage.getItem(E2E_TRACE_ENABLED_KEY) === '1'
+  } catch {
+    return false
+  }
+}
 
 const toNodeLevel = (levelLike, fallbackLabel = 'Level 1') => ({
   id: levelLike?.id ?? generateUUID(),
@@ -140,19 +157,31 @@ const normalizeScopeAssignments = (tree) => {
 
 const appendModelTrace = (entry) => {
   try {
+    if (!isModelTraceEnabled()) {
+      return
+    }
+
     if (typeof window === 'undefined' || !window?.localStorage) return
-    const key = 'roadmap-skilltree.e2e.modelTrace'
-    const raw = window.localStorage.getItem(key) || '[]'
+    const raw = window.localStorage.getItem(E2E_MODEL_TRACE_KEY) || '[]'
     const arr = JSON.parse(raw)
     arr.push(entry)
-    // keep it bounded to avoid unbounded growth
-    if (arr.length > 2000) arr.splice(0, arr.length - 2000)
-    window.localStorage.setItem(key, JSON.stringify(arr))
+    // Keep trace bounded by both entries and serialized byte size.
+    if (arr.length > MAX_MODEL_TRACE_ENTRIES) {
+      arr.splice(0, arr.length - MAX_MODEL_TRACE_ENTRIES)
+    }
+
+    let serialized = JSON.stringify(arr)
+    while (serialized.length > MAX_MODEL_TRACE_BYTES && arr.length > 1) {
+      arr.shift()
+      serialized = JSON.stringify(arr)
+    }
+
+    window.localStorage.setItem(E2E_MODEL_TRACE_KEY, serialized)
     // also persist the latest entry under a dedicated key so E2E helpers
     // can quickly fetch the most recent model change and to reduce the
     // chance of empty/partial modelTrace reads
     try {
-      window.localStorage.setItem('roadmap-skilltree.e2e.modelTraceLast', JSON.stringify(entry))
+      window.localStorage.setItem(E2E_MODEL_TRACE_LAST_KEY, JSON.stringify(entry))
     } catch (e) {
       // ignore secondary write failures
     }
