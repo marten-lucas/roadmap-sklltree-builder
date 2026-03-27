@@ -746,6 +746,14 @@ export const clickRootAddNearSelectedWithDirection = async (page, direction, anc
   await waitForInspector(page)
 }
 
+export const getVisibleRootAddControlCountForNode = async (page, anchorNodeId) => {
+  return getVisibleLocator(
+    page.locator(
+      `svg.skill-tree-canvas g[data-add-control="root-near"][data-node-id="${escapeCssAttribute(anchorNodeId)}"]`,
+    ),
+  ).count()
+}
+
 export const clickChildAddForSelectedNode = async (page, anchorNodeId = null) => {
   const selectedNodeId = anchorNodeId ?? await getSelectedNodeId(page)
   const selector = `svg.skill-tree-canvas g[data-add-control="child"][data-root-id="${escapeCssAttribute(selectedNodeId)}"]`
@@ -1163,3 +1171,214 @@ export const buildExpectedNodeMapFromRows = (rows, options = {}) => {
 }
 
 export const resolveWorkspacePath = (...parts) => resolve(process.cwd(), ...parts)
+
+/**
+ * Extracts layout geometry metrics from a static HTML export string.
+ * Works in Node.js without a browser — useful for post-analysis of saved exports.
+ *
+ * Returns:
+ *   { svgWidth, svgHeight, maxRadius, usedAngleSpanDeg, nodeCount, linkCount }
+ */
+export const extractLayoutMetrics = (htmlText) => {
+  const text = String(htmlText ?? '')
+
+  // Locate the main tree canvas SVG (large one; skip tiny icon SVGs)
+  let svgWidth = 0
+  let svgHeight = 0
+  for (const m of text.matchAll(/<svg[^>]*width="(\d+(?:\.\d+)?)"[^>]*height="(\d+(?:\.\d+)?)"[^>]*>/g)) {
+    const w = parseFloat(m[1])
+    if (w > 500) {
+      svgWidth = w
+      svgHeight = parseFloat(m[2])
+      break
+    }
+  }
+
+  // Halo circle: <circle cx="{ox}" cy="{oy}" r="{maxRadius+160}" fill="url(#nodeHalo)"/>
+  const haloMatch = text.match(/<circle cx="([^"]+)" cy="([^"]+)" r="([^"]+)" fill="url\(#nodeHalo\)"/)
+  const ox = haloMatch ? parseFloat(haloMatch[1]) : null
+  const oy = haloMatch ? parseFloat(haloMatch[2]) : null
+  const maxRadius = haloMatch ? Math.round((parseFloat(haloMatch[3]) - 160) * 10) / 10 : 0
+
+  // Collect node foreignObject positions
+  const xs = []
+  const ys = []
+  const widths = []
+  const heights = []
+  for (const m of text.matchAll(/<foreignObject([^>]+)>/g)) {
+    const tag = m[1]
+    if (!tag.includes('skill-node-export-anchor')) continue
+    const xm = tag.match(/\bx="([^"]+)"/)
+    const ym = tag.match(/\by="([^"]+)"/)
+    const wm = tag.match(/\bwidth="([^"]+)"/)
+    const hm = tag.match(/\bheight="([^"]+)"/)
+    if (xm && ym) {
+      xs.push(parseFloat(xm[1]))
+      ys.push(parseFloat(ym[1]))
+      if (wm) widths.push(parseFloat(wm[1]))
+      if (hm) heights.push(parseFloat(hm[1]))
+    }
+  }
+
+  const nodeSize = widths[0] ?? 88
+  let usedAngleSpanDeg = 0
+  if (ox != null && xs.length > 1) {
+    const angles = xs.map((x, i) =>
+      Math.atan2(ys[i] + (heights[i] ?? nodeSize) / 2 - oy, x + nodeSize / 2 - ox) * 180 / Math.PI,
+    )
+    usedAngleSpanDeg = Math.round((Math.max(...angles) - Math.min(...angles)) * 10) / 10
+  }
+
+  const linkCount = (text.match(/data-link-source-id=/g) ?? []).length
+
+  return {
+    svgWidth,
+    svgHeight,
+    maxRadius,
+    centerRadius: maxRadius,
+    usedAngleSpanDeg,
+    usedAngleDeg: usedAngleSpanDeg,
+    nodeCount: xs.length,
+    linkCount,
+  }
+}
+
+/**
+ * Classifies exported SVG link paths using simple path-shape heuristics.
+ * - ring: arc-only level-1 ring connectors
+ * - direct: straight radial-ish links with a single line segment
+ * - routed: links that combine lines and arcs / multi-stage routing
+ */
+export const extractConnectionMetrics = (htmlText) => {
+  const text = String(htmlText ?? '')
+  const paths = [...text.matchAll(/<path d="([^"]+)" data-link-source-id="([^"]*)" data-link-target-id="([^"]*)"/g)]
+    .map((match) => match[1])
+
+  let ringCount = 0
+  let directCount = 0
+  let routedCount = 0
+
+  for (const path of paths) {
+    const hasLine = /\bL\b/.test(path)
+    const arcMatches = path.match(/\bA\b/g) ?? []
+    const arcCount = arcMatches.length
+
+    if (!hasLine && arcCount >= 1) {
+      ringCount += 1
+      continue
+    }
+
+    if (hasLine && arcCount === 0) {
+      directCount += 1
+      continue
+    }
+
+    routedCount += 1
+  }
+
+  return {
+    linkCount: paths.length,
+    ringCount,
+    directCount,
+    routedCount,
+  }
+}
+
+/**
+ * Collects layout geometry metrics from the live builder canvas.
+ * Must be called while the skill-tree canvas SVG is visible in the page.
+ *
+ * Returns:
+ *   { canvasWidth, canvasHeight, centerX, centerY, maxRadius, nodeAngleSpread }
+ */
+export const collectCanvasGeometryMetrics = async (page) => {
+  return page.evaluate(() => {
+    const normalizeDeg = (deg) => {
+      const normalized = deg % 360
+      return normalized < 0 ? normalized + 360 : normalized
+    }
+
+    const canvas = document.querySelector('svg.skill-tree-canvas')
+    if (!canvas) {
+      return {
+        canvasWidth: 0,
+        canvasHeight: 0,
+        centerX: 0,
+        centerY: 0,
+        maxRadius: 0,
+        nodeAngleSpread: 0,
+      }
+    }
+
+    const viewBox = canvas.getAttribute('viewBox')?.split(/\s+/).map(Number) ?? [0, 0, 0, 0]
+    const canvasWidth = Number(viewBox[2] ?? 0)
+    const canvasHeight = Number(viewBox[3] ?? 0)
+
+    const centerGroup = document.querySelector('.skill-tree-center-icon')
+    const transform = centerGroup?.getAttribute('transform') ?? ''
+    const match = transform.match(/translate\(([-\d.]+),\s*([-\d.]+)\)/)
+    const centerX = match ? Number(match[1]) : canvasWidth / 2
+    const centerY = match ? Number(match[2]) : canvasHeight / 2
+
+    const anchors = Array.from(document.querySelectorAll('foreignObject.skill-node-export-anchor'))
+    const angles = []
+    const radii = []
+
+    for (const anchor of anchors) {
+      const x = Number(anchor.getAttribute('x') ?? 0)
+      const y = Number(anchor.getAttribute('y') ?? 0)
+      const width = Number(anchor.getAttribute('width') ?? 0)
+      const height = Number(anchor.getAttribute('height') ?? 0)
+      const cx = x + width / 2
+      const cy = y + height / 2
+      const dx = cx - centerX
+      const dy = cy - centerY
+      const angle = normalizeDeg((Math.atan2(dy, dx) * 180) / Math.PI)
+      angles.push(angle)
+      radii.push(Math.hypot(dx, dy))
+    }
+
+    const nodeAngleSpread = angles.length > 0
+      ? Math.max(...angles) - Math.min(...angles)
+      : 0
+
+    return {
+      canvasWidth,
+      canvasHeight,
+      centerX,
+      centerY,
+      maxRadius: radii.length > 0 ? Math.max(...radii) : 0,
+      centerRadius: radii.length > 0 ? Math.max(...radii) : 0,
+      nodeAngleSpread,
+      usedAngleDeg: nodeAngleSpread,
+    }
+  })
+}
+
+/**
+ * Imports a CSV text string into the app via the toolbar file input.
+ * Expects the page to already be at '/'.
+ * Waits for the import dialog, confirms it, and waits for nodes to render.
+ */
+export const importCsvViaToolbar = async (page, csvText) => {
+  const { Buffer } = await import('node:buffer')
+
+  await page.locator('input[type="file"][accept="text/csv,.csv"]').setInputFiles({
+    name: 'skilltree-import.csv',
+    mimeType: 'text/csv',
+    buffer: Buffer.from(String(csvText), 'utf-8'),
+  })
+
+  const dialog = page.getByRole('dialog', { name: 'CSV-Import Optionen' })
+  await dialog.waitFor({ state: 'visible', timeout: 10_000 })
+
+  // Click the last button in the dialog (the confirm / Importieren button)
+  await page.evaluate(() => {
+    const dialogRoot = document.querySelector('[role="dialog"]')
+    const buttons = Array.from(dialogRoot?.querySelectorAll('button') ?? [])
+    buttons.at(-1)?.click()
+  })
+
+  await dialog.waitFor({ state: 'hidden', timeout: 10_000 })
+  await page.waitForSelector('foreignObject.skill-node-export-anchor', { state: 'attached', timeout: 20_000 })
+}

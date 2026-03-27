@@ -1,6 +1,13 @@
 import { readFileSync } from 'node:fs'
 import { test, expect } from '@playwright/test'
-import { startFresh, readDownload, getBuilderNodeLabels, exportHtml, extractJsonPayload } from './helpers.js'
+import {
+  startFresh,
+  readDownload,
+  getBuilderNodeLabels,
+  exportHtml,
+  extractJsonPayload,
+  extractLayoutMetrics,
+} from './helpers.js'
 
 // ---------------------------------------------------------------------------
 // Content equivalence: HTML export must match the builder state
@@ -87,6 +94,16 @@ test.describe('HTML export – content matches builder', () => {
     expect(html).toContain('July 2026 Release')
     expect(html).toContain('Exportiert am')
     expect(download.suggestedFilename()).toBe('skilltree-roadmap.html')
+  })
+
+  test('exported html exposes layout metrics for comparison', async ({ page }) => {
+    const html = await exportHtml(page)
+    const metrics = extractLayoutMetrics(html)
+
+    expect(metrics.nodeCount).toBeGreaterThan(0)
+    expect(metrics.linkCount).toBeGreaterThan(0)
+    expect(metrics.usedAngleDeg).toBeGreaterThan(0)
+    expect(metrics.centerRadius).toBeGreaterThan(0)
   })
 })
 

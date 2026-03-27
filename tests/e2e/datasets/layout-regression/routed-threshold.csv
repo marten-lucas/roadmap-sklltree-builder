@@ -1,0 +1,8 @@
+ShortName,Name,Scope,Ebene,Segment,Parent,AdditionalDependency,ProgressLevel,Status,ReleaseNotes
+RTR,Routed Threshold Root,,1,Core,,,1,now,"Root for routed links"
+RT1,Routed Child A,,2,Alpha,RTR,,1,next,"Far segment"
+RT2,Routed Child B,,2,Beta,RTR,,1,later,"Far segment"
+RT3,Routed Child C,,2,Gamma,RTR,,1,done,"Far segment"
+RT4,Routed Child D,,2,Delta,RTR,,1,now,"Far segment"
+RT5,Routed Child E,,2,Epsilon,RTR,,1,next,"Far segment"
+RG1,Routed Grandchild,,3,Gamma,RT1,,1,later,"Forces trunk reuse"

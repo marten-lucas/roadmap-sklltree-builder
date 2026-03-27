@@ -1,0 +1,6 @@
+ShortName,Name,Scope,Ebene,Segment,Parent,AdditionalDependency,ProgressLevel,Status,ReleaseNotes
+ECR,Even Children Root,,1,Core,,,1,now,"Parent with even child count"
+EC1,Even Child 1,,2,North,ECR,,1,next,"Even child"
+EC2,Even Child 2,,2,East,ECR,,1,later,"Even child"
+EC3,Even Child 3,,2,South,ECR,,1,done,"Even child"
+EC4,Even Child 4,,2,West,ECR,,1,now,"Even child"

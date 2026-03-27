@@ -1,0 +1,7 @@
+ShortName,Name,Scope,Ebene,Segment,Parent,AdditionalDependency,ProgressLevel,Status,ReleaseNotes
+OCR,Odd Children Root,,1,Core,,,1,now,"Parent with odd child count"
+OC1,Odd Child 1,,2,North,OCR,,1,next,"Odd child"
+OC2,Odd Child 2,,2,East,OCR,,1,later,"Odd child"
+OC3,Odd Child 3,,2,Core,OCR,,1,done,"Centered odd child"
+OC4,Odd Child 4,,2,South,OCR,,1,now,"Odd child"
+OC5,Odd Child 5,,2,West,OCR,,1,next,"Odd child"

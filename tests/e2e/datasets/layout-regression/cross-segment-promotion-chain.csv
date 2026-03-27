@@ -1,0 +1,8 @@
+ShortName,Name,Scope,Ebene,Segment,Parent,AdditionalDependency,ProgressLevel,Status,ReleaseNotes
+CSP,Cross Segment Parent,,1,Alpha,,,1,now,"Root for alternating chain"
+CS1,Chain Stage 1,,2,Beta,CSP,,1,next,"Alternates segment"
+CS2,Chain Stage 2,,3,Gamma,CS1,,1,later,"Alternates segment"
+CS3,Chain Stage 3,,4,Delta,CS2,,1,done,"Alternates segment"
+CS4,Chain Stage 4,,5,Alpha,CS3,,1,now,"Returns to start"
+CS5,Chain Stage 5,,6,Gamma,CS4,,1,next,"Promotion stress"
+CS6,Chain Stage 6,,7,Beta,CS5,,1,later,"Promotion stress"

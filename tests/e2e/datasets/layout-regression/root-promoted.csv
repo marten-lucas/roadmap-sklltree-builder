@@ -1,0 +1,4 @@
+ShortName,Name,Scope,Ebene,Segment,Parent,AdditionalDependency,ProgressLevel,Status,ReleaseNotes
+RTP,Root Promoted,,2,Alpha,,,1,now,"Promoted single root"
+CHA,Child Alpha,,3,Alpha,RTP,,1,next,"Child in same segment"
+CHB,Child Beta,,3,Beta,RTP,,1,later,"Child in other segment"

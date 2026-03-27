@@ -1,0 +1,9 @@
+ShortName,Name,Scope,Ebene,Segment,Parent,AdditionalDependency,ProgressLevel,Status,ReleaseNotes
+STR,Shifted Subtree Root,,1,North,,,1,now,"Represents a post-reassignment state"
+ST1,Shifted Branch A,,2,North,STR,,1,next,"Original branch"
+ST2,Shifted Branch B,,2,South,STR,,1,later,"Moved branch"
+ST3,Shifted Branch C,,2,East,STR,,1,done,"Moved branch"
+SG1,Grandchild A1,,3,South,ST1,,1,now,"Descendant moved across order"
+SG2,Grandchild A2,,3,East,ST1,,1,next,"Descendant moved across order"
+SG3,Grandchild B1,,3,West,ST2,,1,later,"Subtree spread"
+SG4,Grandchild C1,,3,North,ST3,,1,done,"Cross-order return"

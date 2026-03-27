@@ -1,0 +1,5 @@
+ShortName,Name,Scope,Ebene,Segment,Parent,AdditionalDependency,ProgressLevel,Status,ReleaseNotes
+DTR,Direct Threshold Root,,1,Core,,,1,now,"Root for direct-ish links"
+DT1,Direct Child Near 1,,2,Core,DTR,,1,next,"Same ray"
+DT2,Direct Child Near 2,,2,Adjacent,DTR,,1,later,"Adjacent segment"
+DT3,Direct Grandchild,,3,Adjacent,DT2,,1,done,"Keeps path simple"

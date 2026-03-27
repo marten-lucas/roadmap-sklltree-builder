@@ -1,0 +1,6 @@
+ShortName,Name,Scope,Ebene,Segment,Parent,AdditionalDependency,ProgressLevel,Status,ReleaseNotes
+LLR,Long Label Root,,1,Platform Architecture and Distributed Systems Enablement,,,1,now,"Long label segment root"
+LL1,Observability Child,,2,Platform Architecture and Distributed Systems Enablement,LLR,,1,next,"Same long label"
+LL2,Design System Child,,2,Customer Experience and Human-Centred Product Delivery,LLR,,1,later,"Cross long label"
+LL3,Data Governance Child,,2,Enterprise Data Governance and Lifecycle Management,LLR,,1,done,"Cross long label"
+LL4,Security Child,,2,Zero Trust Security and Identity Federation Operations,LLR,,1,now,"Cross long label"

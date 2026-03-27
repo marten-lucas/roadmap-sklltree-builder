@@ -1,0 +1,7 @@
+ShortName,Name,Scope,Ebene,Segment,Parent,AdditionalDependency,ProgressLevel,Status,ReleaseNotes
+MLR,Multi Level Ray Root,,1,Core,,,1,now,"Root for same-ray chain"
+ML1,Ray Level 2,,2,Core,MLR,,1,next,"Same segment"
+ML2,Ray Level 3,,3,Core,ML1,,1,later,"Same segment"
+ML3,Ray Level 4,,4,Core,ML2,,1,done,"Same segment"
+ML4,Ray Level 5,,5,Core,ML3,,1,now,"Same segment"
+MLS,Side Branch,,3,Side,ML1,,1,next,"Side branch off the ray"

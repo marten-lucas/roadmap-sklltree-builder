@@ -1,0 +1,9 @@
+ShortName,Name,Scope,Ebene,Segment,Parent,AdditionalDependency,ProgressLevel,Status,ReleaseNotes
+LPA,Left Parent,,1,Left,,,1,now,"Left root"
+L1A,Left Child One,,2,Right,LPA,,1,next,"Crosses to right segment"
+L2A,Left Child Two,,2,Left,LPA,,1,later,"Stays left"
+L3A,Left Child Three,,2,Left,LPA,,1,done,"Stays left"
+RPA,Right Parent,,1,Right,,,1,now,"Right root"
+R1A,Right Child One,,2,Left,RPA,,1,next,"Crosses to left segment"
+R2A,Right Child Two,,2,Right,RPA,,1,later,"Stays right"
+R3A,Right Child Three,,2,Right,RPA,,1,done,"Stays right"

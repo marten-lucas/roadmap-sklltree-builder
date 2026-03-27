@@ -1,0 +1,6 @@
+ShortName,Name,Scope,Ebene,Segment,Parent,AdditionalDependency,ProgressLevel,Status,ReleaseNotes
+RCH,Root Chain,,1,Core,,,1,now,"Chain root"
+C01,Chain Level 2,,2,Core,RCH,,1,next,"Single-child chain"
+C02,Chain Level 3,,3,Side,C01,,1,later,"Segment shift"
+C03,Chain Level 4,,4,Side,C02,,1,done,"Keep parent ray"
+C04,Chain Level 5,,5,Docs,C03,,1,now,"Deep chain"

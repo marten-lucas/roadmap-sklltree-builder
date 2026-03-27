@@ -1,0 +1,10 @@
+ShortName,Name,Scope,Ebene,Segment,Parent,AdditionalDependency,ProgressLevel,Status,ReleaseNotes
+FAN,Fanout Root,,1,Core,,,1,now,"Root for routing"
+F01,Alpha Child,,2,Alpha,FAN,,1,next,"Far segment A"
+F02,Beta Child,,2,Beta,FAN,,1,later,"Far segment B"
+F03,Gamma Child,,2,Gamma,FAN,,1,done,"Far segment C"
+F04,Delta Child,,2,Delta,FAN,,1,now,"Far segment D"
+F11,Alpha Grandchild,,3,Beta,F01,,1,next,"Cross segment grandchild"
+F21,Beta Grandchild,,3,Gamma,F02,,1,later,"Cross segment grandchild"
+F31,Gamma Grandchild,,3,Alpha,F03,,1,done,"Cross segment grandchild"
+F41,Delta Grandchild,,3,Core,F04,,1,now,"Returns inward"

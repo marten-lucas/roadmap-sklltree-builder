@@ -7,10 +7,12 @@ import {
   clickChildAddForSelectedNode,
   clickInitialRootAddControl,
   clickInitialSegmentAddControl,
+  collectCanvasGeometryMetrics,
   clickRootAddNearSelectedWithDirection,
   clickSegmentAddNearSelected,
   confirmAndReset,
   extractJsonPayload,
+  extractLayoutMetrics,
   ensureScopesExist,
   getSelectedNodeId,
   getVisibleChildAddControlCountForNode,
@@ -127,7 +129,7 @@ const resolveCsvTemplatePath = () => {
     return resolve(process.env.SKILLTREE_E2E_TEMPLATE_CSV)
   }
 
-  if (datasetName === 'small' || datasetName === 'medium' || datasetName === 'large' || datasetName === 'minimal') {
+  if (datasetName === 'small' || datasetName === 'medium' || datasetName === 'large' || datasetName === 'minimal' || datasetName === 'huge') {
     return resolve(process.cwd(), 'tests/e2e/datasets', `${datasetName}.csv`)
   }
 
@@ -253,68 +255,6 @@ const ensureNodeProgressLevels = async (page, nodeId, targetLevelCount) => {
     await addButton.click()
     await page.waitForTimeout(150)
   }
-}
-
-const collectCanvasGeometryMetrics = async (page) => {
-  return page.evaluate(() => {
-    const normalizeDeg = (deg) => {
-      const normalized = deg % 360
-      return normalized < 0 ? normalized + 360 : normalized
-    }
-
-    const canvas = document.querySelector('svg.skill-tree-canvas')
-    if (!canvas) {
-      return {
-        canvasWidth: 0,
-        canvasHeight: 0,
-        centerX: 0,
-        centerY: 0,
-        maxRadius: 0,
-        nodeAngleSpread: 0,
-      }
-    }
-
-    const viewBox = canvas.getAttribute('viewBox')?.split(/\s+/).map(Number) ?? [0, 0, 0, 0]
-    const canvasWidth = Number(viewBox[2] ?? 0)
-    const canvasHeight = Number(viewBox[3] ?? 0)
-
-    const centerGroup = document.querySelector('.skill-tree-center-icon')
-    const transform = centerGroup?.getAttribute('transform') ?? ''
-    const match = transform.match(/translate\(([-\d.]+),\s*([-\d.]+)\)/)
-    const centerX = match ? Number(match[1]) : canvasWidth / 2
-    const centerY = match ? Number(match[2]) : canvasHeight / 2
-
-    const anchors = Array.from(document.querySelectorAll('foreignObject.skill-node-export-anchor'))
-    const angles = []
-    const radii = []
-
-    for (const anchor of anchors) {
-      const x = Number(anchor.getAttribute('x') ?? 0)
-      const y = Number(anchor.getAttribute('y') ?? 0)
-      const width = Number(anchor.getAttribute('width') ?? 0)
-      const height = Number(anchor.getAttribute('height') ?? 0)
-      const cx = x + width / 2
-      const cy = y + height / 2
-      const dx = cx - centerX
-      const dy = cy - centerY
-      const angle = normalizeDeg((Math.atan2(dy, dx) * 180) / Math.PI)
-      angles.push(angle)
-      radii.push(Math.hypot(dx, dy))
-    }
-
-    const nodeAngleSpread = angles.length > 0
-      ? Math.max(...angles) - Math.min(...angles)
-      : 0
-
-    return {
-      canvasWidth,
-      canvasHeight,
-      centerX,
-      centerY,
-      maxRadius: radii.length > 0 ? Math.max(...radii) : 0,
-      nodeAngleSpread,
-    }
-  })
 }
 
 const extractCenterIconGeometryFromMarkup = (markup) => {
@@ -946,6 +886,7 @@ test.describe('CSV template roundtrip via builder UI', () => {
         phaseDurationMs: phaseTimingsMs.statuses,
         document: collectDocumentMetrics(payload.document),
         canvas: await collectCanvasGeometryMetrics(page),
+        exportLayout: extractLayoutMetrics(exported),
       })
     }
 
@@ -975,6 +916,7 @@ test.describe('CSV template roundtrip via builder UI', () => {
         phaseDurationMs: phaseTimingsMs.scopes,
         document: collectDocumentMetrics(payload.document),
         canvas: await collectCanvasGeometryMetrics(page),
+        exportLayout: extractLayoutMetrics(exported),
       })
     }
 
@@ -1004,6 +946,7 @@ test.describe('CSV template roundtrip via builder UI', () => {
         phaseDurationMs: phaseTimingsMs.segments,
         document: collectDocumentMetrics(payload.document),
         canvas: await collectCanvasGeometryMetrics(page),
+        exportLayout: extractLayoutMetrics(exported),
       })
     }
 
@@ -1066,6 +1009,7 @@ test.describe('CSV template roundtrip via builder UI', () => {
     persistedExportPath = persistHtmlExport(exportedHtml)
     const exportedPayload = extractJsonPayload(exportedHtml)
     const actualExportedSnapshots = collectActualNodeSnapshots(exportedPayload.document)
+    const exportedLayoutMetrics = extractLayoutMetrics(exportedHtml)
 
     verboseLog(`assert: snapshots.length=${actualExportedSnapshots.length} expected=${template.rows.length}`)
     expect(actualExportedSnapshots).toHaveLength(template.rows.length)
@@ -1115,6 +1059,9 @@ test.describe('CSV template roundtrip via builder UI', () => {
     expect(Number.isFinite(svgCenterGeometry.centerY)).toBe(true)
 
     expect(existsSync(persistedExportPath)).toBe(true)
+    expect(exportedLayoutMetrics.nodeCount).toBe(actualExportedSnapshots.length)
+    expect(exportedLayoutMetrics.usedAngleDeg).toBeGreaterThan(0)
+    expect(exportedLayoutMetrics.centerRadius).toBeGreaterThan(0)
     verboseLog(`final export done nodes=${actualExportedSnapshots.length}`)
 
     const persistedScopeLabels = await page.evaluate(() => {
@@ -1147,6 +1094,7 @@ test.describe('CSV template roundtrip via builder UI', () => {
       const importedDownload = await triggerExportDownload('roundtrip-reexport')
       const importedHtml = await readDownload(importedDownload)
       const payload = extractJsonPayload(importedHtml)
+      const importedLayoutMetrics = extractLayoutMetrics(importedHtml)
       verboseLog('roundtrip re-export complete')
 
       const expectedSnapshots = collectExpectedNodeSnapshots(template.rows, { ignoreManualLevels: ignoreProgressLevels })
@@ -1263,6 +1211,7 @@ test.describe('CSV template roundtrip via builder UI', () => {
         phaseDurationMs: phaseTimingsMs.roundtrip,
         document: collectDocumentMetrics(payload.document),
         canvas: await collectCanvasGeometryMetrics(page),
+        exportLayout: importedLayoutMetrics,
       })
     }
 
@@ -1275,6 +1224,7 @@ test.describe('CSV template roundtrip via builder UI', () => {
       phaseTimingsMs,
       totalDurationMs: Date.now() - runStartedAtMs,
       nodeCountExpected: template.rows.length,
+      finalExportLayout: exportedLayoutMetrics,
     })
 
     if (process.env.SKILLTREE_E2E_HOLD_OPEN === '1' && persistedExportPath) {

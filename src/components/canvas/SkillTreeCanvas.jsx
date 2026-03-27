@@ -390,7 +390,7 @@ export function SkillTreeCanvas({
                 </text>
               </g>
 
-              {selectedLayoutNode.depth === 1 && selectedLayoutNode.level === 1 && (
+              {selectedLayoutNode.depth === 1 && (
                 <g>
                   <g
                     data-add-control="root-near"

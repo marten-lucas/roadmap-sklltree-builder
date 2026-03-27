@@ -1,0 +1,10 @@
+ShortName,Name,Scope,Ebene,Segment,Parent,AdditionalDependency,ProgressLevel,Status,ReleaseNotes
+SSR,Sparse Segment Root,,1,Heavy,,,1,now,"Dominant subtree"
+SS1,Heavy Child 1,,2,Heavy,SSR,,1,next,"Heavy segment"
+SS2,Heavy Child 2,,2,Heavy,SSR,,1,later,"Heavy segment"
+SS3,Heavy Child 3,,2,Heavy,SSR,,1,done,"Heavy segment"
+SS4,Heavy Child 4,,2,Heavy,SSR,,1,now,"Heavy segment"
+SLA,Light Segment A,,1,Light-A,,,1,next,"Single node segment"
+SLB,Light Segment B,,1,Light-B,,,1,later,"Single node segment"
+SLC,Light Segment C,,1,Light-C,,,1,done,"Single node segment"
+SLD,Light Segment D,,1,Light-D,,,1,now,"Single node segment"
