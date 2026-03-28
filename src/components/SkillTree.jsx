@@ -643,9 +643,10 @@ export function SkillTree() {
     }
 
     const endpoints = []
-    const portalOrbit = TREE_CONFIG.nodeSize * 0.72
-    const portalAvoidance = 17
-    const spreadStep = 18
+    const portalOrbit = TREE_CONFIG.nodeSize * 0.74
+    const portalAvoidance = 20
+    const spreadStep = 16
+    const endpointOrbitStep = TREE_CONFIG.nodeSize * 0.06
 
     for (const [nodeId, nodeEndpoints] of endpointsByNodeId.entries()) {
       const layoutNode = layoutNodeById.get(nodeId)
@@ -664,25 +665,67 @@ export function SkillTree() {
         }
       }
 
+      const reservedAngles = []
       const inwardAngle = toDegrees(Math.atan2(canvas.origin.y - layoutNode.y, canvas.origin.x - layoutNode.x))
       const offsetCenter = (nodeEndpoints.length - 1) / 2
+      const sortedEndpoints = [...nodeEndpoints].sort((left, right) => {
+        if (left.type === right.type) {
+          return left.key.localeCompare(right.key)
+        }
+        return left.type === 'source' ? -1 : 1
+      })
 
-      nodeEndpoints.forEach((endpoint, index) => {
-        let candidateAngle = inwardAngle + (index - offsetCenter) * spreadStep
-        let safety = 0
+      const candidateOffsets = [
+        0,
+        -1,
+        1,
+        -2,
+        2,
+        -3,
+        3,
+        -4,
+        4,
+        -5,
+        5,
+      ]
 
-        while (blockedAngles.some((blocked) => isAngleNear(candidateAngle, blocked, portalAvoidance)) && safety < 8) {
-          const direction = index <= offsetCenter ? -1 : 1
-          candidateAngle += direction * 12
-          safety += 1
+      sortedEndpoints.forEach((endpoint, index) => {
+        const baseAngle = inwardAngle + (index - offsetCenter) * spreadStep
+        let bestAngle = baseAngle
+        let bestPenalty = Number.POSITIVE_INFINITY
+
+        for (const offsetFactor of candidateOffsets) {
+          const candidateAngle = baseAngle + offsetFactor * 9
+          const blockedPenalty = blockedAngles.some((blocked) => isAngleNear(candidateAngle, blocked, portalAvoidance))
+            ? 1000
+            : 0
+          const reservedPenalty = reservedAngles.some((reserved) => isAngleNear(candidateAngle, reserved, 11))
+            ? 700
+            : 0
+          const spreadPenalty = Math.abs(offsetFactor)
+          const penalty = blockedPenalty + reservedPenalty + spreadPenalty
+
+          if (penalty < bestPenalty) {
+            bestPenalty = penalty
+            bestAngle = candidateAngle
+          }
+
+          if (penalty === 0) {
+            break
+          }
         }
 
-        const radians = toRadians(candidateAngle)
+        reservedAngles.push(bestAngle)
+        const orbit = portalOrbit + Math.abs(index - offsetCenter) * endpointOrbitStep
+        const radians = toRadians(bestAngle)
+
         endpoints.push({
           ...endpoint,
           nodeId,
-          x: layoutNode.x + Math.cos(radians) * portalOrbit,
-          y: layoutNode.y + Math.sin(radians) * portalOrbit,
+          x: layoutNode.x + Math.cos(radians) * orbit,
+          y: layoutNode.y + Math.sin(radians) * orbit,
+          angle: bestAngle,
+          rotation: bestAngle + 90,
         })
       })
     }

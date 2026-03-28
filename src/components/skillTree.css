@@ -277,39 +277,42 @@
 }
 
 .skill-tree-portal__halo {
-    opacity: 0.28;
-    filter: blur(0.2px);
+    opacity: 0.34;
+    filter: blur(0.3px);
     animation: skill-portal-pulse 4.8s ease-in-out infinite;
 }
 
 .skill-tree-portal__halo--source {
-    fill: rgba(56, 189, 248, 0.14);
+    fill: rgba(56, 189, 248, 0.2);
 }
 
 .skill-tree-portal__halo--target {
-    fill: rgba(251, 191, 36, 0.14);
+    fill: rgba(250, 204, 21, 0.2);
 }
 
-.skill-tree-portal__core {
-    stroke-width: 1.25;
+.skill-tree-portal__chevron {
+    fill: none;
+    stroke-width: 2.8;
+    stroke-linecap: round;
+    stroke-linejoin: round;
     transition: transform 140ms ease, stroke-width 140ms ease, opacity 140ms ease;
 }
 
-.skill-tree-portal__core--source {
-    fill: rgba(2, 132, 199, 0.95);
-    stroke: rgba(186, 230, 253, 0.9);
+.skill-tree-portal__chevron--source {
+    stroke: rgba(56, 189, 248, 0.95);
+    filter: drop-shadow(0 0 3px rgba(56, 189, 248, 0.42));
 }
 
-.skill-tree-portal__core--target {
-    fill: rgba(217, 119, 6, 0.95);
-    stroke: rgba(254, 240, 138, 0.92);
+.skill-tree-portal__chevron--target {
+    stroke: rgba(250, 204, 21, 0.95);
+    filter: drop-shadow(0 0 3px rgba(250, 204, 21, 0.42));
 }
 
 .skill-tree-portal__label {
     fill: rgba(248, 250, 252, 0.95);
-    font-size: 7px;
-    font-weight: 400;
-    letter-spacing: 0.03em;
+    font-size: 6px;
+    font-weight: 500;
+    letter-spacing: 0.07em;
     text-transform: uppercase;
     paint-order: stroke;
     stroke: rgba(2, 6, 23, 0.85);
@@ -319,20 +322,20 @@
 }
 
 .skill-tree-portal__halo,
-.skill-tree-portal__core {
+.skill-tree-portal__chevron {
     pointer-events: all;
 }
 
-.skill-tree-portal--interactive:hover .skill-tree-portal__core {
-    transform: scale(1.03);
+.skill-tree-portal--interactive:hover .skill-tree-portal__chevron {
+    transform: scale(1.06);
 }
 
 .skill-tree-portal--selected .skill-tree-portal__halo {
-    opacity: 0.46;
+    opacity: 0.54;
 }
 
-.skill-tree-portal--selected .skill-tree-portal__core {
-    stroke-width: 2.4;
+.skill-tree-portal--selected .skill-tree-portal__chevron {
+    stroke-width: 3.4;
 }
 
 .skill-tree-portal--selected .skill-tree-portal__label {

@@ -8,6 +8,15 @@ const getPortalClassName = (portal, isSelected) => [
   isSelected ? 'skill-tree-portal--selected' : '',
 ].filter(Boolean).join(' ')
 
+const getPortalChevronPath = (type) => {
+  // Open chevrons (< >) for a stronger directional portal identity.
+  if (type === 'target') {
+    return 'M 8 -9 L -7 0 L 8 9'
+  }
+
+  return 'M -8 -9 L 7 0 L -8 9'
+}
+
 export function SkillTreeCanvas({
   canvasRef,
   canvas,
@@ -227,6 +236,7 @@ export function SkillTreeCanvas({
         {visibleDependencyPortals.map((portal) => {
           const isPortalSelected = portal.key === selectedPortalKey
           const portalClassName = getPortalClassName(portal, isPortalSelected)
+          const chevronPath = getPortalChevronPath(portal.type)
 
           return (
             <Tooltip
@@ -240,11 +250,11 @@ export function SkillTreeCanvas({
               label={<MarkdownTooltipContent title={portal.otherLabel} markdown={portal.tooltip} />}
             >
               <g
-                className={`${portalClassName} skill-tree-export-exclude`}
+                className={portalClassName}
                 data-portal-node-id={portal.nodeId}
                 data-portal-source-id={portal.sourceId}
                 data-portal-target-id={portal.targetId}
-                transform={`translate(${portal.x} ${portal.y})`}
+                transform={`translate(${portal.x} ${portal.y}) rotate(${portal.rotation ?? 0})`}
                 onMouseDown={(event) => event.stopPropagation()}
                 onClick={(event) => {
                   event.stopPropagation()
@@ -253,13 +263,13 @@ export function SkillTreeCanvas({
                   }
                 }}
               >
-                <circle className="skill-tree-portal__hit" r="30" />
-                <circle className={`skill-tree-portal__halo skill-tree-portal__halo--${portal.type}`} r="26" />
-                <circle className={`skill-tree-portal__core skill-tree-portal__core--${portal.type}`} r="16" />
+                <circle className="skill-tree-portal__hit" r="26" />
+                <circle className={`skill-tree-portal__halo skill-tree-portal__halo--${portal.type}`} r="17" />
+                <path className={`skill-tree-portal__chevron skill-tree-portal__chevron--${portal.type}`} d={chevronPath} />
                 <text
                   className="skill-tree-portal__label"
                   x="0"
-                  y="0"
+                  y="17"
                   textAnchor="middle"
                   dominantBaseline="middle"
                 >
