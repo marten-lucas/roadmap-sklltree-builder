@@ -301,6 +301,107 @@ const buildAncestorsByNodeId = (parentByNodeId) => {
   return ancestorsByNodeId
 }
 
+const buildAdditionalDependencyGraphByNodeId = (tree) => {
+  const nodeIds = collectNodeIds(tree)
+  const outgoingByNodeId = new Map([...nodeIds].map((id) => [id, []]))
+  const queue = [...(tree?.children ?? [])]
+
+  while (queue.length > 0) {
+    const current = queue.shift()
+    const outgoingIds = uniqueStringArray(current.additionalDependencyIds).filter((targetId) => nodeIds.has(targetId))
+    outgoingByNodeId.set(current.id, outgoingIds)
+    queue.push(...(current.children ?? []))
+  }
+
+  return outgoingByNodeId
+}
+
+const hasReachableAdditionalDependencyPath = (outgoingByNodeId, startId, targetId) => {
+  if (!startId || !targetId) {
+    return false
+  }
+
+  const queue = [startId]
+  const visited = new Set([startId])
+
+  while (queue.length > 0) {
+    const currentId = queue.shift()
+    if (currentId === targetId) {
+      return true
+    }
+
+    for (const nextId of outgoingByNodeId.get(currentId) ?? []) {
+      if (visited.has(nextId)) {
+        continue
+      }
+
+      visited.add(nextId)
+      queue.push(nextId)
+    }
+  }
+
+  return false
+}
+
+export const wouldCreateAdditionalDependencyCycle = (tree, sourceNodeId, targetNodeId) => {
+  if (!tree || !sourceNodeId || !targetNodeId || sourceNodeId === targetNodeId) {
+    return false
+  }
+
+  const outgoingByNodeId = buildAdditionalDependencyGraphByNodeId(tree)
+  if (!outgoingByNodeId.has(sourceNodeId) || !outgoingByNodeId.has(targetNodeId)) {
+    return false
+  }
+
+  return hasReachableAdditionalDependencyPath(outgoingByNodeId, targetNodeId, sourceNodeId)
+}
+
+export const findAdditionalDependencyCycles = (tree) => {
+  const outgoingByNodeId = buildAdditionalDependencyGraphByNodeId(tree)
+  const stateByNodeId = new Map()
+  const activePath = []
+  const cycles = []
+  const cycleKeys = new Set()
+
+  const visit = (nodeId) => {
+    stateByNodeId.set(nodeId, 'visiting')
+    activePath.push(nodeId)
+
+    for (const nextId of outgoingByNodeId.get(nodeId) ?? []) {
+      const nextState = stateByNodeId.get(nextId)
+
+      if (nextState === 'visiting') {
+        const cycleStartIndex = activePath.indexOf(nextId)
+        const cycle = cycleStartIndex >= 0
+          ? [...activePath.slice(cycleStartIndex), nextId]
+          : [...activePath, nextId]
+        const cycleKey = cycle.join('>')
+
+        if (!cycleKeys.has(cycleKey)) {
+          cycleKeys.add(cycleKey)
+          cycles.push(cycle)
+        }
+        continue
+      }
+
+      if (nextState !== 'visited') {
+        visit(nextId)
+      }
+    }
+
+    activePath.pop()
+    stateByNodeId.set(nodeId, 'visited')
+  }
+
+  for (const nodeId of outgoingByNodeId.keys()) {
+    if (stateByNodeId.get(nodeId) !== 'visited') {
+      visit(nodeId)
+    }
+  }
+
+  return cycles
+}
+
 const normalizeAdditionalDependencies = (tree) => {
   if (!tree) {
     return tree
@@ -310,6 +411,7 @@ const normalizeAdditionalDependencies = (tree) => {
   const parentByNodeId = buildParentByNodeId(tree)
   const descendantsByNodeId = buildDescendantsByNodeId(tree)
   const ancestorsByNodeId = buildAncestorsByNodeId(parentByNodeId)
+  const outgoingByNodeId = buildAdditionalDependencyGraphByNodeId(tree)
   const incomingByTargetId = new Map([...nodeIds].map((id) => [id, []]))
 
   const normalizeNode = (node) => {
@@ -334,6 +436,10 @@ const normalizeAdditionalDependencies = (tree) => {
       }
 
       if (ancestors.has(targetId) || descendants.has(targetId) || siblingIds.has(targetId)) {
+        return false
+      }
+
+      if (hasReachableAdditionalDependencyPath(outgoingByNodeId, targetId, ownId)) {
         return false
       }
 
@@ -495,7 +601,7 @@ export const setNodeAdditionalDependencies = (treeData, sourceNodeId, nextTarget
   }
 
   const nextTree = updateNodeById(treeData, sourceNodeId, () => ({
-    additionalDependencyIds: uniqueStringArray(nextTargetIds),
+    additionalDependencyIds: uniqueStringArray(nextTargetIds).filter((targetId) => !wouldCreateAdditionalDependencyCycle(treeData, sourceNodeId, targetId)),
   }))
 
   return withNormalizedDependencies(nextTree)

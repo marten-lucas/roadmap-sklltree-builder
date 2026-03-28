@@ -1,7 +1,13 @@
 import { TREE_CONFIG } from '../config'
 import { UNASSIGNED_SEGMENT_ID } from './layoutShared'
 import { solveSkillTreeLayout } from './layoutSolver'
-import { findNodeById, getNodeLevelInfo, updateNodeLevel, updateNodeSegment } from './treeData'
+import {
+  findNodeById,
+  getNodeLevelInfo,
+  updateNodeLevel,
+  updateNodeSegment,
+  wouldCreateAdditionalDependencyCycle,
+} from './treeData'
 
 const DEFAULT_INVALID_REASON = 'Die Aenderung erzeugt einen ungueltigen Layout-Zustand.'
 
@@ -371,6 +377,12 @@ export const getAdditionalDependencyOptionsForNode = (tree, nodeId) => {
       if (sibling.id !== nodeId) {
         blockedIds.add(sibling.id)
       }
+    }
+  }
+
+  for (const node of nodes) {
+    if (wouldCreateAdditionalDependencyCycle(tree, nodeId, node.id)) {
+      blockedIds.add(node.id)
     }
   }
 

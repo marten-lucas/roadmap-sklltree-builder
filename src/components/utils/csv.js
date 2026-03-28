@@ -1,6 +1,6 @@
 import { normalizeStatusKey } from '../config'
 import { createEmptyDocument } from './documentState'
-import { ensureNodeLevels } from './treeData'
+import { ensureNodeLevels, findAdditionalDependencyCycles } from './treeData'
 import { generateUUID } from './uuid'
 
 export const CSV_EXPORT_FILE_NAME = 'skilltree-roadmap.csv'
@@ -611,14 +611,37 @@ const buildDocumentFromRows = (rows, options = {}) => {
       .filter(Boolean)
   }
 
-  if (errors.length > 0) {
-    return { ok: false, errors }
-  }
-
   const roots = rootGroups
     .map((group) => nodeByShortName.get(group.shortName))
     .filter(Boolean)
     .sort((left, right) => (orderMap.get(String(left.shortName ?? '')) ?? 0) - (orderMap.get(String(right.shortName ?? '')) ?? 0))
+
+  const nodeById = new Map([...nodeByShortName.values()].map((node) => [node.id, node]))
+
+  if (errors.length > 0) {
+    return { ok: false, errors }
+  }
+
+  const cycleErrors = []
+  const detectedCycles = findAdditionalDependencyCycles({ children: roots })
+
+  for (const cycle of detectedCycles) {
+    const cycleNodeIds = cycle[0] === cycle[cycle.length - 1] ? cycle.slice(0, -1) : cycle
+    const cycleLabels = cycleNodeIds.map((nodeId) => {
+      const node = nodeById.get(nodeId)
+      const label = String(node?.shortName ?? node?.label ?? nodeId).trim()
+      return label || nodeId
+    })
+
+    cycleErrors.push(`AdditionalDependency-Zirkelbezug gefunden: ${cycleLabels.join(' -> ')}`)
+  }
+
+  if (cycleErrors.length > 0) {
+    return {
+      ok: false,
+      errors: cycleErrors,
+    }
+  }
 
   const document = createEmptyDocument()
   document.segments = Array.from(segmentsByKey.values())

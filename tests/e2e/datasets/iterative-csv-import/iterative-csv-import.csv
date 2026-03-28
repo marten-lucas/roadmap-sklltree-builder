@@ -1,0 +1,7 @@
+ShortName,Name,Scope,Ebene,Segment,Parent,AdditionalDependency,ProgressLevel,Status,ReleaseNotes
+FRR,Frontend Root,,1,Frontend,,,1,now,
+FRC,React,,2,Frontend,FRR,,1,done,
+FCV,Vue,,2,Frontend,FRR,,1,later,
+BRR,Backend Root,,1,Backend,,,1,now,
+BAP,API Design,,2,Backend,BRR,,1,done,
+BDB,Database,,2,Backend,BRR,,1,later,

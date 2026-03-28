@@ -208,4 +208,17 @@ describe('csv', () => {
     expect(apiNode).toBeDefined()
     expect(apiNode.segmentId).toBeNull()
   })
+
+  it('rejects cyclic additional dependencies during import and export roundtrip validation', () => {
+    const document = createDocument()
+    const frontendChild = document.children[0].children[0]
+    const backendChild = document.children[1].children[0]
+
+    frontendChild.additionalDependencyIds = ['node-sierra']
+    backendChild.additionalDependencyIds = ['node-bravo']
+
+    const csv = serializeDocumentToCsv(document)
+
+    expect(() => readDocumentFromCsvText(csv)).toThrow('AdditionalDependency-Zirkelbezug gefunden')
+  })
 })

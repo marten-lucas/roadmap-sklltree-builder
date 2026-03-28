@@ -1621,7 +1621,7 @@ export const collectCanvasWarningMetrics = async (page) => {
  * Expects the page to already be at '/'.
  * Waits for the import dialog, confirms it, and waits for nodes to render.
  */
-export const importCsvViaToolbar = async (page, csvText) => {
+export const importCsvViaToolbar = async (page, csvText, options = {}) => {
   const { Buffer } = await import('node:buffer')
 
   await page.locator('input[type="file"][accept="text/csv,.csv"]').setInputFiles({
@@ -1632,6 +1632,16 @@ export const importCsvViaToolbar = async (page, csvText) => {
 
   const dialog = page.getByRole('dialog', { name: 'CSV-Import Optionen' })
   await dialog.waitFor({ state: 'visible', timeout: 10_000 })
+
+  const { processSegments, processManualLevels } = options
+
+  if (typeof processSegments === 'boolean') {
+    await dialog.getByRole('checkbox', { name: 'Segmente verarbeiten' }).setChecked(processSegments)
+  }
+
+  if (typeof processManualLevels === 'boolean') {
+    await dialog.getByRole('checkbox', { name: 'Manuelle Ebenen verarbeiten' }).setChecked(processManualLevels)
+  }
 
   // Click the last button in the dialog (the confirm / Importieren button)
   await page.evaluate(() => {

@@ -507,5 +507,25 @@ describe('treeValidation', () => {
       expect(optionIdsForChild.has('child-vue')).toBe(false)
       expect(optionIdsForChild.has('child-db')).toBe(true)
     })
+
+    it('should exclude dependencies that would create a cycle', () => {
+      const tree = createSimpleTree()
+      const withDependency = {
+        ...tree,
+        children: tree.children.map((node) => ({
+          ...node,
+          children: node.children.map((child) => (
+            child.id === 'child-react'
+              ? { ...child, additionalDependencyIds: ['child-db'] }
+              : child
+          )),
+        })),
+      }
+
+      const optionsForDb = getAdditionalDependencyOptionsForNode(withDependency, 'child-db')
+      const optionIdsForDb = new Set(optionsForDb.map((option) => option.id))
+
+      expect(optionIdsForDb.has('child-react')).toBe(false)
+    })
   })
 })

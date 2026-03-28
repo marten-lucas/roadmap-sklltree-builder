@@ -251,6 +251,15 @@ describe('treeData', () => {
       expect(targetDeps.incomingIds).toEqual([])
     })
 
+    it('should reject cyclic additional dependencies', () => {
+      const tree = createSimpleTree()
+      const withDependency = setNodeAdditionalDependencies(tree, 'child-react', ['child-db'])
+      const nextTree = setNodeAdditionalDependencies(withDependency, 'child-db', ['child-react'])
+
+      expect(getNodeAdditionalDependencies(nextTree, 'child-react').outgoingIds).toEqual(['child-db'])
+      expect(getNodeAdditionalDependencies(nextTree, 'child-db').outgoingIds).toEqual([])
+    })
+
     it('should not change layout coordinates after dependency-only changes', () => {
       const tree = createSimpleTree()
       const before = solveSkillTreeLayout(tree, TREE_CONFIG)
