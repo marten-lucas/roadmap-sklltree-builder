@@ -21,6 +21,7 @@ const MAX_SEGMENT_LABEL_CHARS_PER_LINE = 15
 const CENTER_LABEL_GAP_PX = 12
 const LABEL_LEVEL_ONE_GAP_PX = 14
 const LABEL_RADIUS_OUTER_BIAS = 0.68
+const MIN_SEGMENT_SPREAD_DEG = 52
 
 const estimateWrappedLineCount = (text) => {
   const words = String(text ?? '').trim().split(/\s+/).filter(Boolean)
@@ -89,6 +90,87 @@ const computeSpreadScaleMultiplier = (subtreeSpan, maxAngleSpread) => {
   return clamp(damped, 1.03, 1.55)
 }
 
+const SEPARATOR_HOMOGENEITY_PROFILES = {
+  off: {
+    biasFactor: 1,
+    useNeighborBias: false,
+    useGlobalPass: false,
+  },
+  balanced: {
+    biasFactor: 0.82,
+    useNeighborBias: true,
+    useGlobalPass: true,
+  },
+  strong: {
+    biasFactor: 0.72,
+    useNeighborBias: true,
+    useGlobalPass: true,
+  },
+}
+
+const resolveSeparatorHomogeneityProfile = (profileKey) => {
+  const key = String(profileKey ?? 'balanced').trim().toLowerCase()
+  return SEPARATOR_HOMOGENEITY_PROFILES[key] ?? SEPARATOR_HOMOGENEITY_PROFILES.balanced
+}
+
+const summarizeSeparatorDetours = (separatorResults) => {
+  const directions = separatorResults
+    .map((separator) => separator.dominantDetourDirection)
+    .filter((direction) => direction === 'left' || direction === 'right')
+  let directionChanges = 0
+  for (let index = 1; index < directions.length; index += 1) {
+    if (directions[index] !== directions[index - 1]) {
+      directionChanges += 1
+    }
+  }
+
+  const totalLeftDetours = separatorResults.reduce((sum, separator) => sum + separator.leftDetourCount, 0)
+  const totalRightDetours = separatorResults.reduce((sum, separator) => sum + separator.rightDetourCount, 0)
+  const totalDetours = totalLeftDetours + totalRightDetours
+  const totalDetourDeg = separatorResults.reduce((sum, separator) => sum + separator.totalDetourDeg, 0)
+  const dominantDetourDirection =
+    totalLeftDetours > totalRightDetours ? 'left' : totalRightDetours > totalLeftDetours ? 'right' : null
+  const dominantCount = Math.max(totalLeftDetours, totalRightDetours)
+  const consistency = totalDetours > 0 ? dominantCount / totalDetours : 1
+  const smoothness = directions.length > 1 ? 1 - directionChanges / (directions.length - 1) : 1
+  const meanDetour = totalDetours > 0 ? totalDetourDeg / totalDetours : 0
+  const detourEfficiency = 1 / (1 + meanDetour / 20)
+  const homogeneityScore = clamp(
+    100 * (consistency * 0.5 + smoothness * 0.3 + detourEfficiency * 0.2),
+    0,
+    100,
+  )
+
+  return {
+    totalLeftDetours,
+    totalRightDetours,
+    totalDetours,
+    totalDetourDeg,
+    directionChanges,
+    dominantDetourDirection,
+    homogeneityScore,
+  }
+}
+
+const chooseBetterSeparatorStrategy = ({ baselineSummary, candidateSummary }) => {
+  if (candidateSummary.totalDetours === 0 && baselineSummary.totalDetours > 0) {
+    return 'candidate'
+  }
+  if (candidateSummary.directionChanges < baselineSummary.directionChanges) {
+    return 'candidate'
+  }
+  if (candidateSummary.directionChanges > baselineSummary.directionChanges) {
+    return 'baseline'
+  }
+  if (candidateSummary.totalDetourDeg < baselineSummary.totalDetourDeg - 0.1) {
+    return 'candidate'
+  }
+  if (candidateSummary.totalDetourDeg > baselineSummary.totalDetourDeg + 0.1) {
+    return 'baseline'
+  }
+  return candidateSummary.homogeneityScore >= baselineSummary.homogeneityScore ? 'candidate' : 'baseline'
+}
+
 const buildSeparatorPathWithDetours = ({
   baseAngle,
   innerRadius,
@@ -99,6 +181,8 @@ const buildSeparatorPathWithDetours = ({
   allowedMaxAngle,
   nodeSize,
   angleSafetyDeg,
+  preferredDetourDirection = null,
+  detourBiasFactor = 1,
 }) => {
   const clampedBaseAngle = clamp(baseAngle, allowedMinAngle, allowedMaxAngle)
   const start = toCartesian(clampedBaseAngle, innerRadius, origin)
@@ -152,6 +236,10 @@ const buildSeparatorPathWithDetours = ({
     currentAngle = nextAngle
   }
 
+  let leftDetourCount = 0
+  let rightDetourCount = 0
+  let totalDetourDeg = 0
+
   for (const blocker of blockers) {
     if (blocker.blockEndRadius <= currentRadius + EPSILON) {
       continue
@@ -172,7 +260,19 @@ const buildSeparatorPathWithDetours = ({
 
     const leftDistance = Math.abs(currentAngle - leftEscape)
     const rightDistance = Math.abs(rightEscape - currentAngle)
-    const nextAngle = leftDistance <= rightDistance ? leftEscape : rightEscape
+    const clampedBias = clamp(detourBiasFactor, 0.6, 1)
+    const leftPenalty = preferredDetourDirection === 'left' ? clampedBias : 1
+    const rightPenalty = preferredDetourDirection === 'right' ? clampedBias : 1
+    const weightedLeftDistance = leftDistance * leftPenalty
+    const weightedRightDistance = rightDistance * rightPenalty
+    const nextAngle = weightedLeftDistance <= weightedRightDistance ? leftEscape : rightEscape
+
+    if (nextAngle === leftEscape) {
+      leftDetourCount += 1
+    } else {
+      rightDetourCount += 1
+    }
+    totalDetourDeg += Math.abs(nextAngle - currentAngle)
 
     addArcSegmentToAngle(nextAngle)
 
@@ -182,7 +282,20 @@ const buildSeparatorPathWithDetours = ({
 
   addRaySegmentToRadius(outerRadius)
 
-  return parts.join(' ')
+  let dominantDetourDirection = null
+  if (leftDetourCount > rightDetourCount) {
+    dominantDetourDirection = 'left'
+  } else if (rightDetourCount > leftDetourCount) {
+    dominantDetourDirection = 'right'
+  }
+
+  return {
+    path: parts.join(' '),
+    dominantDetourDirection,
+    leftDetourCount,
+    rightDetourCount,
+    totalDetourDeg,
+  }
 }
 
 export const solveSkillTreeLayout = (data, config) => {
@@ -251,6 +364,33 @@ export const solveSkillTreeLayout = (data, config) => {
   const toAngleSpan = (pixelWidth, radius) => {
     return toDegrees(pixelWidth / Math.max(radius, 1))
   }
+  const getMinimumSegmentWidthDeg = (segmentId, currentRadius, stats) => {
+    const segmentStats = stats ?? { count: 0 }
+    const labelWidth = toAngleSpan(
+      getEstimatedSegmentLabelWidthPx(segmentId) + config.nodeSize * 0.28,
+      currentRadius,
+    )
+
+    if (segmentStats.count > 0) {
+      return Math.max(labelWidth, toAngleSpan(config.nodeSize * 0.9, currentRadius))
+    }
+
+    return labelWidth
+  }
+  const computeAdaptiveSegmentSpread = ({ segmentIds, statsById, radius }) => {
+    if (segmentIds.length <= 1) {
+      return 0
+    }
+
+    const minimumWidthSum = segmentIds.reduce(
+      (sum, segmentId) => sum + getMinimumSegmentWidthDeg(segmentId, radius, statsById.get(segmentId)),
+      0,
+    )
+    // Preserve a small global slack budget for visual breathing room while avoiding
+    // large unused gaps when the current radius already provides enough angular room.
+    const slack = Math.max(10, Math.min(42, (segmentIds.length - 1) * 3.8))
+    return clamp(minimumWidthSum + slack, MIN_SEGMENT_SPREAD_DEG, config.maxAngleSpread)
+  }
   const computeSegmentSlots = ({ segmentIds, statsById, radius, totalSpread }) => {
     return computeWeightedSegmentSlots({
       segmentIds,
@@ -258,19 +398,8 @@ export const solveSkillTreeLayout = (data, config) => {
       radius,
       totalSpread,
       centerAngle,
-      getMinimumWidth: (segmentId, currentRadius, stats) => {
-        const segmentStats = stats ?? { count: 0 }
-        const labelWidth = toAngleSpan(
-          getEstimatedSegmentLabelWidthPx(segmentId) + config.nodeSize * 0.28,
-          currentRadius,
-        )
-
-        if (segmentStats.count > 0) {
-          return Math.max(labelWidth, toAngleSpan(config.nodeSize * 0.9, currentRadius))
-        }
-
-        return labelWidth
-      },
+      getMinimumWidth: (segmentId, currentRadius, stats) =>
+        getMinimumSegmentWidthDeg(segmentId, currentRadius, stats),
       getWeight: (_segmentId, stats) => {
         const segmentStats = stats ?? { count: 0 }
         return segmentStats.count > 0 ? Math.max(1, segmentStats.count) : 0.02
@@ -491,22 +620,23 @@ export const solveSkillTreeLayout = (data, config) => {
       const angle = (slot.max + next.min) / 2
       const safeMinAngle = Math.min(slot.max, next.min)
       const safeMaxAngle = Math.max(slot.max, next.min)
+      const separatorPath = buildSeparatorPathWithDetours({
+        baseAngle: angle,
+        innerRadius: separatorInnerRadius,
+        outerRadius: separatorOuterRadius,
+        origin,
+        nodes: [],
+        allowedMinAngle: safeMinAngle,
+        allowedMaxAngle: safeMaxAngle,
+        nodeSize: config.nodeSize,
+        angleSafetyDeg: 0,
+      })
 
       return {
         id: `segment-separator-${slot.id}-${next.id}`,
         leftSegmentId: slot.id,
         rightSegmentId: next.id,
-        path: buildSeparatorPathWithDetours({
-          baseAngle: angle,
-          innerRadius: separatorInnerRadius,
-          outerRadius: separatorOuterRadius,
-          origin,
-          nodes: [],
-          allowedMinAngle: safeMinAngle,
-          allowedMaxAngle: safeMaxAngle,
-          nodeSize: config.nodeSize,
-          angleSafetyDeg: 0,
-        }),
+        path: separatorPath.path,
       }
     })
 
@@ -1179,6 +1309,19 @@ export const solveSkillTreeLayout = (data, config) => {
     computeLabelBandRadius(labelInnerRadius, recomputedLabelOuterRadius),
   )
 
+  const visualSegmentSpread = computeAdaptiveSegmentSpread({
+    segmentIds: segmentEntries.map((segment) => segment.id),
+    statsById: segmentStatsById,
+    radius: segmentLabelRadius,
+  })
+  const visualSegmentSlots = computeSegmentSlots({
+    segmentIds: segmentEntries.map((segment) => segment.id),
+    statsById: segmentStatsById,
+    radius: segmentLabelRadius,
+    totalSpread: visualSegmentSpread,
+  })
+  const visualSegmentSlotById = new Map(visualSegmentSlots.map((slot) => [slot.id, slot]))
+
   const observedSegmentRangesMap = new Map()
 
   for (const node of allNodes) {
@@ -1206,20 +1349,27 @@ export const solveSkillTreeLayout = (data, config) => {
 
   const finalOrderedSegments = orderedSegments.map((segment) => {
     const range = observedSegmentRangesMap.get(segment.id)
+    const visualSlot = visualSegmentSlotById.get(segment.id)
+    const wedgeMin = visualSlot?.min ?? segment.wedgeMin
+    const wedgeMax = visualSlot?.max ?? segment.wedgeMax
+    const wedgeCenter = visualSlot?.center ?? segment.wedgeCenter
     return {
       ...segment,
-      min: segment.wedgeMin,
-      max: segment.wedgeMax,
+      min: wedgeMin,
+      max: wedgeMax,
+      wedgeMin,
+      wedgeMax,
+      wedgeCenter,
       observedMin: range?.min ?? null,
       observedMax: range?.max ?? null,
-      anchorAngle: segment.wedgeCenter,
+      anchorAngle: wedgeCenter,
     }
   })
 
   const segmentSpanDegById = new Map(
     finalOrderedSegments.map((segment) => {
-      const min = segment.wedgeMin ?? segment.slotMin ?? segment.anchorAngle
-      const max = segment.wedgeMax ?? segment.slotMax ?? segment.anchorAngle
+      const min = segment.slotMin ?? segment.wedgeMin ?? segment.anchorAngle
+      const max = segment.slotMax ?? segment.wedgeMax ?? segment.anchorAngle
       return [segment.id, Math.max(1, max - min)]
     }),
   )
@@ -1311,9 +1461,10 @@ export const solveSkillTreeLayout = (data, config) => {
     })
   }
 
-  const boundarySafetyMarginDeg = toDegrees((config.nodeSize * 0.58) / Math.max(levelOneRadius, config.levelSpacing))
+  const boundarySafetyMarginPx = config.nodeSize * 0.5 + additionalDependencyPortalAllowancePx
+  const boundarySafetyMarginDeg = toDegrees(boundarySafetyMarginPx / Math.max(levelOneRadius, config.levelSpacing))
 
-  const segmentSeparators = finalOrderedSegments.slice(0, -1).map((segment, index) => {
+  const separatorSpecs = finalOrderedSegments.slice(0, -1).map((segment, index) => {
     const next = finalOrderedSegments[index + 1]
     const leftBoundaryAngle = segment.wedgeMax ?? segment.slotMax
     const rightBoundaryAngle = next.wedgeMin ?? next.slotMin
@@ -1329,19 +1480,82 @@ export const solveSkillTreeLayout = (data, config) => {
       id: `segment-separator-${segment.id}-${next.id}`,
       leftSegmentId: segment.id,
       rightSegmentId: next.id,
-      path: buildSeparatorPathWithDetours({
-        baseAngle: angle,
+      baseAngle: angle,
+      safeMinAngle,
+      safeMaxAngle,
+    }
+  })
+
+  const separatorProfile = resolveSeparatorHomogeneityProfile(config.separatorHomogeneityProfile)
+
+  const buildSeparatorSet = ({ globalDirection = null, useNeighborBias = false }) => {
+    let runningNeighborDirection = globalDirection
+
+    const results = separatorSpecs.map((separator) => {
+      const preferredDirection = useNeighborBias ? runningNeighborDirection : globalDirection
+      const separatorPath = buildSeparatorPathWithDetours({
+        baseAngle: separator.baseAngle,
         innerRadius: separatorInnerRadius,
         outerRadius: separatorOuterRadius,
         origin,
         nodes,
-        allowedMinAngle: safeMinAngle,
-        allowedMaxAngle: safeMaxAngle,
+        allowedMinAngle: separator.safeMinAngle,
+        allowedMaxAngle: separator.safeMaxAngle,
         nodeSize: config.nodeSize,
         angleSafetyDeg: boundarySafetyMarginDeg,
-      }),
+        preferredDetourDirection: preferredDirection,
+        detourBiasFactor: separatorProfile.biasFactor,
+      })
+
+      if (useNeighborBias && separatorPath.dominantDetourDirection) {
+        runningNeighborDirection = separatorPath.dominantDetourDirection
+      }
+
+      return {
+        ...separator,
+        path: separatorPath.path,
+        dominantDetourDirection: separatorPath.dominantDetourDirection,
+        leftDetourCount: separatorPath.leftDetourCount,
+        rightDetourCount: separatorPath.rightDetourCount,
+        totalDetourDeg: separatorPath.totalDetourDeg,
+      }
+    })
+
+    return {
+      separators: results,
+      summary: summarizeSeparatorDetours(results),
     }
+  }
+
+  const baselineSeparatorSet = buildSeparatorSet({
+    globalDirection: null,
+    useNeighborBias: false,
   })
+  let selectedSeparatorSet = baselineSeparatorSet
+  let selectedSeparatorStrategy = 'baseline'
+
+  if (separatorProfile.useGlobalPass) {
+    const candidateSeparatorSet = buildSeparatorSet({
+      globalDirection: baselineSeparatorSet.summary.dominantDetourDirection,
+      useNeighborBias: separatorProfile.useNeighborBias,
+    })
+
+    selectedSeparatorStrategy = chooseBetterSeparatorStrategy({
+      baselineSummary: baselineSeparatorSet.summary,
+      candidateSummary: candidateSeparatorSet.summary,
+    })
+
+    if (selectedSeparatorStrategy === 'candidate') {
+      selectedSeparatorSet = candidateSeparatorSet
+    }
+  }
+
+  const segmentSeparators = selectedSeparatorSet.separators.map((separator) => ({
+    id: separator.id,
+    leftSegmentId: separator.leftSegmentId,
+    rightSegmentId: separator.rightSegmentId,
+    path: separator.path,
+  }))
 
   const segmentLabels = finalOrderedSegments
     .filter((segment) => !segment.isVirtual)
@@ -1426,6 +1640,12 @@ export const solveSkillTreeLayout = (data, config) => {
         segmentLevelEntries: feasibilityAnalysis.segmentLevelEntries,
       },
       capacityIssues,
+      separatorOptimization: {
+        profile: String(config.separatorHomogeneityProfile ?? 'balanced').trim().toLowerCase(),
+        selectedStrategy: selectedSeparatorStrategy,
+        baseline: baselineSeparatorSet.summary,
+        selected: selectedSeparatorSet.summary,
+      },
     },
   }
 }

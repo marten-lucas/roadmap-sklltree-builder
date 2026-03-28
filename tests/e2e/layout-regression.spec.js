@@ -221,6 +221,30 @@ const exportHtmlFromPage = async (page) => {
   return readDownload(download)
 }
 
+const extractSegmentLabelTextStats = (exportedHtml) => {
+  const html = String(exportedHtml ?? '')
+  const groups = [...html.matchAll(/<g[^>]*data-segment-id="[^"]+"[^>]*>[\s\S]*?<\/g>/g)]
+
+  if (!groups.length) {
+    return {
+      segmentLabelCount: 0,
+      maxSegmentLabelLineCount: 0,
+    }
+  }
+
+  let maxSegmentLabelLineCount = 0
+  for (const match of groups) {
+    const groupMarkup = match[0]
+    const tspanCount = (groupMarkup.match(/<tspan\b/g) ?? []).length
+    maxSegmentLabelLineCount = Math.max(maxSegmentLabelLineCount, Math.max(1, tspanCount))
+  }
+
+  return {
+    segmentLabelCount: groups.length,
+    maxSegmentLabelLineCount,
+  }
+}
+
 const buildDatasetAssertions = ({
   datasetBaseKey,
   variantKey,
@@ -228,6 +252,7 @@ const buildDatasetAssertions = ({
   exportLayout,
   expectedEdgeCount,
   warningMetrics,
+  exportedHtml,
 }) => {
   const warningGateByDatasetKey = {
     large__full: {
@@ -348,6 +373,12 @@ const buildDatasetAssertions = ({
 
   if (datasetBaseKey === 'sparse-segments') {
     expect(exportLayout.usedAngleDeg).toBeGreaterThan(180)
+  }
+
+  if (datasetBaseKey === 'long-segment-labels' && !variantKey.includes('no-segments')) {
+    const labelStats = extractSegmentLabelTextStats(exportedHtml)
+    expect(labelStats.segmentLabelCount).toBeGreaterThan(0)
+    expect(labelStats.maxSegmentLabelLineCount).toBeGreaterThanOrEqual(2)
   }
 
   if (datasetBaseKey === 'single-chain') {
@@ -488,6 +519,7 @@ test.describe('CSV import/export layout regression metrics', () => {
         exportLayout,
         expectedEdgeCount: template.children.length,
         warningMetrics,
+        exportedHtml,
       })
 
       reportEntries.push({

@@ -79,6 +79,7 @@ export const TREE_CONFIG = {
   minArcGapFactor: 1.08,
   promotionProfile: 'balanced',
   routingProfile: 'strict',
+  separatorHomogeneityProfile: 'balanced',
   levelSpacing: 180,
   horizontalPadding: 600,
   topPadding: 600,

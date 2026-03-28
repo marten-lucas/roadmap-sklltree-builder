@@ -79,9 +79,45 @@ import { resolveInspectorSelectedNode } from './utils/selection'
 
 const AUTOSAVE_DEBOUNCE_MS = 450
 const MINIMAL_NODE_SIZE = 36
+const MAX_SEGMENT_LABEL_CHARS_PER_LINE = 15
+const CENTER_LABEL_GAP_PX = 12
+const LABEL_LEVEL_ONE_GAP_PX = 14
 const DEFAULT_CSV_IMPORT_PROCESS_OPTIONS = {
   processSegments: true,
   processManualLevels: true,
+}
+
+const estimateWrappedLineCount = (text) => {
+  const words = String(text ?? '').trim().split(/\s+/).filter(Boolean)
+  if (words.length === 0) {
+    return 1
+  }
+
+  let lineCount = 0
+  let currentLine = ''
+  for (const word of words) {
+    const candidate = currentLine ? `${currentLine} ${word}` : word
+    if (candidate.length <= MAX_SEGMENT_LABEL_CHARS_PER_LINE) {
+      currentLine = candidate
+      continue
+    }
+
+    if (currentLine) {
+      lineCount += 1
+    }
+    currentLine = word
+  }
+
+  if (currentLine) {
+    lineCount += 1
+  }
+
+  return Math.max(lineCount, 1)
+}
+
+const getEstimatedSegmentLabelHeightPx = (label) => {
+  const lineCount = estimateWrappedLineCount(label)
+  return 24 + Math.max(0, lineCount - 1) * 16
 }
 
 export function SkillTree() {
@@ -156,6 +192,17 @@ export function SkillTree() {
   const initialPositionX = viewportWidth / 2 - canvas.origin.x * initialViewScale
   const initialPositionY = viewportHeight / 2 - canvas.origin.y * initialViewScale
   const centerIconSource = roadmapData.centerIconSrc ?? DEFAULT_CENTER_ICON_SRC
+  const maxEstimatedSegmentLabelHeightPx = useMemo(() => {
+    const segments = roadmapData?.segments ?? []
+    if (segments.length === 0) {
+      return TREE_CONFIG.nodeSize * 0.4
+    }
+
+    return Math.max(
+      TREE_CONFIG.nodeSize * 0.4,
+      ...segments.map((segment) => getEstimatedSegmentLabelHeightPx(segment?.label ?? '')),
+    )
+  }, [roadmapData?.segments])
 
   const centerIconSize = useMemo(() => {
     const firstLevelNode = nodes.find((node) => node.level === 1)
@@ -164,14 +211,20 @@ export function SkillTree() {
     const levelOneNodeClearance = TREE_CONFIG.nodeSize * 0.5 + additionalDependencyPortalAllowance
     const minRadius = TREE_CONFIG.nodeSize * 0.5
     const preferredRadius = TREE_CONFIG.nodeSize * 0.72
+    const labelBandHeight = maxEstimatedSegmentLabelHeightPx
     const maxAllowedRadius = Math.max(
       minRadius,
-      firstLevelRadius - levelOneNodeClearance - 20,
+      firstLevelRadius - levelOneNodeClearance - LABEL_LEVEL_ONE_GAP_PX - labelBandHeight - CENTER_LABEL_GAP_PX,
     )
-    const radius = Math.max(minRadius, Math.min(preferredRadius, maxAllowedRadius))
+    const maxVisualRadius = Math.min(
+      TREE_CONFIG.nodeSize * 1.35,
+      firstLevelRadius * 0.42,
+    )
+    const targetRadius = Math.min(maxAllowedRadius, maxVisualRadius)
+    const radius = Math.max(minRadius, Math.max(preferredRadius, targetRadius))
 
     return radius * 2
-  }, [nodes])
+  }, [maxEstimatedSegmentLabelHeightPx, nodes])
 
   const selectedNode = useMemo(
     () => findNodeById(roadmapData, selectedNodeId),
