@@ -237,6 +237,11 @@ export function SkillTreeCanvas({
           const isPortalSelected = portal.key === selectedPortalKey
           const portalClassName = getPortalClassName(portal, isPortalSelected)
           const chevronPath = getPortalChevronPath(portal.type)
+          const portalRotation = portal.rotation ?? 0
+          const portalAngle = portal.angle ?? 0
+          const portalLabelOffset = TREE_CONFIG.nodeSize * 0.15
+          const portalLabelX = -Math.cos((portalAngle * Math.PI) / 180) * portalLabelOffset
+          const portalLabelY = -Math.sin((portalAngle * Math.PI) / 180) * portalLabelOffset
 
           return (
             <Tooltip
@@ -254,7 +259,7 @@ export function SkillTreeCanvas({
                 data-portal-node-id={portal.nodeId}
                 data-portal-source-id={portal.sourceId}
                 data-portal-target-id={portal.targetId}
-                transform={`translate(${portal.x} ${portal.y}) rotate(${portal.rotation ?? 0})`}
+                transform={`translate(${portal.x} ${portal.y})`}
                 onMouseDown={(event) => event.stopPropagation()}
                 onClick={(event) => {
                   event.stopPropagation()
@@ -263,18 +268,22 @@ export function SkillTreeCanvas({
                   }
                 }}
               >
-                <circle className="skill-tree-portal__hit" r="26" />
-                <circle className={`skill-tree-portal__halo skill-tree-portal__halo--${portal.type}`} r="17" />
-                <path className={`skill-tree-portal__chevron skill-tree-portal__chevron--${portal.type}`} d={chevronPath} />
-                <text
-                  className="skill-tree-portal__label"
-                  x="0"
-                  y="17"
-                  textAnchor="middle"
-                  dominantBaseline="middle"
-                >
-                  {portal.otherLabel}
-                </text>
+                <g transform={`rotate(${portalRotation})`}>
+                  <circle className="skill-tree-portal__hit" r="26" />
+                  <circle className={`skill-tree-portal__halo skill-tree-portal__halo--${portal.type}`} r="17" />
+                  <path className={`skill-tree-portal__chevron skill-tree-portal__chevron--${portal.type}`} d={chevronPath} />
+                </g>
+                <g transform={`translate(${portalLabelX} ${portalLabelY})`}>
+                  <text
+                    className="skill-tree-portal__label"
+                    x="0"
+                    y="0"
+                    textAnchor="middle"
+                    dominantBaseline="middle"
+                  >
+                    {portal.otherLabel}
+                  </text>
+                </g>
               </g>
             </Tooltip>
           )

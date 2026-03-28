@@ -8,6 +8,7 @@ import {
   collectCanvasGeometryMetrics,
   confirmAndReset,
   extractConnectionMetrics,
+  extractPortalMetrics,
   extractJsonPayload,
   extractLayoutMetrics,
   getSelectedNodeId,
@@ -45,6 +46,7 @@ const baseDatasetEntries = [
   { key: 'crisscross', label: 'crisscross', path: resolve(process.cwd(), 'tests/e2e/datasets/layout-regression/crisscross.csv') },
   { key: 'dense-segment-capacity', label: 'dense-segment-capacity', path: resolve(process.cwd(), 'tests/e2e/datasets/layout-regression/dense-segment-capacity.csv') },
   { key: 'dense-root-capacity', label: 'dense-root-capacity', path: resolve(process.cwd(), 'tests/e2e/datasets/layout-regression/dense-root-capacity.csv') },
+  { key: 'portal-density', label: 'portal-density', path: resolve(process.cwd(), 'tests/e2e/datasets/layout-regression/portal-density.csv') },
   { key: 'long-segment-labels', label: 'long-segment-labels', path: resolve(process.cwd(), 'tests/e2e/datasets/layout-regression/long-segment-labels.csv') },
   { key: 'segment-boundary', label: 'segment-boundary', path: resolve(process.cwd(), 'tests/e2e/datasets/layout-regression/segment-boundary.csv') },
   { key: 'sparse-segments', label: 'sparse-segments', path: resolve(process.cwd(), 'tests/e2e/datasets/layout-regression/sparse-segments.csv') },
@@ -251,6 +253,8 @@ const buildDatasetAssertions = ({
   connectionMetrics,
   exportLayout,
   expectedEdgeCount,
+  expectedPortalCount,
+  portalMetrics,
   warningMetrics,
   exportedHtml,
 }) => {
@@ -408,6 +412,11 @@ const buildDatasetAssertions = ({
     expect(connectionMetrics.routedCount).toBeGreaterThanOrEqual(3)
   }
 
+  if (datasetBaseKey === 'portal-density') {
+    expect(portalMetrics.portalCount).toBe(expectedPortalCount)
+    expect(portalMetrics.portalNodeCount).toBe(9)
+  }
+
   if (datasetBaseKey === 'subtree-shifted') {
     expect(connectionMetrics.routedCount).toBeGreaterThan(0)
   }
@@ -470,6 +479,10 @@ test.describe('CSV import/export layout regression metrics', () => {
       const originalCsvText = readFileSync(dataset.path, 'utf-8')
       const csvText = buildLayoutVariantCsv(originalCsvText, dataset.variant)
       const template = parseSkillTreeCsvTemplate(csvText)
+      const expectedPortalCount = template.rows.reduce(
+        (total, row) => total + (row.additionalDependencies?.length ?? 0),
+        0,
+      ) * 2
       const startedAt = Date.now()
 
       ensureArtifactDirs()
@@ -507,6 +520,7 @@ test.describe('CSV import/export layout regression metrics', () => {
       const payload = extractJsonPayload(exportedHtml)
       const exportLayout = extractLayoutMetrics(exportedHtml)
       const connectionMetrics = extractConnectionMetrics(exportedHtml)
+      const portalMetrics = extractPortalMetrics(exportedHtml)
 
       expect(payload.document.children?.length ?? 0).toBeGreaterThan(0)
       expect(pageErrors).toEqual([])
@@ -518,6 +532,8 @@ test.describe('CSV import/export layout regression metrics', () => {
         connectionMetrics,
         exportLayout,
         expectedEdgeCount: template.children.length,
+        expectedPortalCount,
+        portalMetrics,
         warningMetrics,
         exportedHtml,
       })
@@ -549,6 +565,7 @@ test.describe('CSV import/export layout regression metrics', () => {
         },
         exportLayout,
         connections: connectionMetrics,
+        portals: portalMetrics,
         exportPath,
         screenshots: {
           builder: builderScreenshotPath,

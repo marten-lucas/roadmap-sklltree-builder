@@ -1380,6 +1380,21 @@ export const extractConnectionMetrics = (htmlText) => {
 }
 
 /**
+ * Counts rendered dependency portals in exported HTML.
+ */
+export const extractPortalMetrics = (htmlText) => {
+  const text = String(htmlText ?? '')
+  const portalNodeIds = [...text.matchAll(/data-portal-node-id="([^"]*)"/g)]
+    .map((match) => match[1])
+    .filter(Boolean)
+
+  return {
+    portalCount: portalNodeIds.length,
+    portalNodeCount: new Set(portalNodeIds).size,
+  }
+}
+
+/**
  * Collects layout geometry metrics from the live builder canvas.
  * Must be called while the skill-tree canvas SVG is visible in the page.
  *

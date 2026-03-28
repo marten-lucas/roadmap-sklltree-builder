@@ -446,6 +446,7 @@ test.describe('Inspector and layout regressions', () => {
 
     expect(sourceNode.additionalDependencyIds).toContain(targetNode.id)
     await expect(page.locator(`.skill-tree-portal[data-portal-source-id="${sourceNode.id}"][data-portal-target-id="${targetNode.id}"]`)).toHaveCount(2)
+    await expect(page.locator('.skill-tree-portal__label').first()).not.toHaveAttribute('transform', /rotate/)
   })
 
   test('zooms and pans the canvas around rendered nodes', async ({ page }) => {

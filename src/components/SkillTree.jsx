@@ -725,7 +725,7 @@ export function SkillTree() {
           x: layoutNode.x + Math.cos(radians) * orbit,
           y: layoutNode.y + Math.sin(radians) * orbit,
           angle: bestAngle,
-          rotation: bestAngle + 90,
+          rotation: bestAngle + 180,
         })
       })
     }
