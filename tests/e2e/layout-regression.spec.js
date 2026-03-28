@@ -229,6 +229,87 @@ const buildDatasetAssertions = ({
   expectedEdgeCount,
   warningMetrics,
 }) => {
+  const warningGateByDatasetKey = {
+    large__full: {
+      maxLinkLinkIntersectionCount: 76,
+      maxLinkNodeOverlapCount: 17,
+    },
+    'large__no-manual-levels': {
+      maxLinkLinkIntersectionCount: 74,
+      maxLinkNodeOverlapCount: 17,
+    },
+    crisscross__full: {
+      maxLinkLinkIntersectionCount: 13,
+      maxLinkNodeOverlapCount: 7,
+    },
+    'crisscross__no-manual-levels': {
+      maxLinkLinkIntersectionCount: 13,
+      maxLinkNodeOverlapCount: 7,
+    },
+    'crisscross__no-segments': {
+      maxLinkLinkIntersectionCount: 12,
+      maxLinkNodeOverlapCount: 7,
+    },
+    'crisscross__no-manual-levels-no-segments': {
+      maxLinkLinkIntersectionCount: 12,
+      maxLinkNodeOverlapCount: 7,
+    },
+    'dense-root-capacity__full': {
+      maxLinkLinkIntersectionCount: 10,
+      maxLinkNodeOverlapCount: 11,
+    },
+    'root-promoted__full': {
+      maxLinkLinkIntersectionCount: 3,
+      maxLinkNodeOverlapCount: 3,
+    },
+  }
+  const fallbackGateByDatasetKey = {
+    'crisscross__full': 4,
+    'crisscross__no-manual-levels': 4,
+    'crisscross__no-segments': 6,
+    'crisscross__no-manual-levels-no-segments': 6,
+    'medium__no-segments': 2,
+    'large__no-segments': 8,
+    'large__no-manual-levels-no-segments': 8,
+    'segment-boundary__no-segments': 4,
+    'segment-boundary__no-manual-levels-no-segments': 4,
+    'single-chain__full': 0,
+    'single-chain__no-segments': 0,
+    'single-chain__no-manual-levels': 0,
+    'single-chain__no-manual-levels-no-segments': 0,
+    'multi-level-ray__full': 0,
+    'multi-level-ray__no-segments': 0,
+    'multi-level-ray__no-manual-levels': 0,
+    'multi-level-ray__no-manual-levels-no-segments': 0,
+  }
+  // Known edge cases where a segment label falls slightly beyond its wedge boundary.
+  // All other datasets must have segmentLabelOutsideCount === 0.
+  const labelGateByDatasetKey = {
+    'large__full': 1,
+    'large__no-manual-levels': 1,
+    'routed-threshold__full': 1,
+    'routed-threshold__no-manual-levels': 1,
+  }
+  const datasetKey = `${datasetBaseKey}__${variantKey}`
+  const warningGate = warningGateByDatasetKey[datasetKey]
+  const fallbackGate = fallbackGateByDatasetKey[datasetKey]
+  const labelGate = labelGateByDatasetKey[datasetKey] ?? 0
+
+  if (warningGate) {
+    expect(warningMetrics.linkLinkIntersectionCount).toBeLessThanOrEqual(
+      warningGate.maxLinkLinkIntersectionCount,
+    )
+    expect(warningMetrics.linkNodeOverlapCount).toBeLessThanOrEqual(
+      warningGate.maxLinkNodeOverlapCount,
+    )
+  }
+
+  if (fallbackGate != null) {
+    expect(connectionMetrics.betweenRadialsFallbackCount).toBeLessThanOrEqual(fallbackGate)
+  }
+
+  expect(warningMetrics.segmentLabelOutsideCount).toBeLessThanOrEqual(labelGate)
+
   expect(exportLayout.nodeCount).toBeGreaterThan(0)
   expect(exportLayout.usedAngleDeg).toBeGreaterThanOrEqual(0)
   expect(exportLayout.centerRadius).toBeGreaterThan(0)

@@ -1344,8 +1344,11 @@ export const extractConnectionMetrics = (htmlText) => {
   let ringCount = 0
   let directCount = 0
   let routedCount = 0
+  let betweenRadialsFallbackCount = 0
 
   for (const path of paths) {
+    const commandTokens = path.match(/\b[MLA]\b/g) ?? []
+    const firstDrawCommand = commandTokens[1] ?? null
     const hasLine = /\bL\b/.test(path)
     const arcMatches = path.match(/\bA\b/g) ?? []
     const arcCount = arcMatches.length
@@ -1361,6 +1364,10 @@ export const extractConnectionMetrics = (htmlText) => {
     }
 
     routedCount += 1
+    if (firstDrawCommand === 'A') {
+      // Arc-first routed links are treated as fallback between-radials paths.
+      betweenRadialsFallbackCount += 1
+    }
   }
 
   return {
@@ -1368,6 +1375,7 @@ export const extractConnectionMetrics = (htmlText) => {
     ringCount,
     directCount,
     routedCount,
+    betweenRadialsFallbackCount,
   }
 }
 
@@ -1454,7 +1462,7 @@ export const collectCanvasWarningMetrics = async (page) => {
     }
 
     const parseTranslate = (transform) => {
-      const match = String(transform ?? '').match(/translate\(([-\d.]+)[ ,]([-\d.]+)\)/)
+      const match = String(transform ?? '').match(/translate\(([-\d.]+)[,\s]+([-\d.]+)\)/)
       return match ? { x: Number(match[1]), y: Number(match[2]) } : { x: 0, y: 0 }
     }
 
