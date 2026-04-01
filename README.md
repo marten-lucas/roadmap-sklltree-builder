@@ -62,6 +62,9 @@ npm run dev
 npm run build
 ```
 
+The build output is a single minified standalone file at `dist/roadmap-skilltree-builder.html`.
+It contains the app code and styles inline so it can be shared directly and opened locally without a server.
+
 ### Testing
 ```bash
 npm run test:unit         # Fast unit suite
