@@ -773,9 +773,17 @@ export const solveSkillTreeLayout = (data, config) => {
     const baseGap = Math.max(gapByLevel.get(left.level), gapByLevel.get(right.level))
     const leftSegmentId = getGroupedSegmentId(left.node.data.segmentId ?? null)
     const rightSegmentId = getGroupedSegmentId(right.node.data.segmentId ?? null)
-    const segmentGapMultiplier = leftSegmentId === rightSegmentId ? 1 : crossSegmentGapFactor
 
-    return (left.span + right.span) / 2 + baseGap * segmentGapMultiplier
+    if (leftSegmentId === rightSegmentId) {
+      return (left.span + right.span) / 2 + baseGap
+    }
+
+    const level = Math.max(left.level, right.level)
+    const actualRadius = radiusByLevel.get(level) ?? level * config.levelSpacing
+    const cappedRadius = Math.min(actualRadius, config.levelSpacing * 3)
+    const effectiveCrossSegGap = Math.max(baseGap, toDegrees(minimumArcGap / cappedRadius)) * crossSegmentGapFactor
+
+    return (left.span + right.span) / 2 + effectiveCrossSegGap
   }
 
   const computeOffsets = (items, distances) => {
@@ -905,7 +913,13 @@ export const solveSkillTreeLayout = (data, config) => {
       groupItems.forEach((item, index) => {
         const slotCenter = slotCenterBySegmentId.get(item.group.segmentId) ?? centerAngle
         const packedCenter = centerAngle + offsets[index]
+
+        // Groups whose angular span is much smaller than their assigned slot
+        // (e.g. two leaf-level nodes in a wide segment) drift far from the slot
+        // centre with a naive 50/50 blend. Scale the slot-centre weight up when
+        // the group occupies a small fraction of the slot so they stay centred.
         const desiredCenter = item.group.nodes.length > 0 ? (slotCenter + packedCenter) / 2 : slotCenter
+
         const delta = desiredCenter - item.center
 
         if (Math.abs(delta) <= 0.01) {
