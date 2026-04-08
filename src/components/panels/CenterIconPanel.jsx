@@ -46,7 +46,8 @@ export function CenterIconPanel({
         </div>
       </div>
 
-      <Stack gap="md" className="skill-panel__body">
+      <div className="skill-panel__body skill-panel__body--scrollable">
+        <Stack gap="md">
         <input
           ref={fileInputRef}
           type="file"
@@ -159,6 +160,7 @@ export function CenterIconPanel({
           Lade eine SVG-Datei hoch. Das Icon wird in der Roadmap gespeichert und in Exporten uebernommen.
         </Text>
       </Stack>
+      </div>
     </Paper>
   )
 }

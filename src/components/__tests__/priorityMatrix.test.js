@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { computeMatrixLayout } from '../panels/PriorityMatrix'
+import { computeMatrixLayout } from '../utils/matrixLayout'
 
 const makeNode = (id, effortSize, benefitSize, status = 'later') => ({
   id,

@@ -2,6 +2,7 @@ import { Text } from '@mantine/core'
 import { renderScopeLabelsMarkup } from '../utils/scopeDisplay'
 import { renderMarkdownToHtml } from '../utils/markdown'
 import { EFFORT_SIZE_LABELS, BENEFIT_SIZE_LABELS, resolveStoryPoints } from '../utils/effortBenefit'
+import { STATUS_STYLES } from '../config'
 
 const EMPTY_NOTE = 'Keine Release Note hinterlegt.'
 
@@ -29,13 +30,41 @@ const EffortBenefitChips = ({ effort, benefit, storyPointMap }) => {
   )
 }
 
-export function MarkdownTooltipContent({ title, markdown, scopeLabels = [], effort, benefit, storyPointMap }) {
-  const noteHtml = renderMarkdownToHtml(markdown)
-  const scopeHtml = renderScopeLabelsMarkup(scopeLabels)
+const LevelTabBar = ({ levels, activeIndex, onTabChange }) => (
+  <div className="skill-node-level-tab-bar">
+    {levels.map((level, i) => {
+      const statusKey = level.status ?? 'later'
+      const dotColor = STATUS_STYLES[statusKey]?.ringBand ?? STATUS_STYLES.later.ringBand
+      const shortLabel = level.label ? String(level.label).slice(0, 4) : `L${i + 1}`
+      return (
+        <button
+          key={level.id ?? i}
+          type="button"
+          className={i === activeIndex ? 'skill-node-level-tab skill-node-level-tab--active' : 'skill-node-level-tab'}
+          onClick={(e) => { e.stopPropagation(); onTabChange(i) }}
+          title={level.label}
+        >
+          <span className="skill-node-level-tab__dot" style={{ background: dotColor }} />
+          {shortLabel}
+        </button>
+      )
+    })}
+  </div>
+)
+
+export function MarkdownTooltipContent({ title, markdown, scopeLabels = [], effort, benefit, storyPointMap, levels, activeLevelIndex = 0, onTabChange }) {
+  const multiLevel = Array.isArray(levels) && levels.length > 1
+  const activeLevel = Array.isArray(levels) && levels.length > 0 ? (levels[activeLevelIndex] ?? levels[0]) : null
+  const resolvedMarkdown = activeLevel ? activeLevel.releaseNote : markdown
+  const resolvedScopeLabels = activeLevel ? (activeLevel.scopeLabels ?? []) : scopeLabels
+
+  const noteHtml = renderMarkdownToHtml(resolvedMarkdown)
+  const scopeHtml = renderScopeLabelsMarkup(resolvedScopeLabels)
 
   return (
     <div>
-      <Text className="skill-node-tooltip__title">{title}</Text>
+      {title && <Text className="skill-node-tooltip__title">{title}</Text>}
+      {multiLevel && <LevelTabBar levels={levels} activeIndex={activeLevelIndex} onTabChange={onTabChange ?? (() => {})} />}
       <EffortBenefitChips effort={effort} benefit={benefit} storyPointMap={storyPointMap} />
       <div
         className="skill-node-tooltip__note skill-node-tooltip__note--markdown"

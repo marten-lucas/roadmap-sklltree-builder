@@ -11,7 +11,7 @@ import {
   resolveStoryPoints,
   computeBudgetSummary,
 } from '../utils/effortBenefit'
-import { createEmptyDocument, createDocumentHistoryState } from '../utils/documentState'
+import { createEmptyDocument } from '../utils/documentState'
 import { addInitialRootNodeWithResult, updateNodeEffort, updateNodeBenefit, findNodeById } from '../utils/treeData'
 
 describe('EFFORT_SIZES / BENEFIT_SIZES constants', () => {

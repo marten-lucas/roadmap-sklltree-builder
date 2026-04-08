@@ -2,7 +2,6 @@ import { buildLayoutDiagnostics } from './layoutDiagnostics'
 import { buildEdgeRoutingModel, buildRoutedEdgeLinks } from './edgeRouter'
 import { analyzeSegmentLevelFeasibility, buildSegmentLevelGroups } from './layoutFeasibility'
 import {
-  buildArcRadialPath,
   buildRadialArcPath,
   centerAngle,
   clamp,

@@ -1,11 +1,12 @@
+import { useState } from 'react'
 import { Paper, Text } from '@mantine/core'
 import { STATUS_STYLES } from '../config'
 import { getDisplayStatusKey, getLevelStatusKeys } from '../utils/nodeStatus'
 import { resolveScopeLabels } from '../utils/scopeDisplay'
 import { MarkdownTooltipContent, Tooltip } from '../tooltip'
 
-const CLOSE_CARD_HEIGHT = 140 // px extra height below the circle for the release note card
-const CLOSE_CARD_EXTRA_W = 22 // px extra width each side when card is shown
+const CLOSE_CARD_WIDTH = 144 // px card width to the right of the circle
+const CLOSE_CARD_GAP = 0    // gap handled via CSS margin-left overlap instead
 
 const getShortName = (node) => {
   const explicitShortName = String(node?.shortName ?? '').trim().toLowerCase().slice(0, 3)
@@ -70,13 +71,14 @@ const buildSegmentConicStyle = (statusKeys, colorGetter) => {
 }
 
 export function SkillNode({ node, nodeSize, isSelected, onSelect, onSelectLevel, displayMode = 'full', labelMode = 'far', scopeOptions = [], storyPointMap }) {
+  const [activeCardTab, setActiveCardTab] = useState(0)
   const isMinimal = displayMode === 'minimal'
   const glowPadding = isMinimal ? 8 : 18
   const renderSize = nodeSize + glowPadding * 2
-  const cardExtraW = (!isMinimal && labelMode === 'close') ? CLOSE_CARD_EXTRA_W : 0
-  const cardExtraH = (!isMinimal && labelMode === 'close') ? CLOSE_CARD_HEIGHT : 0
-  const fwWidth = renderSize + cardExtraW * 2
-  const fwHeight = renderSize + cardExtraH
+  // Card sits to the RIGHT of the circle — extend width only, not height
+  const cardRightExtra = (!isMinimal && labelMode === 'close') ? CLOSE_CARD_WIDTH + CLOSE_CARD_GAP : 0
+  const fwWidth = renderSize + cardRightExtra
+  const fwHeight = renderSize
   const statusKey = getDisplayStatusKey(node)
   const statusStyles = STATUS_STYLES[statusKey] ?? STATUS_STYLES.later
   const shortName = getShortName(node)
@@ -138,7 +140,7 @@ export function SkillNode({ node, nodeSize, isSelected, onSelect, onSelectLevel,
 
   return (
     <foreignObject
-      x={node.x - nodeSize / 2 - glowPadding - cardExtraW}
+      x={node.x - nodeSize / 2 - glowPadding}
       y={node.y - nodeSize / 2 - glowPadding}
       width={fwWidth}
       height={fwHeight}
@@ -158,6 +160,7 @@ export function SkillNode({ node, nodeSize, isSelected, onSelect, onSelectLevel,
         onClick={(event) => event.stopPropagation()}
       >
         <Tooltip
+          disabled={labelMode === 'close'}
           multiline
           openDelay={80}
           closeDelay={40}
@@ -185,7 +188,7 @@ export function SkillNode({ node, nodeSize, isSelected, onSelect, onSelectLevel,
               {showLabel && (
                 <p
                   className="skill-node-button__label"
-                  style={{ color: statusStyles.textColor }}
+                  style={{ color: '#f8fafc' }}
                 >
                   {node.label}
                 </p>
@@ -204,12 +207,15 @@ export function SkillNode({ node, nodeSize, isSelected, onSelect, onSelectLevel,
         {showCard && (
           <div className="skill-node-label-card">
             <MarkdownTooltipContent
-              title={node.label}
+              title={null}
               markdown={tooltipReleaseNote}
               scopeLabels={tooltipScopeLabels}
               effort={node.effort}
               benefit={node.benefit}
               storyPointMap={storyPointMap}
+              levels={exportLevelEntries}
+              activeLevelIndex={activeCardTab}
+              onTabChange={setActiveCardTab}
             />
           </div>
         )}

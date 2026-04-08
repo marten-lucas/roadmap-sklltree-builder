@@ -2,13 +2,9 @@ import { Modal, Text } from '@mantine/core'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { STATUS_STYLES, STATUS_LABELS } from '../config'
 import { EFFORT_SIZE_LABELS, BENEFIT_SIZE_LABELS, resolveStoryPoints } from '../utils/effortBenefit'
+import { AXIS_SIZES, AXIS_COUNT, MATRIX_PADDING, NODE_RADIUS, computeMatrixLayout } from '../utils/matrixLayout'
 
-const AXIS_SIZES = ['xs', 's', 'm', 'l', 'xl']
-const AXIS_COUNT = AXIS_SIZES.length // 5
-const MATRIX_PADDING = 48
 const CELL_MIN_SIZE = 80
-const NODE_RADIUS = 18
-const NODE_COLLISION_MARGIN = 4
 
 /**
  * Collects all nodes (flat) from a document tree.
@@ -32,64 +28,9 @@ const filterPlottableNodes = (nodes) =>
     (n) => n.effort?.size && n.effort.size !== 'unclear' && n.benefit?.size && n.benefit.size !== 'unclear',
   )
 
-/**
- * Computes node positions in 5x5 grid, resolving collisions in each cell
- * by placing nodes in a small grid pattern within the cell.
- */
-export const computeMatrixLayout = (nodes, cellSize) => {
-  const cellNodes = {}
-  for (const size of AXIS_SIZES) {
-    cellNodes[size] = {}
-    for (const bSize of AXIS_SIZES) {
-      cellNodes[size][bSize] = []
-    }
-  }
+// computeMatrixLayout is imported from ../utils/matrixLayout
 
-  for (const node of nodes) {
-    const ef = node.effort?.size
-    const be = node.benefit?.size
-    if (ef && be && AXIS_SIZES.includes(ef) && AXIS_SIZES.includes(be)) {
-      cellNodes[ef][be].push(node)
-    }
-  }
-
-  const positioned = []
-
-  for (const [effortKey, benefitMap] of Object.entries(cellNodes)) {
-    const col = AXIS_SIZES.indexOf(effortKey)
-    for (const [benefitKey, nodesInCell] of Object.entries(benefitMap)) {
-      if (nodesInCell.length === 0) continue
-
-      const row = AXIS_SIZES.indexOf(benefitKey)
-      // row 0 = highest benefit (xl) at top — invert y
-      const invertedRow = AXIS_COUNT - 1 - row
-
-      const cellCenterX = MATRIX_PADDING + col * cellSize + cellSize / 2
-      const cellCenterY = MATRIX_PADDING + invertedRow * cellSize + cellSize / 2
-
-      // Lay out nodes in a spiral / grid within the cell to avoid overlap
-      const slotDiameter = NODE_RADIUS * 2 + NODE_COLLISION_MARGIN
-
-      // Compute grid dimensions for this cell
-      const cols = Math.ceil(Math.sqrt(nodesInCell.length))
-      const rows = Math.ceil(nodesInCell.length / cols)
-      const totalW = cols * slotDiameter
-      const totalH = rows * slotDiameter
-
-      nodesInCell.forEach((node, i) => {
-        const col_ = i % cols
-        const row_ = Math.floor(i / cols)
-        const x = cellCenterX - totalW / 2 + col_ * slotDiameter + slotDiameter / 2
-        const y = cellCenterY - totalH / 2 + row_ * slotDiameter + slotDiameter / 2
-        positioned.push({ node, x, y, effortKey, benefitKey })
-      })
-    }
-  }
-
-  return positioned
-}
-
-const NodeCircle = ({ entry, storyPointMap, onHover, isHovered }) => {
+const NodeCircle = ({ entry, onHover, isHovered }) => {
   const { node, x, y } = entry
   const statusKey = node.status ?? 'later'
   const statusStyles = STATUS_STYLES[statusKey] ?? STATUS_STYLES.later
@@ -137,7 +78,7 @@ const NodeCircle = ({ entry, storyPointMap, onHover, isHovered }) => {
   )
 }
 
-const HoverTooltip = ({ entry, storyPointMap, containerRect }) => {
+const HoverTooltip = ({ entry, storyPointMap }) => {
   if (!entry) return null
 
   const { node, x, y } = entry
@@ -194,11 +135,12 @@ export function PriorityMatrix({ opened, onClose, document }) {
     })
     ro.observe(containerRef.current)
     return () => ro.disconnect()
-  }, [containerRef.current])
+  }, [])
 
-  // Reset transform when opened
+  // Reset transform and hover when modal opens (standard modal-reset pattern).
   useEffect(() => {
     if (opened) {
+      /* eslint-disable-next-line react-hooks/set-state-in-effect */
       setTransform({ x: 0, y: 0, scale: 1 })
       setHoveredEntry(null)
     }
@@ -211,9 +153,6 @@ export function PriorityMatrix({ opened, onClose, document }) {
       (containerSize.height - MATRIX_PADDING * 2) / AXIS_COUNT,
     ),
   )
-
-  const svgWidth = AXIS_COUNT * cellSize + MATRIX_PADDING * 2
-  const svgHeight = AXIS_COUNT * cellSize + MATRIX_PADDING * 2
 
   const allNodes = collectNodes(document)
   const plottable = filterPlottableNodes(allNodes)
@@ -425,7 +364,6 @@ export function PriorityMatrix({ opened, onClose, document }) {
               <NodeCircle
                 key={entry.node.id}
                 entry={entry}
-                storyPointMap={storyPointMap}
                 onHover={setHoveredEntry}
                 isHovered={hoveredEntry?.node.id === entry.node.id}
               />
