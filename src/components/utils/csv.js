@@ -1,5 +1,6 @@
 import { normalizeStatusKey } from '../config'
 import { createEmptyDocument } from './documentState'
+import { normalizeEffort, normalizeBenefit } from './effortBenefit'
 import { ensureNodeLevels, findAdditionalDependencyCycles } from './treeData'
 import { generateUUID } from './uuid'
 
@@ -16,6 +17,9 @@ export const CSV_EXPORT_HEADERS = [
   'ProgressLevel',
   'Status',
   'ReleaseNotes',
+  'Effort',
+  'EffortCustomPoints',
+  'Benefit',
 ]
 
 const CSV_HEADER_ALIASES = {
@@ -29,6 +33,9 @@ const CSV_HEADER_ALIASES = {
   progressLevel: ['progresslevel', 'progress level'],
   status: ['status'],
   releaseNotes: ['releasenotes', 'release notes'],
+  effort: ['effort'],
+  effortCustomPoints: ['effortcustompoints', 'effort custom points'],
+  benefit: ['benefit'],
 }
 
 const CSV_STATUS_ALIASES = new Map([
@@ -323,6 +330,9 @@ const buildDocumentFromRows = (rows, options = {}) => {
   let progressLevelIndex
   let statusIndex
   let releaseNotesIndex
+  let effortIndex
+  let effortCustomPointsIndex
+  let benefitIndex
 
   try {
     shortNameIndex = getHeaderIndex(headerIndexByName, CSV_HEADER_ALIASES.shortName)
@@ -335,6 +345,9 @@ const buildDocumentFromRows = (rows, options = {}) => {
     progressLevelIndex = getHeaderIndex(headerIndexByName, CSV_HEADER_ALIASES.progressLevel, false)
     statusIndex = getHeaderIndex(headerIndexByName, CSV_HEADER_ALIASES.status)
     releaseNotesIndex = getHeaderIndex(headerIndexByName, CSV_HEADER_ALIASES.releaseNotes, false)
+    effortIndex = getHeaderIndex(headerIndexByName, CSV_HEADER_ALIASES.effort, false)
+    effortCustomPointsIndex = getHeaderIndex(headerIndexByName, CSV_HEADER_ALIASES.effortCustomPoints, false)
+    benefitIndex = getHeaderIndex(headerIndexByName, CSV_HEADER_ALIASES.benefit, false)
   } catch (error) {
     return {
       ok: false,
@@ -356,6 +369,9 @@ const buildDocumentFromRows = (rows, options = {}) => {
     const status = normalizeStatusCell(row[statusIndex])
     const releaseNote = releaseNotesIndex == null ? '' : String(row[releaseNotesIndex] ?? '')
     const additionalDependencyText = additionalDependencyIndex == null ? '' : String(row[additionalDependencyIndex] ?? '')
+    const effortSizeText = effortIndex == null ? '' : String(row[effortIndex] ?? '').trim().toLowerCase()
+    const effortCustomPointsText = effortCustomPointsIndex == null ? '' : String(row[effortCustomPointsIndex] ?? '').trim()
+    const benefitSizeText = benefitIndex == null ? '' : String(row[benefitIndex] ?? '').trim().toLowerCase()
 
     const rowErrors = []
 
@@ -403,6 +419,9 @@ const buildDocumentFromRows = (rows, options = {}) => {
       releaseNote,
       scopeLabels,
       order: rowOffset,
+      effortSizeText,
+      effortCustomPointsText,
+      benefitSizeText,
     }
 
     const group = rowGroups.get(shortName)
@@ -416,6 +435,9 @@ const buildDocumentFromRows = (rows, options = {}) => {
         dependencyShortNames,
         rows: [rowEntry],
         firstOrder: rowOffset,
+        effortSizeText,
+        effortCustomPointsText,
+        benefitSizeText,
       })
       return
     }
@@ -547,6 +569,13 @@ const buildDocumentFromRows = (rows, options = {}) => {
       additionalDependencyIds: [],
       additionalDependentIds: [],
       children: [],
+      effort: normalizeEffort({
+        size: group.effortSizeText || 'unclear',
+        customPoints: group.effortCustomPointsText ? Number(group.effortCustomPointsText) || null : null,
+      }),
+      benefit: normalizeBenefit({
+        size: group.benefitSizeText || 'unclear',
+      }),
     }
 
     nodeByShortName.set(group.shortName, node)
@@ -693,6 +722,9 @@ export const serializeDocumentToCsv = (document) => {
         String(index + 1),
         normalizeStatusKey(level.status ?? node.status),
         String(level.releaseNote ?? ''),
+        String(node.effort?.size ?? 'unclear'),
+        node.effort?.size === 'custom' && node.effort?.customPoints != null ? String(node.effort.customPoints) : '',
+        String(node.benefit?.size ?? 'unclear'),
       ])
     })
 

@@ -14,6 +14,7 @@ import {
   documentHistoryReducer,
 } from './utils/documentState'
 import { CenterIconPanel, InspectorPanel, SegmentPanel, ToolbarScopeManager, ToolbarSegmentManager } from './panels'
+import { PriorityMatrix } from './panels/PriorityMatrix'
 import { solveSkillTreeLayout } from './utils/layoutSolver'
 import { UNASSIGNED_SEGMENT_ID } from './utils/layoutShared'
 import { getSkillTreeShortcutAction } from './utils/keyboardShortcuts'
@@ -51,6 +52,8 @@ import {
   updateNodeProgressLevel,
   updateNodeShortName,
   updateSegmentLabel,
+  updateNodeEffort,
+  updateNodeBenefit,
 } from './utils/treeData'
 import { toDegrees, toRadians } from './utils/layoutMath'
 import { SkillTreeCanvas } from './canvas'
@@ -143,6 +146,7 @@ export function SkillTree() {
   const [csvImportDialogOpen, setCsvImportDialogOpen] = useState(false)
   const [csvImportOptions, setCsvImportOptions] = useState(DEFAULT_CSV_IMPORT_PROCESS_OPTIONS)
   const [pendingCsvImport, setPendingCsvImport] = useState(null)
+  const [priorityMatrixOpen, setPriorityMatrixOpen] = useState(false)
 
   const {
     selectedNodeId,
@@ -1949,6 +1953,22 @@ export function SkillTree() {
     commitDocument(removeNodeProgressLevel(roadmapData, selectedNodeId, levelId))
   }
 
+  const handleEffortChange = (effort) => {
+    if (!selectedNodeId && !(Array.isArray(selectedNodeIds) && selectedNodeIds.length > 0)) {
+      return
+    }
+
+    applyToSelectedNodes((tree, id) => updateNodeEffort(tree, id, effort))
+  }
+
+  const handleBenefitChange = (benefit) => {
+    if (!selectedNodeId && !(Array.isArray(selectedNodeIds) && selectedNodeIds.length > 0)) {
+      return
+    }
+
+    applyToSelectedNodes((tree, id) => updateNodeBenefit(tree, id, benefit))
+  }
+
   const handleLevelChange = (newLevel) => {
     if (!selectedNodeId) {
       return
@@ -2148,6 +2168,7 @@ export function SkillTree() {
         onReset={handleReset}
         onOpenSegmentManager={handleOpenSegmentManager}
         onOpenScopeManager={handleOpenScopeManager}
+        onOpenPriorityMatrix={() => setPriorityMatrixOpen(true)}
         releaseFilter={releaseFilter}
         setReleaseFilter={setReleaseFilter}
         selectedReleaseFilterLabel={selectedReleaseFilterLabel}
@@ -2229,6 +2250,7 @@ export function SkillTree() {
             onAddSegmentNear={handleAddSegmentNear}
             onAddChild={handleAddChild}
             onSelectNode={handleSelectNode}
+            storyPointMap={roadmapData.storyPointMap}
           />
         </TransformComponent>
       </TransformWrapper>
@@ -2291,6 +2313,8 @@ export function SkillTree() {
         onAdditionalDependenciesChange={handleAdditionalDependenciesChange}
         onDeleteNodeOnly={handleDeleteNodeOnly}
         onDeleteNodeBranch={handleDeleteNodeBranch}
+        onEffortChange={handleEffortChange}
+        onBenefitChange={handleBenefitChange}
         />
       )}
 
@@ -2334,6 +2358,12 @@ export function SkillTree() {
         onResetDefault={handleResetCenterIcon}
         roadmapData={roadmapData}
         commitDocument={commitDocument}
+      />
+
+      <PriorityMatrix
+        opened={priorityMatrixOpen}
+        onClose={() => setPriorityMatrixOpen(false)}
+        document={roadmapData}
       />
     </main>
   )

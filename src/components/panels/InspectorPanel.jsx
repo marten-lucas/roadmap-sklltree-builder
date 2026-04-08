@@ -1,8 +1,9 @@
-import { ActionIcon, Alert, Badge, Button, Divider, Group, MultiSelect, Paper, Select, Stack, Tabs, Text, TextInput, Textarea } from '@mantine/core'
+import { ActionIcon, Alert, Badge, Button, Divider, Group, MultiSelect, NumberInput, Paper, SegmentedControl, Select, Stack, Tabs, Text, TextInput, Textarea } from '@mantine/core'
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { normalizeStatusKey, STATUS_LABELS } from '../config'
 import { UNASSIGNED_SEGMENT_ID } from '../utils/layoutShared'
 import { commitInspectorDrafts } from '../utils/inspectorCommit'
+import { EFFORT_SIZE_LABELS, BENEFIT_SIZE_LABELS } from '../utils/effortBenefit'
 import { MarkdownField } from './MarkdownField'
 import { Tooltip } from '../tooltip'
 
@@ -127,6 +128,8 @@ export function InspectorPanel({
   onDeleteNodeBranch,
   onFocusNode,
   onInspectorCommit,
+  onEffortChange,
+  onBenefitChange,
 }) {
   const [scopeManagerOpen, setScopeManagerOpen] = useState(false)
   const [scopeDraft, setScopeDraft] = useState('')
@@ -850,6 +853,40 @@ export function InspectorPanel({
             }}
             comboboxProps={{ withinPortal: true, zIndex: 450 }}
           />
+
+          <div>
+            <Text className="mantine-dark-label" size="sm" mb={6}>Effort</Text>
+            <SegmentedControl
+              fullWidth
+              size="xs"
+              value={selectedNode.effort?.size ?? 'unclear'}
+              onChange={(size) => onEffortChange?.({ size, customPoints: selectedNode.effort?.customPoints ?? null })}
+              data={Object.entries(EFFORT_SIZE_LABELS).map(([value, label]) => ({ value, label }))}
+            />
+            {selectedNode.effort?.size === 'custom' && (
+              <NumberInput
+                mt={6}
+                label="Story Points (Custom)"
+                placeholder="z.B. 7"
+                value={selectedNode.effort?.customPoints ?? ''}
+                onChange={(val) => onEffortChange?.({ size: 'custom', customPoints: val === '' ? null : Number(val) })}
+                min={0}
+                allowDecimal={false}
+                classNames={{ input: 'mantine-dark-input', label: 'mantine-dark-label' }}
+              />
+            )}
+          </div>
+
+          <div>
+            <Text className="mantine-dark-label" size="sm" mb={6}>Benefit</Text>
+            <SegmentedControl
+              fullWidth
+              size="xs"
+              value={selectedNode.benefit?.size ?? 'unclear'}
+              onChange={(size) => onBenefitChange?.({ size })}
+              data={Object.entries(BENEFIT_SIZE_LABELS).map(([value, label]) => ({ value, label }))}
+            />
+          </div>
 
           <div className="skill-panel__scope-block">
             <Group justify="space-between" align="center" mb={6}>

@@ -54,6 +54,7 @@ export function SkillTreeCanvas({
   onAddSegmentNear,
   onAddChild,
   onSelectNode,
+  storyPointMap,
 }) {
   return (
     <svg
@@ -231,6 +232,7 @@ export function SkillTreeCanvas({
               isSelected={node.id === selectedNodeId || selectedNodeIds.includes(node.id)}
               scopeOptions={scopeOptions}
               onSelect={onSelectNode}
+              storyPointMap={storyPointMap}
             />
           )
         })}

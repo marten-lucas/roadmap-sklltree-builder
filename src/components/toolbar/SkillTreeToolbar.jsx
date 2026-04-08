@@ -3,6 +3,7 @@ import { useMemo, useState } from 'react'
 import {
   IconArrowBackUp,
   IconArrowForwardUp,
+  IconChartDots,
   IconChevronLeft,
   IconChevronRight,
   IconDownload,
@@ -57,6 +58,7 @@ export function SkillTreeToolbar({
   onReset,
   onOpenSegmentManager,
   onOpenScopeManager,
+  onOpenPriorityMatrix,
   releaseFilter,
   setReleaseFilter,
   selectedReleaseFilterLabel,
@@ -322,6 +324,17 @@ export function SkillTreeToolbar({
                 onClick={onOpenScopeManager}
               >
                 <IconFilters {...TOOLBAR_ICON_PROPS} />
+              </ActionIcon>
+            </Tooltip>
+
+            <Tooltip label="Priorisierungs-Matrix" position="top" middlewares={TOOLBAR_TOOLTIP_MIDDLEWARES}>
+              <ActionIcon
+                size="md"
+                variant="default"
+                aria-label="Priorisierungs-Matrix"
+                onClick={onOpenPriorityMatrix}
+              >
+                <IconChartDots {...TOOLBAR_ICON_PROPS} />
               </ActionIcon>
             </Tooltip>
 

@@ -1,6 +1,21 @@
-import { ActionIcon, Button, Paper, Stack, Text, TextInput } from '@mantine/core'
+import { ActionIcon, Alert, Button, NumberInput, Paper, Stack, Text, TextInput } from '@mantine/core'
 import { useRef } from 'react'
 import { MarkdownField } from './MarkdownField'
+import { DEFAULT_STORY_POINT_MAP } from '../utils/effortBenefit'
+import { computeBudgetSummary } from '../utils/effortBenefit'
+
+const T_SHIRT_KEYS = ['xs', 's', 'm', 'l', 'xl']
+
+const collectAllNodes = (document) => {
+  const all = []
+  const queue = [...(document?.children ?? [])]
+  while (queue.length > 0) {
+    const node = queue.shift()
+    all.push(node)
+    queue.push(...(node.children ?? []))
+  }
+  return all
+}
 
 export function CenterIconPanel({
   isOpen,
@@ -78,6 +93,55 @@ export function CenterIconPanel({
           onChange={(nextValue) => commitDocument({ ...roadmapData, release: { ...(roadmapData.release || {}), introduction: nextValue } })}
           minRows={3}
         />
+
+        <Text size="sm" c="dimmed" mt="xs">Story Points Konfiguration</Text>
+
+        <Stack gap={6}>
+          {T_SHIRT_KEYS.map((key) => (
+            <NumberInput
+              key={key}
+              label={`SP für ${key.toUpperCase()}`}
+              value={roadmapData?.storyPointMap?.[key] ?? DEFAULT_STORY_POINT_MAP[key]}
+              onChange={(val) => {
+                const v = val === '' ? DEFAULT_STORY_POINT_MAP[key] : Number(val)
+                const next = { ...(roadmapData?.storyPointMap ?? DEFAULT_STORY_POINT_MAP), [key]: v }
+                commitDocument({ ...roadmapData, storyPointMap: next })
+              }}
+              min={0}
+              allowDecimal={false}
+              rightSection={<Text size="xs" c="dimmed">SP</Text>}
+              classNames={{ input: 'mantine-dark-input', label: 'mantine-dark-label' }}
+            />
+          ))}
+        </Stack>
+
+        <NumberInput
+          label="Verfügbare Story Points (Budget)"
+          placeholder="z.B. 40"
+          value={roadmapData?.storyPointBudget ?? ''}
+          onChange={(val) => {
+            commitDocument({ ...roadmapData, storyPointBudget: val === '' ? null : Number(val) })
+          }}
+          min={0}
+          allowDecimal={false}
+          classNames={{ input: 'mantine-dark-input', label: 'mantine-dark-label' }}
+        />
+
+        {(() => {
+          const allNodes = collectAllNodes(roadmapData)
+          const summary = computeBudgetSummary(allNodes, roadmapData)
+          const budgetSet = summary.budget != null
+          return (
+            <Alert
+              color={summary.isOverBudget ? 'red' : 'teal'}
+              variant="light"
+            >
+              {budgetSet
+                ? `Verbraucht: ${summary.total} / ${summary.budget} SP${summary.isOverBudget ? ' ⚠ Budget überschritten!' : ''}`
+                : `Verbraucht: ${summary.total} SP (kein Budget gesetzt)`}
+            </Alert>
+          )
+        })()}
 
         <Button onClick={() => fileInputRef.current?.click()}>
           SVG hochladen

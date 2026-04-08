@@ -1,4 +1,5 @@
 import { normalizeStatusKey } from '../config'
+import { createDefaultEffort, createDefaultBenefit, normalizeEffort, normalizeBenefit } from './effortBenefit'
 import { generateUUID } from './uuid'
 
 const DEFAULT_NODE_LABEL = 'Neuer Skill'
@@ -831,6 +832,8 @@ const createNewNode = (level, segmentId = null) => ({
   additionalDependencyIds: [],
   additionalDependentIds: [],
   children: [],
+  effort: createDefaultEffort(),
+  benefit: createDefaultBenefit(),
 })
 
 const createNewSegment = () => ({
@@ -1336,3 +1339,13 @@ export const moveNodeToParent = (tree, nodeId, parentId) => {
     children: nextChildren,
   })
 }
+
+export const updateNodeEffort = (treeData, id, effort) =>
+  withNormalizedDependencies(updateNodeById(treeData, id, () => ({
+    effort: normalizeEffort(effort),
+  })))
+
+export const updateNodeBenefit = (treeData, id, benefit) =>
+  withNormalizedDependencies(updateNodeById(treeData, id, () => ({
+    benefit: normalizeBenefit(benefit),
+  })))

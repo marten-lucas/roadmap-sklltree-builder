@@ -69,7 +69,7 @@ const buildSegmentConicStyle = (statusKeys, colorGetter) => {
   }
 }
 
-export function SkillNode({ node, nodeSize, isSelected, onSelect, onSelectLevel, displayMode = 'full', labelMode = 'far', scopeOptions = [] }) {
+export function SkillNode({ node, nodeSize, isSelected, onSelect, onSelectLevel, displayMode = 'full', labelMode = 'far', scopeOptions = [], storyPointMap }) {
   const isMinimal = displayMode === 'minimal'
   const glowPadding = isMinimal ? 8 : 18
   const renderSize = nodeSize + glowPadding * 2
@@ -163,7 +163,7 @@ export function SkillNode({ node, nodeSize, isSelected, onSelect, onSelectLevel,
           closeDelay={40}
           transitionProps={{ transition: 'fade', duration: 120 }}
           classNames={{ tooltip: 'skill-node-tooltip', arrow: 'skill-node-tooltip__arrow' }}
-          label={<MarkdownTooltipContent title={node.label} markdown={tooltipReleaseNote} scopeLabels={tooltipScopeLabels} />}
+          label={<MarkdownTooltipContent title={node.label} markdown={tooltipReleaseNote} scopeLabels={tooltipScopeLabels} effort={node.effort} benefit={node.benefit} storyPointMap={storyPointMap} />}
         >
           <Paper
             component="button"
@@ -207,6 +207,9 @@ export function SkillNode({ node, nodeSize, isSelected, onSelect, onSelectLevel,
               title={node.label}
               markdown={tooltipReleaseNote}
               scopeLabels={tooltipScopeLabels}
+              effort={node.effort}
+              benefit={node.benefit}
+              storyPointMap={storyPointMap}
             />
           </div>
         )}
