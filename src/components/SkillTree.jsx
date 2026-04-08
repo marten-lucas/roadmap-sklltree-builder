@@ -747,6 +747,7 @@ export function SkillTree() {
           y: layoutNode.y + Math.sin(radians) * orbit,
           angle: bestAngle,
           rotation: bestAngle + 180,
+          scale: isNodeMinimal ? MINIMAL_NODE_SIZE / TREE_CONFIG.nodeSize : 1,
         })
       })
     }

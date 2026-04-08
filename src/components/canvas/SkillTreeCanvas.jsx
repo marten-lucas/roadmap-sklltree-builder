@@ -244,7 +244,8 @@ export function SkillTreeCanvas({
           const chevronPath = getPortalChevronPath(portal.type)
           const portalRotation = portal.rotation ?? 0
           const portalAngle = portal.angle ?? 0
-          const portalLabelOffset = TREE_CONFIG.nodeSize * 0.15
+          const portalScale = portal.scale ?? 1
+          const portalLabelOffset = TREE_CONFIG.nodeSize * 0.15 * portalScale
           const portalLabelX = -Math.cos((portalAngle * Math.PI) / 180) * portalLabelOffset
           const portalLabelY = -Math.sin((portalAngle * Math.PI) / 180) * portalLabelOffset
 
@@ -273,7 +274,7 @@ export function SkillTreeCanvas({
                   }
                 }}
               >
-                <g transform={`rotate(${portalRotation})`}>
+                <g transform={`rotate(${portalRotation}) scale(${portalScale})`}>
                   <circle className="skill-tree-portal__hit" r="26" />
                   <circle className={`skill-tree-portal__halo skill-tree-portal__halo--${portal.type}`} r="17" />
                   <path className={`skill-tree-portal__chevron skill-tree-portal__chevron--${portal.type}`} d={chevronPath} />
