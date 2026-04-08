@@ -72,6 +72,19 @@ export const STATUS_STYLES = {
   },
 }
 
+/**
+ * Zoom thresholds for responsive node label display.
+ * Adjust these values to change when the label mode switches.
+ *
+ *   scale < farToMid  → 'far'   (short name only)
+ *   farToMid ≤ scale < midToClose → 'mid'   (full name + short name)
+ *   scale ≥ midToClose → 'close' (full name + short name + release note card)
+ */
+export const NODE_LABEL_ZOOM = {
+  farToMid: 0.5,
+  midToClose: 1.0,
+}
+
 export const TREE_CONFIG = {
   minAngleSpread: 140,
   maxAngleSpread: 270,

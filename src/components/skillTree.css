@@ -777,6 +777,68 @@
     letter-spacing: 0.08em;
 }
 
+/* --- labeled mode (mid / close zoom) ----------------------------------- */
+
+.skill-node-button__content--labeled {
+    flex-direction: column;
+    gap: 2px;
+}
+
+.skill-node-button__content--labeled .skill-node-button__shortname {
+    font-size: 1.5rem;
+}
+
+.skill-node-button__label {
+    margin: 0;
+    padding: 0;
+    font-size: 8px;
+    font-weight: 500;
+    line-height: 1.2;
+    opacity: 0.85;
+    max-width: 90%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* --- close-zoom card (pinned release note below the circle) ------------ */
+
+.skill-node-foreign--close {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.skill-node-label-card {
+    width: 100%;
+    padding: 5px 8px;
+    background: rgba(2, 6, 23, 0.92);
+    border: 1px solid rgba(100, 116, 139, 0.35);
+    border-radius: 8px;
+    margin-top: 4px;
+    max-height: 128px;
+    overflow: hidden;
+    pointer-events: none;
+}
+
+.skill-node-label-card .skill-node-tooltip__title {
+    font-size: 9px;
+    margin-bottom: 3px;
+}
+
+.skill-node-label-card .skill-node-tooltip__note--markdown {
+    font-size: 8px;
+    line-height: 1.35;
+}
+
+.skill-node-label-card .skill-node-tooltip__note--markdown p {
+    margin: 0 0 2px;
+}
+
+.skill-node-label-card .skill-node-tooltip__scopes {
+    margin-bottom: 3px;
+}
+
 .skill-node-button__status {
     align-self: center;
     margin: 0;

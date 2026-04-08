@@ -4,6 +4,7 @@ import { renderMarkdownToHtml } from './markdown'
 import { renderScopeLabelsMarkup } from './scopeDisplay'
 import { serializeSvgElementForExport } from './svgExport'
 import { VIEWPORT_DEFAULTS } from './viewport'
+import { NODE_LABEL_ZOOM } from '../config'
 import htmlToImageBundle from 'html-to-image/dist/html-to-image.js?raw'
 
 export const HTML_EXPORT_DATA_SCRIPT_ID = 'skilltree-export-data'
@@ -164,6 +165,21 @@ const buildViewerScript = () => `
         fitPadding: ${VIEWPORT_DEFAULTS.fitPadding},
       }
 
+      // Zoom thresholds for responsive node labels (mirrors NODE_LABEL_ZOOM in config.js)
+      const NODE_LABEL_ZOOM = {
+        farToMid: ${NODE_LABEL_ZOOM.farToMid},
+        midToClose: ${NODE_LABEL_ZOOM.midToClose},
+      }
+      const CLOSE_CARD_HEIGHT = 140
+      const CLOSE_CARD_EXTRA_W = 22
+
+      const STATUS_TEXT_COLORS = {
+        done: '#5a6576',
+        now: '#ffffff',
+        next: '#ffffff',
+        later: '#4f5f75',
+      }
+
       const normalizeStatusKey = (status) => {
         if (!status) {
           return 'later'
@@ -295,6 +311,110 @@ const buildViewerScript = () => `
       const segmentSeparators = Array.from(document.querySelectorAll('[data-segment-left][data-segment-right]'))
       const portalElements = Array.from(document.querySelectorAll('[data-portal-node-id][data-portal-source-id][data-portal-target-id]'))
       const tooltipNodeElements = Array.from(document.querySelectorAll('[data-tooltip-node-id]'))
+
+      // --- Responsive label mode logic ------------------------------------
+
+      const escapeLabelHtml = (value) => String(value ?? '')
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+
+      const getLabelMode = (scale) => {
+        if (scale < NODE_LABEL_ZOOM.farToMid) return 'far'
+        if (scale >= NODE_LABEL_ZOOM.midToClose) return 'close'
+        return 'mid'
+      }
+
+      let currentLabelMode = null
+
+      const removeNodeCard = (anchor) => {
+        const card = anchor.querySelector('.skill-node-label-card')
+        if (!card) return
+        card.remove()
+        const wrapper = anchor.querySelector('.skill-node-foreign')
+        if (wrapper) {
+          wrapper.style.display = ''
+          wrapper.style.flexDirection = ''
+          wrapper.style.alignItems = ''
+        }
+        if (anchor.dataset.origFwHeight) {
+          anchor.setAttribute('height', anchor.dataset.origFwHeight)
+          anchor.setAttribute('width', anchor.dataset.origFwWidth)
+          anchor.setAttribute('x', anchor.dataset.origFwX)
+        }
+      }
+
+      const addNodeCard = (anchor, label, noteText) => {
+        let card = anchor.querySelector('.skill-node-label-card')
+        if (!card) {
+          card = document.createElement('div')
+          card.className = 'skill-node-label-card'
+        }
+        card.innerHTML =
+          '<div class="skill-node-tooltip__title" style="font-size:9px;margin-bottom:3px;">' + escapeLabelHtml(label) + '</div>' +
+          '<div class="skill-node-tooltip__note skill-node-tooltip__note--markdown" style="font-size:8px;line-height:1.35;">' +
+          '<p style="margin:0;">' + escapeLabelHtml(noteText || 'Keine Release Note hinterlegt.') + '</p>' +
+          '</div>'
+        const wrapper = anchor.querySelector('.skill-node-foreign')
+        if (wrapper && !anchor.querySelector('.skill-node-label-card')) {
+          wrapper.style.display = 'flex'
+          wrapper.style.flexDirection = 'column'
+          wrapper.style.alignItems = 'center'
+          wrapper.appendChild(card)
+        }
+        if (!anchor.dataset.origFwHeight) {
+          anchor.dataset.origFwHeight = anchor.getAttribute('height') || ''
+          anchor.dataset.origFwWidth = anchor.getAttribute('width') || ''
+          anchor.dataset.origFwX = anchor.getAttribute('x') || ''
+        }
+        const origH = Number.parseFloat(anchor.dataset.origFwHeight) || 0
+        const origW = Number.parseFloat(anchor.dataset.origFwWidth) || 0
+        const origX = Number.parseFloat(anchor.dataset.origFwX) || 0
+        anchor.setAttribute('height', String(origH + CLOSE_CARD_HEIGHT))
+        anchor.setAttribute('width', String(origW + CLOSE_CARD_EXTRA_W * 2))
+        anchor.setAttribute('x', String(origX - CLOSE_CARD_EXTRA_W))
+      }
+
+      const applyLabelMode = (mode) => {
+        if (mode === currentLabelMode) return
+        currentLabelMode = mode
+        nodeAnchors.forEach((anchor) => {
+          if (anchor.style.display === 'none') return
+          if (anchor.classList.contains('html-export__node--minimal')) {
+            if (mode !== 'close') removeNodeCard(anchor)
+            return
+          }
+          const label = anchor.getAttribute('data-export-label') || ''
+          const shortName = anchor.getAttribute('data-short-name') || ''
+          const noteText = anchor.getAttribute('data-export-note') || ''
+          const nodeId = anchor.getAttribute('data-node-id') || ''
+          const nodeInfo = nodeInfoById.get(nodeId)
+          const status = nodeInfo?.status ?? 'later'
+          const textColor = STATUS_TEXT_COLORS[status] ?? STATUS_TEXT_COLORS.later
+          const fontWeight = status === 'now' ? 900 : 800
+          const content = anchor.querySelector('.skill-node-button__content')
+          if (!content) return
+
+          if (mode === 'far') {
+            content.className = 'skill-node-button__content'
+            content.innerHTML = '<p class="skill-node-button__shortname" style="font-size:2rem;font-weight:' + fontWeight + ';line-height:1;letter-spacing:0.08em;color:' + textColor + ';">' + escapeLabelHtml(shortName) + '</p>'
+            removeNodeCard(anchor)
+          } else if (mode === 'mid') {
+            content.className = 'skill-node-button__content skill-node-button__content--labeled'
+            content.innerHTML =
+              '<p class="skill-node-button__label" style="color:' + textColor + ';">' + escapeLabelHtml(label) + '</p>' +
+              '<p class="skill-node-button__shortname" style="font-size:1.5rem;font-weight:' + fontWeight + ';line-height:1;letter-spacing:0.08em;color:' + textColor + ';">' + escapeLabelHtml(shortName) + '</p>'
+            removeNodeCard(anchor)
+          } else if (mode === 'close') {
+            content.className = 'skill-node-button__content skill-node-button__content--labeled'
+            content.innerHTML =
+              '<p class="skill-node-button__label" style="color:' + textColor + ';">' + escapeLabelHtml(label) + '</p>' +
+              '<p class="skill-node-button__shortname" style="font-size:1.5rem;font-weight:' + fontWeight + ';line-height:1;letter-spacing:0.08em;color:' + textColor + ';">' + escapeLabelHtml(shortName) + '</p>'
+            addNodeCard(anchor, label, noteText)
+          }
+        })
+      }
+
+      // -------------------------------------------------------------------
+
       const panZoomState = {
         scale: 1,
         translateX: 0,
@@ -524,6 +644,8 @@ const buildViewerScript = () => `
         if (treeCanvas) {
           treeCanvas.style.cursor = panZoomState.isDragging ? 'grabbing' : 'grab'
         }
+
+        applyLabelMode(getLabelMode(panZoomState.scale))
       }
 
       const zoomToScale = (nextScale, anchorX, anchorY) => {

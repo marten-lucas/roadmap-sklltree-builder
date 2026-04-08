@@ -804,6 +804,9 @@ const buildTooltipGroup = ({ centerX, centerY, title, entries }) => {
     noteWrapper.setAttribute('class', 'skill-node-tooltip__note skill-node-tooltip__note--markdown')
     noteWrapper.innerHTML = renderMarkdownToHtml(entry.releaseNote) || '<p>Keine Release Note hinterlegt.</p>'
 
+    card.appendChild(header)
+    card.appendChild(noteWrapper)
+
     if (Array.isArray(entry.scopeLabels) && entry.scopeLabels.length > 0) {
       const scopeWrapper = document.createElementNS('http://www.w3.org/1999/xhtml', 'div')
       scopeWrapper.setAttribute('class', 'skill-node-tooltip__scopes')
@@ -812,8 +815,6 @@ const buildTooltipGroup = ({ centerX, centerY, title, entries }) => {
       card.appendChild(scopeWrapper)
     }
 
-    card.appendChild(header)
-    card.appendChild(noteWrapper)
     stack.appendChild(card)
   })
 

@@ -4,18 +4,21 @@ import { getDisplayStatusKey, getLevelStatusKeys } from '../utils/nodeStatus'
 import { resolveScopeLabels } from '../utils/scopeDisplay'
 import { MarkdownTooltipContent, Tooltip } from '../tooltip'
 
+const CLOSE_CARD_HEIGHT = 140 // px extra height below the circle for the release note card
+const CLOSE_CARD_EXTRA_W = 22 // px extra width each side when card is shown
+
 const getShortName = (node) => {
-  const explicitShortName = String(node?.shortName ?? '').trim().toUpperCase().slice(0, 3)
+  const explicitShortName = String(node?.shortName ?? '').trim().toLowerCase().slice(0, 3)
   if (explicitShortName) {
     return explicitShortName
   }
 
   const letters = String(node?.label ?? '')
     .replace(/[^A-Za-z0-9]/g, '')
-    .toUpperCase()
+    .toLowerCase()
     .slice(0, 3)
 
-  return letters || 'SKL'
+  return letters || 'skl'
 }
 
 const getTooltipLevel = (node) => {
@@ -66,10 +69,14 @@ const buildSegmentConicStyle = (statusKeys, colorGetter) => {
   }
 }
 
-export function SkillNode({ node, nodeSize, isSelected, onSelect, onSelectLevel, displayMode = 'full', scopeOptions = [] }) {
+export function SkillNode({ node, nodeSize, isSelected, onSelect, onSelectLevel, displayMode = 'full', labelMode = 'far', scopeOptions = [] }) {
   const isMinimal = displayMode === 'minimal'
   const glowPadding = isMinimal ? 8 : 18
   const renderSize = nodeSize + glowPadding * 2
+  const cardExtraW = (!isMinimal && labelMode === 'close') ? CLOSE_CARD_EXTRA_W : 0
+  const cardExtraH = (!isMinimal && labelMode === 'close') ? CLOSE_CARD_HEIGHT : 0
+  const fwWidth = renderSize + cardExtraW * 2
+  const fwHeight = renderSize + cardExtraH
   const statusKey = getDisplayStatusKey(node)
   const statusStyles = STATUS_STYLES[statusKey] ?? STATUS_STYLES.later
   const shortName = getShortName(node)
@@ -126,23 +133,27 @@ export function SkillNode({ node, nodeSize, isSelected, onSelect, onSelectLevel,
     }
   }
 
+  const showLabel = !isMinimal && (labelMode === 'mid' || labelMode === 'close')
+  const showCard = !isMinimal && labelMode === 'close'
+
   return (
     <foreignObject
-      x={node.x - nodeSize / 2 - glowPadding}
+      x={node.x - nodeSize / 2 - glowPadding - cardExtraW}
       y={node.y - nodeSize / 2 - glowPadding}
-      width={renderSize}
-      height={renderSize}
+      width={fwWidth}
+      height={fwHeight}
       className="skill-node-export-anchor"
       data-node-id={node.id}
       data-export-label={node.label}
       data-short-name={shortName}
+      data-label-mode={labelMode}
       data-selected={isSelected ? 'true' : 'false'}
       data-export-note={tooltipReleaseNote}
       data-export-levels={JSON.stringify(exportLevelEntries)}
     >
       <div
         xmlns="http://www.w3.org/1999/xhtml"
-        className="skill-node-foreign"
+        className={showCard ? 'skill-node-foreign skill-node-foreign--close' : 'skill-node-foreign'}
         style={{ padding: `${glowPadding}px` }}
         onClick={(event) => event.stopPropagation()}
       >
@@ -170,7 +181,15 @@ export function SkillNode({ node, nodeSize, isSelected, onSelect, onSelectLevel,
             {!isMinimal && <div className="skill-node-level-glow" style={levelGlowStyle} />}
             {!isMinimal && <div className="skill-node-level-glow" style={{ ...nowLevelGlowStyle, filter: 'blur(24px)' }} />}
             {!isMinimal && <div className="skill-node-level-ring" style={levelRingStyle} />}
-            <div className="skill-node-button__content">
+            <div className={showLabel ? 'skill-node-button__content skill-node-button__content--labeled' : 'skill-node-button__content'}>
+              {showLabel && (
+                <p
+                  className="skill-node-button__label"
+                  style={{ color: statusStyles.textColor }}
+                >
+                  {node.label}
+                </p>
+              )}
               {!isMinimal && (
                 <Text
                   className="skill-node-button__shortname"
@@ -182,6 +201,15 @@ export function SkillNode({ node, nodeSize, isSelected, onSelect, onSelectLevel,
             </div>
           </Paper>
         </Tooltip>
+        {showCard && (
+          <div className="skill-node-label-card">
+            <MarkdownTooltipContent
+              title={node.label}
+              markdown={tooltipReleaseNote}
+              scopeLabels={tooltipScopeLabels}
+            />
+          </div>
+        )}
       </div>
     </foreignObject>
   )

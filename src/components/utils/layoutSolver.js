@@ -60,10 +60,12 @@ const getReadableRadialLabelRotation = (anchorAngleDeg) => {
   const normalized = normalizeAngleDeg(anchorAngleDeg)
   // Radial orientation: text points along the spoke outward from centre.
   // SVG 0°=right, angles increase clockwise, so a radial label at angle θ
-  // needs rotation θ−90 (top of text faces outward). In the left half
-  // (90°<θ<270°) flip by +180 so text is never upside-down.
+  // needs rotation θ−90 (top of text faces outward).
+  // The reading direction becomes inverted when (normalized − 90) lands in
+  // (90°, 270°), i.e. when normalized > 180°. Flip those cases by +180° so
+  // text is always readable from below (never upside-down).
   const radial = normalized - 90
-  if (normalized > 90 && normalized < 270) {
+  if (normalized > 180 && normalized < 360) {
     return radial + 180
   }
 

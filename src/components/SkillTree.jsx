@@ -1,9 +1,9 @@
-import { Alert, Button, Checkbox, Group, Modal, Stack, Text } from '@mantine/core'
+import { Alert, Button, Checkbox, Group, Modal, Radio, Stack, Text } from '@mantine/core'
 import { useEffect, useMemo, useReducer, useRef, useState } from 'react'
 import { flushSync } from 'react-dom'
 import { TransformComponent, TransformWrapper } from 'react-zoom-pan-pinch'
 import './skillTree.css'
-import { TREE_CONFIG, STATUS_STYLES } from './config'
+import { TREE_CONFIG, STATUS_STYLES, NODE_LABEL_ZOOM } from './config'
 import {
   saveDocumentToLocalStorage,
 } from './utils/documentPersistence'
@@ -135,6 +135,10 @@ export function SkillTree() {
   const transformApiRef = useRef(null)
   const [isPanModeActive, setIsPanModeActive] = useState(false)
   const [currentZoomScale, setCurrentZoomScale] = useState(1)
+  const [exportLabelModeOverride, setExportLabelModeOverride] = useState(null)
+  const [exportLabelDialogOpen, setExportLabelDialogOpen] = useState(false)
+  const [exportLabelDialogMode, setExportLabelDialogMode] = useState('mid')
+  const exportLabelDialogResolveRef = useRef(null)
   const [lastSavedAt, setLastSavedAt] = useState(null)
   const [csvImportDialogOpen, setCsvImportDialogOpen] = useState(false)
   const [csvImportOptions, setCsvImportOptions] = useState(DEFAULT_CSV_IMPORT_PROCESS_OPTIONS)
@@ -191,6 +195,15 @@ export function SkillTree() {
   }, [canvas.height, canvas.width, viewportHeight, viewportWidth])
   const initialPositionX = viewportWidth / 2 - canvas.origin.x * initialViewScale
   const initialPositionY = viewportHeight / 2 - canvas.origin.y * initialViewScale
+
+  // Responsive label mode: derived from live zoom scale (or overridden for exports)
+  const zoomLabelMode = useMemo(() => {
+    if (currentZoomScale < NODE_LABEL_ZOOM.farToMid) return 'far'
+    if (currentZoomScale >= NODE_LABEL_ZOOM.midToClose) return 'close'
+    return 'mid'
+  }, [currentZoomScale])
+  const activeLabelMode = exportLabelModeOverride ?? zoomLabelMode
+
   const centerIconSource = roadmapData.centerIconSrc ?? DEFAULT_CENTER_ICON_SRC
   const maxEstimatedSegmentLabelHeightPx = useMemo(() => {
     const segments = roadmapData?.segments ?? []
@@ -1034,6 +1047,26 @@ export function SkillTree() {
     setSelectedProgressLevelId(null)
   }
 
+  // --- Export label-mode dialog helpers ---
+
+  const openExportLabelDialog = () => new Promise((resolve) => {
+    exportLabelDialogResolveRef.current = resolve
+    setExportLabelDialogMode('mid')
+    setExportLabelDialogOpen(true)
+  })
+
+  const confirmExportLabelDialog = () => {
+    setExportLabelDialogOpen(false)
+    exportLabelDialogResolveRef.current?.(exportLabelDialogMode)
+    exportLabelDialogResolveRef.current = null
+  }
+
+  const cancelExportLabelDialog = () => {
+    setExportLabelDialogOpen(false)
+    exportLabelDialogResolveRef.current?.(null)
+    exportLabelDialogResolveRef.current = null
+  }
+
   const handleExportSvg = async () => {
     if (!canvasSvgRef.current) {
       window.alert('SVG-Export derzeit nicht verfuegbar.')
@@ -1042,6 +1075,9 @@ export function SkillTree() {
 
     try {
       flushSync(() => resetSelections())
+      const selectedMode = await openExportLabelDialog()
+      if (selectedMode === null) return
+      flushSync(() => setExportLabelModeOverride(selectedMode))
       const { exportSvgFromElement } = await import('./utils/svgExport')
       const exported = exportSvgFromElement(canvasSvgRef.current, {
         fileName: 'skilltree-roadmap.svg',
@@ -1056,6 +1092,8 @@ export function SkillTree() {
     } catch (error) {
       console.error('SVG export failed', error)
       window.alert('SVG-Export fehlgeschlagen.')
+    } finally {
+      setExportLabelModeOverride(null)
     }
   }
 
@@ -1067,6 +1105,9 @@ export function SkillTree() {
 
     try {
       flushSync(() => resetSelections())
+      const selectedMode = await openExportLabelDialog()
+      if (selectedMode === null) return
+      flushSync(() => setExportLabelModeOverride(selectedMode))
       const { exportPngFromElement } = await import('./utils/svgExport')
       const exported = await exportPngFromElement(canvasSvgRef.current, {
         fileName: 'skilltree-roadmap.png',
@@ -1081,6 +1122,8 @@ export function SkillTree() {
     } catch (error) {
       console.error('PNG export failed', error)
       window.alert('PNG-Export fehlgeschlagen.')
+    } finally {
+      setExportLabelModeOverride(null)
     }
   }
 
@@ -1092,6 +1135,9 @@ export function SkillTree() {
 
     try {
       flushSync(() => resetSelections())
+      const selectedMode = await openExportLabelDialog()
+      if (selectedMode === null) return
+      flushSync(() => setExportLabelModeOverride(selectedMode))
       const { exportSvgFromElement } = await import('./utils/svgExport')
       const exported = exportSvgFromElement(canvasSvgRef.current, {
         fileName: 'skilltree-roadmap-clean.svg',
@@ -1106,6 +1152,8 @@ export function SkillTree() {
     } catch (error) {
       console.error('Clean SVG export failed', error)
       window.alert('Clean-SVG-Export fehlgeschlagen.')
+    } finally {
+      setExportLabelModeOverride(null)
     }
   }
 
@@ -1117,6 +1165,9 @@ export function SkillTree() {
 
     try {
       flushSync(() => resetSelections())
+      // Render in 'far' mode so the HTML viewer script has the base dimensions
+      // and can apply responsive label modes dynamically.
+      flushSync(() => setExportLabelModeOverride('far'))
       const { exportHtmlFromSkillTree } = await import('./utils/htmlExport')
       const exported = exportHtmlFromSkillTree({
         svgElement: canvasSvgRef.current,
@@ -1131,6 +1182,8 @@ export function SkillTree() {
     } catch (error) {
       console.error('HTML export failed', error)
       window.alert('HTML-Export fehlgeschlagen.')
+    } finally {
+      setExportLabelModeOverride(null)
     }
   }
 
@@ -1155,6 +1208,9 @@ export function SkillTree() {
 
     try {
       flushSync(() => resetSelections())
+      const selectedMode = await openExportLabelDialog()
+      if (selectedMode === null) return
+      flushSync(() => setExportLabelModeOverride(selectedMode))
       const { tryExportPdfFromSkillTree } = await import('./utils/pdfExport')
       const exported = tryExportPdfFromSkillTree({
         svgElement: canvasSvgRef.current,
@@ -1173,6 +1229,8 @@ export function SkillTree() {
     } catch (error) {
       console.error('PDF export failed', error)
       window.alert('PDF-Export fehlgeschlagen. Bitte erneut versuchen.')
+    } finally {
+      setExportLabelModeOverride(null)
     }
   }
 
@@ -2033,6 +2091,35 @@ export function SkillTree() {
         </Stack>
       </Modal>
 
+      <Modal
+        opened={exportLabelDialogOpen}
+        onClose={cancelExportLabelDialog}
+        title="Knotenbezeichnung im Export"
+        size="sm"
+      >
+        <Stack gap="md">
+          <Radio.Group
+            value={exportLabelDialogMode}
+            onChange={setExportLabelDialogMode}
+            label="Zoomstufe für den Export wählen"
+          >
+            <Stack gap="xs" mt="xs">
+              <Radio value="far" label="Weit weg – nur Kürzel (abc)" />
+              <Radio value="mid" label="Normal – Name + Kürzel" />
+              <Radio value="close" label="Nah – Name + Kürzel + Release Note" />
+            </Stack>
+          </Radio.Group>
+          <Group justify="flex-end">
+            <Button variant="default" onClick={cancelExportLabelDialog}>
+              Abbrechen
+            </Button>
+            <Button onClick={confirmExportLabelDialog}>
+              Exportieren
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
+
       {globalToast.visible && (
         <div style={{ position: 'fixed', top: 12, left: '50%', transform: 'translateX(-50%)', zIndex: 9999 }}>
           <Alert color={globalToast.type === 'warning' ? 'yellow' : globalToast.type === 'success' ? 'teal' : 'blue'}>
@@ -2125,6 +2212,7 @@ export function SkillTree() {
             emptySegmentAddControl={emptySegmentAddControl}
             nodeSize={TREE_CONFIG.nodeSize}
             minimalNodeSize={MINIMAL_NODE_SIZE}
+            labelMode={activeLabelMode}
             scopeOptions={scopeOptions}
             onCanvasClick={() => {
               selectNodeId(null)

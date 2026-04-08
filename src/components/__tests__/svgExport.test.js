@@ -567,4 +567,44 @@ describe('svgExport', () => {
     expect(serialized).toContain('"Space Grotesk", "Rajdhani", sans-serif')
   })
 
+  it('places scope chips after the release note in the tooltip card', () => {
+    installSvgDomShim()
+
+    const svg = new MockElement('svg')
+    const foreignObject = new MockElement('foreignObject')
+
+    foreignObject.setAttribute('class', 'skill-node-export-anchor')
+    foreignObject.setAttribute('x', '10')
+    foreignObject.setAttribute('y', '20')
+    foreignObject.setAttribute('width', '120')
+    foreignObject.setAttribute('height', '120')
+    foreignObject.setAttribute('data-node-id', 'node-scope-order')
+    foreignObject.setAttribute('data-export-label', 'Scope Order Test')
+    foreignObject.setAttribute('data-export-levels', JSON.stringify([
+      {
+        id: 'level-1',
+        label: 'Level 1',
+        status: 'now',
+        statusLabel: 'Now',
+        releaseNote: 'Release note text.',
+        scopeLabels: ['Frontend', 'Platform'],
+      },
+    ]))
+    svg.appendChild(foreignObject)
+
+    const serialized = serializeSvgElementForExport(svg)
+
+    // Search within the tooltip DOM content only (use attribute form to skip the CSS block)
+    const contentStart = serialized.indexOf('class="skill-node-tooltip__panel"')
+    const content = serialized.slice(contentStart)
+
+    const notePos = content.indexOf('skill-node-tooltip__note')
+    const scopesPos = content.indexOf('skill-node-tooltip__scopes')
+
+    expect(notePos).toBeGreaterThan(-1)
+    expect(scopesPos).toBeGreaterThan(-1)
+    // Scopes must appear after the note in the DOM
+    expect(scopesPos).toBeGreaterThan(notePos)
+  })
+
 })
