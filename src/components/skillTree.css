@@ -635,6 +635,12 @@
     mask: radial-gradient(farthest-side, transparent calc(100% - 5px), #000 calc(100% - 5px));
 }
 
+.skill-node-button--minimal .skill-node-level-ring {
+    /* Thinner ring for the smaller minimal node */
+    -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 3px));
+    mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 3px));
+}
+
 .skill-node-button:hover {
     transform: translateY(-1px);
 }
@@ -841,19 +847,37 @@
     word-break: break-word;
 }
 
-/* --- close-zoom card (pinned release note to the right of the circle) --- */
+/* --- close-zoom card (pinned release note beside the circle) --- */
 
 .skill-node-foreign--close {
     display: flex;
-    flex-direction: row;
     align-items: center;
     gap: 0;
+}
+
+/* Card on the right (default for right-half nodes) */
+.skill-node-foreign--close-right {
+    flex-direction: row;
+}
+
+.skill-node-foreign--close-right .skill-node-label-card {
+    margin-left: -12px;
+    margin-right: 0;
+}
+
+/* Card on the left (for left-half nodes) */
+.skill-node-foreign--close-left {
+    flex-direction: row-reverse;
+}
+
+.skill-node-foreign--close-left .skill-node-label-card {
+    margin-left: 0;
+    margin-right: -12px;
 }
 
 .skill-node-label-card {
     width: 144px;
     flex-shrink: 0;
-    margin-left: -12px;
     padding: 5px 8px;
     background: rgba(2, 6, 23, 0.92);
     border: 1px solid rgba(100, 116, 139, 0.35);

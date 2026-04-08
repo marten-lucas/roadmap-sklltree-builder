@@ -4,6 +4,7 @@ import { STATUS_STYLES } from '../config'
 import { getDisplayStatusKey, getLevelStatusKeys } from '../utils/nodeStatus'
 import { resolveScopeLabels } from '../utils/scopeDisplay'
 import { MarkdownTooltipContent, Tooltip } from '../tooltip'
+import { EFFORT_SIZE_LABELS, BENEFIT_SIZE_LABELS } from '../utils/effortBenefit'
 
 const CLOSE_CARD_WIDTH = 144 // px card width to the right of the circle
 const CLOSE_CARD_GAP = 0    // gap handled via CSS margin-left overlap instead
@@ -70,14 +71,16 @@ const buildSegmentConicStyle = (statusKeys, colorGetter) => {
   }
 }
 
-export function SkillNode({ node, nodeSize, isSelected, onSelect, onSelectLevel, displayMode = 'full', labelMode = 'far', scopeOptions = [], storyPointMap }) {
+export function SkillNode({ node, nodeSize, isSelected, onSelect, onSelectLevel, displayMode = 'full', labelMode = 'far', scopeOptions = [], storyPointMap, canvasOriginX = 0 }) {
   const [activeCardTab, setActiveCardTab] = useState(0)
   const isMinimal = displayMode === 'minimal'
   const glowPadding = isMinimal ? 8 : 18
   const renderSize = nodeSize + glowPadding * 2
-  // Card sits to the RIGHT of the circle — extend width only, not height
-  const cardRightExtra = (!isMinimal && labelMode === 'close') ? CLOSE_CARD_WIDTH + CLOSE_CARD_GAP : 0
-  const fwWidth = renderSize + cardRightExtra
+  const showCard = !isMinimal && labelMode === 'close'
+  // Card sits to the LEFT when node is in the left half of the tree
+  const cardSide = (showCard && node.x < canvasOriginX) ? 'left' : 'right'
+  const cardExtra = showCard ? CLOSE_CARD_WIDTH + CLOSE_CARD_GAP : 0
+  const fwWidth = renderSize + cardExtra
   const fwHeight = renderSize
   const statusKey = getDisplayStatusKey(node)
   const statusStyles = STATUS_STYLES[statusKey] ?? STATUS_STYLES.later
@@ -136,11 +139,12 @@ export function SkillNode({ node, nodeSize, isSelected, onSelect, onSelectLevel,
   }
 
   const showLabel = !isMinimal && (labelMode === 'mid' || labelMode === 'close')
-  const showCard = !isMinimal && labelMode === 'close'
+  // fwX shifts left by CLOSE_CARD_WIDTH when card is on the left side
+  const fwX = node.x - nodeSize / 2 - glowPadding - (showCard && cardSide === 'left' ? CLOSE_CARD_WIDTH : 0)
 
   return (
     <foreignObject
-      x={node.x - nodeSize / 2 - glowPadding}
+      x={fwX}
       y={node.y - nodeSize / 2 - glowPadding}
       width={fwWidth}
       height={fwHeight}
@@ -152,10 +156,13 @@ export function SkillNode({ node, nodeSize, isSelected, onSelect, onSelectLevel,
       data-selected={isSelected ? 'true' : 'false'}
       data-export-note={tooltipReleaseNote}
       data-export-levels={JSON.stringify(exportLevelEntries)}
+      data-card-side={cardSide}
+      data-export-effort={node.effort?.size && node.effort.size !== 'unclear' ? `${EFFORT_SIZE_LABELS[node.effort.size] ?? node.effort.size}` : ''}
+      data-export-benefit={node.benefit?.size && node.benefit.size !== 'unclear' ? `${BENEFIT_SIZE_LABELS[node.benefit.size] ?? node.benefit.size}` : ''}
     >
       <div
         xmlns="http://www.w3.org/1999/xhtml"
-        className={showCard ? 'skill-node-foreign skill-node-foreign--close' : 'skill-node-foreign'}
+        className={showCard ? `skill-node-foreign skill-node-foreign--close skill-node-foreign--close-${cardSide}` : 'skill-node-foreign'}
         style={{ padding: `${glowPadding}px` }}
         onClick={(event) => event.stopPropagation()}
       >
@@ -183,7 +190,7 @@ export function SkillNode({ node, nodeSize, isSelected, onSelect, onSelectLevel,
           >
             {!isMinimal && <div className="skill-node-level-glow" style={levelGlowStyle} />}
             {!isMinimal && <div className="skill-node-level-glow" style={{ ...nowLevelGlowStyle, filter: 'blur(24px)' }} />}
-            {!isMinimal && <div className="skill-node-level-ring" style={levelRingStyle} />}
+            <div className="skill-node-level-ring" style={levelRingStyle} />
             <div className={showLabel ? 'skill-node-button__content skill-node-button__content--labeled' : 'skill-node-button__content'}>
               {showLabel && (
                 <p

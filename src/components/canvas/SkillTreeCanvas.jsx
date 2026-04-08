@@ -233,6 +233,7 @@ export function SkillTreeCanvas({
               scopeOptions={scopeOptions}
               onSelect={onSelectNode}
               storyPointMap={storyPointMap}
+              canvasOriginX={canvas.origin.x}
             />
           )
         })}

@@ -362,6 +362,16 @@ const buildViewerScript = () => `
           '</div>'
       }
 
+      const buildCardChipsHtml = (anchor) => {
+        const effort = anchor.getAttribute('data-export-effort') || ''
+        const benefit = anchor.getAttribute('data-export-benefit') || ''
+        if (!effort && !benefit) return ''
+        return '<div class="skill-node-tooltip__chips" style="margin-bottom:3px;">' +
+          (effort ? '<span class="skill-node-chip skill-node-chip--effort" style="font-size:7px;padding:1px 4px;">⚡ ' + escapeLabelHtml(effort) + '</span>' : '') +
+          (benefit ? '<span class="skill-node-chip skill-node-chip--benefit" style="font-size:7px;padding:1px 4px;">★ ' + escapeLabelHtml(benefit) + '</span>' : '') +
+          '</div>'
+      }
+
       const addNodeCard = (anchor) => {
         const levelsRaw = anchor.getAttribute('data-export-levels')
         let levels = []
@@ -401,6 +411,7 @@ const buildViewerScript = () => `
         }
 
         card.innerHTML = tabBarHtml +
+          buildCardChipsHtml(anchor) +
           buildCardNoteHtml(activeLevel.releaseNote) +
           buildCardScopeHtml(activeLevel.scopeLabels ?? [])
 
@@ -423,13 +434,17 @@ const buildViewerScript = () => `
           })
         }
 
+        const cardSide = anchor.getAttribute('data-card-side') || 'right'
+        const isLeftSide = cardSide === 'left'
+
         const wrapper = anchor.querySelector('.skill-node-foreign')
         if (wrapper && !anchor.querySelector('.skill-node-label-card')) {
           wrapper.style.display = 'flex'
-          wrapper.style.flexDirection = 'row'
+          wrapper.style.flexDirection = isLeftSide ? 'row-reverse' : 'row'
           wrapper.style.alignItems = 'center'
           wrapper.style.gap = '0'
-          card.style.marginLeft = '-12px'
+          card.style.marginLeft = isLeftSide ? '0' : '-12px'
+          card.style.marginRight = isLeftSide ? '-12px' : '0'
           card.style.width = '144px'
           wrapper.appendChild(card)
         }
@@ -439,7 +454,11 @@ const buildViewerScript = () => `
           anchor.dataset.origFwX = anchor.getAttribute('x') || ''
         }
         const origW = Number.parseFloat(anchor.dataset.origFwWidth) || 0
+        const origX = Number.parseFloat(anchor.dataset.origFwX) || 0
         anchor.setAttribute('width', String(origW + CLOSE_CARD_WIDTH + CLOSE_CARD_GAP))
+        if (isLeftSide) {
+          anchor.setAttribute('x', String(origX - CLOSE_CARD_WIDTH))
+        }
       }
 
       const applyLabelMode = (mode) => {

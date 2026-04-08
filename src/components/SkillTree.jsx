@@ -660,16 +660,20 @@ export function SkillTree() {
     }
 
     const endpoints = []
-    const portalOrbit = TREE_CONFIG.nodeSize * 0.74
     const portalAvoidance = 20
     const spreadStep = 16
-    const endpointOrbitStep = TREE_CONFIG.nodeSize * 0.06
 
     for (const [nodeId, nodeEndpoints] of endpointsByNodeId.entries()) {
       const layoutNode = layoutNodeById.get(nodeId)
       if (!layoutNode) {
         continue
       }
+
+      // Use actual rendered size so portals stay tight when a node is minimal
+      const isNodeMinimal = nodeVisibilityModeById.get(nodeId) === 'minimal'
+      const effectiveNodeSize = isNodeMinimal ? MINIMAL_NODE_SIZE : TREE_CONFIG.nodeSize
+      const portalOrbit = effectiveNodeSize * 0.74
+      const endpointOrbitStep = effectiveNodeSize * 0.06
 
       const childAngles = nodes
         .filter((candidate) => candidate.parentId === nodeId)
@@ -748,7 +752,7 @@ export function SkillTree() {
     }
 
     return endpoints
-  }, [allNodesById, canvas.origin.x, canvas.origin.y, nodes, roadmapData.children])
+  }, [allNodesById, canvas.origin.x, canvas.origin.y, nodeVisibilityModeById, nodes, roadmapData.children])
 
   const visibleDependencyPortals = useMemo(
     () => dependencyPortals.filter((portal) => (

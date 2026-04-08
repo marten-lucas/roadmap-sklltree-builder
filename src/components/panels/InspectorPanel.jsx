@@ -1,5 +1,5 @@
 import { ActionIcon, Alert, Badge, Button, Divider, Group, MultiSelect, NumberInput, Paper, SegmentedControl, Select, Stack, Tabs, Text, TextInput, Textarea } from '@mantine/core'
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { normalizeStatusKey, STATUS_LABELS } from '../config'
 import { UNASSIGNED_SEGMENT_ID } from '../utils/layoutShared'
 import { commitInspectorDrafts } from '../utils/inspectorCommit'
@@ -545,6 +545,27 @@ export function InspectorPanel({
   const selectedSegmentKey = selectedNode?.segmentId ?? UNASSIGNED_SEGMENT_ID
   const blockedLevelHint = levelOptions.find((option) => !option.isAllowed)?.reasons?.[0] ?? null
   const blockedSegmentHint = segmentOptions?.find((option) => !option.isAllowed)?.reasons?.[0] ?? null
+
+  // Collect all short names in the tree except the current node for duplicate check
+  const otherShortNames = useMemo(() => {
+    const names = new Set()
+    const queue = [...(roadmapData?.children ?? [])]
+    while (queue.length > 0) {
+      const node = queue.shift()
+      if (node.id !== selectedNode?.id) {
+        const sn = String(node.shortName ?? '').trim().toLowerCase()
+        if (sn) names.add(sn)
+      }
+      queue.push(...(node.children ?? []))
+    }
+    return names
+  }, [roadmapData, selectedNode?.id])
+
+  const shortNameDuplicateWarning = useMemo(() => {
+    const draft = String(shortNameDraft ?? '').trim().toLowerCase()
+    if (!draft) return null
+    return otherShortNames.has(draft) ? 'Dieser Shortname wird bereits von einem anderen Node verwendet.' : null
+  }, [shortNameDraft, otherShortNames])
   const levelData = levelOptions.map((option) => ({
     value: String(option.value),
     label: `Ebene ${option.value}`,
@@ -630,6 +651,7 @@ export function InspectorPanel({
               commitCurrentDrafts(true, 'explicit')
             }}
             /* allow longer input; show a warning on blur if >3 */
+            error={shortNameDuplicateWarning}
             classNames={{
               input: 'mantine-dark-input',
               label: 'mantine-dark-label',
