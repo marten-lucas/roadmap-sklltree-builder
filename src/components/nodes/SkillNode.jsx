@@ -73,6 +73,7 @@ const buildSegmentConicStyle = (statusKeys, colorGetter) => {
 
 export function SkillNode({ node, nodeSize, isSelected, onSelect, onSelectLevel, displayMode = 'full', labelMode = 'far', scopeOptions = [], storyPointMap, canvasOriginX = 0 }) {
   const [activeCardTab, setActiveCardTab] = useState(0)
+  const [hoveredLevelIndex, setHoveredLevelIndex] = useState(null)
   const isMinimal = displayMode === 'minimal'
   const glowPadding = isMinimal ? 8 : 18
   const renderSize = nodeSize + glowPadding * 2
@@ -88,6 +89,16 @@ export function SkillNode({ node, nodeSize, isSelected, onSelect, onSelectLevel,
   const tooltipLevel = getTooltipLevel(node)
   const tooltipReleaseNote = getTooltipReleaseNote(node)
   const tooltipScopeLabels = resolveScopeLabels(tooltipLevel?.scopeIds, scopeOptions)
+  const levels = Array.isArray(node?.levels) ? node.levels : []
+  const activeTooltipReleaseNote = hoveredLevelIndex !== null
+    ? (String(levels[hoveredLevelIndex]?.releaseNote ?? '').trim() || 'Keine Release Note hinterlegt.')
+    : tooltipReleaseNote
+  const activeTooltipScopeLabels = hoveredLevelIndex !== null
+    ? resolveScopeLabels(levels[hoveredLevelIndex]?.scopeIds, scopeOptions)
+    : tooltipScopeLabels
+  const activeTooltipTitle = hoveredLevelIndex !== null && levels.length > 1
+    ? `${node.label} – L${hoveredLevelIndex + 1}`
+    : node.label
   const levelStatusKeys = getLevelStatusKeys(node)
   const levelRingStyle = buildSegmentConicStyle(
     levelStatusKeys,
@@ -119,9 +130,27 @@ export function SkillNode({ node, nodeSize, isSelected, onSelect, onSelectLevel,
       ? 'radial-gradient(circle at 32% 28%, rgb(83, 96, 117), rgb(29, 40, 60) 58%, rgb(10, 16, 31) 100%)'
       : 'radial-gradient(circle at 32% 28%, rgb(21, 45, 94), rgb(15, 23, 42) 58%, rgb(2, 6, 23) 100%)'
 
+  const handleRingMouseMove = (event) => {
+    if (levels.length <= 1) return
+    const rect = event.currentTarget.getBoundingClientRect()
+    const cx = rect.left + rect.width / 2
+    const cy = rect.top + rect.height / 2
+    const dx = event.clientX - cx
+    const dy = event.clientY - cy
+    const dist = Math.sqrt(dx * dx + dy * dy)
+    if (dist >= (nodeSize / 2) * 0.5) {
+      const angle = (Math.atan2(dy, dx) * 180 / Math.PI + 90 + 360) % 360
+      const index = Math.min(Math.floor(angle / (360 / levels.length)), levels.length - 1)
+      setHoveredLevelIndex(prev => prev === index ? prev : index)
+    } else {
+      setHoveredLevelIndex(null)
+    }
+  }
+
+  const handleRingMouseLeave = () => setHoveredLevelIndex(null)
+
   const handleNodeClick = (event) => {
     onSelect(node.id, event)
-    const levels = Array.isArray(node?.levels) ? node.levels : []
     if (onSelectLevel && levels.length > 0) {
       const rect = event.currentTarget.getBoundingClientRect()
       const cx = rect.left + rect.width / 2
@@ -137,6 +166,7 @@ export function SkillNode({ node, nodeSize, isSelected, onSelect, onSelectLevel,
       }
     }
   }
+
 
   const showLabel = !isMinimal && (labelMode === 'mid' || labelMode === 'close')
   // fwX shifts left by CLOSE_CARD_WIDTH when card is on the left side
@@ -173,12 +203,14 @@ export function SkillNode({ node, nodeSize, isSelected, onSelect, onSelectLevel,
           closeDelay={40}
           transitionProps={{ transition: 'fade', duration: 120 }}
           classNames={{ tooltip: 'skill-node-tooltip', arrow: 'skill-node-tooltip__arrow' }}
-          label={<MarkdownTooltipContent title={node.label} markdown={tooltipReleaseNote} scopeLabels={tooltipScopeLabels} effort={node.effort} benefit={node.benefit} storyPointMap={storyPointMap} />}
+          label={<MarkdownTooltipContent title={activeTooltipTitle} markdown={activeTooltipReleaseNote} scopeLabels={activeTooltipScopeLabels} effort={node.effort} benefit={node.benefit} storyPointMap={storyPointMap} />}
         >
           <Paper
             component="button"
             type="button"
             onClick={handleNodeClick}
+            onMouseMove={handleRingMouseMove}
+            onMouseLeave={handleRingMouseLeave}
             className={isMinimal ? 'skill-node-button skill-node-button--minimal' : 'skill-node-button'}
             radius="xl"
             withBorder={false}

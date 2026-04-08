@@ -35,7 +35,6 @@ const LevelTabBar = ({ levels, activeIndex, onTabChange }) => (
     {levels.map((level, i) => {
       const statusKey = level.status ?? 'later'
       const dotColor = STATUS_STYLES[statusKey]?.ringBand ?? STATUS_STYLES.later.ringBand
-      const shortLabel = level.label ? String(level.label).slice(0, 4) : `L${i + 1}`
       return (
         <button
           key={level.id ?? i}
@@ -45,7 +44,7 @@ const LevelTabBar = ({ levels, activeIndex, onTabChange }) => (
           title={level.label}
         >
           <span className="skill-node-level-tab__dot" style={{ background: dotColor }} />
-          {shortLabel}
+          {`L${i + 1}`}
         </button>
       )
     })}

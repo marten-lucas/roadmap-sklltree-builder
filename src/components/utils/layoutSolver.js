@@ -2,6 +2,7 @@ import { buildLayoutDiagnostics } from './layoutDiagnostics'
 import { buildEdgeRoutingModel, buildRoutedEdgeLinks } from './edgeRouter'
 import { analyzeSegmentLevelFeasibility, buildSegmentLevelGroups } from './layoutFeasibility'
 import {
+  buildArcRadialPath,
   buildRadialArcPath,
   centerAngle,
   clamp,
@@ -1175,7 +1176,16 @@ export const solveSkillTreeLayout = (data, config) => {
           }
 
           const groupSize = end - start
-          if (!parentId || groupSize === 1) {
+          if (!parentId) {
+            // Root children have no shared placement anchor – each node keeps its own
+            // preferred angle derived from the initial computeAngleLayout placement.
+            for (let i = start; i < end; i += 1) {
+              preferredCenters.push(clamp(getPreferredPlacementAngle(orderedNodes[i]), leftCenter, rightCenter))
+            }
+            start = end
+            continue
+          }
+          if (groupSize === 1) {
             preferredCenters.push(baseAngle)
             start = end
             continue
@@ -1350,20 +1360,14 @@ export const solveSkillTreeLayout = (data, config) => {
 
   const finalOrderedSegments = orderedSegments.map((segment) => {
     const range = observedSegmentRangesMap.get(segment.id)
-    const visualSlot = visualSegmentSlotById.get(segment.id)
-    const wedgeMin = visualSlot?.min ?? segment.wedgeMin
-    const wedgeMax = visualSlot?.max ?? segment.wedgeMax
-    const wedgeCenter = visualSlot?.center ?? segment.wedgeCenter
+    // Keep segment geometry (min/max/wedge*) aligned with the layout slots so that
+    // nodes placed within those slots are always reported as inside their wedge.
+    // The visualSegmentSlots are only used for separator geometry and label anchors
+    // via the separate segmentLabels / segmentSeparators computations below.
     return {
       ...segment,
-      min: wedgeMin,
-      max: wedgeMax,
-      wedgeMin,
-      wedgeMax,
-      wedgeCenter,
       observedMin: range?.min ?? null,
       observedMax: range?.max ?? null,
-      anchorAngle: wedgeCenter,
     }
   })
 
@@ -1441,7 +1445,7 @@ export const solveSkillTreeLayout = (data, config) => {
       sourceDepth: 1,
       sourceId: node.parentId ?? null,
       targetId: node.id,
-      path: buildRadialArcPath(node.angle, levelOneRadius, node.angle, node.radius, origin),
+      path: buildArcRadialPath(centerAngle, levelOneRadius, node.angle, node.radius, origin),
     }))
 
   const levelOneNodes = nodes
@@ -1570,16 +1574,7 @@ export const solveSkillTreeLayout = (data, config) => {
       const isFirstVisible = index === 0
       const isLastVisible = index === visibleSegments.length - 1
 
-      let preferredAnchorAngle
-      if (visibleSegments.length > 1 && isFirstVisible) {
-        const outerNodeEdge = segment.observedMin ?? wedgeMin
-        preferredAnchorAngle = (wedgeMax + outerNodeEdge) / 2
-      } else if (visibleSegments.length > 1 && isLastVisible) {
-        const outerNodeEdge = segment.observedMax ?? wedgeMax
-        preferredAnchorAngle = (wedgeMin + outerNodeEdge) / 2
-      } else {
-        preferredAnchorAngle = (wedgeMin + wedgeMax) / 2
-      }
+      const preferredAnchorAngle = (wedgeMin + wedgeMax) / 2
 
       const anchorAngle = safeMin <= safeMax
         ? clamp(preferredAnchorAngle, safeMin, safeMax)

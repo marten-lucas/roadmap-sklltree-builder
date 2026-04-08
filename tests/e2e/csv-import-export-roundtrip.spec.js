@@ -444,6 +444,52 @@ test.describe('CSV template roundtrip via builder UI', () => {
     test.setTimeout(datasetName === 'large' ? 1_800_000 : 900_000)
     test.skip(!existsSync(csvTemplatePath), `CSV template not found: ${csvTemplatePath}`)
     const isVerbose = process.env.SKILLTREE_E2E_VERBOSE === '1'
+
+    let pauseRequested = false
+    await page.exposeFunction('__requestPause', () => { pauseRequested = true })
+
+    const injectPauseOverlay = async (label) => {
+      await page.evaluate((label) => {
+        const existing = document.getElementById('__test-pause-btn')
+        if (existing) existing.remove()
+        const btn = document.createElement('button')
+        btn.id = '__test-pause-btn'
+        btn.textContent = `⏸ Pause  ${label}`
+        Object.assign(btn.style, {
+          position: 'fixed',
+          top: '12px',
+          left: '12px',
+          zIndex: '2147483647',
+          padding: '10px 20px',
+          fontSize: '15px',
+          fontWeight: 'bold',
+          fontFamily: 'sans-serif',
+          background: '#c53030',
+          color: '#fff',
+          border: '2px solid #9b2c2c',
+          borderRadius: '8px',
+          cursor: 'pointer',
+          boxShadow: '0 2px 10px rgba(0,0,0,0.5)',
+        })
+        btn.addEventListener('click', () => {
+          window.__requestPause?.()
+          btn.textContent = '⏳ Pausiert nach diesem Node…'
+          btn.style.background = '#718096'
+          btn.style.borderColor = '#4a5568'
+          btn.disabled = true
+        })
+        document.body.appendChild(btn)
+      }, label)
+    }
+
+    const checkPause = async (label) => {
+      if (!pauseRequested) return
+      pauseRequested = false
+      console.log(`[csv-roundtrip] Pause nach: ${label}. Resume im Playwright Inspector.`)
+      await page.pause()
+      await injectPauseOverlay(label)
+    }
+
     const logStep = (message) => {
       console.log(`[csv-roundtrip:${datasetName}] ${message}`)
     }
@@ -633,6 +679,8 @@ test.describe('CSV template roundtrip via builder UI', () => {
     const firstRootNodeId = await getSelectedNodeId(page)
     nodeIdByCsvShortName.set(template.roots[0].shortName, firstRootNodeId)
     logCreatedNode('root-initial', template.roots[0].shortName, firstRootNodeId)
+    await injectPauseOverlay(template.roots[0].shortName)
+    await checkPause(template.roots[0].shortName)
     if (!ignoreSegments) {
       await setSelectValueByLabel(page, 'Segment', template.roots[0].segment)
     }
@@ -737,6 +785,8 @@ test.describe('CSV template roundtrip via builder UI', () => {
       const createdRootNodeId = await getSelectedNodeId(page)
       nodeIdByCsvShortName.set(template.roots[index].shortName, createdRootNodeId)
       logCreatedNode('root-sibling', template.roots[index].shortName, createdRootNodeId)
+      await injectPauseOverlay(template.roots[index].shortName)
+      await checkPause(template.roots[index].shortName)
     }
 
     for (const rootRow of template.roots) {
@@ -759,6 +809,8 @@ test.describe('CSV template roundtrip via builder UI', () => {
         const createdMissingRootNodeId = await getSelectedNodeId(page)
         nodeIdByCsvShortName.set(rootRow.shortName, createdMissingRootNodeId)
         logCreatedNode('root-recovery', rootRow.shortName, createdMissingRootNodeId)
+        await injectPauseOverlay(rootRow.shortName)
+        await checkPause(rootRow.shortName)
       }
     }
 
@@ -828,6 +880,8 @@ test.describe('CSV template roundtrip via builder UI', () => {
       const createdChildNodeId = await getSelectedNodeId(page)
       nodeIdByCsvShortName.set(row.shortName, createdChildNodeId)
       logCreatedNode('child', row.shortName, createdChildNodeId)
+      await injectPauseOverlay(row.shortName)
+      await checkPause(row.shortName)
     }
 
     await fillCenterMetadata(page)

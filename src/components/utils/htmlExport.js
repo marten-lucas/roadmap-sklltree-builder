@@ -397,7 +397,7 @@ const buildViewerScript = () => `
             levels.map((level, i) => {
               const statusKey = String(level?.status ?? 'later').trim().toLowerCase()
               const dotColor = STATUS_RING_COLORS[statusKey] ?? STATUS_RING_COLORS.later
-              const shortLabel = level?.label ? escapeLabelHtml(String(level.label).slice(0, 4)) : ('L' + (i + 1))
+              const shortLabel = 'L' + (i + 1)
               const isActive = i === activeIndex
               return '<button type="button"' +
                 ' class="skill-node-level-tab' + (isActive ? ' skill-node-level-tab--active' : '') + '"' +

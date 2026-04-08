@@ -13,8 +13,14 @@ import {
   importCsvViaToolbar,
 } from './helpers.js'
 
-const fixturePath = resolve(process.cwd(), 'tests/e2e/datasets/layout-regression/single-chain.csv')
+const fixturePath = process.env.SKILLTREE_ITERATIVE_CSV
+  ? resolve(process.env.SKILLTREE_ITERATIVE_CSV)
+  : resolve(process.cwd(), 'tests/e2e/datasets/layout-regression/single-chain.csv')
 const fixtureCsvText = readFileSync(fixturePath, 'utf-8')
+
+const csvImportOptions = {
+  ignoreManualLevels: process.env.SKILLTREE_ITERATIVE_IGNORE_LEVELS === '1',
+}
 
 const parseCsvLine = (line) => {
   const values = []
@@ -120,6 +126,36 @@ const fixtureRows = fixtureRecordLines.map((recordLine) => {
   }
 })
 
+const buildBfsRows = (rows) => {
+  const rowByShortName = new Map(rows.map((row) => [row.shortName, row]))
+  const shortNameSet = new Set(rows.map((row) => row.shortName))
+  const result = []
+  const visited = new Set()
+
+  const queue = rows.filter((row) => !row.parentShortName || !shortNameSet.has(row.parentShortName))
+  queue.forEach((row) => visited.add(row.shortName))
+
+  while (queue.length > 0) {
+    const current = queue.shift()
+    result.push(current)
+    for (const row of rows) {
+      if (!visited.has(row.shortName) && row.parentShortName === current.shortName) {
+        visited.add(row.shortName)
+        queue.push(row)
+      }
+    }
+  }
+
+  // append any rows not reachable via parent tree (e.g. orphans)
+  for (const row of rows) {
+    if (!visited.has(row.shortName)) result.push(row)
+  }
+
+  return result
+}
+
+const bfsRows = buildBfsRows(fixtureRows)
+
 const escapeCsvCell = (value) => {
   const text = String(value ?? '')
   if (/[",\n\r]/.test(text)) {
@@ -155,7 +191,7 @@ const maxInteriorAngularGapDeg = (angles) => {
 
 const buildPrefixCsv = (rowCount) => {
   const header = 'ShortName,Name,Scope,Ebene,Segment,Parent,AdditionalDependency,ProgressLevel,Status,ReleaseNotes'
-  const rows = fixtureRows.slice(0, rowCount).map((row) => [
+  const rows = bfsRows.slice(0, rowCount).map((row) => [
     escapeCsvCell(row.shortName),
     escapeCsvCell(row.label),
     escapeCsvCell(row.scope ?? ''),
@@ -236,21 +272,63 @@ test.describe('Iterative CSV Import', () => {
   test.use({ viewport: { width: 1920, height: 1080 }, deviceScaleFactor: 2 })
 
   test('imports each CSV prefix without breaking layout invariants', async ({ page }) => {
-    test.setTimeout(180_000)
+    test.setTimeout(600_000)
+
+    let pauseRequested = false
+    await page.exposeFunction('__requestPause', () => {
+      pauseRequested = true
+    })
+
+    const injectPauseOverlay = async (rowCount, total) => {
+      await page.evaluate(({ rowCount, total }) => {
+        const existing = document.getElementById('__test-pause-btn')
+        if (existing) existing.remove()
+        const btn = document.createElement('button')
+        btn.id = '__test-pause-btn'
+        btn.textContent = `⏸ Pause  (${rowCount} / ${total})`
+        Object.assign(btn.style, {
+          position: 'fixed',
+          top: '12px',
+          left: '12px',
+          zIndex: '2147483647',
+          padding: '10px 20px',
+          fontSize: '15px',
+          fontWeight: 'bold',
+          fontFamily: 'sans-serif',
+          background: '#c53030',
+          color: '#fff',
+          border: '2px solid #9b2c2c',
+          borderRadius: '8px',
+          cursor: 'pointer',
+          boxShadow: '0 2px 10px rgba(0,0,0,0.5)',
+        })
+        btn.addEventListener('click', () => {
+          window.__requestPause?.()
+          btn.textContent = '⏳ Pausiert nach Assertions…'
+          btn.style.background = '#718096'
+          btn.style.borderColor = '#4a5568'
+          btn.disabled = true
+        })
+        document.body.appendChild(btn)
+      }, { rowCount, total })
+    }
 
     await page.goto('/')
     await confirmAndReset(page)
     await expect(page.locator('foreignObject.skill-node-export-anchor')).toHaveCount(0)
 
-    for (let rowCount = 1; rowCount <= fixtureRows.length; rowCount += 1) {
+    for (let rowCount = 1; rowCount <= bfsRows.length; rowCount += 1) {
       const prefixCsv = buildPrefixCsv(rowCount)
-      const document = readDocumentFromCsvText(prefixCsv)
+      const document = readDocumentFromCsvText(prefixCsv, csvImportOptions)
       const layoutResult = solveSkillTreeLayout(document, TREE_CONFIG)
 
       await confirmAndReset(page)
       await expect(page.locator('foreignObject.skill-node-export-anchor')).toHaveCount(0)
       await importCsvViaToolbar(page, prefixCsv)
       await fitToScreenIfAvailable(page)
+
+      // Button nach dem Import – jetzt siehst du das Ergebnis
+      await injectPauseOverlay(rowCount, bfsRows.length)
 
       const exportedHtml = await exportHtml(page)
       const warningMetrics = await collectCanvasWarningMetrics(page)
@@ -261,6 +339,12 @@ test.describe('Iterative CSV Import', () => {
         exportedHtml,
         warningMetrics,
       })
+
+      if (pauseRequested) {
+        pauseRequested = false
+        console.log(`[iterative-import] Pause nach Iteration ${rowCount} / ${bfsRows.length}. Resume im Playwright Inspector.`)
+        await page.pause()
+      }
     }
   })
 })
