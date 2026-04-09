@@ -60,18 +60,18 @@ export const buildArcRadialPath = (sourceAngle, sourceRadius, targetAngle, targe
 
 export const buildRadialArcPath = (sourceAngle, sourceRadius, targetAngle, targetRadius, origin) => {
   const source = toCartesian(sourceAngle, sourceRadius, origin)
-  const targetOnSourceRay = toCartesian(sourceAngle, targetRadius, origin)
+  const sourceAtTargetAngle = toCartesian(targetAngle, sourceRadius, origin)
   const target = toCartesian(targetAngle, targetRadius, origin)
 
   const parts = [`M ${source.x} ${source.y}`]
 
-  if (Math.abs(targetRadius - sourceRadius) >= 0.01) {
-    parts.push(`L ${targetOnSourceRay.x} ${targetOnSourceRay.y}`)
+  if (sourceRadius >= 1 && Math.abs(targetAngle - sourceAngle) >= 0.01) {
+    const sweep = targetAngle > sourceAngle ? 1 : 0
+    parts.push(`A ${sourceRadius} ${sourceRadius} 0 0 ${sweep} ${sourceAtTargetAngle.x} ${sourceAtTargetAngle.y}`)
   }
 
-  if (targetRadius >= 1 && Math.abs(targetAngle - sourceAngle) >= 0.01) {
-    const sweep = targetAngle > sourceAngle ? 1 : 0
-    parts.push(`A ${targetRadius} ${targetRadius} 0 0 ${sweep} ${target.x} ${target.y}`)
+  if (Math.abs(targetRadius - sourceRadius) >= 0.01) {
+    parts.push(`L ${target.x} ${target.y}`)
   }
 
   return parts.join(' ')

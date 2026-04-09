@@ -21,7 +21,7 @@ const MAX_SEGMENT_LABEL_CHARS_PER_LINE = 15
 const CENTER_LABEL_GAP_PX = 12
 const LABEL_LEVEL_ONE_GAP_PX = 14
 const LABEL_RADIUS_OUTER_BIAS = 0.68
-const MIN_SEGMENT_SPREAD_DEG = 52
+const MIN_SEGMENT_SPREAD_DEG = 18
 
 const estimateWrappedLineCount = (text) => {
   const words = String(text ?? '').trim().split(/\s+/).filter(Boolean)
@@ -374,7 +374,7 @@ export const solveSkillTreeLayout = (data, config) => {
     )
 
     if (segmentStats.count > 0) {
-      return Math.max(labelWidth, toAngleSpan(config.nodeSize * 0.9, currentRadius))
+      return Math.max(labelWidth, toAngleSpan(config.nodeSize * 1.25, currentRadius))
     }
 
     return labelWidth
@@ -390,7 +390,7 @@ export const solveSkillTreeLayout = (data, config) => {
     )
     // Preserve a small global slack budget for visual breathing room while avoiding
     // large unused gaps when the current radius already provides enough angular room.
-    const slack = Math.max(10, Math.min(42, (segmentIds.length - 1) * 3.8))
+    const slack = Math.max(2, Math.min(15, (segmentIds.length - 1) * 1.5))
     return clamp(minimumWidthSum + slack, MIN_SEGMENT_SPREAD_DEG, config.maxAngleSpread)
   }
   const computeSegmentSlots = ({ segmentIds, statsById, radius, totalSpread }) => {
@@ -707,7 +707,7 @@ export const solveSkillTreeLayout = (data, config) => {
 
   const minimumArcGap = config.nodeSize * config.minArcGapFactor * denseGapScale
 
-  const crossSegmentGapFactor = 2.4
+  const crossSegmentGapFactor = 1.85
 
   const sortedLevels = Array.from(levelCounts.keys()).sort((a, b) => a - b)
   const firstNodeLevel = sortedLevels[0] ?? 1
@@ -849,7 +849,7 @@ export const solveSkillTreeLayout = (data, config) => {
         return
       }
 
-      const rootGroupGap = (gapByLevel.get(1) ?? toDegrees(minimumArcGap / config.levelSpacing)) * 1.35
+      const rootGroupGap = (gapByLevel.get(1) ?? toDegrees(minimumArcGap / config.levelSpacing)) * 1.55
       const hasEmptySegmentSlots = orderedSegmentIds.some((segmentId) => !rootGroupsMap.has(segmentId))
       const levelOneRadiusForGroups = radiusByLevel.get(1) ?? config.levelSpacing
 
@@ -926,7 +926,12 @@ export const solveSkillTreeLayout = (data, config) => {
         // multi-segment tree, also check whether the default formula would leave
         // the group too far from the arc boundary (which opens the top gap beyond
         // 120°). If so, pin the group edge to the arc boundary instead.
-        const defaultDesiredCenter = item.group.nodes.length > 0 ? (slotCenter + packedCenter) / 2 : slotCenter
+        // When the tree is dense (many nodes), drift less and stick closer to the packed center
+        // to minimize gaps between subtrees. This helps reduce large angular voids in wide segments.
+        const blendFactor = filledGroupItems.length > 4 ? 0.76 : 0.5;
+        const defaultDesiredCenter = item.group.nodes.length > 0 
+          ? (slotCenter * (1 - blendFactor) + packedCenter * blendFactor) 
+          : slotCenter;
         let desiredCenter = defaultDesiredCenter
 
         if (

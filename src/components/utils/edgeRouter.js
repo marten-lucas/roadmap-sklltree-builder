@@ -67,25 +67,38 @@ const canShareTrunk = ({
 // For n children, pick the gap midpoint closest to the mean angle.
 // This guarantees the trunk hits the ring BETWEEN children (never at a child position).
 const computeTrunkAngle = (angles) => {
-  if (angles.length <= 1) return angles[0] ?? 0
-  if (angles.length === 2) return (angles[0] + angles[1]) / 2
+  if (angles.length === 0) return 0;
+  
+  const sorted = [...angles].sort((a, b) => a - b);
+  const mean = sorted.reduce((sum, val) => sum + val, 0) / sorted.length;
+  
+  if (sorted.length <= 2) {
+    return mean;
+  }
 
-  const sorted = [...angles].sort((a, b) => a - b)
-  const mean = sorted.reduce((s, a) => s + a, 0) / sorted.length
-  let best = (sorted[0] + sorted[1]) / 2
-  let bestDist = Math.abs(best - mean)
+  // Pick the midpoint of the largest gap between adjacent children
+  // to ensure the trunk doesn't overlap any child node.
+  let maxGap = -1;
+  let bestMid = (sorted[0] + sorted[sorted.length - 1]) / 2;
 
-  for (let i = 1; i < sorted.length - 1; i++) {
-    const mid = (sorted[i] + sorted[i + 1]) / 2
-    const dist = Math.abs(mid - mean)
-
-    if (dist < bestDist) {
-      bestDist = dist
-      best = mid
+  for (let i = 0; i < sorted.length - 1; i++) {
+    const gap = sorted[i + 1] - sorted[i];
+    if (gap > maxGap) {
+      maxGap = gap;
+      bestMid = (sorted[i] + sorted[i + 1]) / 2;
     }
   }
 
-  return best
+  // If the mean is naturally within a gap that's already of decent size,
+  // we prefer the mean to keep connections as center-aligned as possible.
+  // Otherwise, fallback to the largest-gap midpoint for safety.
+  for (let i = 0; i < sorted.length - 1; i++) {
+    if (mean > sorted[i] + 0.5 && mean < sorted[i + 1] - 0.5) {
+      return mean;
+    }
+  }
+
+  return bestMid;
 }
 
 const toTrunkGroup = ({
