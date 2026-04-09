@@ -113,6 +113,29 @@ export const buildAutoPromotedLevels = ({ root, segmentOrderIndexById, config })
     }
   }
 
+  // Second pass: fix level inversions where a child has ebene ≤ parent ebene.
+  // This can happen in manually-authored CSVs (e.g. SEA has Ebene=1 but parent
+  // MM has Ebene=3, or PFD has Ebene=6 same as parent CFL). Such inversions
+  // produce inward or horizontal edges – enforce child level > parent level.
+  const allLinks = root.links().filter((link) => link.source.depth > 0)
+  changed = true
+  safety = 0
+  while (changed && safety < 20) {
+    changed = false
+    safety += 1
+    for (const link of allLinks) {
+      const parentId = link.source.data.id
+      const childId = link.target.data.id
+      const parentLevel = promotedLevelById.get(parentId) ?? baseLevelById.get(parentId) ?? link.source.depth
+      const currentChildLevel = promotedLevelById.get(childId) ?? baseLevelById.get(childId) ?? link.target.depth
+      if (currentChildLevel <= parentLevel) {
+        const nextChildLevel = parentLevel + 1
+        promotedLevelById.set(childId, nextChildLevel)
+        changed = true
+      }
+    }
+  }
+
   return {
     promotedLevelById,
     promotedByConflict,

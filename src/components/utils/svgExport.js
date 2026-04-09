@@ -167,13 +167,14 @@ const replaceCenterIconForeignObject = (svgRoot) => {
     return
   }
 
-  const centerSizeAttr = centerGroup.getAttribute('data-center-icon-size')
-  const centerSize = centerSizeAttr ? Number.parseFloat(centerSizeAttr) : CENTER_ICON_EXPORT_SIZE
-  const exportSize = Number.isFinite(centerSize) ? centerSize : CENTER_ICON_EXPORT_SIZE
+  // Always export at the canonical size so SVG and HTML exports are visually identical.
+  // The HTML export CSS also enforces 156px; using data-center-icon-size (live computed
+  // size, typically ~173px) would make the standalone SVG blob appear larger than HTML.
+  const exportSize = CENTER_ICON_EXPORT_SIZE
+  const exportHalf = exportSize / 2
 
   const image = createSvgElement('image')
   image.setAttribute('class', 'skill-tree-center-icon__image')
-  const exportHalf = exportSize / 2
   image.setAttribute('x', String(-exportHalf))
   image.setAttribute('y', String(-exportHalf))
   image.setAttribute('width', String(exportSize))
@@ -192,7 +193,7 @@ const replaceCenterIconForeignObject = (svgRoot) => {
 
   const hitArea = svgRoot.querySelector('.skill-tree-center-icon__hit-area')
   if (hitArea) {
-    hitArea.setAttribute('r', String(exportSize / 2 + 8))
+    hitArea.setAttribute('r', String(exportHalf))
   }
 }
 

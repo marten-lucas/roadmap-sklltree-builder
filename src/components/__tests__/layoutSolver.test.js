@@ -1,6 +1,9 @@
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { describe, it, expect } from 'vitest'
 import { solveSkillTreeLayout } from '../utils/layoutSolver'
 import { TREE_CONFIG } from '../config'
+import { readDocumentFromCsvText } from '../utils/csv'
 import { createSimpleTree, createCrossSegmentTree, createDenseTree, createEmptyTree, countNodesInTree } from './testUtils'
 
 describe('layoutSolver', () => {
@@ -1149,6 +1152,29 @@ describe('layoutSolver', () => {
         const lineCommands = commands.filter((match) => match[1] === 'L')
         expect(lineCommands.length).toBe(1)
       })
+    })
+  })
+
+  describe('myKyana full import – axial outward invariant', () => {
+    it('every parent→child edge should have child.radius >= parent.radius', () => {
+      const csvPath = resolve(process.cwd(), 'tests/e2e/datasets/myKyana.csv')
+      const csvText = readFileSync(csvPath, 'utf-8')
+      const doc = readDocumentFromCsvText(csvText, { ignoreSegments: false, ignoreManualLevels: true })
+      const result = solveSkillTreeLayout(doc, TREE_CONFIG)
+
+      const byId = new Map(result.layout.nodes.map((n) => [n.id, n]))
+
+      const violations = []
+      for (const link of result.layout.links) {
+        const parent = byId.get(link.sourceId)
+        const child = byId.get(link.targetId)
+        if (!parent || !child) continue
+        if (child.radius < parent.radius - 1) {
+          violations.push(`${link.sourceId}(r=${parent.radius.toFixed(0)}) → ${link.targetId}(r=${child.radius.toFixed(0)})`)
+        }
+      }
+
+      expect(violations, `Inward edges found:\n${violations.join('\n')}`).toEqual([])
     })
   })
 })

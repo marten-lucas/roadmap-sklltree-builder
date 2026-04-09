@@ -1,4 +1,4 @@
-import { Modal, Text } from '@mantine/core'
+import { Text } from '@mantine/core'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { STATUS_STYLES, STATUS_LABELS } from '../config'
 import { EFFORT_SIZE_LABELS, BENEFIT_SIZE_LABELS, resolveStoryPoints } from '../utils/effortBenefit'
@@ -115,11 +115,29 @@ const HoverTooltip = ({ entry, storyPointMap }) => {
 export function PriorityMatrix({ opened, onClose, document }) {
   const svgRef = useRef(null)
   const containerRef = useRef(null)
+  const drawerRef = useRef(null)
+  const [drawerWidth, setDrawerWidth] = useState(null)
   const [containerSize, setContainerSize] = useState({ width: 600, height: 520 })
   const [transform, setTransform] = useState({ x: 0, y: 0, scale: 1 })
   const [isPanning, setIsPanning] = useState(false)
   const panStartRef = useRef(null)
   const [hoveredEntry, setHoveredEntry] = useState(null)
+
+  const handleResizeStart = useCallback((e) => {
+    e.preventDefault()
+    const startX = e.clientX
+    const startWidth = drawerRef.current?.offsetWidth ?? window.innerWidth * 0.5
+    const onMove = (moveEvt) => {
+      const newWidth = Math.max(320, Math.min(window.innerWidth * 0.9, startWidth + (moveEvt.clientX - startX)))
+      setDrawerWidth(newWidth)
+    }
+    const onUp = () => {
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup', onUp)
+    }
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
+  }, [])
 
   // ResizeObserver for responsiveness
   useEffect(() => {
@@ -137,14 +155,34 @@ export function PriorityMatrix({ opened, onClose, document }) {
     return () => ro.disconnect()
   }, [])
 
-  // Reset transform and hover when modal opens (standard modal-reset pattern).
-  useEffect(() => {
-    if (opened) {
-      /* eslint-disable-next-line react-hooks/set-state-in-effect */
-      setTransform({ x: 0, y: 0, scale: 1 })
-      setHoveredEntry(null)
+  // Keep a ref so wheel/pan callbacks always see the latest containerSize
+  const containerSizeRef = useRef(containerSize)
+  useEffect(() => { containerSizeRef.current = containerSize }, [containerSize])
+
+  const computeFitTransform = useCallback((cSize) => {
+    const cs = Math.max(
+      CELL_MIN_SIZE,
+      Math.min(
+        (cSize.width - MATRIX_PADDING * 2) / AXIS_COUNT,
+        (cSize.height - MATRIX_PADDING * 2) / AXIS_COUNT,
+      ),
+    )
+    // Center the content (grid + labels) inside the SVG viewport
+    const contentW = MATRIX_PADDING * 2 + AXIS_COUNT * cs
+    const contentH = MATRIX_PADDING + AXIS_COUNT * cs + 44
+    return {
+      x: Math.max(0, (cSize.width - contentW) / 2),
+      y: Math.max(0, (cSize.height - contentH) / 2),
+      scale: 1,
     }
-  }, [opened])
+  }, [])
+
+  // Refit whenever the container is resized or the drawer is opened/closed
+  useEffect(() => {
+    if (!opened || containerSize.width <= 0) return
+    setTransform(computeFitTransform(containerSize))
+    setHoveredEntry(null)
+  }, [opened, containerSize, computeFitTransform])
 
   const cellSize = Math.max(
     CELL_MIN_SIZE,
@@ -161,20 +199,33 @@ export function PriorityMatrix({ opened, onClose, document }) {
   const storyPointMap = document?.storyPointMap
 
   // --- Zoom & Pan handlers ---
+  // Clamp a transform so the diagram can't be panned completely off-screen
+  const clampXY = (x, y, scale, cSize) => {
+    const cs = Math.max(CELL_MIN_SIZE, Math.min(
+      (cSize.width - MATRIX_PADDING * 2) / AXIS_COUNT,
+      (cSize.height - MATRIX_PADDING * 2) / AXIS_COUNT,
+    ))
+    const contentW = (MATRIX_PADDING * 2 + AXIS_COUNT * cs) * scale
+    const contentH = (MATRIX_PADDING + AXIS_COUNT * cs + 44) * scale
+    const MARGIN = 80
+    return {
+      x: Math.max(MARGIN - contentW, Math.min(cSize.width - MARGIN, x)),
+      y: Math.max(MARGIN - contentH, Math.min(cSize.height - MARGIN, y)),
+    }
+  }
+
   const handleWheel = useCallback((e) => {
     e.preventDefault()
     const delta = e.deltaY > 0 ? 0.9 : 1.1
     setTransform((prev) => {
       const newScale = Math.max(0.4, Math.min(4, prev.scale * delta))
-      // Zoom towards mouse position
       const rect = svgRef.current?.getBoundingClientRect() ?? { left: 0, top: 0 }
       const mx = e.clientX - rect.left
       const my = e.clientY - rect.top
-      return {
-        x: mx - (mx - prev.x) * (newScale / prev.scale),
-        y: my - (my - prev.y) * (newScale / prev.scale),
-        scale: newScale,
-      }
+      const rawX = mx - (mx - prev.x) * (newScale / prev.scale)
+      const rawY = my - (my - prev.y) * (newScale / prev.scale)
+      const clamped = clampXY(rawX, rawY, newScale, containerSizeRef.current)
+      return { ...clamped, scale: newScale }
     })
   }, [])
 
@@ -191,37 +242,46 @@ export function PriorityMatrix({ opened, onClose, document }) {
     panStartRef.current = { x: e.clientX - transform.x, y: e.clientY - transform.y }
   }
 
+  // Fix: capture panStartRef value locally to avoid stale-closure crash when
+  // panStartRef is nulled by handleMouseUp between the isPanning check and the access.
   const handleMouseMove = useCallback((e) => {
-    if (!isPanning || !panStartRef.current) return
-    setTransform((prev) => ({
-      ...prev,
-      x: e.clientX - panStartRef.current.x,
-      y: e.clientY - panStartRef.current.y,
-    }))
-  }, [isPanning])
+    const start = panStartRef.current
+    if (!start) return
+    setTransform((prev) => {
+      const rawX = e.clientX - start.x
+      const rawY = e.clientY - start.y
+      const clamped = clampXY(rawX, rawY, prev.scale, containerSizeRef.current)
+      return { ...prev, ...clamped }
+    })
+  }, [])
 
   const handleMouseUp = () => {
     setIsPanning(false)
     panStartRef.current = null
   }
 
-  const handleResetZoom = () => setTransform({ x: 0, y: 0, scale: 1 })
+  const handleResetZoom = () => setTransform(computeFitTransform(containerSize))
+
+  if (!opened) return null
 
   return (
-    <Modal
-      opened={opened}
-      onClose={onClose}
-      title="Effort vs Benefit – Priorisierungs-Matrix"
-      size="xl"
-      centered
-      zIndex={500}
-      styles={{
-        body: { padding: 0 },
-        content: { overflow: 'hidden' },
-      }}
+    <div
+      ref={drawerRef}
+      className="priority-matrix-drawer"
+      style={{ width: drawerWidth != null ? `${drawerWidth}px` : '50vw' }}
     >
+      <div className="priority-matrix-drawer__header">
+        <span className="priority-matrix-drawer__title">Effort vs Benefit – Priorisierungs-Matrix</span>
+        <button
+          className="priority-matrix-drawer__close"
+          onClick={onClose}
+          aria-label="Schließen"
+        >
+          ×
+        </button>
+      </div>
       <div
-        style={{ position: 'relative', width: '100%', height: '70vh', minHeight: 360, background: '#0f172a' }}
+        className="priority-matrix-drawer__content"
         ref={containerRef}
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
@@ -269,9 +329,9 @@ export function PriorityMatrix({ opened, onClose, document }) {
         {/* SVG */}
         <svg
           ref={svgRef}
-          width={containerSize.width}
-          height={containerSize.height}
-          style={{ display: 'block', cursor: isPanning ? 'grabbing' : 'grab', userSelect: 'none' }}
+          width="100%"
+          height="100%"
+          style={{ display: 'block', position: 'absolute', inset: 0, cursor: isPanning ? 'grabbing' : 'grab', userSelect: 'none' }}
           onMouseDown={handleMouseDown}
         >
           <g transform={`translate(${transform.x},${transform.y}) scale(${transform.scale})`}>
@@ -386,7 +446,13 @@ export function PriorityMatrix({ opened, onClose, document }) {
           </g>
         </svg>
       </div>
-    </Modal>
+      <div
+        className="priority-matrix-drawer__resize-handle"
+        onMouseDown={handleResizeStart}
+      >
+        <div className="priority-matrix-drawer__resize-grip" />
+      </div>
+    </div>
   )
 }
 

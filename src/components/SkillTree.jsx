@@ -13,7 +13,7 @@ import {
   DEFAULT_CENTER_ICON_SRC,
   documentHistoryReducer,
 } from './utils/documentState'
-import { CenterIconPanel, InspectorPanel, SegmentPanel, ToolbarScopeManager, ToolbarSegmentManager } from './panels'
+import { SystemPanel, InspectorPanel, SegmentPanel, ToolbarScopeManager, ToolbarSegmentManager } from './panels'
 import { PriorityMatrix } from './panels/PriorityMatrix'
 import { solveSkillTreeLayout } from './utils/layoutSolver'
 import { UNASSIGNED_SEGMENT_ID } from './utils/layoutShared'
@@ -2173,7 +2173,7 @@ export function SkillTree() {
         onReset={handleReset}
         onOpenSegmentManager={handleOpenSegmentManager}
         onOpenScopeManager={handleOpenScopeManager}
-        onOpenPriorityMatrix={() => setPriorityMatrixOpen(true)}
+        onOpenPriorityMatrix={() => setPriorityMatrixOpen((v) => !v)}
         releaseFilter={releaseFilter}
         setReleaseFilter={setReleaseFilter}
         selectedReleaseFilterLabel={selectedReleaseFilterLabel}
@@ -2355,7 +2355,7 @@ export function SkillTree() {
         onDeleteSegment={handleDeleteSegmentForManager}
       />
 
-      <CenterIconPanel
+      <SystemPanel
         isOpen={rightPanel === PANEL_CENTER}
         iconSource={centerIconSource}
         onClose={() => { if (rightPanel === PANEL_CENTER) setRightPanel(null) }}

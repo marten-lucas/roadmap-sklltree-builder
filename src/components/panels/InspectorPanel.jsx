@@ -1,5 +1,6 @@
 import { ActionIcon, Alert, Badge, Button, Divider, Group, MultiSelect, NumberInput, Paper, SegmentedControl, Select, Stack, Tabs, Text, TextInput, Textarea } from '@mantine/core'
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import { IconPercentage20 } from '@tabler/icons-react'
 import { normalizeStatusKey, STATUS_LABELS } from '../config'
 import { UNASSIGNED_SEGMENT_ID } from '../utils/layoutShared'
 import { commitInspectorDrafts } from '../utils/inspectorCommit'
@@ -588,6 +589,26 @@ export function InspectorPanel({
     disabled: !option.isAllowed,
   }))
 
+  const [activeTab, setActiveTab] = useState('properties')
+
+  useEffect(() => {
+    setActiveTab('properties')
+  }, [selectedNode?.id])
+
+  const handleTabChange = useCallback((newValue) => {
+    if (!newValue) return
+    commitCurrentDrafts(false, 'tab-switch')
+    setActiveTab(newValue)
+    const levelForTab = nodeLevels.find((l) => l.id === newValue)
+    if (levelForTab) {
+      const nextReleaseNote = levelForTab.releaseNote ?? ''
+      releaseNoteDraftRef.current = nextReleaseNote
+      committedReleaseNoteRef.current = nextReleaseNote
+      setReleaseNoteDraft(nextReleaseNote)
+      onSelectProgressLevel?.(newValue)
+    }
+  }, [commitCurrentDrafts, nodeLevels, onSelectProgressLevel])
+
   if (!selectedNode) {
     return multiSelectInspector
   }
@@ -599,10 +620,15 @@ export function InspectorPanel({
       shadow="none"
       data-selected-node-id={selectedNode.id}
     >
+      {/* ── Header: node name in title ── */}
       <div className="skill-panel__header">
-        <div>
+        <div style={{ flex: 1, minWidth: 0 }}>
           <Text className="skill-panel__eyebrow">Inspector</Text>
-          <Text className="skill-panel__title skill-panel__title--large">Skill bearbeiten</Text>
+          <Text className="skill-panel__title skill-panel__title--node">
+            {selectedNode.shortName
+              ? `${selectedNode.label} (${selectedNode.shortName})`
+              : selectedNode.label}
+          </Text>
         </div>
         <div className="skill-panel__header-actions">
           <ActionIcon variant="subtle" color="gray" onClick={() => { commitCurrentDrafts(false, 'explicit'); onClose?.() }} aria-label="Inspector schließen">
@@ -611,483 +637,398 @@ export function InspectorPanel({
         </div>
       </div>
 
-      <div className="skill-panel__body skill-panel__body--scrollable">
-        <Stack gap="md">
-          <Paper className="skill-panel__selected" radius="lg" withBorder>
-            <Text className="skill-panel__selected-label">Ausgewählt</Text>
-            <Text className="skill-panel__selected-value">{selectedNode.label}</Text>
-          </Paper>
+      {/* ── Tab container ── */}
+      <div className="skill-panel__tab-container">
+        <Tabs
+          value={activeTab}
+          onChange={handleTabChange}
+          classNames={{
+            root: 'skill-panel__tabs-root',
+            panel: 'skill-panel__tab-panel',
+            list: 'skill-panel__tabs-list',
+          }}
+        >
+          <Tabs.List>
+            <Tabs.Tab value="properties">Eigenschaften</Tabs.Tab>
 
-          <Textarea
-            label="Name"
-            placeholder="Skill-Name eingeben …"
-            value={nameDraft}
-            onChange={(event) => {
-              const nextValue = event.currentTarget.value
-              nameDraftRef.current = nextValue
-              setNameDraft(nextValue)
-            }}
-            onBlur={() => {
-              commitCurrentDrafts(true, 'explicit')
-            }}
-            minRows={2}
-            maxRows={4}
-            classNames={{
-              input: 'mantine-dark-input',
-              label: 'mantine-dark-label',
-            }}
-          />
+            {nodeLevels.map((level, index) => (
+              <Tabs.Tab key={level.id} value={level.id}>{`Level ${index + 1}`}</Tabs.Tab>
+            ))}
 
-          <TextInput
-            label="Shortname"
-            placeholder="z.B. API"
-            value={shortNameDraft}
-            onChange={(event) => {
-              const nextValue = event.currentTarget.value
-              shortNameDraftRef.current = nextValue
-              setShortNameDraft(nextValue)
-            }}
-            onBlur={() => {
-              commitCurrentDrafts(true, 'explicit')
-            }}
-            /* allow longer input; show a warning on blur if >3 */
-            error={shortNameDuplicateWarning}
-            classNames={{
-              input: 'mantine-dark-input',
-              label: 'mantine-dark-label',
-            }}
-          />
+            <ActionIcon
+              size="sm"
+              variant="filled"
+              color="cyan"
+              onClick={onAddProgressLevel}
+              aria-label="Level hinzufügen"
+              ml={4}
+              style={{ alignSelf: 'center' }}
+            >
+              +
+            </ActionIcon>
+          </Tabs.List>
 
-          <Select
-            label="Ebene"
-            data={levelData}
-            value={String(currentLevel)}
-            onChange={(value) => value && onLevelChange(parseInt(value, 10))}
-            allowDeselect={false}
-            description={blockedLevelHint ?? undefined}
-            classNames={{
-              input: 'mantine-dark-input',
-              label: 'mantine-dark-label',
-              description: 'mantine-dark-description',
-              dropdown: 'mantine-dark-dropdown',
-              option: 'mantine-dark-option',
-            }}
-            comboboxProps={{ withinPortal: true, zIndex: 450 }}
-          />
+          {/* ── Eigenschaften Tab ── */}
+          <Tabs.Panel value="properties">
+            <div className="skill-panel__tab-scroll">
+              <Stack gap="xl">
 
-          {segmentOptions && segmentOptions.length > 0 && (
-            <>
-              <Group gap="xs" align="center" wrap="nowrap">
-                <Select
-                  label="Segment"
-                  data={segmentData}
-                  value={selectedSegmentKey}
-                  onChange={(value) => value && onSegmentChange(value)}
-                  allowDeselect={false}
-                  description={blockedSegmentHint ?? undefined}
-                  flex={1}
-                  classNames={{
-                    input: 'mantine-dark-input',
-                    label: 'mantine-dark-label',
-                    description: 'mantine-dark-description',
-                    dropdown: 'mantine-dark-dropdown',
-                    option: 'mantine-dark-option',
-                  }}
-                  comboboxProps={{ withinPortal: true, zIndex: 450 }}
-                />
-
-                <Tooltip label="Segmente verwalten">
-                  <ActionIcon
-                    variant="light"
-                    color="gray"
-                    onClick={() => setSegmentManagerOpen((open) => !open)}
-                    aria-label="Segmente verwalten"
-                  >
-                    <TablerPercentIcon size={15} />
-                  </ActionIcon>
-                </Tooltip>
-              </Group>
-
-              <div className={`skill-panel__segment-accordion ${segmentManagerOpen ? 'skill-panel__segment-accordion--open' : ''}`}>
+                {/* Gruppe 1: Bezeichnung */}
                 <Stack gap="sm">
-                  <Group align="flex-end" wrap="nowrap">
-                    <TextInput
-                      label="Segmente verwalten"
-                      placeholder="Neues Segment"
-                      value={segmentDraft}
-                      onChange={(event) => setSegmentDraft(event.currentTarget.value)}
-                      style={{ flex: 1 }}
-                      classNames={{ input: 'mantine-dark-input', label: 'mantine-dark-label' }}
-                    />
-                    <Tooltip label="Segment hinzufügen">
-                      <ActionIcon
-                        variant="light"
-                        color="cyan"
-                        size="lg"
-                        onClick={handleCreateSegment}
-                        aria-label="Segment hinzufügen"
-                      >
-                        <TablerCirclePlusIcon size={20} />
-                      </ActionIcon>
-                    </Tooltip>
-                  </Group>
-
-                  <Divider />
-
-                  <Stack gap={8}>
-                    {(segmentData ?? []).length === 0 && (
-                      <Text size="sm" c="dimmed">Noch keine Segmente vorhanden.</Text>
-                    )}
-
-                    {(segmentData ?? []).map((segment) => (
-                      <Paper key={segment.value} withBorder radius="md" p="xs">
-                        {editingSegmentId === segment.value ? (
-                          <Stack gap={8}>
-                            <TextInput
-                              value={editingSegmentLabel}
-                              onChange={(event) => setEditingSegmentLabel(event.currentTarget.value)}
-                              classNames={{ input: 'mantine-dark-input' }}
-                            />
-                            <Group justify="space-between">
-                              <Button size="xs" variant="light" onClick={() => { setEditingSegmentId(null); setEditingSegmentLabel('') }}>Abbrechen</Button>
-                              <Button size="xs" onClick={handleRenameSegment}>Speichern</Button>
-                            </Group>
-                          </Stack>
-                        ) : (
-                          <Group justify="space-between" wrap="nowrap">
-                            <Text size="sm" truncate>{segment.label}</Text>
-                            <Group gap={6} wrap="nowrap">
-                              <ActionIcon size="sm" variant="subtle" color="gray" onClick={() => handleStartRenameSegment(segment.value, segment.label)} aria-label="Segment umbenennen">✎</ActionIcon>
-                              <ActionIcon size="sm" variant="subtle" color="red" onClick={() => handleDeleteSegment(segment.value)} aria-label="Segment löschen">✕</ActionIcon>
-                            </Group>
-                          </Group>
-                        )}
-                      </Paper>
-                    ))}
-
-                    {segmentError && (
-                      <Alert color="red" variant="light">{segmentError}</Alert>
-                    )}
-                  </Stack>
-                </Stack>
-              </div>
-            </>
-          )}
-
-          {parentOptions && parentOptions.length > 0 && (
-            <Select
-              label="Parent"
-              data={parentData}
-              value={selectedParentKey}
-              onChange={(value) => value && onParentChange(value)}
-              allowDeselect={false}
-              classNames={{
-                input: 'mantine-dark-input',
-                label: 'mantine-dark-label',
-                dropdown: 'mantine-dark-dropdown',
-                option: 'mantine-dark-option',
-              }}
-              comboboxProps={{ withinPortal: true, zIndex: 450 }}
-            />
-          )}
-
-          {additionalDependencyData.length > 0 && (
-            <MultiSelect
-              label="Additional Dependencies"
-              data={additionalDependencyData}
-              value={selectedAdditionalDependencyIds ?? []}
-              onChange={onAdditionalDependenciesChange}
-              searchable
-              clearable
-              classNames={{
-                input: 'mantine-dark-input',
-                label: 'mantine-dark-label',
-                dropdown: 'mantine-dark-dropdown',
-                option: 'mantine-dark-option',
-                pill: 'mantine-dark-pill',
-              }}
-              comboboxProps={{ withinPortal: true, zIndex: 450 }}
-            />
-          )}
-
-          <div>
-            <Text className="mantine-dark-label" size="sm" mb="xs">Incoming Dependencies</Text>
-            {incomingDependencyLabels && incomingDependencyLabels.length > 0 ? (
-              <Stack gap={6}>
-                {incomingDependencyLabels.map((entry) => (
-                  <Paper key={entry.id} radius="md" px="sm" py={6} className="skill-panel__incoming-item" withBorder>
-                    <Text size="sm">{entry.shortName ? `${entry.label} (${entry.shortName})` : entry.label}</Text>
-                  </Paper>
-                ))}
-              </Stack>
-            ) : (
-              <Text size="sm" c="dimmed">Keine eingehenden Dependencies.</Text>
-            )}
-          </div>
-
-          <div>
-            <Text className="mantine-dark-label" size="sm" mb="xs">Ausbaustufen</Text>
-            <Tabs value={activeProgressLevelId} onChange={(value) => value && onSelectProgressLevel(value)}>
-              <Tabs.List className="skill-panel__level-tabs">
-                {nodeLevels.map((level, index) => (
-                  <div key={level.id} className="skill-panel__level-tab-item">
-                    <Tabs.Tab value={level.id}>{`L${index + 1}`}</Tabs.Tab>
-                    <ActionIcon
-                      size="sm"
-                      variant="subtle"
-                      color="gray"
-                      onClick={(event) => {
-                        event.preventDefault()
-                        event.stopPropagation()
-                        onDeleteProgressLevel(level.id)
-                      }}
-                      aria-label={`Level ${index + 1} löschen`}
-                      disabled={nodeLevels.length <= 1}
-                    >
-                      ✕
-                    </ActionIcon>
-                  </div>
-                ))}
-                <ActionIcon
-                  size="sm"
-                  variant="filled"
-                  color="cyan"
-                  onClick={onAddProgressLevel}
-                  aria-label="Level hinzufügen"
-                >
-                  +
-                </ActionIcon>
-              </Tabs.List>
-            </Tabs>
-          </div>
-
-          <Select
-            label="Status"
-            data={STATUS_OPTIONS}
-            value={activeProgressLevel.status}
-            onChange={(value) => value && onStatusChange(value)}
-            allowDeselect={false}
-            classNames={{
-              input: 'mantine-dark-input',
-              label: 'mantine-dark-label',
-              dropdown: 'mantine-dark-dropdown',
-              option: 'mantine-dark-option',
-            }}
-            comboboxProps={{ withinPortal: true, zIndex: 450 }}
-          />
-
-          <div>
-            <Text className="mantine-dark-label" size="sm" mb={6}>Effort</Text>
-            <SegmentedControl
-              fullWidth
-              size="xs"
-              value={selectedNode.effort?.size ?? 'unclear'}
-              onChange={(size) => onEffortChange?.({ size, customPoints: selectedNode.effort?.customPoints ?? null })}
-              data={Object.entries(EFFORT_SIZE_LABELS).map(([value, label]) => ({ value, label }))}
-            />
-            {selectedNode.effort?.size === 'custom' && (
-              <NumberInput
-                mt={6}
-                label="Story Points (Custom)"
-                placeholder="z.B. 7"
-                value={selectedNode.effort?.customPoints ?? ''}
-                onChange={(val) => onEffortChange?.({ size: 'custom', customPoints: val === '' ? null : Number(val) })}
-                min={0}
-                allowDecimal={false}
-                classNames={{ input: 'mantine-dark-input', label: 'mantine-dark-label' }}
-              />
-            )}
-          </div>
-
-          <div>
-            <Text className="mantine-dark-label" size="sm" mb={6}>Benefit</Text>
-            <SegmentedControl
-              fullWidth
-              size="xs"
-              value={selectedNode.benefit?.size ?? 'unclear'}
-              onChange={(size) => onBenefitChange?.({ size })}
-              data={Object.entries(BENEFIT_SIZE_LABELS).map(([value, label]) => ({ value, label }))}
-            />
-          </div>
-
-          <div className="skill-panel__scope-block">
-            <Group justify="space-between" align="center" mb={6}>
-              <Text className="mantine-dark-label" size="sm">Scope</Text>
-              <Tooltip label="Ohne Zuordnung gilt die Ausbaustufe fuer alle Produktgruppen.">
-                <ActionIcon
-                  variant="subtle"
-                  color="gray"
-                  size="sm"
-                  aria-label="Scope-Hinweis"
-                >
-                  <TablerInfoCircleIcon size={15} />
-                </ActionIcon>
-              </Tooltip>
-            </Group>
-
-            <Group gap="xs" align="center" wrap="nowrap">
-              <MultiSelect
-                data={scopeSelectData}
-                value={activeProgressLevel.scopeIds ?? []}
-                onChange={handleScopeIdsChange}
-                placeholder="Scopes"
-                searchable
-                clearable
-                flex={1}
-                classNames={{
-                  input: 'mantine-dark-input',
-                  dropdown: 'mantine-dark-dropdown',
-                  option: 'mantine-dark-option',
-                  pill: 'mantine-dark-pill',
-                }}
-                comboboxProps={{ withinPortal: true, zIndex: 450 }}
-              />
-
-              <Tooltip label="Scopes verwalten">
-                <ActionIcon
-                  variant="light"
-                  color="gray"
-                  onClick={() => setScopeManagerOpen((open) => !open)}
-                  aria-label="Scopes verwalten"
-                >
-                  <TablerAdjustmentsIcon size={15} />
-                </ActionIcon>
-              </Tooltip>
-            </Group>
-
-            <div className={`skill-panel__scope-accordion ${scopeManagerOpen ? 'skill-panel__scope-accordion--open' : ''}`}>
-              <Stack gap="sm">
-                <Group align="flex-end" wrap="nowrap">
+                  <Text size="xs" fw={600} tt="uppercase" c="dimmed" lts="0.1em">Bezeichnung</Text>
+                  <Textarea
+                    label="Name"
+                    placeholder="Skill-Name eingeben …"
+                    value={nameDraft}
+                    onChange={(event) => {
+                      const nextValue = event.currentTarget.value
+                      nameDraftRef.current = nextValue
+                      setNameDraft(nextValue)
+                    }}
+                    onBlur={() => commitCurrentDrafts(true, 'explicit')}
+                    minRows={3}
+                    maxRows={8}
+                    autosize
+                    classNames={{ input: 'mantine-dark-input', label: 'mantine-dark-label' }}
+                  />
                   <TextInput
-                    label="Scopes verwalten"
-                    placeholder="z.B. Serie A"
-                    value={scopeDraft}
-                    onChange={(event) => setScopeDraft(event.currentTarget.value)}
-                    style={{ flex: 1 }}
+                    label="Shortname"
+                    placeholder="z.B. API"
+                    value={shortNameDraft}
+                    onChange={(event) => {
+                      const nextValue = event.currentTarget.value
+                      shortNameDraftRef.current = nextValue
+                      setShortNameDraft(nextValue)
+                    }}
+                    onBlur={() => commitCurrentDrafts(true, 'explicit')}
+                    error={shortNameDuplicateWarning}
+                    classNames={{ input: 'mantine-dark-input', label: 'mantine-dark-label' }}
+                  />
+                </Stack>
+
+                {/* Gruppe 2: Einordnung */}
+                <Stack gap="sm">
+                  <Text size="xs" fw={600} tt="uppercase" c="dimmed" lts="0.1em">Einordnung</Text>
+
+                  {parentOptions && parentOptions.length > 0 && (
+                    <Select
+                      label="Parent"
+                      data={parentData}
+                      value={selectedParentKey}
+                      onChange={(value) => value && onParentChange(value)}
+                      allowDeselect={false}
+                      classNames={{
+                        input: 'mantine-dark-input',
+                        label: 'mantine-dark-label',
+                        dropdown: 'mantine-dark-dropdown',
+                        option: 'mantine-dark-option',
+                      }}
+                      comboboxProps={{ withinPortal: true, zIndex: 450 }}
+                    />
+                  )}
+
+                  {additionalDependencyData.length > 0 && (
+                    <MultiSelect
+                      label="Additional Dependencies"
+                      data={additionalDependencyData}
+                      value={selectedAdditionalDependencyIds ?? []}
+                      onChange={onAdditionalDependenciesChange}
+                      searchable
+                      clearable
+                      classNames={{
+                        input: 'mantine-dark-input',
+                        label: 'mantine-dark-label',
+                        dropdown: 'mantine-dark-dropdown',
+                        option: 'mantine-dark-option',
+                        pill: 'mantine-dark-pill',
+                      }}
+                      comboboxProps={{ withinPortal: true, zIndex: 450 }}
+                    />
+                  )}
+
+                  {segmentOptions && segmentOptions.length > 0 && (
+                    <>
+                      <Group gap="xs" align="center" wrap="nowrap">
+                        <Select
+                          label="Segment"
+                          data={segmentData}
+                          value={selectedSegmentKey}
+                          onChange={(value) => value && onSegmentChange(value)}
+                          allowDeselect={false}
+                          description={blockedSegmentHint ?? undefined}
+                          flex={1}
+                          classNames={{
+                            input: 'mantine-dark-input',
+                            label: 'mantine-dark-label',
+                            description: 'mantine-dark-description',
+                            dropdown: 'mantine-dark-dropdown',
+                            option: 'mantine-dark-option',
+                          }}
+                          comboboxProps={{ withinPortal: true, zIndex: 450 }}
+                        />
+                        <Tooltip label="Segmente verwalten">
+                          <ActionIcon variant="light" color="gray" onClick={() => setSegmentManagerOpen((open) => !open)} aria-label="Segmente verwalten">
+                            <IconPercentage20 size={15} />
+                          </ActionIcon>
+                        </Tooltip>
+                      </Group>
+
+                      <div className={`skill-panel__segment-accordion ${segmentManagerOpen ? 'skill-panel__segment-accordion--open' : ''}`}>
+                        <Stack gap="sm">
+                          <Group align="flex-end" wrap="nowrap">
+                            <TextInput
+                              label="Segmente verwalten"
+                              placeholder="Neues Segment"
+                              value={segmentDraft}
+                              onChange={(event) => setSegmentDraft(event.currentTarget.value)}
+                              style={{ flex: 1 }}
+                              classNames={{ input: 'mantine-dark-input', label: 'mantine-dark-label' }}
+                            />
+                            <Tooltip label="Segment hinzufügen">
+                              <ActionIcon variant="light" color="cyan" size="lg" onClick={handleCreateSegment} aria-label="Segment hinzufügen">
+                                <TablerCirclePlusIcon size={20} />
+                              </ActionIcon>
+                            </Tooltip>
+                          </Group>
+                          <Divider />
+                          <Stack gap={8}>
+                            {(segmentData ?? []).length === 0 && <Text size="sm" c="dimmed">Noch keine Segmente vorhanden.</Text>}
+                            {(segmentData ?? []).map((segment) => (
+                              <Paper key={segment.value} withBorder radius="md" p="xs">
+                                {editingSegmentId === segment.value ? (
+                                  <Stack gap={8}>
+                                    <TextInput value={editingSegmentLabel} onChange={(event) => setEditingSegmentLabel(event.currentTarget.value)} classNames={{ input: 'mantine-dark-input' }} />
+                                    <Group justify="space-between">
+                                      <Button size="xs" variant="light" onClick={() => { setEditingSegmentId(null); setEditingSegmentLabel('') }}>Abbrechen</Button>
+                                      <Button size="xs" onClick={handleRenameSegment}>Speichern</Button>
+                                    </Group>
+                                  </Stack>
+                                ) : (
+                                  <Group justify="space-between" wrap="nowrap">
+                                    <Text size="sm" truncate>{segment.label}</Text>
+                                    <Group gap={6} wrap="nowrap">
+                                      <ActionIcon size="sm" variant="subtle" color="gray" onClick={() => handleStartRenameSegment(segment.value, segment.label)} aria-label="Segment umbenennen">✎</ActionIcon>
+                                      <ActionIcon size="sm" variant="subtle" color="red" onClick={() => handleDeleteSegment(segment.value)} aria-label="Segment löschen">✕</ActionIcon>
+                                    </Group>
+                                  </Group>
+                                )}
+                              </Paper>
+                            ))}
+                            {segmentError && <Alert color="red" variant="light">{segmentError}</Alert>}
+                          </Stack>
+                        </Stack>
+                      </div>
+                    </>
+                  )}
+
+                  <Select
+                    label="Ebene"
+                    data={levelData}
+                    value={String(currentLevel)}
+                    onChange={(value) => value && onLevelChange(parseInt(value, 10))}
+                    allowDeselect={false}
+                    description={blockedLevelHint ?? undefined}
                     classNames={{
                       input: 'mantine-dark-input',
                       label: 'mantine-dark-label',
+                      description: 'mantine-dark-description',
+                      dropdown: 'mantine-dark-dropdown',
+                      option: 'mantine-dark-option',
                     }}
+                    comboboxProps={{ withinPortal: true, zIndex: 450 }}
                   />
-                  <Tooltip label="Scope hinzufügen">
-                    <ActionIcon
-                      variant="light"
-                      color="cyan"
-                      size="lg"
-                      onClick={handleCreateScope}
-                      aria-label="Scope hinzufügen"
-                    >
-                      <TablerCirclePlusIcon size={20} />
-                    </ActionIcon>
-                  </Tooltip>
-                </Group>
-
-                <Divider />
-
-                <Stack gap={8}>
-                  {scopeSelectData.length === 0 && (
-                    <Text size="sm" c="dimmed">Noch keine Scopes vorhanden.</Text>
-                  )}
-
-                  {scopeSelectData.map((scope) => (
-                    <Paper key={scope.value} withBorder radius="md" p="xs">
-                      {editingScopeId === scope.value ? (
-                        <Stack gap={8}>
-                          <TextInput
-                            value={editingScopeLabel}
-                            onChange={(event) => setEditingScopeLabel(event.currentTarget.value)}
-                            classNames={{
-                              input: 'mantine-dark-input',
-                            }}
-                          />
-                          <Group justify="space-between">
-                            <Button
-                              size="xs"
-                              variant="light"
-                              onClick={() => {
-                                setEditingScopeId(null)
-                                setEditingScopeLabel('')
-                              }}
-                            >
-                              Abbrechen
-                            </Button>
-                            <Button size="xs" onClick={handleRenameScope}>Speichern</Button>
-                          </Group>
-                        </Stack>
-                      ) : (
-                        <Group justify="space-between" wrap="nowrap">
-                          <Text size="sm" truncate>{scope.label}</Text>
-                          <Group gap={6} wrap="nowrap">
-                            <ActionIcon
-                              size="sm"
-                              variant="subtle"
-                              color="gray"
-                              onClick={() => handleStartRenameScope(scope.value, scope.label)}
-                              aria-label="Scope umbenennen"
-                            >
-                              ✎
-                            </ActionIcon>
-                            <ActionIcon
-                              size="sm"
-                              variant="subtle"
-                              color="red"
-                              onClick={() => handleDeleteScope(scope.value)}
-                              aria-label="Scope löschen"
-                            >
-                              ✕
-                            </ActionIcon>
-                          </Group>
-                        </Group>
-                      )}
-                    </Paper>
-                  ))}
                 </Stack>
 
-                {scopeError && (
-                  <Alert color="red" variant="light">
-                    {scopeError}
-                  </Alert>
-                )}
               </Stack>
             </div>
-          </div>
 
-          <MarkdownField
-            label="Release Note"
-            placeholder="Beschreibe aus Kundensicht, was in dieser Ausbaustufe geliefert wurde oder als Nächstes kommt ..."
-            value={releaseNoteDraft}
-            onChange={(nextValue) => {
-              releaseNoteDraftRef.current = nextValue
-              setReleaseNoteDraft(nextValue)
-            }}
-            onBlur={() => {
-              commitCurrentDrafts(true, 'explicit')
-            }}
-          />
+            <div className="skill-panel__tab-bottom-bar">
+              <Divider mb="sm" />
+              <Group gap="sm" grow>
+                <Button variant="default" onClick={onDeleteNodeOnly}>Skill löschen</Button>
+                <Button color="red" variant="outline" onClick={onDeleteNodeBranch}>Zweig löschen</Button>
+              </Group>
+            </div>
+          </Tabs.Panel>
 
-          {saveToast.visible && (
-            <Alert color="teal" variant="light">
-              {saveToast.message}
-            </Alert>
-          )}
+          {/* ── Level Tabs ── */}
+          {nodeLevels.map((level) => (
+            <Tabs.Panel key={level.id} value={level.id}>
+              <div className="skill-panel__tab-scroll skill-panel__tab-scroll--level">
+                <Stack gap="md" style={{ flexShrink: 0 }}>
+                  <div>
+                    <Text className="mantine-dark-label" size="sm" mb={6}>Status</Text>
+                    <SegmentedControl
+                      fullWidth
+                      size="xs"
+                      value={level.status}
+                      onChange={(value) => value && onStatusChange(value)}
+                      data={STATUS_OPTIONS}
+                    />
+                  </div>
 
-          {validationMessage && (
-            <Alert color="yellow" variant="light" className="skill-panel__alert">
-              {validationMessage}
-            </Alert>
-          )}
+                  <div>
+                    <Text className="mantine-dark-label" size="sm" mb={6}>Effort</Text>
+                    <SegmentedControl
+                      fullWidth
+                      size="xs"
+                      value={selectedNode.effort?.size ?? 'unclear'}
+                      onChange={(size) => onEffortChange?.({ size, customPoints: selectedNode.effort?.customPoints ?? null })}
+                      data={Object.entries(EFFORT_SIZE_LABELS).map(([value, label]) => ({ value, label }))}
+                    />
+                    {selectedNode.effort?.size === 'custom' && (
+                      <NumberInput
+                        mt={6}
+                        label="Story Points (Custom)"
+                        placeholder="z.B. 7"
+                        value={selectedNode.effort?.customPoints ?? ''}
+                        onChange={(val) => onEffortChange?.({ size: 'custom', customPoints: val === '' ? null : Number(val) })}
+                        min={0}
+                        allowDecimal={false}
+                        classNames={{ input: 'mantine-dark-input', label: 'mantine-dark-label' }}
+                      />
+                    )}
+                  </div>
 
-          <div className="skill-panel__danger-zone">
-            <Text className="skill-panel__danger-title">Löschen</Text>
-            <Button variant="default" onClick={onDeleteNodeOnly}>
-              Skill löschen
-            </Button>
-            <Button color="red" variant="outline" onClick={onDeleteNodeBranch}>
-              Zweig löschen
-            </Button>
-          </div>
-        </Stack>
+                  <div>
+                    <Text className="mantine-dark-label" size="sm" mb={6}>Benefit</Text>
+                    <SegmentedControl
+                      fullWidth
+                      size="xs"
+                      value={selectedNode.benefit?.size ?? 'unclear'}
+                      onChange={(size) => onBenefitChange?.({ size })}
+                      data={Object.entries(BENEFIT_SIZE_LABELS).map(([value, label]) => ({ value, label }))}
+                    />
+                  </div>
+
+                  <div className="skill-panel__scope-block">
+                    <Group justify="space-between" align="center" mb={6}>
+                      <Text className="mantine-dark-label" size="sm">Scope</Text>
+                      <Tooltip label="Ohne Zuordnung gilt die Ausbaustufe fuer alle Produktgruppen.">
+                        <ActionIcon variant="subtle" color="gray" size="sm" aria-label="Scope-Hinweis">
+                          <TablerInfoCircleIcon size={15} />
+                        </ActionIcon>
+                      </Tooltip>
+                    </Group>
+
+                    <Group gap="xs" align="center" wrap="nowrap">
+                      <MultiSelect
+                        data={scopeSelectData}
+                        value={level.scopeIds ?? []}
+                        onChange={handleScopeIdsChange}
+                        placeholder="Scopes"
+                        searchable
+                        clearable
+                        flex={1}
+                        classNames={{
+                          input: 'mantine-dark-input',
+                          dropdown: 'mantine-dark-dropdown',
+                          option: 'mantine-dark-option',
+                          pill: 'mantine-dark-pill',
+                        }}
+                        comboboxProps={{ withinPortal: true, zIndex: 450 }}
+                      />
+                      <Tooltip label="Scopes verwalten">
+                        <ActionIcon variant="light" color="gray" onClick={() => setScopeManagerOpen((open) => !open)} aria-label="Scopes verwalten">
+                          <TablerAdjustmentsIcon size={15} />
+                        </ActionIcon>
+                      </Tooltip>
+                    </Group>
+
+                    <div className={`skill-panel__scope-accordion ${scopeManagerOpen ? 'skill-panel__scope-accordion--open' : ''}`}>
+                      <Stack gap="sm">
+                        <Group align="flex-end" wrap="nowrap">
+                          <TextInput
+                            label="Scopes verwalten"
+                            placeholder="z.B. Serie A"
+                            value={scopeDraft}
+                            onChange={(event) => setScopeDraft(event.currentTarget.value)}
+                            style={{ flex: 1 }}
+                            classNames={{ input: 'mantine-dark-input', label: 'mantine-dark-label' }}
+                          />
+                          <Tooltip label="Scope hinzufügen">
+                            <ActionIcon variant="light" color="cyan" size="lg" onClick={handleCreateScope} aria-label="Scope hinzufügen">
+                              <TablerCirclePlusIcon size={20} />
+                            </ActionIcon>
+                          </Tooltip>
+                        </Group>
+                        <Divider />
+                        <Stack gap={8}>
+                          {scopeSelectData.length === 0 && <Text size="sm" c="dimmed">Noch keine Scopes vorhanden.</Text>}
+                          {scopeSelectData.map((scope) => (
+                            <Paper key={scope.value} withBorder radius="md" p="xs">
+                              {editingScopeId === scope.value ? (
+                                <Stack gap={8}>
+                                  <TextInput value={editingScopeLabel} onChange={(event) => setEditingScopeLabel(event.currentTarget.value)} classNames={{ input: 'mantine-dark-input' }} />
+                                  <Group justify="space-between">
+                                    <Button size="xs" variant="light" onClick={() => { setEditingScopeId(null); setEditingScopeLabel('') }}>Abbrechen</Button>
+                                    <Button size="xs" onClick={handleRenameScope}>Speichern</Button>
+                                  </Group>
+                                </Stack>
+                              ) : (
+                                <Group justify="space-between" wrap="nowrap">
+                                  <Text size="sm" truncate>{scope.label}</Text>
+                                  <Group gap={6} wrap="nowrap">
+                                    <ActionIcon size="sm" variant="subtle" color="gray" onClick={() => handleStartRenameScope(scope.value, scope.label)} aria-label="Scope umbenennen">✎</ActionIcon>
+                                    <ActionIcon size="sm" variant="subtle" color="red" onClick={() => handleDeleteScope(scope.value)} aria-label="Scope löschen">✕</ActionIcon>
+                                  </Group>
+                                </Group>
+                              )}
+                            </Paper>
+                          ))}
+                          {scopeError && <Alert color="red" variant="light">{scopeError}</Alert>}
+                        </Stack>
+                      </Stack>
+                    </div>
+                  </div>
+                </Stack>
+
+                <div className="skill-panel__release-note-fill">
+                  <MarkdownField
+                    fill
+                    label="Release Note"
+                    placeholder="Beschreibe aus Kundensicht, was in dieser Ausbaustufe geliefert wurde oder als Nächstes kommt ..."
+                    value={activeTab === level.id ? releaseNoteDraft : (level.releaseNote ?? '')}
+                    onChange={(nextValue) => {
+                      releaseNoteDraftRef.current = nextValue
+                      setReleaseNoteDraft(nextValue)
+                    }}
+                    onBlur={() => commitCurrentDrafts(true, 'explicit')}
+                  />
+                </div>
+              </div>
+
+              <div className="skill-panel__tab-bottom-bar">
+                <Divider mb="sm" />
+                <Button
+                  color="red"
+                  variant="outline"
+                  fullWidth
+                  disabled={nodeLevels.length <= 1}
+                  onClick={() => {
+                    onDeleteProgressLevel(level.id)
+                    setActiveTab('properties')
+                  }}
+                >
+                  Level löschen
+                </Button>
+              </div>
+            </Tabs.Panel>
+          ))}
+        </Tabs>
       </div>
+
+      {saveToast.visible && (
+        <Alert color="teal" variant="light" style={{ margin: '0 1.5rem 0.75rem' }}>
+          {saveToast.message}
+        </Alert>
+      )}
+
+      {validationMessage && (
+        <Alert color="yellow" variant="light" style={{ margin: '0 1.5rem 0.75rem' }} className="skill-panel__alert">
+          {validationMessage}
+        </Alert>
+      )}
     </Paper>
   )
 }

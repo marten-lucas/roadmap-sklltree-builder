@@ -6,6 +6,7 @@ import {
   documentHistoryReducer,
   normalizeCenterIconSrc,
 } from '../utils/documentState'
+import { DEFAULT_STORY_POINT_MAP } from '../utils/effortBenefit'
 
 const createDoc = (suffix) => ({
   segments: [{ id: `segment-${suffix}`, label: `Segment ${suffix}` }],
@@ -13,6 +14,8 @@ const createDoc = (suffix) => ({
   children: [{ id: `node-${suffix}`, label: `Node ${suffix}`, children: [] }],
   centerIconSrc: DEFAULT_CENTER_ICON_SRC,
   release: { name: `Release ${suffix}`, motto: `Motto ${suffix}`, introduction: `Intro ${suffix}`, date: `2026-07-${String(suffix).padStart(2, '0')}` },
+  storyPointBudget: null,
+  storyPointMap: { ...DEFAULT_STORY_POINT_MAP },
 })
 
 describe('documentState', () => {
@@ -132,6 +135,8 @@ describe('documentState', () => {
       children: [],
       centerIconSrc: DEFAULT_CENTER_ICON_SRC,
       release: { name: '', motto: '', introduction: '', date: '' },
+      storyPointBudget: null,
+      storyPointMap: { ...DEFAULT_STORY_POINT_MAP },
     })
   })
 

@@ -21,6 +21,7 @@ export function MarkdownField({
   minRows = 4,
   autosize = true,
   description,
+  fill = false,
 }) {
   const textareaRef = useRef(null)
 
@@ -44,7 +45,7 @@ export function MarkdownField({
   }
 
   return (
-    <Stack gap={8}>
+    <Stack gap={8} style={fill ? { flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 } : undefined}>
       <Group justify="space-between" align="center" gap="sm">
         <Text component="label" size="sm" className="mantine-dark-label">
           {label}
@@ -71,7 +72,12 @@ export function MarkdownField({
         onChange={(event) => onChange?.(event.currentTarget.value)}
         onBlur={onBlur}
         minRows={minRows}
-        autosize={autosize}
+        autosize={fill ? false : autosize}
+        styles={fill ? {
+          root: { flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 },
+          wrapper: { flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 },
+          input: { flex: 1, resize: 'none', height: 'auto' },
+        } : undefined}
         classNames={{
           input: 'mantine-dark-input skill-panel__markdown-input',
           label: 'mantine-dark-label',

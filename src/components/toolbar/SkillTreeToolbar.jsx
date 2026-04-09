@@ -27,8 +27,8 @@ const TOOLBAR_ICON_PROPS = {
 }
 
 const TOOLBAR_TOOLTIP_MIDDLEWARES = {
-  flip: false,
-  shift: false,
+  flip: true,
+  shift: true,
   inline: false,
 }
 

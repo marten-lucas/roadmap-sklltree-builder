@@ -707,7 +707,7 @@ export const solveSkillTreeLayout = (data, config) => {
 
   const minimumArcGap = config.nodeSize * config.minArcGapFactor * denseGapScale
 
-  const crossSegmentGapFactor = 1.15
+  const crossSegmentGapFactor = 1.05
 
   const sortedLevels = Array.from(levelCounts.keys()).sort((a, b) => a - b)
   const firstNodeLevel = sortedLevels[0] ?? 1
@@ -849,7 +849,7 @@ export const solveSkillTreeLayout = (data, config) => {
         return
       }
 
-      const rootGroupGap = (gapByLevel.get(1) ?? toDegrees(minimumArcGap / config.levelSpacing)) * 1.30
+      const rootGroupGap = (gapByLevel.get(1) ?? toDegrees(minimumArcGap / config.levelSpacing)) * 1.0
       const hasEmptySegmentSlots = orderedSegmentIds.some((segmentId) => !rootGroupsMap.has(segmentId))
       const levelOneRadiusForGroups = radiusByLevel.get(1) ?? config.levelSpacing
 
@@ -1372,6 +1372,55 @@ export const solveSkillTreeLayout = (data, config) => {
     minimumArcGap,
   })
   capacityIssues = feasibilityAnalysis.issues
+
+  // Post-packing nudge: rigidly shift each segment×level pack toward any
+  // cross-segment parent angle (or toward a same-segment parent that was itself
+  // shifted by this pass).  The pack moves as one unit so node spacing is
+  // preserved; the shift is bounded by [leftCenter, rightCenter] so no node
+  // leaves its slot.  Processing in level order lets shifts cascade naturally
+  // from shallower levels down to deeper ones.
+  const allNodeById = new Map(allNodes.map((node) => [node.data.id, node]))
+  const postPackNudgeShifts = new Map()
+  for (const entry of feasibilityAnalysis.segmentLevelEntries) {
+    if (!entry.isFeasible) continue
+    const { leftCenter, rightCenter, nodeIds } = entry
+    const sortedGroup = nodeIds
+      .map((id) => ({ id, node: allNodeById.get(id), angle: packedAngleByNodeId.get(id) ?? centerAngle }))
+      .filter(({ node }) => node != null)
+      .sort((a, b) => a.angle - b.angle)
+    if (sortedGroup.length === 0) continue
+    const packMin = sortedGroup[0].angle
+    const packMax = sortedGroup[sortedGroup.length - 1].angle
+    let netPull = 0
+    for (const { id, node } of sortedGroup) {
+      // Pull toward cross-segment parent or a same-segment parent that was shifted.
+      if (node.parent && node.parent.depth > 0) {
+        const parentId = node.parent.data.id
+        const parentSegId = getGroupedSegmentId(node.parent.data.segmentId ?? null)
+        const parentShift = postPackNudgeShifts.get(parentId) ?? 0
+        if (parentSegId !== entry.segmentId || parentShift !== 0) {
+          netPull += (packedAngleByNodeId.get(parentId) ?? centerAngle) - (packedAngleByNodeId.get(id) ?? centerAngle)
+        }
+      }
+      // Pull toward cross-segment children so the parent also moves to close the gap.
+      for (const childNode of (node.children ?? [])) {
+        const childSegId = getGroupedSegmentId(childNode.data.segmentId ?? null)
+        if (childSegId !== entry.segmentId) {
+          netPull += (packedAngleByNodeId.get(childNode.data.id) ?? centerAngle) - (packedAngleByNodeId.get(id) ?? centerAngle)
+        }
+      }
+    }
+    if (netPull === 0) continue
+    const shift = netPull > 0
+      ? Math.max(0, Math.min(netPull, rightCenter - packMax))
+      : Math.min(0, Math.max(netPull, leftCenter - packMin))
+    if (Math.abs(shift) < 0.01) continue
+    for (const { id } of sortedGroup) {
+      const cur = packedAngleByNodeId.get(id) ?? centerAngle
+      packedAngleByNodeId.set(id, cur + shift)
+      postPackNudgeShifts.set(id, (postPackNudgeShifts.get(id) ?? 0) + shift)
+    }
+  }
 
   maxRadius = Math.max(config.levelSpacing, ...radiusByLevel.values())
   separatorOuterRadius = maxRadius + 120

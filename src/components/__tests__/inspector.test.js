@@ -76,7 +76,7 @@ describe('InspectorPanel render', () => {
     )
 
     expect(html).toContain('Inspector')
-    expect(html).toContain('Skill bearbeiten')
+    expect(html).toContain('Node 1')
   })
 })
 

@@ -1,4 +1,4 @@
-export { CenterIconPanel } from './CenterIconPanel'
+export { SystemPanel } from './SystemPanel'
 export { InspectorPanel } from './InspectorPanel'
 export { MarkdownField } from './MarkdownField'
 export { SegmentPanel } from './SegmentPanel'
