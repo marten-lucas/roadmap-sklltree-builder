@@ -271,7 +271,7 @@ export const buildEdgeRoutingModel = ({
   }
 }
 
-export const buildRoutedEdgeLinks = ({ edgeRouting, nodesById, origin }) => {
+export const buildRoutedEdgeLinks = ({ edgeRouting, nodesById, origin, nodeSize = 48 }) => {
   const { trunkGroups, edgePlans } = edgeRouting
   const trunkGroupById = new Map(trunkGroups.map((g) => [g.id, g]))
 
@@ -306,24 +306,58 @@ export const buildRoutedEdgeLinks = ({ edgeRouting, nodesById, origin }) => {
     } else if (Math.abs(childAngle - trunkAngle) < 0.5) {
       path = buildRadialArcPath(parent.angle, sourceRadius, childAngle, targetRadius, origin)
     } else {
-      // Shared trunk: source-radius arc -> radial trunk -> target-radius arc.
-      const parts = [`M ${parent.x} ${parent.y}`]
-      const sourceTrunkPoint = toCartesian(trunkAngle, sourceRadius, origin)
-      const targetTrunkPoint = toCartesian(trunkAngle, targetRadius, origin)
+      // Shared trunk with corridor routing:
+      // source-ring arc → radial to mid-corridor → corridor arc (free space) → spoke to child.
+      // The corridor arc runs between the two node rings so it never sweeps through sibling nodes.
+      const levelGap = targetRadius - sourceRadius
+      const minCorridorGap = nodeSize // corridor at gap/2 needs one node-diameter clearance from each ring
 
-      const sourceArc = buildArc(parent.angle, sourceRadius, trunkAngle, sourceTrunkPoint)
-      if (sourceArc) {
-        parts.push(sourceArc)
+      if (levelGap >= minCorridorGap) {
+        // Place corridor at 50 % of the gap — safely between both rings.
+        const corridorRadius = sourceRadius + levelGap * 0.5
+        const sourceTrunkPoint = toCartesian(trunkAngle, sourceRadius, origin)
+        const corridorTrunkPoint = toCartesian(trunkAngle, corridorRadius, origin)
+        const corridorChildPoint = toCartesian(childAngle, corridorRadius, origin)
+
+        const parts = [`M ${parent.x} ${parent.y}`]
+
+        const sourceArc = buildArc(parent.angle, sourceRadius, trunkAngle, sourceTrunkPoint)
+        if (sourceArc) {
+          parts.push(sourceArc)
+        }
+
+        parts.push(`L ${corridorTrunkPoint.x} ${corridorTrunkPoint.y}`)
+
+        const corridorArc = buildArc(trunkAngle, corridorRadius, childAngle, corridorChildPoint)
+        if (corridorArc) {
+          parts.push(corridorArc)
+        }
+
+        // Radial spoke from corridor to target node.
+        parts.push(`L ${child.x} ${child.y}`)
+
+        path = parts.join(' ')
+      } else {
+        // Level gap too small for a distinct corridor — fall back to classic routing.
+        const sourceTrunkPoint = toCartesian(trunkAngle, sourceRadius, origin)
+        const targetTrunkPoint = toCartesian(trunkAngle, targetRadius, origin)
+
+        const parts = [`M ${parent.x} ${parent.y}`]
+
+        const sourceArc = buildArc(parent.angle, sourceRadius, trunkAngle, sourceTrunkPoint)
+        if (sourceArc) {
+          parts.push(sourceArc)
+        }
+
+        parts.push(`L ${targetTrunkPoint.x} ${targetTrunkPoint.y}`)
+
+        const targetArc = buildArc(trunkAngle, targetRadius, childAngle, child)
+        if (targetArc) {
+          parts.push(targetArc)
+        }
+
+        path = parts.join(' ')
       }
-
-      parts.push(`L ${targetTrunkPoint.x} ${targetTrunkPoint.y}`)
-
-      const targetArc = buildArc(trunkAngle, targetRadius, childAngle, child)
-      if (targetArc) {
-        parts.push(targetArc)
-      }
-
-      path = parts.join(' ')
     }
 
     links.push({

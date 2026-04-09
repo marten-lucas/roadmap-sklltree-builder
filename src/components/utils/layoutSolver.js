@@ -1545,6 +1545,7 @@ export const solveSkillTreeLayout = (data, config) => {
     edgeRouting,
     nodesById,
     origin,
+    nodeSize: config.nodeSize,
   })
 
   const levelOneRadius = getRadiusForLevel(1)

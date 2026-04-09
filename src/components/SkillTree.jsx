@@ -140,7 +140,6 @@ export function SkillTree() {
   const transformApiRef = useRef(null)
   const [isPanModeActive, setIsPanModeActive] = useState(false)
   const [currentZoomScale, setCurrentZoomScale] = useState(1)
-  const [radialExpansion, setRadialExpansion] = useState(1.0)
   const [exportLabelModeOverride, setExportLabelModeOverride] = useState(null)
   const [exportLabelDialogOpen, setExportLabelDialogOpen] = useState(false)
   const [exportLabelDialogMode, setExportLabelDialogMode] = useState('mid')
@@ -337,28 +336,6 @@ export function SkillTree() {
     [nodes, nodeVisibilityModeById],
   )
 
-  const expandedNodes = useMemo(() => {
-    if (radialExpansion === 1.0) return renderedNodes
-    const ox = canvas.origin.x
-    const oy = canvas.origin.y
-    return renderedNodes.map((node) => {
-      const dx = node.x - ox
-      const dy = node.y - oy
-      return { ...node, x: ox + dx * radialExpansion, y: oy + dy * radialExpansion }
-    })
-  }, [renderedNodes, radialExpansion, canvas.origin.x, canvas.origin.y])
-
-  const allNodesExpandedById = useMemo(() => {
-    if (radialExpansion === 1.0) return new Map(nodes.map((n) => [n.id, n]))
-    const ox = canvas.origin.x
-    const oy = canvas.origin.y
-    return new Map(nodes.map((n) => {
-      const dx = n.x - ox
-      const dy = n.y - oy
-      return [n.id, { ...n, x: ox + dx * radialExpansion, y: oy + dy * radialExpansion }]
-    }))
-  }, [nodes, radialExpansion, canvas.origin.x, canvas.origin.y])
-
   const renderedNodeIds = useMemo(
     () => new Set(renderedNodes.map((node) => node.id)),
     [renderedNodes],
@@ -419,18 +396,6 @@ export function SkillTree() {
     }),
     [links, renderedNodeIds],
   )
-
-  const expandedFilteredLinks = useMemo(() => {
-    if (radialExpansion === 1.0) return filteredLinks
-    const expandedById = new Map(expandedNodes.map((n) => [n.id, n]))
-    return filteredLinks.map((link) => {
-      const src = link.sourceId ? expandedById.get(link.sourceId) : null
-      const tgt = link.targetId ? expandedById.get(link.targetId) : null
-      if (!src || !tgt) return link
-      const path = `M ${src.x} ${src.y} L ${tgt.x} ${tgt.y}`
-      return { ...link, path }
-    })
-  }, [filteredLinks, radialExpansion, expandedNodes])
 
   const _visibleSegmentIdSet = useMemo(
     () => new Set(filteredSegmentLabels.map((segmentLabel) => segmentLabel.segmentId)),
@@ -583,8 +548,8 @@ export function SkillTree() {
   }, [diagnostics, selectedNodeId])
 
   const selectedLayoutNode = useMemo(
-    () => expandedNodes.find((node) => node.id === selectedNodeId) ?? null,
-    [expandedNodes, selectedNodeId],
+    () => renderedNodes.find((node) => node.id === selectedNodeId) ?? null,
+    [renderedNodes, selectedNodeId],
   )
 
   const selectedSegmentLabel = useMemo(
@@ -649,7 +614,7 @@ export function SkillTree() {
       return []
     }
 
-    const layoutNodeById = allNodesExpandedById
+    const layoutNodeById = layoutNodesById
     const levelIdToNodeId = buildLevelIdToNodeIdMap(roadmapData)
     const dependencies = []
     const queue = [...(roadmapData.children ?? [])]
@@ -790,6 +755,7 @@ export function SkillTree() {
           angle: bestAngle,
           rotation: bestAngle + 180,
           scale: isNodeMinimal ? MINIMAL_NODE_SIZE / TREE_CONFIG.nodeSize : 1,
+          isMinimal: isNodeMinimal,
         })
       })
 
@@ -821,12 +787,13 @@ export function SkillTree() {
           angle: bestAngle,
           rotation: bestAngle + 180,
           scale: isNodeMinimal ? MINIMAL_NODE_SIZE / TREE_CONFIG.nodeSize : 1,
+          isMinimal: isNodeMinimal,
         })
       })
     }
 
     return endpoints
-  }, [allNodesById, allNodesExpandedById, canvas.origin.x, canvas.origin.y, nodeVisibilityModeById, nodes, roadmapData.children])
+  }, [allNodesById, layoutNodesById, canvas.origin.x, canvas.origin.y, nodeVisibilityModeById, nodes, roadmapData.children])
 
   const visibleDependencyPortals = useMemo(
     () => dependencyPortals.filter((portal) => (
@@ -914,7 +881,7 @@ export function SkillTree() {
       centerIconSize + 16,
     )
 
-    for (const node of expandedNodes) {
+    for (const node of renderedNodes) {
       const visibilityMode = nodeVisibilityModeById.get(node.id) ?? 'full'
       const glowPadding = visibilityMode === 'minimal' ? 8 : 18
       const nodeSizeForFit = (visibilityMode === 'minimal' ? MINIMAL_NODE_SIZE : TREE_CONFIG.nodeSize) + glowPadding * 2
@@ -994,7 +961,7 @@ export function SkillTree() {
     filteredSegmentLabels,
     filteredSegmentSeparators,
     nodeVisibilityModeById,
-    expandedNodes,
+    renderedNodes,
     selectedControlGeometry,
     selectedSegmentControlGeometry,
     visibleDependencyPortals,
@@ -1614,12 +1581,6 @@ export function SkillTree() {
       const hasSelection = Boolean(selectedNodeId)
         || Boolean(selectedSegmentId)
         || (Array.isArray(selectedNodeIds) && selectedNodeIds.length > 0)
-
-      if (event.altKey && !event.ctrlKey && !event.metaKey && event.key.toLowerCase() === 'd' && !isEditableElement(event.target)) {
-        event.preventDefault()
-        setRadialExpansion((prev) => prev > 1.0 ? 1.0 : 1.35)
-        return
-      }
 
       if (selectedNodeId && (event.key === 'ArrowLeft' || event.key === 'ArrowRight' || event.key === 'ArrowUp' || event.key === 'ArrowDown') && !event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey && !isEditableElement(event.target)) {
         const nextNodeId = getKeyboardNavigationTarget(selectedNodeId, event.key)
@@ -2321,9 +2282,9 @@ export function SkillTree() {
             centerIconSize={centerIconSize}
             filteredSegmentSeparators={filteredSegmentSeparators}
             filteredSegmentLabels={filteredSegmentLabels}
-            filteredLinks={expandedFilteredLinks}
+            filteredLinks={filteredLinks}
             layoutNodesById={layoutNodesById}
-            renderedNodes={expandedNodes}
+            renderedNodes={renderedNodes}
             nodeVisibilityModeById={nodeVisibilityModeById}
             selectedNodeId={selectedNodeId}
             selectedNodeIds={selectedNodeIds}

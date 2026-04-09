@@ -434,17 +434,16 @@ const buildViewerScript = () => `
           })
         }
 
-        const cardSide = anchor.getAttribute('data-card-side') || 'right'
-        const isLeftSide = cardSide === 'left'
-
         const wrapper = anchor.querySelector('.skill-node-foreign')
+        const CLOSE_CARD_OVERLAP = 30 // nodeSize(120) / 4
         if (wrapper && !anchor.querySelector('.skill-node-label-card')) {
           wrapper.style.display = 'flex'
-          wrapper.style.flexDirection = isLeftSide ? 'row-reverse' : 'row'
+          wrapper.style.flexDirection = 'column'
           wrapper.style.alignItems = 'center'
           wrapper.style.gap = '0'
-          card.style.marginLeft = isLeftSide ? '0' : '-12px'
-          card.style.marginRight = isLeftSide ? '-12px' : '0'
+          card.style.marginTop = '-' + CLOSE_CARD_OVERLAP + 'px'
+          card.style.marginLeft = '0'
+          card.style.marginRight = '0'
           card.style.width = '144px'
           wrapper.appendChild(card)
         }
@@ -453,11 +452,15 @@ const buildViewerScript = () => `
           anchor.dataset.origFwWidth = anchor.getAttribute('width') || ''
           anchor.dataset.origFwX = anchor.getAttribute('x') || ''
         }
+        const origH = Number.parseFloat(anchor.dataset.origFwHeight) || 0
         const origW = Number.parseFloat(anchor.dataset.origFwWidth) || 0
         const origX = Number.parseFloat(anchor.dataset.origFwX) || 0
-        anchor.setAttribute('width', String(origW + CLOSE_CARD_WIDTH + CLOSE_CARD_GAP))
-        if (isLeftSide) {
-          anchor.setAttribute('x', String(origX - CLOSE_CARD_WIDTH))
+        const newW = Math.max(origW, CLOSE_CARD_WIDTH + 36) // 36 = 2 * glowPadding(18)
+        const extraW = newW - origW
+        anchor.setAttribute('height', String(origH + 164 - 30))
+        anchor.setAttribute('width', String(newW))
+        if (extraW > 0) {
+          anchor.setAttribute('x', String(origX - extraW / 2))
         }
       }
 

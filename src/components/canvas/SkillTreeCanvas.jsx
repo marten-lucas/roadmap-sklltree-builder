@@ -245,6 +245,9 @@ export function SkillTreeCanvas({
           const portalAngle = portal.angle ?? 0
           const portalScale = portal.scale ?? 1
           const isSource = portal.type === 'source'
+          const dotIdx = portal.otherLabel ? portal.otherLabel.indexOf('\u00B7') : -1
+          const labelName = dotIdx >= 0 ? portal.otherLabel.slice(0, dotIdx) : (portal.otherLabel ?? '')
+          const labelLevel = dotIdx >= 0 ? portal.otherLabel.slice(dotIdx + 1) : null
 
           return (
             <Tooltip
@@ -277,18 +280,21 @@ export function SkillTreeCanvas({
                   <path
                     className={`skill-tree-portal__cup skill-tree-portal__cup--${portal.type}`}
                     d={PORTAL_CUP_PATH}
-                    transform={isSource ? 'rotate(180)' : undefined}
+                    transform={!isSource ? 'rotate(180)' : undefined}
                   />
                 </g>
-                <text
-                  className="skill-tree-portal__label"
-                  x="0"
-                  y="0"
-                  textAnchor="middle"
-                  dominantBaseline="middle"
-                >
-                  {portal.otherLabel}
-                </text>
+                {!portal.isMinimal && (
+                  <text
+                    className="skill-tree-portal__label"
+                    x="0"
+                    y={labelLevel ? '-3.5' : '0'}
+                    textAnchor="middle"
+                    dominantBaseline="middle"
+                  >
+                    {labelName}
+                    {labelLevel && <tspan x="0" dy="8">{labelLevel}</tspan>}
+                  </text>
+                )}
               </g>
             </Tooltip>
           )

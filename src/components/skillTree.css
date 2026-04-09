@@ -282,7 +282,7 @@
 .skill-tree-portal__ring {
     fill: none;
     stroke-width: 1.5;
-    transition: stroke-opacity 140ms ease, transform 140ms ease;
+    transition: stroke-opacity 140ms ease;
 }
 
 .skill-tree-portal__ring--source {
@@ -300,7 +300,7 @@
     fill: none;
     stroke-width: 3.5;
     stroke-linecap: round;
-    transition: stroke-opacity 140ms ease, transform 140ms ease;
+    transition: stroke-opacity 140ms ease;
 }
 
 .skill-tree-portal__cup--source {
@@ -942,32 +942,19 @@
     word-break: break-word;
 }
 
-/* --- close-zoom card (pinned release note beside the circle) --- */
+/* --- close-zoom card (pinned release note below the circle) --- */
 
 .skill-node-foreign--close {
     display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
     align-items: center;
     gap: 0;
 }
 
-/* Card on the right (default for right-half nodes) */
-.skill-node-foreign--close-right {
-    flex-direction: row;
-}
-
-.skill-node-foreign--close-right .skill-node-label-card {
-    margin-left: -12px;
-    margin-right: 0;
-}
-
-/* Card on the left (for left-half nodes) */
-.skill-node-foreign--close-left {
-    flex-direction: row-reverse;
-}
-
-.skill-node-foreign--close-left .skill-node-label-card {
+.skill-node-foreign--close .skill-node-label-card {
     margin-left: 0;
-    margin-right: -12px;
+    margin-right: 0;
 }
 
 .skill-node-label-card {
@@ -980,6 +967,7 @@
     max-height: 156px;
     overflow: hidden;
     pointer-events: auto;
+    position: relative;
     z-index: 1;
     opacity: 0.88;
 }

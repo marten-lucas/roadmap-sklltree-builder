@@ -6,8 +6,8 @@ import { resolveScopeLabels } from '../utils/scopeDisplay'
 import { MarkdownTooltipContent, Tooltip } from '../tooltip'
 import { EFFORT_SIZE_LABELS, BENEFIT_SIZE_LABELS } from '../utils/effortBenefit'
 
-const CLOSE_CARD_WIDTH = 144 // px card width to the right of the circle
-const CLOSE_CARD_GAP = 0    // gap handled via CSS margin-left overlap instead
+const CLOSE_CARD_WIDTH = 144 // px card width below the circle
+const CLOSE_CARD_HEIGHT = 164 // px card height (slightly above max-height 156)
 
 const getShortName = (node) => {
   const explicitShortName = String(node?.shortName ?? '').trim().toLowerCase().slice(0, 3)
@@ -78,11 +78,9 @@ export function SkillNode({ node, nodeSize, isSelected, onSelect, onSelectLevel,
   const glowPadding = isMinimal ? 8 : 18
   const renderSize = nodeSize + glowPadding * 2
   const showCard = !isMinimal && labelMode === 'close'
-  // Card sits to the LEFT when node is in the left half of the tree
-  const cardSide = (showCard && node.x < canvasOriginX) ? 'left' : 'right'
-  const cardExtra = showCard ? CLOSE_CARD_WIDTH + CLOSE_CARD_GAP : 0
-  const fwWidth = renderSize + cardExtra
-  const fwHeight = renderSize
+  const cardOverlap = Math.round(nodeSize / 4)
+  const fwWidth = showCard ? Math.max(renderSize, CLOSE_CARD_WIDTH + 2 * glowPadding) : renderSize
+  const fwHeight = renderSize + (showCard ? CLOSE_CARD_HEIGHT - cardOverlap : 0)
   const statusKey = getDisplayStatusKey(node)
   const statusStyles = STATUS_STYLES[statusKey] ?? STATUS_STYLES.later
   const shortName = getShortName(node)
@@ -169,8 +167,7 @@ export function SkillNode({ node, nodeSize, isSelected, onSelect, onSelectLevel,
 
 
   const showLabel = !isMinimal && (labelMode === 'mid' || labelMode === 'close')
-  // fwX shifts left by CLOSE_CARD_WIDTH when card is on the left side
-  const fwX = node.x - nodeSize / 2 - glowPadding - (showCard && cardSide === 'left' ? CLOSE_CARD_WIDTH : 0)
+  const fwX = node.x - fwWidth / 2
 
   return (
     <foreignObject
@@ -186,13 +183,12 @@ export function SkillNode({ node, nodeSize, isSelected, onSelect, onSelectLevel,
       data-selected={isSelected ? 'true' : 'false'}
       data-export-note={tooltipReleaseNote}
       data-export-levels={JSON.stringify(exportLevelEntries)}
-      data-card-side={cardSide}
       data-export-effort={node.effort?.size && node.effort.size !== 'unclear' ? `${EFFORT_SIZE_LABELS[node.effort.size] ?? node.effort.size}` : ''}
       data-export-benefit={node.benefit?.size && node.benefit.size !== 'unclear' ? `${BENEFIT_SIZE_LABELS[node.benefit.size] ?? node.benefit.size}` : ''}
     >
       <div
         xmlns="http://www.w3.org/1999/xhtml"
-        className={showCard ? `skill-node-foreign skill-node-foreign--close skill-node-foreign--close-${cardSide}` : 'skill-node-foreign'}
+        className={showCard ? 'skill-node-foreign skill-node-foreign--close' : 'skill-node-foreign'}
         style={{ padding: `${glowPadding}px` }}
         onClick={(event) => event.stopPropagation()}
       >
@@ -244,7 +240,7 @@ export function SkillNode({ node, nodeSize, isSelected, onSelect, onSelectLevel,
           </Paper>
         </Tooltip>
         {showCard && (
-          <div className="skill-node-label-card">
+          <div className="skill-node-label-card" style={{ marginTop: -cardOverlap }}>
             <MarkdownTooltipContent
               title={null}
               markdown={tooltipReleaseNote}
