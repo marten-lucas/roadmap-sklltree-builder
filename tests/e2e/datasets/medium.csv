@@ -1,31 +1,31 @@
-ShortName,Name,Scope,Ebene,Segment,Parent,AdditionalDependency,ProgressLevel,Status,ReleaseNotes
+ShortName,Name,Scope,Ebene,Segment,Parent,AdditionalDependency,ProgressLevel,Status,ReleaseNotes,Effort,EffortCustomPoints,Benefit
 MID,Medium Root,ScopeA,1,Seg1,,,1,now,"# Medium Root - Level 1
 
-The root rollout is **ready**."
+The root rollout is **ready**.",m,,l
 MID,Medium Root,ScopeB,1,Seg1,,,2,next,"# Medium Root - Level 2
 
-This level keeps the node identity stable."
+This level keeps the node identity stable.",m,,l
 MID,Medium Root,,1,Seg1,,,3,later,"# Medium Root - Level 3
 
-Release notes roundtrip."
+Release notes roundtrip.",m,,l
 M1,M1 Child,ScopeC,2,Seg2,MID,,1,done,"# M1 Child - Level 1
 
-Child one ships with **done** status."
+Child one ships with **done** status.",s,,m
 M1,M1 Child,ScopeD,2,Seg2,MID,,2,now,"# M1 Child - Level 2
 
-This step is `in progress`."
+This step is `in progress`.",s,,m
 M1,M1 Child,,2,Seg2,MID,,3,next,"# M1 Child - Level 3
 
-Quality remains active."
+Quality remains active.",s,,m
 M2,M2 Child,ScopeE,2,Seg3,MID,,1,now,"# M2 Child - Level 1
 
-Data work is underway."
+Data work is underway.",l,,xl
 M2,M2 Child,,2,Seg3,MID,,2,next,"# M2 Child - Level 2
 
-Ops notes are pending."
-M3,M3 Child,,2,Seg4,M1,,1,later,"M3 Level 1"
-M3,M3 Child,ScopeA,2,Seg4,M1,,2,done,"M3 Level 2"
+Ops notes are pending.",l,,xl
+M3,M3 Child,,2,Seg4,M1,,1,later,M3 Level 1,unclear,,unclear
+M3,M3 Child,ScopeA,2,Seg4,M1,,2,done,M3 Level 2,unclear,,unclear
 M4,M4 Child,ScopeB,2,Seg5,M2,,1,now,"# M4 Child - Level 1
 
-Final child node."
-M4,M4 Child,,2,Seg5,M2,,2,next,"M4 Level 2"
+Final child node.",custom,13,s
+M4,M4 Child,,2,Seg5,M2,,2,next,M4 Level 2,custom,13,s

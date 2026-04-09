@@ -1,301 +1,301 @@
-ShortName,Name,Scope,Ebene,Segment,Parent,AdditionalDependency,Status,ReleaseNotes
+ShortName,Name,Scope,Ebene,Segment,Parent,AdditionalDependency,Status,ReleaseNotes,Effort,EffortCustomPoints,Benefit
 FND,Foundation,SC01,1,Seg01,,,done,"## Foundation
 
-Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen."
+Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen.",unclear,,unclear
 SVC,Microservices,SC02,1,Seg02,,,now,"## Microservices
 
-Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen."
+Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen.",unclear,,unclear
 AGW,API-Gateway,SC03,1,Seg03,,,next,"## API-Gateway
 
-Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen."
+Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen.",unclear,,unclear
 DAL,Data-Access-Layer,SC04,1,Seg04,,,later,"## Data-Access-Layer
 
-Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen."
+Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen.",unclear,,unclear
 SEC,Security,SC05,1,Seg05,,,done,"## Security
 
-Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen."
+Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen.",unclear,,unclear
 OPS,Operations,SC06,1,Seg06,,,now,"## Operations
 
-Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen."
+Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen.",unclear,,unclear
 MON,Monitoring,SC07,1,Seg07,,,next,"## Monitoring
 
-Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen."
+Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen.",unclear,,unclear
 MQS,Message-Queue,SC08,1,Seg08,,,later,"## Message-Queue
 
-Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen."
+Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen.",unclear,,unclear
 CDN,Content-Delivery,SC09,1,Seg09,,,done,"## Content-Delivery
 
-Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen."
+Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen.",unclear,,unclear
 AUT,Authentication,SC10,1,Seg10,,,now,"## Authentication
 
-Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen."
+Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen.",unclear,,unclear
 STG,Storage,,1,Seg11,,,next,"## Storage
 
-Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen."
+Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen.",unclear,,unclear
 SCH,Scheduling,,1,Seg12,,,later,"## Scheduling
 
-Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen."
+Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen.",unclear,,unclear
 CFG,Configuration,,1,Seg13,,,done,"## Configuration
 
-Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen."
+Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen.",unclear,,unclear
 LOG,Logging,,1,Seg14,,,now,"## Logging
 
-Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen."
+Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen.",unclear,,unclear
 TST,Testing,SC11,1,Seg15,,,next,"## Testing
 
-Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen."
+Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen.",unclear,,unclear
 DEP,Deployment,SC12,1,Seg16,,,later,"## Deployment
 
-Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen."
+Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen.",unclear,,unclear
 NET,Networking,SC13,1,Seg17,,,done,"## Networking
 
-Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen."
+Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen.",unclear,,unclear
 CSH,Caching,SC14,1,Seg18,,,now,"## Caching
 
-Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen."
+Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen.",unclear,,unclear
 SRX,Search,SC15,1,Seg19,,,next,"## Search
 
-Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen."
+Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen.",unclear,,unclear
 INT,Integration,SC16,1,Seg20,,,later,"## Integration
 
-Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen."
+Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen.",unclear,,unclear
 FN1,FND-Core,SC01,2,Seg01,FND,,done,"## FND-Core
 
-Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen."
+Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen.",unclear,,unclear
 FN2,FND-Bootstrap,SC02,2,Seg01,FND,,now,"## FND-Bootstrap
 
-Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen."
+Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen.",unclear,,unclear
 FN3,FND-Config,,2,Seg01,FND,,next,"## FND-Config
 
-Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen."
+Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen.",unclear,,unclear
 FN4,FND-Utils,,2,Seg01,FND,,later,"## FND-Utils
 
-Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen."
+Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen.",unclear,,unclear
 SV1,SVC-Registry,SC17,2,Seg02,SVC,,later,"## SVC-Registry
 
-Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen."
+Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen.",unclear,,unclear
 SV2,SVC-Router,SC18,2,Seg02,SVC,,done,"## SVC-Router
 
-Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen."
+Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen.",unclear,,unclear
 SV3,SVC-Proxy,,2,Seg02,SVC,,now,"## SVC-Proxy
 
-Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen."
+Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen.",unclear,,unclear
 SV4,SVC-Health,SC19,2,Seg02,SVC,,next,"## SVC-Health
 
-Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen."
+Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen.",unclear,,unclear
 AG1,AGW-Auth,SC03,2,Seg03,AGW,FN1,done,"## AGW-Auth
 
-Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen."
+Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen.",unclear,,unclear
 AG2,AGW-RateLimit,SC20,2,Seg03,AGW,,now,"## AGW-RateLimit
 
-Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen."
+Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen.",unclear,,unclear
 AG3,AGW-Router,SC01,2,Seg03,AGW,,next,"## AGW-Router
 
-Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen."
+Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen.",unclear,,unclear
 AG4,AGW-Cache,,2,Seg03,AGW,,later,"## AGW-Cache
 
-Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen."
+Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen.",unclear,,unclear
 DA1,DAL-ORM,SC02,2,Seg04,DAL,ST1,done,"## DAL-ORM
 
-Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen."
+Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen.",unclear,,unclear
 DA2,DAL-Migration,,2,Seg04,DAL,,now,"## DAL-Migration
 
-Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen."
+Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen.",unclear,,unclear
 DA3,DAL-Pool,SC03,2,Seg04,DAL,,next,"## DAL-Pool
 
-Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen."
+Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen.",unclear,,unclear
 DA4,DAL-Replica,SC04,2,Seg04,DAL,,later,"## DAL-Replica
 
-Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen."
+Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen.",unclear,,unclear
 SE1,SEC-Policy,SC05,2,Seg05,SEC,AU1,done,"## SEC-Policy
 
-Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen."
+Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen.",unclear,,unclear
 SE2,SEC-Firewall,SC06,2,Seg05,SEC,,now,"## SEC-Firewall
 
-Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen."
+Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen.",unclear,,unclear
 SE3,SEC-Audit,,2,Seg05,SEC,,next,"## SEC-Audit
 
-Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen."
+Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen.",unclear,,unclear
 SE4,SEC-Scan,SC07,2,Seg05,SEC,,later,"## SEC-Scan
 
-Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen."
+Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen.",unclear,,unclear
 OP1,OPS-Pipeline,SC08,2,Seg06,OPS,,done,"## OPS-Pipeline
 
-Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen."
+Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen.",unclear,,unclear
 OP2,OPS-Rollback,,2,Seg06,OPS,,now,"## OPS-Rollback
 
-Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen."
+Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen.",unclear,,unclear
 OP3,OPS-Alerts,SC09,2,Seg06,OPS,,next,"## OPS-Alerts
 
-Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen."
+Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen.",unclear,,unclear
 OP4,OPS-Dashboard,SC10,2,Seg06,OPS,,later,"## OPS-Dashboard
 
-Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen."
+Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen.",unclear,,unclear
 MN1,MON-Metrics,SC11,2,Seg07,MON,LG1,done,"## MON-Metrics
 
-Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen."
+Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen.",unclear,,unclear
 MN2,MON-Traces,SC12,2,Seg07,MON,,now,"## MON-Traces
 
-Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen."
+Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen.",unclear,,unclear
 MN3,MON-Events,,2,Seg07,MON,,next,"## MON-Events
 
-Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen."
+Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen.",unclear,,unclear
 MN4,MON-Alerts,SC13,2,Seg07,MON,,later,"## MON-Alerts
 
-Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen."
+Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen.",unclear,,unclear
 MQ1,MQS-Broker,SC14,2,Seg08,MQS,NT1,done,"## MQS-Broker
 
-Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen."
+Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen.",unclear,,unclear
 MQ2,MQS-Consumer,,2,Seg08,MQS,,now,"## MQS-Consumer
 
-Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen."
+Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen.",unclear,,unclear
 MQ3,MQS-Producer,SC15,2,Seg08,MQS,,next,"## MQS-Producer
 
-Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen."
+Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen.",unclear,,unclear
 MQ4,MQS-DLQ,SC16,2,Seg08,MQS,,later,"## MQS-DLQ
 
-Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen."
+Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen.",unclear,,unclear
 CD1,CDN-Edge,SC17,2,Seg09,CDN,,done,"## CDN-Edge
 
-Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen."
+Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen.",unclear,,unclear
 CD2,CDN-Origin,SC18,2,Seg09,CDN,,now,"## CDN-Origin
 
-Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen."
+Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen.",unclear,,unclear
 CD3,CDN-Purge,,2,Seg09,CDN,,next,"## CDN-Purge
 
-Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen."
+Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen.",unclear,,unclear
 CD4,CDN-Analytics,SC19,2,Seg09,CDN,,later,"## CDN-Analytics
 
-Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen."
+Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen.",unclear,,unclear
 AU1,AUT-JWT,SC20,2,Seg10,AUT,,done,"## AUT-JWT
 
-Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen."
+Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen.",unclear,,unclear
 AU2,AUT-OAuth,,2,Seg10,AUT,,now,"## AUT-OAuth
 
-Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen."
+Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen.",unclear,,unclear
 AU3,AUT-SAML,SC01,2,Seg10,AUT,,next,"## AUT-SAML
 
-Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen."
+Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen.",unclear,,unclear
 AU4,AUT-MFA,SC02,2,Seg10,AUT,,later,"## AUT-MFA
 
-Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen."
+Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen.",unclear,,unclear
 ST1,STG-Blob,SC03,2,Seg11,STG,,done,"## STG-Blob
 
-Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen."
+Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen.",unclear,,unclear
 ST2,STG-Object,,2,Seg11,STG,,now,"## STG-Object
 
-Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen."
+Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen.",unclear,,unclear
 ST3,STG-Archive,SC04,2,Seg11,STG,,next,"## STG-Archive
 
-Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen."
+Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen.",unclear,,unclear
 ST4,STG-Backup,,2,Seg11,STG,,later,"## STG-Backup
 
-Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen."
+Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen.",unclear,,unclear
 SH1,SCH-Cron,SC05,2,Seg12,SCH,,done,"## SCH-Cron
 
-Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen."
+Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen.",unclear,,unclear
 SH2,SCH-Queue,SC06,2,Seg12,SCH,,now,"## SCH-Queue
 
-Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen."
+Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen.",unclear,,unclear
 SH3,SCH-Retry,,2,Seg12,SCH,,next,"## SCH-Retry
 
-Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen."
+Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen.",unclear,,unclear
 SH4,SCH-Priority,SC07,2,Seg12,SCH,,later,"## SCH-Priority
 
-Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen."
+Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen.",unclear,,unclear
 CF1,CFG-Vault,,2,Seg13,CFG,,done,"## CFG-Vault
 
-Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen."
+Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen.",unclear,,unclear
 CF2,CFG-Env,SC08,2,Seg13,CFG,,now,"## CFG-Env
 
-Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen."
+Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen.",unclear,,unclear
 CF3,CFG-Feature,SC09,2,Seg13,CFG,,next,"## CFG-Feature
 
-Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen."
+Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen.",unclear,,unclear
 CF4,CFG-Reload,,2,Seg13,CFG,,later,"## CFG-Reload
 
-Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen."
+Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen.",unclear,,unclear
 LG1,LOG-Appender,SC10,2,Seg14,LOG,,done,"## LOG-Appender
 
-Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen."
+Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen.",unclear,,unclear
 LG2,LOG-Rotate,,2,Seg14,LOG,,now,"## LOG-Rotate
 
-Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen."
+Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen.",unclear,,unclear
 LG3,LOG-Ingest,SC11,2,Seg14,LOG,,next,"## LOG-Ingest
 
-Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen."
+Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen.",unclear,,unclear
 LG4,LOG-Drain,SC12,2,Seg14,LOG,,later,"## LOG-Drain
 
-Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen."
+Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen.",unclear,,unclear
 TS1,TST-Unit,SC13,2,Seg15,TST,,done,"## TST-Unit
 
-Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen."
+Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen.",unclear,,unclear
 TS2,TST-Integration,,2,Seg15,TST,,now,"## TST-Integration
 
-Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen."
+Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen.",unclear,,unclear
 TS3,TST-E2E,SC14,2,Seg15,TST,,next,"## TST-E2E
 
-Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen."
+Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen.",unclear,,unclear
 TS4,TST-Load,SC15,2,Seg15,TST,,later,"## TST-Load
 
-Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen."
+Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen.",unclear,,unclear
 DP1,DEP-CI,SC16,2,Seg16,DEP,,done,"## DEP-CI
 
-Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen."
+Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen.",unclear,,unclear
 DP2,DEP-CD,SC17,2,Seg16,DEP,,now,"## DEP-CD
 
-Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen."
+Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen.",unclear,,unclear
 DP3,DEP-Canary,,2,Seg16,DEP,,next,"## DEP-Canary
 
-Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen."
+Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen.",unclear,,unclear
 DP4,DEP-BlueGreen,SC18,2,Seg16,DEP,,later,"## DEP-BlueGreen
 
-Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen."
+Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen.",unclear,,unclear
 NT1,NET-DNS,SC19,2,Seg17,NET,,done,"## NET-DNS
 
-Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen."
+Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen.",unclear,,unclear
 NT2,NET-LB,,2,Seg17,NET,,now,"## NET-LB
 
-Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen."
+Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen.",unclear,,unclear
 NT3,NET-VPN,SC20,2,Seg17,NET,,next,"## NET-VPN
 
-Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen."
+Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen.",unclear,,unclear
 NT4,NET-Firewall,SC01,2,Seg17,NET,,later,"## NET-Firewall
 
-Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen."
+Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen.",unclear,,unclear
 CS1,CSH-Redis,SC02,2,Seg18,CSH,DA1,done,"## CSH-Redis
 
-Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen."
+Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen.",unclear,,unclear
 CS2,CSH-Memcached,,2,Seg18,CSH,,now,"## CSH-Memcached
 
-Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen."
+Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen.",unclear,,unclear
 CS3,CSH-Policy,SC03,2,Seg18,CSH,,next,"## CSH-Policy
 
-Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen."
+Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen.",unclear,,unclear
 CS4,CSH-Eviction,SC04,2,Seg18,CSH,,later,"## CSH-Eviction
 
-Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen."
+Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen.",unclear,,unclear
 SX1,SRX-Indexer,,2,Seg19,SRX,CS1,done,"## SRX-Indexer
 
-Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen."
+Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen.",unclear,,unclear
 SX2,SRX-Query,SC05,2,Seg19,SRX,,now,"## SRX-Query
 
-Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen."
+Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen.",unclear,,unclear
 SX3,SRX-Rank,SC06,2,Seg19,SRX,,next,"## SRX-Rank
 
-Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen."
+Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen.",unclear,,unclear
 SX4,SRX-Suggest,,2,Seg19,SRX,,later,"## SRX-Suggest
 
-Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen."
+Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen.",unclear,,unclear
 IN1,INT-Webhook,SC07,2,Seg20,INT,AG1,done,"## INT-Webhook
 
-Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen."
+Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen.",unclear,,unclear
 IN2,INT-Adapter,,2,Seg20,INT,,now,"## INT-Adapter
 
-Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen."
+Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen.",unclear,,unclear
 IN3,INT-Transform,SC08,2,Seg20,INT,,next,"## INT-Transform
 
-Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen."
+Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen.",unclear,,unclear
 IN4,INT-Replay,SC09,2,Seg20,INT,,later,"## INT-Replay
 
-Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen."
+Diese Komponente stellt wesentliche Funktionalitaet fuer alle abhaengigen Dienste bereit. Ein stabiler Rollout ist Voraussetzung fuer die nachfolgenden Ausbaustufen.",unclear,,unclear

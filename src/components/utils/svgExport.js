@@ -156,8 +156,9 @@ const estimateTooltipCardHeight = (entry) => {
 const replaceCenterIconForeignObject = (svgRoot) => {
   const centerForeign = svgRoot.querySelector('.skill-tree-center-icon__foreign')
   const centerImage = svgRoot.querySelector('.skill-tree-center-icon__image')
+  const centerGroup = svgRoot.querySelector('.skill-tree-center-icon')
 
-  if (!centerForeign || !centerImage) {
+  if (!centerForeign || !centerImage || !centerGroup) {
     return
   }
 
@@ -166,9 +167,12 @@ const replaceCenterIconForeignObject = (svgRoot) => {
     return
   }
 
+  const centerSizeAttr = centerGroup.getAttribute('data-center-icon-size')
+  const centerSize = centerSizeAttr ? Number.parseFloat(centerSizeAttr) : CENTER_ICON_EXPORT_SIZE
+  const exportSize = Number.isFinite(centerSize) ? centerSize : CENTER_ICON_EXPORT_SIZE
+
   const image = createSvgElement('image')
   image.setAttribute('class', 'skill-tree-center-icon__image')
-  const exportSize = CENTER_ICON_EXPORT_SIZE
   const exportHalf = exportSize / 2
   image.setAttribute('x', String(-exportHalf))
   image.setAttribute('y', String(-exportHalf))
@@ -188,7 +192,7 @@ const replaceCenterIconForeignObject = (svgRoot) => {
 
   const hitArea = svgRoot.querySelector('.skill-tree-center-icon__hit-area')
   if (hitArea) {
-    hitArea.setAttribute('r', String(CENTER_ICON_EXPORT_HIT_RADIUS))
+    hitArea.setAttribute('r', String(exportSize / 2 + 8))
   }
 }
 

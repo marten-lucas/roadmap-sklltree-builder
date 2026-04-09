@@ -1,4 +1,4 @@
-ShortName,Name,Scope,Ebene,Segment,Parent,AdditionalDependency,ProgressLevel,Status,ReleaseNotes
+ShortName,Name,Scope,Ebene,Segment,Parent,AdditionalDependency,ProgressLevel,Status,ReleaseNotes,Effort,EffortCustomPoints,Benefit
 MIN,Minimal Node,Alpha,1,Core,,,1,now,"# Minimal Node
 
 The first milestone is **ready**.
@@ -6,38 +6,38 @@ The first milestone is **ready**.
 - Short text with  two  spaces
 - New line preserved
 
-Next step is below."
+Next step is below.",m,,l
 MIN,Minimal Node,Beta,1,Core,,,2,next,"# Minimal Node - Beta
 
-This level keeps the same node identity and checks multiline import."
+This level keeps the same node identity and checks multiline import.",m,,l
 MIN,Minimal Node,,1,Core,,,3,later,"# Minimal Node - Gamma
 
 Formatting stays intact across
 
 1. ordered item
-2. second item"
+2. second item",m,,l
 SUP,Support Node,Alpha,2,Side,MIN,,1,now,"# Support Node
 
 Support work is **in progress**.
 
-Remember: spacing  matters."
+Remember: spacing  matters.",s,,m
 API,API Adapter,,3,Side,SUP,MIN,1,next,"# API Adapter
 
 API handoff is `clean` and ready.
 
 - one line
-- another line"
+- another line",custom,7,xl
 DOC,Docs Node,Beta,4,Docs,SUP,,1,later,"# Docs Node
 
 Docs include a short paragraph and a list:
 
 - draft
-- review"
+- review",unclear,,unclear
 QA,QA Gate,Gamma,4,Quality,API,DOC,1,done,"# QA Gate
 
 Quality checks passed.
 
-This line has  two  spaces on purpose."
+This line has  two  spaces on purpose.",l,,s
 OPS,Ops Follow-up,Alpha,5,Core,QA,API,1,now,"# Ops Follow-up
 
 Follow-up notes:
@@ -45,4 +45,4 @@ Follow-up notes:
 - deploy
 - monitor
 
-All good."
+All good.",xl,,m

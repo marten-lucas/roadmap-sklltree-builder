@@ -1,5 +1,5 @@
-ShortName,Name,Scope,Ebene,Segment,Parent,AdditionalDependency,ProgressLevel,Status,ReleaseNotes
-SML,Small Root,Alpha,1,Seg1,,,1,now,
-SML,Small Root,,1,Seg1,,,2,next,
-SMC,Small Child,Beta,2,Seg2,SML,,1,done,
-SMC,Small Child,Gamma,2,Seg2,SML,,2,later,
+ShortName,Name,Scope,Ebene,Segment,Parent,AdditionalDependency,ProgressLevel,Status,ReleaseNotes,Effort,EffortCustomPoints,Benefit
+SML,Small Root,Alpha,1,Seg1,,,1,now,,m,,l
+SML,Small Root,,1,Seg1,,,2,next,,m,,l
+SMC,Small Child,Beta,2,Seg2,SML,,1,done,,s,,xs
+SMC,Small Child,Gamma,2,Seg2,SML,,2,later,,s,,xs

@@ -374,7 +374,7 @@ export const solveSkillTreeLayout = (data, config) => {
     )
 
     if (segmentStats.count > 0) {
-      return Math.max(labelWidth, toAngleSpan(config.nodeSize * 1.25, currentRadius))
+      return Math.max(labelWidth, toAngleSpan(config.nodeSize * 1.15, currentRadius))
     }
 
     return labelWidth
@@ -390,7 +390,7 @@ export const solveSkillTreeLayout = (data, config) => {
     )
     // Preserve a small global slack budget for visual breathing room while avoiding
     // large unused gaps when the current radius already provides enough angular room.
-    const slack = Math.max(2, Math.min(15, (segmentIds.length - 1) * 1.5))
+    const slack = Math.max(0.1, Math.min(6, (segmentIds.length - 1) * 0.40))
     return clamp(minimumWidthSum + slack, MIN_SEGMENT_SPREAD_DEG, config.maxAngleSpread)
   }
   const computeSegmentSlots = ({ segmentIds, statsById, radius, totalSpread }) => {
@@ -707,7 +707,7 @@ export const solveSkillTreeLayout = (data, config) => {
 
   const minimumArcGap = config.nodeSize * config.minArcGapFactor * denseGapScale
 
-  const crossSegmentGapFactor = 1.85
+  const crossSegmentGapFactor = 1.15
 
   const sortedLevels = Array.from(levelCounts.keys()).sort((a, b) => a - b)
   const firstNodeLevel = sortedLevels[0] ?? 1
@@ -780,7 +780,7 @@ export const solveSkillTreeLayout = (data, config) => {
 
     const level = Math.max(left.level, right.level)
     const actualRadius = radiusByLevel.get(level) ?? level * config.levelSpacing
-    const cappedRadius = Math.min(actualRadius, config.levelSpacing * 3)
+    const cappedRadius = Math.min(actualRadius, config.levelSpacing * 6)
     const effectiveCrossSegGap = Math.max(baseGap, toDegrees(minimumArcGap / cappedRadius)) * crossSegmentGapFactor
 
     return (left.span + right.span) / 2 + effectiveCrossSegGap
@@ -849,7 +849,7 @@ export const solveSkillTreeLayout = (data, config) => {
         return
       }
 
-      const rootGroupGap = (gapByLevel.get(1) ?? toDegrees(minimumArcGap / config.levelSpacing)) * 1.55
+      const rootGroupGap = (gapByLevel.get(1) ?? toDegrees(minimumArcGap / config.levelSpacing)) * 1.30
       const hasEmptySegmentSlots = orderedSegmentIds.some((segmentId) => !rootGroupsMap.has(segmentId))
       const levelOneRadiusForGroups = radiusByLevel.get(1) ?? config.levelSpacing
 
@@ -882,17 +882,31 @@ export const solveSkillTreeLayout = (data, config) => {
           }
         }
 
-        const bounds = group.nodes.map((node) => {
-          const angle = angleByNodeId.get(node.data.id) ?? centerAngle
-          const span = spanByNodeId.get(node.data.id) ?? 0
-
-          return {
-            min: angle - span / 2,
-            max: angle + span / 2,
+        // Collect only in-segment descendant angles so that cross-segment subtrees
+        // (e.g. a KA root node whose child belongs to D&C) do not inflate this
+        // group's claimed angular range and push neighbouring groups too far away.
+        const inSegmentAngles = []
+        const collectInSegAngles = (node) => {
+          const nodeSegId = getGroupedSegmentId(node.data.segmentId ?? null)
+          if (node.depth > 0 && nodeSegId === segmentId) {
+            const a = angleByNodeId.get(node.data.id)
+            if (a != null) inSegmentAngles.push(a)
           }
-        })
-        const min = Math.min(...bounds.map((bound) => bound.min))
-        const max = Math.max(...bounds.map((bound) => bound.max))
+          for (const child of (node.children ?? [])) {
+            collectInSegAngles(child)
+          }
+        }
+        group.nodes.forEach((node) => collectInSegAngles(node))
+
+        const nodeHalfAngle = toDegrees(
+          config.nodeSize * 0.5 / (radiusByLevel.get(1) ?? config.levelSpacing),
+        )
+        const min = inSegmentAngles.length > 0
+          ? Math.min(...inSegmentAngles) - nodeHalfAngle
+          : (angleByNodeId.get(group.nodes[0].data.id) ?? centerAngle)
+        const max = inSegmentAngles.length > 0
+          ? Math.max(...inSegmentAngles) + nodeHalfAngle
+          : (angleByNodeId.get(group.nodes[0].data.id) ?? centerAngle)
 
         return {
           group,
@@ -928,7 +942,7 @@ export const solveSkillTreeLayout = (data, config) => {
         // 120°). If so, pin the group edge to the arc boundary instead.
         // When the tree is dense (many nodes), drift less and stick closer to the packed center
         // to minimize gaps between subtrees. This helps reduce large angular voids in wide segments.
-        const blendFactor = filledGroupItems.length > 4 ? 0.76 : 0.5;
+        const blendFactor = filledGroupItems.length > 4 ? 0.88 : 0.5;
         const defaultDesiredCenter = item.group.nodes.length > 0 
           ? (slotCenter * (1 - blendFactor) + packedCenter * blendFactor) 
           : slotCenter;

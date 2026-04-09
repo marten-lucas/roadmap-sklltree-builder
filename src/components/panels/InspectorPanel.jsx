@@ -323,7 +323,7 @@ export function InspectorPanel({
     const segmentData = (roadmapData?.segments ?? []).map((segment) => ({ value: segment.id, label: segment.label }))
     const parentData = allNodes
       .filter((node) => !selectedNodeIds.includes(node.id))
-      .map((node) => ({ value: node.id, label: node.label }))
+      .map((node) => ({ value: node.id, label: node.shortName ? `${node.label} (${node.shortName})` : node.label }))
     const additionalDependencyData = allNodes
       .filter((node) => !selectedNodeIds.includes(node.id))
       .map((node) => ({ id: node.id, label: node.label, shortName: node.shortName }))
@@ -578,7 +578,7 @@ export function InspectorPanel({
   }))
   const parentData = (parentOptions ?? []).map((option) => ({
     value: option.id,
-    label: option.label,
+    label: option.shortName ? `${option.label} (${option.shortName})` : option.label,
     disabled: !option.isAllowed,
   }))
   const selectedParentKey = selectedParentId ?? '__root__'

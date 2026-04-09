@@ -79,6 +79,7 @@ export function SkillTreeCanvas({
         <g
           className="skill-tree-center-icon skill-tree-clickable"
           transform={`translate(${canvas.origin.x}, ${canvas.origin.y})`}
+          data-center-icon-size={centerIconSize}
           onMouseDown={(event) => event.stopPropagation()}
           onClick={onOpenCenterIconPanel}
         >

@@ -326,6 +326,7 @@ export const getParentOptionsForNode = (tree, nodeId) => {
     options.push({
       id: node.id,
       label: node.label,
+      shortName: node.shortName,
       isCurrent: currentParentId === node.id,
       isAllowed: true,
       reasons: [],
