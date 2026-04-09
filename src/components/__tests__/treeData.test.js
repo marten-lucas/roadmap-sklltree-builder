@@ -7,14 +7,14 @@ import {
   getNodeAdditionalDependencies,
   moveNodeToParent,
   renameScopeWithResult,
-  setNodeAdditionalDependencies,
+  setLevelAdditionalDependencies,
   updateNodeProgressLevel,
   updateNodeData,
   updateNodeSegment,
   updateNodeLevel,
   deleteNodeOnly,
 } from '../utils/treeData'
-import { createSimpleTree, createCrossSegmentTree, SEGMENT_FRONTEND, SEGMENT_BACKEND } from './testUtils'
+import { createSimpleTree, createCrossSegmentTree, SEGMENT_FRONTEND, SEGMENT_BACKEND, LEVEL_CHILD_REACT_1, LEVEL_CHILD_DB_1, LEVEL_ROOT_BACKEND_1 } from './testUtils'
 import { solveSkillTreeLayout } from '../utils/layoutSolver'
 import { TREE_CONFIG } from '../config'
 
@@ -213,7 +213,7 @@ describe('treeData', () => {
 
     it('should drop invalid dependencies after move when target becomes ancestor', () => {
       const tree = createSimpleTree()
-      const withDependency = setNodeAdditionalDependencies(tree, 'child-react', ['root-backend'])
+      const withDependency = setLevelAdditionalDependencies(tree, 'child-react', LEVEL_CHILD_REACT_1, [LEVEL_ROOT_BACKEND_1])
       const moved = moveNodeToParent(withDependency, 'child-react', 'root-backend')
       const deps = getNodeAdditionalDependencies(moved, 'child-react')
 
@@ -224,7 +224,7 @@ describe('treeData', () => {
   describe('additional dependencies', () => {
     it('should write outgoing dependency and mirrored incoming reference', () => {
       const tree = createSimpleTree()
-      const nextTree = setNodeAdditionalDependencies(tree, 'child-react', ['child-db'])
+      const nextTree = setLevelAdditionalDependencies(tree, 'child-react', LEVEL_CHILD_REACT_1, [LEVEL_CHILD_DB_1])
 
       const sourceDeps = getNodeAdditionalDependencies(nextTree, 'child-react')
       const targetDeps = getNodeAdditionalDependencies(nextTree, 'child-db')
@@ -235,8 +235,8 @@ describe('treeData', () => {
 
     it('should remove mirrored references when dependency is removed', () => {
       const tree = createSimpleTree()
-      const withDependency = setNodeAdditionalDependencies(tree, 'child-react', ['child-db'])
-      const nextTree = setNodeAdditionalDependencies(withDependency, 'child-react', [])
+      const withDependency = setLevelAdditionalDependencies(tree, 'child-react', LEVEL_CHILD_REACT_1, [LEVEL_CHILD_DB_1])
+      const nextTree = setLevelAdditionalDependencies(withDependency, 'child-react', LEVEL_CHILD_REACT_1, [])
 
       const targetDeps = getNodeAdditionalDependencies(nextTree, 'child-db')
       expect(targetDeps.incomingIds).toEqual([])
@@ -244,7 +244,7 @@ describe('treeData', () => {
 
     it('should remove mirrored references when source node is deleted', () => {
       const tree = createSimpleTree()
-      const withDependency = setNodeAdditionalDependencies(tree, 'child-react', ['child-db'])
+      const withDependency = setLevelAdditionalDependencies(tree, 'child-react', LEVEL_CHILD_REACT_1, [LEVEL_CHILD_DB_1])
       const nextTree = deleteNodeOnly(withDependency, 'child-react')
       const targetDeps = getNodeAdditionalDependencies(nextTree, 'child-db')
 
@@ -253,8 +253,8 @@ describe('treeData', () => {
 
     it('should reject cyclic additional dependencies', () => {
       const tree = createSimpleTree()
-      const withDependency = setNodeAdditionalDependencies(tree, 'child-react', ['child-db'])
-      const nextTree = setNodeAdditionalDependencies(withDependency, 'child-db', ['child-react'])
+      const withDependency = setLevelAdditionalDependencies(tree, 'child-react', LEVEL_CHILD_REACT_1, [LEVEL_CHILD_DB_1])
+      const nextTree = setLevelAdditionalDependencies(withDependency, 'child-db', LEVEL_CHILD_DB_1, [LEVEL_CHILD_REACT_1])
 
       expect(getNodeAdditionalDependencies(nextTree, 'child-react').outgoingIds).toEqual(['child-db'])
       expect(getNodeAdditionalDependencies(nextTree, 'child-db').outgoingIds).toEqual([])
@@ -263,7 +263,7 @@ describe('treeData', () => {
     it('should not change layout coordinates after dependency-only changes', () => {
       const tree = createSimpleTree()
       const before = solveSkillTreeLayout(tree, TREE_CONFIG)
-      const changed = setNodeAdditionalDependencies(tree, 'child-react', ['child-db'])
+      const changed = setLevelAdditionalDependencies(tree, 'child-react', LEVEL_CHILD_REACT_1, [LEVEL_CHILD_DB_1])
       const after = solveSkillTreeLayout(changed, TREE_CONFIG)
 
       const beforeById = new Map(before.layout.nodes.map((node) => [node.id, node]))

@@ -21,7 +21,7 @@ import { getSkillTreeShortcutAction } from './utils/keyboardShortcuts'
 import { togglePanel, PANEL_INSPECTOR, PANEL_CENTER, PANEL_SCOPES, PANEL_SEGMENTS } from './utils/panelsState'
 import { getDisplayStatusKey } from './utils/nodeStatus'
 import {
-  getAdditionalDependencyOptionsForNode,
+  getAdditionalDependencyOptionsForLevel,
   getParentOptionsForNode,
   getLevelOptionsForNode,
   getSegmentOptionsForNode,
@@ -36,6 +36,7 @@ import {
   addInitialSegmentWithResult,
   addRootNodeNearWithResult,
   addSegmentNearWithResult,
+  buildLevelIdToNodeIdMap,
   deleteScopeWithResult,
   deleteSegment,
   deleteNodeBranch,
@@ -44,10 +45,11 @@ import {
   findNodeById,
   getNodeAdditionalDependencies,
   getNodeLevelInfo,
+  getLevelAdditionalDependencies,
   moveNodeToParent,
   renameScopeWithResult,
   removeNodeProgressLevel,
-  setNodeAdditionalDependencies,
+  setLevelAdditionalDependencies,
   updateNodeData as updateNodeDataInTree,
   updateNodeProgressLevel,
   updateNodeShortName,
@@ -138,6 +140,7 @@ export function SkillTree() {
   const transformApiRef = useRef(null)
   const [isPanModeActive, setIsPanModeActive] = useState(false)
   const [currentZoomScale, setCurrentZoomScale] = useState(1)
+  const [radialExpansion, setRadialExpansion] = useState(1.0)
   const [exportLabelModeOverride, setExportLabelModeOverride] = useState(null)
   const [exportLabelDialogOpen, setExportLabelDialogOpen] = useState(false)
   const [exportLabelDialogMode, setExportLabelDialogMode] = useState('mid')
@@ -334,6 +337,28 @@ export function SkillTree() {
     [nodes, nodeVisibilityModeById],
   )
 
+  const expandedNodes = useMemo(() => {
+    if (radialExpansion === 1.0) return renderedNodes
+    const ox = canvas.origin.x
+    const oy = canvas.origin.y
+    return renderedNodes.map((node) => {
+      const dx = node.x - ox
+      const dy = node.y - oy
+      return { ...node, x: ox + dx * radialExpansion, y: oy + dy * radialExpansion }
+    })
+  }, [renderedNodes, radialExpansion, canvas.origin.x, canvas.origin.y])
+
+  const allNodesExpandedById = useMemo(() => {
+    if (radialExpansion === 1.0) return new Map(nodes.map((n) => [n.id, n]))
+    const ox = canvas.origin.x
+    const oy = canvas.origin.y
+    return new Map(nodes.map((n) => {
+      const dx = n.x - ox
+      const dy = n.y - oy
+      return [n.id, { ...n, x: ox + dx * radialExpansion, y: oy + dy * radialExpansion }]
+    }))
+  }, [nodes, radialExpansion, canvas.origin.x, canvas.origin.y])
+
   const renderedNodeIds = useMemo(
     () => new Set(renderedNodes.map((node) => node.id)),
     [renderedNodes],
@@ -394,6 +419,18 @@ export function SkillTree() {
     }),
     [links, renderedNodeIds],
   )
+
+  const expandedFilteredLinks = useMemo(() => {
+    if (radialExpansion === 1.0) return filteredLinks
+    const expandedById = new Map(expandedNodes.map((n) => [n.id, n]))
+    return filteredLinks.map((link) => {
+      const src = link.sourceId ? expandedById.get(link.sourceId) : null
+      const tgt = link.targetId ? expandedById.get(link.targetId) : null
+      if (!src || !tgt) return link
+      const path = `M ${src.x} ${src.y} L ${tgt.x} ${tgt.y}`
+      return { ...link, path }
+    })
+  }, [filteredLinks, radialExpansion, expandedNodes])
 
   const _visibleSegmentIdSet = useMemo(
     () => new Set(filteredSegmentLabels.map((segmentLabel) => segmentLabel.segmentId)),
@@ -472,10 +509,16 @@ export function SkillTree() {
     [roadmapData, selectedNodeId],
   )
 
-  const selectedNodeAdditionalDependencyOptions = useMemo(
-    () => (selectedNodeId ? getAdditionalDependencyOptionsForNode(roadmapData, selectedNodeId) : []),
-    [roadmapData, selectedNodeId],
-  )
+  const selectedNodeLevelDependencyOptions = useMemo(() => {
+    if (!selectedNodeId) return {}
+    const selectedNode = findNodeById(roadmapData, selectedNodeId)
+    if (!selectedNode) return {}
+    const result = {}
+    for (const level of (selectedNode.levels ?? [])) {
+      result[level.id] = getAdditionalDependencyOptionsForLevel(roadmapData, selectedNodeId, level.id)
+    }
+    return result
+  }, [roadmapData, selectedNodeId])
 
   const selectedNodeAdditionalDependencies = useMemo(() => {
     if (!selectedNodeId) {
@@ -540,8 +583,8 @@ export function SkillTree() {
   }, [diagnostics, selectedNodeId])
 
   const selectedLayoutNode = useMemo(
-    () => renderedNodes.find((node) => node.id === selectedNodeId) ?? null,
-    [renderedNodes, selectedNodeId],
+    () => expandedNodes.find((node) => node.id === selectedNodeId) ?? null,
+    [expandedNodes, selectedNodeId],
   )
 
   const selectedSegmentLabel = useMemo(
@@ -606,19 +649,25 @@ export function SkillTree() {
       return []
     }
 
-    const layoutNodeById = new Map(nodes.map((node) => [node.id, node]))
+    const layoutNodeById = allNodesExpandedById
+    const levelIdToNodeId = buildLevelIdToNodeIdMap(roadmapData)
     const dependencies = []
     const queue = [...(roadmapData.children ?? [])]
 
     while (queue.length > 0) {
       const current = queue.shift()
-      const outgoingIds = Array.isArray(current.additionalDependencyIds)
-        ? current.additionalDependencyIds
-        : []
 
-      for (const targetId of outgoingIds) {
-        if (layoutNodeById.has(current.id) && layoutNodeById.has(targetId)) {
-          dependencies.push({ sourceId: current.id, targetId })
+      for (const level of (current.levels ?? [])) {
+        for (const targetLevelId of (level.additionalDependencyLevelIds ?? [])) {
+          const targetNodeId = levelIdToNodeId.get(targetLevelId)
+          if (targetNodeId && layoutNodeById.has(current.id) && layoutNodeById.has(targetNodeId)) {
+            dependencies.push({
+              sourceId: current.id,
+              targetId: targetNodeId,
+              sourceLevelId: level.id,
+              targetLevelId,
+            })
+          }
         }
       }
 
@@ -635,33 +684,45 @@ export function SkillTree() {
     for (const dependency of dependencies) {
       const sourceNode = layoutNodeById.get(dependency.sourceId)
       const targetNode = layoutNodeById.get(dependency.targetId)
-      const sourceLabel = allNodesById.get(dependency.sourceId)?.shortName ?? sourceNode.shortName ?? sourceNode.label
-      const targetLabel = allNodesById.get(dependency.targetId)?.shortName ?? targetNode.shortName ?? targetNode.label
+      const sourceDataNode = allNodesById.get(dependency.sourceId)
+      const targetDataNode = allNodesById.get(dependency.targetId)
+      const sourceLabel = sourceDataNode?.shortName ?? sourceNode.shortName ?? sourceNode.label
+      const targetLabel = targetDataNode?.shortName ?? targetNode.shortName ?? targetNode.label
+
+      const targetLevelIndex = (targetDataNode?.levels ?? []).findIndex((l) => l.id === dependency.targetLevelId)
+      const sourceLevelIndex = (sourceDataNode?.levels ?? []).findIndex((l) => l.id === dependency.sourceLevelId)
+      const targetLevelSuffix = targetLevelIndex >= 0 ? `\u00B7L${targetLevelIndex + 1}` : ''
+      const sourceLevelSuffix = sourceLevelIndex >= 0 ? `\u00B7L${sourceLevelIndex + 1}` : ''
+
+      const depKey = `${dependency.sourceId}:${dependency.sourceLevelId}->${dependency.targetId}:${dependency.targetLevelId}`
 
       pushEndpoint(dependency.sourceId, {
-        key: `${dependency.sourceId}->${dependency.targetId}:source`,
+        key: `${depKey}:source`,
         type: 'source',
         sourceId: dependency.sourceId,
         targetId: dependency.targetId,
         tooltip: `Benoetigt ${targetNode.label}`,
         isInteractive: true,
-        otherLabel: String(targetLabel).slice(0, 3).toUpperCase(),
+        otherLabel: `${String(targetLabel).slice(0, 3).toUpperCase()}${targetLevelSuffix}`,
       })
 
       pushEndpoint(dependency.targetId, {
-        key: `${dependency.sourceId}->${dependency.targetId}:target`,
+        key: `${depKey}:target`,
         type: 'target',
         sourceId: dependency.sourceId,
         targetId: dependency.targetId,
         tooltip: `Wird benoetigt von ${sourceNode.label}`,
         isInteractive: true,
-        otherLabel: String(sourceLabel).slice(0, 3).toUpperCase(),
+        otherLabel: `${String(sourceLabel).slice(0, 3).toUpperCase()}${sourceLevelSuffix}`,
       })
     }
 
     const endpoints = []
     const portalAvoidance = 20
-    const spreadStep = 16
+    const spreadStep = 14
+    // Hemisphere split: source portals go to outer hemisphere (away from center),
+    // target portals go to inner hemisphere (toward center). 28° spread per group.
+    const HEMISPHERE_SPREAD = 28
 
     for (const [nodeId, nodeEndpoints] of endpointsByNodeId.entries()) {
       const layoutNode = layoutNodeById.get(nodeId)
@@ -677,7 +738,10 @@ export function SkillTree() {
 
       const childAngles = nodes
         .filter((candidate) => candidate.parentId === nodeId)
-        .map((candidate) => toDegrees(Math.atan2(candidate.y - layoutNode.y, candidate.x - layoutNode.x)))
+        .map((candidate) => {
+          const expanded = layoutNodeById.get(candidate.id) ?? candidate
+          return toDegrees(Math.atan2(expanded.y - layoutNode.y, expanded.x - layoutNode.x))
+        })
       const blockedAngles = [...childAngles]
       if (layoutNode.parentId) {
         const parentNode = layoutNodeById.get(layoutNode.parentId)
@@ -686,60 +750,69 @@ export function SkillTree() {
         }
       }
 
-      const reservedAngles = []
+      // Angle pointing toward center (inner hemisphere for targets) and away (outer for sources)
       const inwardAngle = toDegrees(Math.atan2(canvas.origin.y - layoutNode.y, canvas.origin.x - layoutNode.x))
-      const offsetCenter = (nodeEndpoints.length - 1) / 2
-      const sortedEndpoints = [...nodeEndpoints].sort((left, right) => {
-        if (left.type === right.type) {
-          return left.key.localeCompare(right.key)
-        }
-        return left.type === 'source' ? -1 : 1
-      })
+      const outwardAngle = inwardAngle + 180
 
-      const candidateOffsets = [
-        0,
-        -1,
-        1,
-        -2,
-        2,
-        -3,
-        3,
-        -4,
-        4,
-        -5,
-        5,
-      ]
+      const sourceEndpoints = nodeEndpoints.filter((ep) => ep.type === 'source')
+        .sort((a, b) => a.key.localeCompare(b.key))
+      const targetEndpoints = nodeEndpoints.filter((ep) => ep.type === 'target')
+        .sort((a, b) => a.key.localeCompare(b.key))
 
-      sortedEndpoints.forEach((endpoint, index) => {
-        const baseAngle = inwardAngle + (index - offsetCenter) * spreadStep
+      const reservedAngles = []
+      const candidateOffsets = [0, -1, 1, -2, 2, -3, 3, -4, 4, -5, 5]
+
+      // Place source portals in outer hemisphere
+      sourceEndpoints.forEach((endpoint, index) => {
+        const offsetCenter = (sourceEndpoints.length - 1) / 2
+        const baseAngle = outwardAngle + (index - offsetCenter) * HEMISPHERE_SPREAD
         let bestAngle = baseAngle
         let bestPenalty = Number.POSITIVE_INFINITY
 
         for (const offsetFactor of candidateOffsets) {
           const candidateAngle = baseAngle + offsetFactor * 9
-          const blockedPenalty = blockedAngles.some((blocked) => isAngleNear(candidateAngle, blocked, portalAvoidance))
-            ? 1000
-            : 0
-          const reservedPenalty = reservedAngles.some((reserved) => isAngleNear(candidateAngle, reserved, 11))
-            ? 700
-            : 0
+          const blockedPenalty = blockedAngles.some((blocked) => isAngleNear(candidateAngle, blocked, portalAvoidance)) ? 1000 : 0
+          const reservedPenalty = reservedAngles.some((reserved) => isAngleNear(candidateAngle, reserved, 11)) ? 700 : 0
           const spreadPenalty = Math.abs(offsetFactor)
           const penalty = blockedPenalty + reservedPenalty + spreadPenalty
-
-          if (penalty < bestPenalty) {
-            bestPenalty = penalty
-            bestAngle = candidateAngle
-          }
-
-          if (penalty === 0) {
-            break
-          }
+          if (penalty < bestPenalty) { bestPenalty = penalty; bestAngle = candidateAngle }
+          if (penalty === 0) break
         }
 
         reservedAngles.push(bestAngle)
-        const orbit = portalOrbit + Math.abs(index - offsetCenter) * endpointOrbitStep
+        const orbit = portalOrbit + Math.abs(index - (sourceEndpoints.length - 1) / 2) * endpointOrbitStep
         const radians = toRadians(bestAngle)
+        endpoints.push({
+          ...endpoint,
+          nodeId,
+          x: layoutNode.x + Math.cos(radians) * orbit,
+          y: layoutNode.y + Math.sin(radians) * orbit,
+          angle: bestAngle,
+          rotation: bestAngle + 180,
+          scale: isNodeMinimal ? MINIMAL_NODE_SIZE / TREE_CONFIG.nodeSize : 1,
+        })
+      })
 
+      // Place target portals in inner hemisphere
+      targetEndpoints.forEach((endpoint, index) => {
+        const offsetCenter = (targetEndpoints.length - 1) / 2
+        const baseAngle = inwardAngle + (index - offsetCenter) * HEMISPHERE_SPREAD
+        let bestAngle = baseAngle
+        let bestPenalty = Number.POSITIVE_INFINITY
+
+        for (const offsetFactor of candidateOffsets) {
+          const candidateAngle = baseAngle + offsetFactor * 9
+          const blockedPenalty = blockedAngles.some((blocked) => isAngleNear(candidateAngle, blocked, portalAvoidance)) ? 1000 : 0
+          const reservedPenalty = reservedAngles.some((reserved) => isAngleNear(candidateAngle, reserved, 11)) ? 700 : 0
+          const spreadPenalty = Math.abs(offsetFactor)
+          const penalty = blockedPenalty + reservedPenalty + spreadPenalty
+          if (penalty < bestPenalty) { bestPenalty = penalty; bestAngle = candidateAngle }
+          if (penalty === 0) break
+        }
+
+        reservedAngles.push(bestAngle)
+        const orbit = portalOrbit + Math.abs(index - (targetEndpoints.length - 1) / 2) * endpointOrbitStep
+        const radians = toRadians(bestAngle)
         endpoints.push({
           ...endpoint,
           nodeId,
@@ -753,7 +826,7 @@ export function SkillTree() {
     }
 
     return endpoints
-  }, [allNodesById, canvas.origin.x, canvas.origin.y, nodeVisibilityModeById, nodes, roadmapData.children])
+  }, [allNodesById, allNodesExpandedById, canvas.origin.x, canvas.origin.y, nodeVisibilityModeById, nodes, roadmapData.children])
 
   const visibleDependencyPortals = useMemo(
     () => dependencyPortals.filter((portal) => (
@@ -763,6 +836,29 @@ export function SkillTree() {
     )),
     [dependencyPortals, renderedNodeIds],
   )
+
+  const visibleDependencyLines = useMemo(() => {
+    // Pair source portals with their matching target portals so connections can be drawn.
+    const sourceByKey = new Map()
+    const targetByKey = new Map()
+    for (const portal of visibleDependencyPortals) {
+      // portal.key format: `${depKey}:source` or `${depKey}:target`
+      const baseKey = portal.key.replace(/:(?:source|target)$/, '')
+      if (portal.type === 'source') {
+        sourceByKey.set(baseKey, portal)
+      } else {
+        targetByKey.set(baseKey, portal)
+      }
+    }
+    const lines = []
+    for (const [baseKey, src] of sourceByKey.entries()) {
+      const tgt = targetByKey.get(baseKey)
+      if (tgt) {
+        lines.push({ key: baseKey, x1: src.x, y1: src.y, x2: tgt.x, y2: tgt.y })
+      }
+    }
+    return lines
+  }, [visibleDependencyPortals])
 
   const emptyStateAddControl = useMemo(() => {
     if (nodes.length > 0) {
@@ -818,7 +914,7 @@ export function SkillTree() {
       centerIconSize + 16,
     )
 
-    for (const node of renderedNodes) {
+    for (const node of expandedNodes) {
       const visibilityMode = nodeVisibilityModeById.get(node.id) ?? 'full'
       const glowPadding = visibilityMode === 'minimal' ? 8 : 18
       const nodeSizeForFit = (visibilityMode === 'minimal' ? MINIMAL_NODE_SIZE : TREE_CONFIG.nodeSize) + glowPadding * 2
@@ -898,7 +994,7 @@ export function SkillTree() {
     filteredSegmentLabels,
     filteredSegmentSeparators,
     nodeVisibilityModeById,
-    renderedNodes,
+    expandedNodes,
     selectedControlGeometry,
     selectedSegmentControlGeometry,
     visibleDependencyPortals,
@@ -1519,6 +1615,12 @@ export function SkillTree() {
         || Boolean(selectedSegmentId)
         || (Array.isArray(selectedNodeIds) && selectedNodeIds.length > 0)
 
+      if (event.altKey && !event.ctrlKey && !event.metaKey && event.key.toLowerCase() === 'd' && !isEditableElement(event.target)) {
+        event.preventDefault()
+        setRadialExpansion((prev) => prev > 1.0 ? 1.0 : 1.35)
+        return
+      }
+
       if (selectedNodeId && (event.key === 'ArrowLeft' || event.key === 'ArrowRight' || event.key === 'ArrowUp' || event.key === 'ArrowDown') && !event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey && !isEditableElement(event.target)) {
         const nextNodeId = getKeyboardNavigationTarget(selectedNodeId, event.key)
         if (nextNodeId) {
@@ -1929,12 +2031,10 @@ export function SkillTree() {
     }
   }
 
-  const handleAdditionalDependenciesChange = (nextDependencyIds) => {
-    if (!selectedNodeId && !(Array.isArray(selectedNodeIds) && selectedNodeIds.length > 0)) {
-      return
-    }
-
-    applyToSelectedNodes((tree, id) => setNodeAdditionalDependencies(tree, id, nextDependencyIds))
+  const handleLevelAdditionalDependenciesChange = (levelId, nextTargetLevelIds) => {
+    if (!selectedNodeId) return
+    const nextDocument = setLevelAdditionalDependencies(roadmapData, selectedNodeId, levelId, nextTargetLevelIds)
+    commitDocument(nextDocument)
   }
 
   const handleAddProgressLevel = () => {
@@ -2221,15 +2321,16 @@ export function SkillTree() {
             centerIconSize={centerIconSize}
             filteredSegmentSeparators={filteredSegmentSeparators}
             filteredSegmentLabels={filteredSegmentLabels}
-            filteredLinks={filteredLinks}
+            filteredLinks={expandedFilteredLinks}
             layoutNodesById={layoutNodesById}
-            renderedNodes={renderedNodes}
+            renderedNodes={expandedNodes}
             nodeVisibilityModeById={nodeVisibilityModeById}
             selectedNodeId={selectedNodeId}
             selectedNodeIds={selectedNodeIds}
             selectedSegmentId={selectedSegmentId}
             selectedPortalKey={selectedPortalKey}
             visibleDependencyPortals={visibleDependencyPortals}
+            visibleDependencyLines={visibleDependencyLines}
             selectedLayoutNode={selectedLayoutNode}
             selectedControlGeometry={selectedControlGeometry}
             selectedSegmentLabel={selectedSegmentLabel}
@@ -2291,8 +2392,7 @@ export function SkillTree() {
         segmentOptions={selectedNodeSegmentOptions}
         parentOptions={selectedNodeParentOptions}
         selectedParentId={selectedNodeParentId}
-        additionalDependencyOptions={selectedNodeAdditionalDependencyOptions}
-        selectedAdditionalDependencyIds={selectedNodeAdditionalDependencies.outgoingIds}
+        levelDependencyOptions={selectedNodeLevelDependencyOptions}
         incomingDependencyLabels={selectedNodeIncomingDependencyLabels}
         validationMessage={selectedNodeValidationMessage}
         onParentChange={(nextParentKey) => {
@@ -2315,7 +2415,7 @@ export function SkillTree() {
             return validation.isAllowed ? validation.tree : tree
           })
         }}
-        onAdditionalDependenciesChange={handleAdditionalDependenciesChange}
+        onLevelAdditionalDependenciesChange={handleLevelAdditionalDependenciesChange}
         onDeleteNodeOnly={handleDeleteNodeOnly}
         onDeleteNodeBranch={handleDeleteNodeBranch}
         onEffortChange={handleEffortChange}

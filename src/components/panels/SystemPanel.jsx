@@ -82,7 +82,7 @@ export function SystemPanel({
 
           {/* ── Release Tab ── */}
           <Tabs.Panel value="release">
-            <div className="skill-panel__tab-scroll skill-panel__tab-scroll--level">
+            <div className="skill-panel__tab-scroll skill-panel__tab-scroll--fill">
               <Stack gap="md" style={{ flexShrink: 0 }}>
                 <TextInput
                   label="Systemname"

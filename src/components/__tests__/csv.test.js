@@ -28,6 +28,7 @@ const createDocument = () => ({
           status: 'now',
           releaseNote: '# Alpha Root\nIntro line',
           scopeIds: ['scope-alpha'],
+          additionalDependencyLevelIds: [],
         },
         {
           id: 'level-alpha-2',
@@ -35,9 +36,9 @@ const createDocument = () => ({
           status: 'next',
           releaseNote: 'Follow-up with comma, newline\nand more.',
           scopeIds: ['scope-beta', 'scope-gamma'],
+          additionalDependencyLevelIds: [],
         },
       ],
-      additionalDependencyIds: [],
       additionalDependentIds: [],
       children: [
         {
@@ -54,9 +55,9 @@ const createDocument = () => ({
               status: 'later',
               releaseNote: 'Bravo note',
               scopeIds: ['scope-beta'],
+              additionalDependencyLevelIds: [],
             },
           ],
-          additionalDependencyIds: [],
           additionalDependentIds: [],
           children: [],
         },
@@ -76,9 +77,9 @@ const createDocument = () => ({
           status: 'done',
           releaseNote: 'Omega note',
           scopeIds: [],
+          additionalDependencyLevelIds: [],
         },
       ],
-      additionalDependencyIds: [],
       additionalDependentIds: [],
       children: [
         {
@@ -95,9 +96,9 @@ const createDocument = () => ({
               status: 'now',
               releaseNote: 'Sierra note',
               scopeIds: ['scope-gamma'],
+              additionalDependencyLevelIds: ['level-bravo-1'],
             },
           ],
-          additionalDependencyIds: ['node-bravo'],
           additionalDependentIds: [],
           children: [],
         },
@@ -211,11 +212,12 @@ describe('csv', () => {
 
   it('rejects cyclic additional dependencies during import and export roundtrip validation', () => {
     const document = createDocument()
-    const frontendChild = document.children[0].children[0]
-    const backendChild = document.children[1].children[0]
+    const frontendChild = document.children[0].children[0]  // BRA
+    const backendChild = document.children[1].children[0]   // SIE
 
-    frontendChild.additionalDependencyIds = ['node-sierra']
-    backendChild.additionalDependencyIds = ['node-bravo']
+    // BRA depends on SIE (creates cycle since SIE already depends on BRA)
+    frontendChild.levels[0].additionalDependencyLevelIds = ['level-sierra-1']
+    // SIE's dependency on BRA is already set in createDocument via additionalDependencyLevelIds
 
     const csv = serializeDocumentToCsv(document)
 

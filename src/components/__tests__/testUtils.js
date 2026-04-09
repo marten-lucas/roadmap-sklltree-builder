@@ -7,6 +7,14 @@ const SEGMENT_FRONTEND = 'segment-frontend'
 const SEGMENT_BACKEND = 'segment-backend'
 const SEGMENT_DB = 'segment-db'
 
+// Stable level IDs for createSimpleTree nodes
+export const LEVEL_ROOT_FRONTEND_1 = 'lvl-root-frontend-1'
+export const LEVEL_CHILD_REACT_1 = 'lvl-child-react-1'
+export const LEVEL_CHILD_VUE_1 = 'lvl-child-vue-1'
+export const LEVEL_ROOT_BACKEND_1 = 'lvl-root-backend-1'
+export const LEVEL_CHILD_API_1 = 'lvl-child-api-1'
+export const LEVEL_CHILD_DB_1 = 'lvl-child-db-1'
+
 /**
  * Erstellt einen einfachen Test-Baum mit Frontend/Backend Segmenten
  */
@@ -22,6 +30,7 @@ export const createSimpleTree = () => ({
       status: 'fertig',
       ebene: null,
       segmentId: SEGMENT_FRONTEND,
+      levels: [{ id: LEVEL_ROOT_FRONTEND_1, status: 'fertig', releaseNote: '', scopeIds: [], additionalDependencyLevelIds: [] }],
       children: [
         {
           id: 'child-react',
@@ -29,6 +38,7 @@ export const createSimpleTree = () => ({
           status: 'fertig',
           ebene: null,
           segmentId: SEGMENT_FRONTEND,
+          levels: [{ id: LEVEL_CHILD_REACT_1, status: 'fertig', releaseNote: '', scopeIds: [], additionalDependencyLevelIds: [] }],
           children: [],
         },
         {
@@ -37,6 +47,7 @@ export const createSimpleTree = () => ({
           status: 'später',
           ebene: null,
           segmentId: SEGMENT_FRONTEND,
+          levels: [{ id: LEVEL_CHILD_VUE_1, status: 'später', releaseNote: '', scopeIds: [], additionalDependencyLevelIds: [] }],
           children: [],
         },
       ],
@@ -47,6 +58,7 @@ export const createSimpleTree = () => ({
       status: 'jetzt',
       ebene: null,
       segmentId: SEGMENT_BACKEND,
+      levels: [{ id: LEVEL_ROOT_BACKEND_1, status: 'jetzt', releaseNote: '', scopeIds: [], additionalDependencyLevelIds: [] }],
       children: [
         {
           id: 'child-api',
@@ -54,6 +66,7 @@ export const createSimpleTree = () => ({
           status: 'jetzt',
           ebene: null,
           segmentId: SEGMENT_BACKEND,
+          levels: [{ id: LEVEL_CHILD_API_1, status: 'jetzt', releaseNote: '', scopeIds: [], additionalDependencyLevelIds: [] }],
           children: [],
         },
         {
@@ -62,6 +75,7 @@ export const createSimpleTree = () => ({
           status: 'später',
           ebene: null,
           segmentId: SEGMENT_BACKEND,
+          levels: [{ id: LEVEL_CHILD_DB_1, status: 'später', releaseNote: '', scopeIds: [], additionalDependencyLevelIds: [] }],
           children: [],
         },
       ],

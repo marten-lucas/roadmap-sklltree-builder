@@ -8,14 +8,11 @@ const getPortalClassName = (portal, isSelected) => [
   isSelected ? 'skill-tree-portal--selected' : '',
 ].filter(Boolean).join(' ')
 
-const getPortalChevronPath = (type) => {
-  // Open chevrons (< >) for a stronger directional portal identity.
-  if (type === 'target') {
-    return 'M 8 -9 L -7 0 L 8 9'
-  }
-
-  return 'M -8 -9 L 7 0 L -8 9'
-}
+// Ring r=13 contains the label; Cup is a semicircle r=19 centered at origin.
+// Cup mouth faces +x by default (toward node = target/incoming).
+// Source portals get rotate(180) so mouth faces outward (away from node).
+const PORTAL_RING_R = 13
+const PORTAL_CUP_PATH = 'M 0 -19 A 19 19 0 0 1 0 19'
 
 export function SkillTreeCanvas({
   canvasRef,
@@ -33,6 +30,7 @@ export function SkillTreeCanvas({
   selectedSegmentId,
   selectedPortalKey,
   visibleDependencyPortals,
+  visibleDependencyLines = [],
   selectedLayoutNode,
   selectedControlGeometry,
   selectedSegmentLabel,
@@ -239,16 +237,14 @@ export function SkillTreeCanvas({
           )
         })}
 
+        {/* ── Dependency portals ── */}
         {visibleDependencyPortals.map((portal) => {
           const isPortalSelected = portal.key === selectedPortalKey
           const portalClassName = getPortalClassName(portal, isPortalSelected)
-          const chevronPath = getPortalChevronPath(portal.type)
           const portalRotation = portal.rotation ?? 0
           const portalAngle = portal.angle ?? 0
           const portalScale = portal.scale ?? 1
-          const portalLabelOffset = TREE_CONFIG.nodeSize * 0.15 * portalScale
-          const portalLabelX = -Math.cos((portalAngle * Math.PI) / 180) * portalLabelOffset
-          const portalLabelY = -Math.sin((portalAngle * Math.PI) / 180) * portalLabelOffset
+          const isSource = portal.type === 'source'
 
           return (
             <Tooltip
@@ -277,20 +273,22 @@ export function SkillTreeCanvas({
               >
                 <g transform={`rotate(${portalRotation}) scale(${portalScale})`}>
                   <circle className="skill-tree-portal__hit" r="26" />
-                  <circle className={`skill-tree-portal__halo skill-tree-portal__halo--${portal.type}`} r="17" />
-                  <path className={`skill-tree-portal__chevron skill-tree-portal__chevron--${portal.type}`} d={chevronPath} />
+                  <circle className={`skill-tree-portal__ring skill-tree-portal__ring--${portal.type}`} r={PORTAL_RING_R} />
+                  <path
+                    className={`skill-tree-portal__cup skill-tree-portal__cup--${portal.type}`}
+                    d={PORTAL_CUP_PATH}
+                    transform={isSource ? 'rotate(180)' : undefined}
+                  />
                 </g>
-                <g transform={`translate(${portalLabelX} ${portalLabelY})`}>
-                  <text
-                    className="skill-tree-portal__label"
-                    x="0"
-                    y="0"
-                    textAnchor="middle"
-                    dominantBaseline="middle"
-                  >
-                    {portal.otherLabel}
-                  </text>
-                </g>
+                <text
+                  className="skill-tree-portal__label"
+                  x="0"
+                  y="0"
+                  textAnchor="middle"
+                  dominantBaseline="middle"
+                >
+                  {portal.otherLabel}
+                </text>
               </g>
             </Tooltip>
           )

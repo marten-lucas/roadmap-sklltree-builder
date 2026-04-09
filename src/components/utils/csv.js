@@ -403,7 +403,19 @@ const buildDocumentFromRows = (rows, options = {}) => {
       return
     }
 
-    const dependencyShortNames = splitMultiValueCell(additionalDependencyText)
+    // Parse dependency refs: "BRA" → {shortName:'BRA', progressLevel:1}, "BRA:2" → {shortName:'BRA', progressLevel:2}
+    const dependencyLevelRefs = splitMultiValueCell(additionalDependencyText)
+      .map((ref) => {
+        const colonIdx = ref.lastIndexOf(':')
+        if (colonIdx > 0) {
+          const sn = ref.slice(0, colonIdx).trim()
+          const pl = Number.parseInt(ref.slice(colonIdx + 1), 10)
+          return sn && Number.isInteger(pl) && pl >= 1 ? { shortName: sn, progressLevel: pl } : { shortName: ref.trim(), progressLevel: 1 }
+        }
+        return ref.trim() ? { shortName: ref.trim(), progressLevel: 1 } : null
+      })
+      .filter(Boolean)
+
     const scopeLabels = splitMultiValueCell(scopeText)
 
     const rowEntry = {
@@ -413,7 +425,7 @@ const buildDocumentFromRows = (rows, options = {}) => {
       level,
       segmentText,
       parentShortName,
-      dependencyShortNames,
+      dependencyLevelRefs,
       progressLevel,
       status,
       releaseNote,
@@ -432,7 +444,6 @@ const buildDocumentFromRows = (rows, options = {}) => {
         level,
         segmentText,
         parentShortName,
-        dependencyShortNames,
         rows: [rowEntry],
         firstOrder: rowOffset,
         effortSizeText,
@@ -458,12 +469,6 @@ const buildDocumentFromRows = (rows, options = {}) => {
     if (group.parentShortName !== parentShortName) {
       errors.push(`Knoten ${shortName} hat unterschiedliche Parent-Werte in den CSV-Zeilen.`)
     }
-
-    const groupedDependencies = [...group.dependencyShortNames].sort().join('|')
-    const nextDependencies = [...dependencyShortNames].sort().join('|')
-    if (groupedDependencies !== nextDependencies) {
-      errors.push(`Knoten ${shortName} hat unterschiedliche AdditionalDependency-Werte in den CSV-Zeilen.`)
-    }
   })
 
   for (const group of rowGroups.values()) {
@@ -484,9 +489,11 @@ const buildDocumentFromRows = (rows, options = {}) => {
   }
 
   for (const group of rowGroups.values()) {
-    for (const dependencyShortName of group.dependencyShortNames) {
-      if (!rowGroups.has(dependencyShortName)) {
-        errors.push(`Knoten ${group.shortName} verweist auf unbekannte AdditionalDependency ${dependencyShortName}.`)
+    for (const row of group.rows) {
+      for (const ref of row.dependencyLevelRefs ?? []) {
+        if (!rowGroups.has(ref.shortName)) {
+          errors.push(`Knoten ${group.shortName} verweist auf unbekannte AdditionalDependency ${ref.shortName}.`)
+        }
       }
     }
   }
@@ -555,6 +562,9 @@ const buildDocumentFromRows = (rows, options = {}) => {
         status: normalizeStatusKey(row.status),
         releaseNote: row.releaseNote,
         scopeIds,
+        additionalDependencyLevelIds: [],
+        // store raw refs temporarily; resolved below after all nodes are built
+        _dependencyLevelRefs: row.dependencyLevelRefs ?? [],
       }
     })
 
@@ -566,7 +576,6 @@ const buildDocumentFromRows = (rows, options = {}) => {
       levels,
       ebene: group.level,
       segmentId,
-      additionalDependencyIds: [],
       additionalDependentIds: [],
       children: [],
       effort: normalizeEffort({
@@ -603,35 +612,48 @@ const buildDocumentFromRows = (rows, options = {}) => {
     })
   }
 
+  // Build shortName:progressLevelIndex → levelId map for ref resolution
+  const levelIdByRef = new Map()
+  for (const node of nodeByShortName.values()) {
+    for (let i = 0; i < node.levels.length; i++) {
+      const level = node.levels[i]
+      const key = `${node.shortName}:${i + 1}`
+      levelIdByRef.set(key, level.id)
+    }
+  }
+
   const incomingByShortName = new Map([...rowGroups.keys()].map((shortName) => [shortName, []]))
 
+  // Resolve per-level dependency refs → level IDs
   for (const group of orderedGroupEntries) {
     const node = nodeByShortName.get(group.shortName)
-    if (!node) {
-      continue
-    }
+    if (!node) continue
 
-    const outgoingShortNames = []
-    const seenOutgoing = new Set()
+    for (const level of node.levels) {
+      const rawRefs = level._dependencyLevelRefs ?? []
+      const resolvedLevelIds = []
+      const seenRefs = new Set()
 
-    for (const dependencyShortName of group.dependencyShortNames) {
-      if (seenOutgoing.has(dependencyShortName)) {
-        continue
+      for (const ref of rawRefs) {
+        const refKey = `${ref.shortName}:${ref.progressLevel}`
+        if (seenRefs.has(refKey)) continue
+
+        if (ref.shortName === group.shortName) {
+          errors.push(`Knoten ${group.shortName} hat unzulaessige AdditionalDependency ${ref.shortName} (auf sich selbst).`)
+          continue
+        }
+
+        const targetLevelId = levelIdByRef.get(refKey)
+        if (targetLevelId) {
+          seenRefs.add(refKey)
+          resolvedLevelIds.push(targetLevelId)
+          incomingByShortName.get(ref.shortName)?.push(group.shortName)
+        }
       }
 
-      if (dependencyShortName === group.shortName) {
-        errors.push(`Knoten ${group.shortName} hat unzulaessige AdditionalDependency ${dependencyShortName} (auf sich selbst).`)
-        continue
-      }
-
-      seenOutgoing.add(dependencyShortName)
-      outgoingShortNames.push(dependencyShortName)
-      incomingByShortName.get(dependencyShortName)?.push(group.shortName)
+      level.additionalDependencyLevelIds = resolvedLevelIds
+      delete level._dependencyLevelRefs
     }
-
-    node.additionalDependencyIds = outgoingShortNames
-      .map((shortName) => nodeByShortName.get(shortName)?.id)
-      .filter(Boolean)
   }
 
   for (const node of nodeByShortName.values()) {
@@ -690,19 +712,21 @@ export const serializeDocumentToCsv = (document) => {
   const flattenedNodes = collectTreeNodes(document?.children ?? [])
   const nodeById = new Map(flattenedNodes.map((entry) => [entry.node?.id, entry.node]))
 
+  // Build levelId → { shortName, progressLevel } for dep serialization
+  const levelRefById = new Map()
+  for (const { node } of flattenedNodes) {
+    if (!node) continue
+    const levels = ensureNodeLevels(node)
+    levels.forEach((level, index) => {
+      levelRefById.set(level.id, { shortName: String(node.shortName ?? '').trim(), progressLevel: index + 1 })
+    })
+  }
+
   const rows = [CSV_EXPORT_HEADERS]
 
   const visit = (node, parentShortName = '') => {
     const levels = ensureNodeLevels(node)
     const segmentLabel = segmentLabelById.get(node.segmentId ?? null) ?? ''
-    const additionalDependencyShortNames = Array.isArray(node.additionalDependencyIds)
-      ? node.additionalDependencyIds
-          .map((dependencyId) => {
-            const targetNode = nodeById.get(dependencyId)
-            return targetNode ? String(targetNode.shortName ?? '').trim() : ''
-          })
-          .filter(Boolean)
-      : []
 
     levels.forEach((level, index) => {
       const scopeLabels = Array.isArray(level.scopeIds)
@@ -711,6 +735,11 @@ export const serializeDocumentToCsv = (document) => {
             .filter(Boolean)
         : []
 
+      const additionalDependencyRefs = (level.additionalDependencyLevelIds ?? [])
+        .map((levelId) => levelRefById.get(levelId))
+        .filter(Boolean)
+        .map(({ shortName, progressLevel }) => (progressLevel === 1 ? shortName : `${shortName}:${progressLevel}`))
+
       rows.push([
         String(node.shortName ?? '').trim(),
         String(node.label ?? '').trim(),
@@ -718,7 +747,7 @@ export const serializeDocumentToCsv = (document) => {
         String(node.ebene ?? index + 1),
         segmentLabel,
         parentShortName,
-        additionalDependencyShortNames.join(', '),
+        additionalDependencyRefs.join(', '),
         String(index + 1),
         normalizeStatusKey(level.status ?? node.status),
         String(level.releaseNote ?? ''),

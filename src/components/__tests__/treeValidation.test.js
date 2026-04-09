@@ -9,7 +9,7 @@ import {
   getAdditionalDependencyOptionsForNode,
 } from '../utils/treeValidation'
 import { TREE_CONFIG } from '../config'
-import { createSimpleTree, createCrossSegmentTree, findNodeInTree, SEGMENT_FRONTEND, SEGMENT_BACKEND } from './testUtils'
+import { createSimpleTree, createCrossSegmentTree, findNodeInTree, SEGMENT_FRONTEND, SEGMENT_BACKEND, LEVEL_CHILD_REACT_1, LEVEL_CHILD_DB_1 } from './testUtils'
 
 describe('treeValidation', () => {
   describe('validateSkillTree', () => {
@@ -516,7 +516,14 @@ describe('treeValidation', () => {
           ...node,
           children: node.children.map((child) => (
             child.id === 'child-react'
-              ? { ...child, additionalDependencyIds: ['child-db'] }
+              ? {
+                ...child,
+                levels: (child.levels ?? []).map((l) =>
+                  l.id === LEVEL_CHILD_REACT_1
+                    ? { ...l, additionalDependencyLevelIds: [LEVEL_CHILD_DB_1] }
+                    : l
+                ),
+              }
               : child
           )),
         })),

@@ -101,4 +101,35 @@ describe('documentPersistence', () => {
   it('throws helpful error when JSON text is not importable', () => {
     expect(() => readDocumentFromJsonText('invalid')).toThrow(/gueltiges JSON/)
   })
+
+  it('migrates schemaVersion 1 document by moving additionalDependencyIds to level', () => {
+    const v1doc = {
+      segments: [{ id: 'seg-1', label: 'S' }],
+      children: [
+        {
+          id: 'node-alpha',
+          label: 'Alpha',
+          additionalDependencyIds: ['node-beta'],
+          levels: [{ id: 'lvl-alpha-1', status: 'later', releaseNote: '' }],
+          children: [],
+        },
+        {
+          id: 'node-beta',
+          label: 'Beta',
+          additionalDependencyIds: [],
+          levels: [{ id: 'lvl-beta-1', status: 'done', releaseNote: '' }],
+          children: [],
+        },
+      ],
+    }
+
+    const v1payload = JSON.stringify({ schemaVersion: 1, document: v1doc })
+    const parsed = parseDocumentPayload(v1payload)
+
+    expect(parsed.ok).toBe(true)
+
+    const migratedAlpha = parsed.value.children.find((c) => c.id === 'node-alpha')
+    expect(migratedAlpha.additionalDependencyIds).toBeUndefined()
+    expect(migratedAlpha.levels[0].additionalDependencyLevelIds).toContain('lvl-beta-1')
+  })
 })

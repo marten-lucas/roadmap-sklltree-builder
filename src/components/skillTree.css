@@ -278,36 +278,64 @@
     pointer-events: all;
 }
 
-.skill-tree-portal__halo {
-    opacity: 0.34;
-    filter: blur(0.3px);
-    animation: skill-portal-pulse 4.8s ease-in-out infinite;
-}
-
-.skill-tree-portal__halo--source {
-    fill: rgba(56, 189, 248, 0.2);
-}
-
-.skill-tree-portal__halo--target {
-    fill: rgba(250, 204, 21, 0.2);
-}
-
-.skill-tree-portal__chevron {
+/* ── Ring (thin, contains label) ── */
+.skill-tree-portal__ring {
     fill: none;
-    stroke-width: 2.8;
+    stroke-width: 1.5;
+    transition: stroke-opacity 140ms ease, transform 140ms ease;
+}
+
+.skill-tree-portal__ring--source {
+    stroke: rgba(56, 189, 248, 0.85);
+    filter: drop-shadow(0 0 3px rgba(56, 189, 248, 0.45));
+}
+
+.skill-tree-portal__ring--target {
+    stroke: rgba(250, 204, 21, 0.85);
+    filter: drop-shadow(0 0 3px rgba(250, 204, 21, 0.38));
+}
+
+/* ── Cup (thick, larger, direction indicator) ── */
+.skill-tree-portal__cup {
+    fill: none;
+    stroke-width: 3.5;
     stroke-linecap: round;
-    stroke-linejoin: round;
-    transition: transform 140ms ease, stroke-width 140ms ease, opacity 140ms ease;
+    transition: stroke-opacity 140ms ease, transform 140ms ease;
 }
 
-.skill-tree-portal__chevron--source {
-    stroke: rgba(56, 189, 248, 0.95);
-    filter: drop-shadow(0 0 3px rgba(56, 189, 248, 0.42));
+.skill-tree-portal__cup--source {
+    stroke: rgba(56, 189, 248, 0.9);
+    filter: drop-shadow(0 0 3px rgba(56, 189, 248, 0.5));
 }
 
-.skill-tree-portal__chevron--target {
+.skill-tree-portal__cup--target {
     stroke: rgba(250, 204, 21, 0.95);
     filter: drop-shadow(0 0 3px rgba(250, 204, 21, 0.42));
+}
+
+/* hover */
+.skill-tree-portal--interactive:hover .skill-tree-portal__ring {
+    stroke-opacity: 1;
+    transform: scale(1.08);
+}
+
+.skill-tree-portal--interactive:hover .skill-tree-portal__cup {
+    stroke-opacity: 1;
+    transform: scale(1.08);
+}
+
+/* selected */
+.skill-tree-portal--selected .skill-tree-portal__ring {
+    stroke-width: 3.5;
+    filter: drop-shadow(0 0 5px rgba(56, 189, 248, 0.7));
+}
+
+.skill-tree-portal--selected .skill-tree-portal__ring--target {
+    filter: drop-shadow(0 0 5px rgba(250, 204, 21, 0.6));
+}
+
+.skill-tree-portal--selected .skill-tree-portal__cup {
+    stroke-width: 4;
 }
 
 .skill-tree-portal__label {
@@ -323,39 +351,14 @@
     cursor: inherit;
 }
 
-.skill-tree-portal__halo,
-.skill-tree-portal__chevron {
+.skill-tree-portal__label,
+.skill-tree-portal__ring,
+.skill-tree-portal__cup {
     pointer-events: all;
-}
-
-.skill-tree-portal--interactive:hover .skill-tree-portal__chevron {
-    transform: scale(1.06);
-}
-
-.skill-tree-portal--selected .skill-tree-portal__halo {
-    opacity: 0.54;
-}
-
-.skill-tree-portal--selected .skill-tree-portal__chevron {
-    stroke-width: 3.4;
 }
 
 .skill-tree-portal--selected .skill-tree-portal__label {
     fill: #ffffff;
-}
-
-@keyframes skill-portal-pulse {
-
-    0%,
-    100% {
-        opacity: 0.22;
-        transform: scale(0.99);
-    }
-
-    50% {
-        opacity: 0.32;
-        transform: scale(1.01);
-    }
 }
 
 .skill-panel {
@@ -488,6 +491,16 @@
 .skill-panel__tab-scroll--level {
     flex: 1;
     overflow-y: auto;
+    min-height: 0;
+    padding: 1.25rem 1.5rem;
+    display: flex;
+    flex-direction: column;
+}
+
+/* Variant where the outer area does NOT scroll — inner fill child expands instead */
+.skill-panel__tab-scroll--fill {
+    flex: 1;
+    overflow: hidden;
     min-height: 0;
     padding: 1.25rem 1.5rem;
     display: flex;

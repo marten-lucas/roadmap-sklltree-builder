@@ -1,4 +1,4 @@
-export const DOCUMENT_SCHEMA_VERSION = 1
+export const DOCUMENT_SCHEMA_VERSION = 2
 export const LOCAL_STORAGE_DOCUMENT_KEY = 'roadmap-skilltree.document.v1'
 const LOCAL_STORAGE_TRACE_KEYS = [
   'roadmap-skilltree.e2e.modelTrace',
@@ -24,6 +24,58 @@ export const buildPersistedDocumentPayload = (document) => ({
 export const serializeDocumentPayload = (document, options = {}) => {
   const { pretty = false } = options
   return JSON.stringify(buildPersistedDocumentPayload(document), null, pretty ? 2 : 0)
+}
+
+/**
+ * Migrates a schema-version-1 document to version 2.
+ * v1: node.additionalDependencyIds = [nodeId, ...]
+ * v2: level.additionalDependencyLevelIds = [levelId, ...]  (per level)
+ * Migration maps each outgoing node-level dep to the first level of the target node.
+ */
+const migrateV1ToV2 = (document) => {
+  if (!document || !Array.isArray(document.children)) {
+    return document
+  }
+
+  // Build nodeId → firstLevelId map
+  const nodeFirstLevelId = new Map()
+  const collectLevels = (node) => {
+    const firstLevel = Array.isArray(node.levels) && node.levels.length > 0 ? node.levels[0] : null
+    if (firstLevel?.id) {
+      nodeFirstLevelId.set(node.id, firstLevel.id)
+    }
+    for (const child of node.children ?? []) {
+      collectLevels(child)
+    }
+  }
+  for (const root of document.children) {
+    collectLevels(root)
+  }
+
+  const migrateNode = (node) => {
+    const oldDeps = Array.isArray(node.additionalDependencyIds) ? node.additionalDependencyIds : []
+    const targetLevelIds = oldDeps.map((targetNodeId) => nodeFirstLevelId.get(targetNodeId)).filter(Boolean)
+
+    const migratedLevels = Array.isArray(node.levels)
+      ? node.levels.map((level, index) => ({
+        ...level,
+        additionalDependencyLevelIds: index === 0 ? targetLevelIds : (level.additionalDependencyLevelIds ?? []),
+      }))
+      : node.levels
+
+    const { additionalDependencyIds: _removed, ...rest } = node
+
+    return {
+      ...rest,
+      levels: migratedLevels,
+      children: (node.children ?? []).map(migrateNode),
+    }
+  }
+
+  return {
+    ...document,
+    children: document.children.map(migrateNode),
+  }
 }
 
 const isQuotaExceededError = (err) => {
@@ -75,14 +127,16 @@ export const parseDocumentPayload = (rawValue) => {
     }
   }
 
-  if (parsed.schemaVersion !== DOCUMENT_SCHEMA_VERSION) {
+  if (parsed.schemaVersion !== DOCUMENT_SCHEMA_VERSION && parsed.schemaVersion !== 1) {
     return {
       ok: false,
       error: `Nicht unterstuetzte schemaVersion: ${String(parsed.schemaVersion)}`,
     }
   }
 
-  if (!isValidDocumentShape(parsed.document)) {
+  const documentToValidate = parsed.schemaVersion === 1 ? migrateV1ToV2(parsed.document) : parsed.document
+
+  if (!isValidDocumentShape(documentToValidate)) {
     return {
       ok: false,
       error: 'Dokumentdaten sind unvollstaendig (segments/children fehlen).',
@@ -91,7 +145,7 @@ export const parseDocumentPayload = (rawValue) => {
 
   return {
     ok: true,
-    value: parsed.document,
+    value: documentToValidate,
   }
 }
 

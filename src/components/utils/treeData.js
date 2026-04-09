@@ -28,6 +28,7 @@ const toNodeLevel = (levelLike, fallbackLabel = 'Level 1') => ({
   status: normalizeStatusKey(levelLike?.status ?? DEFAULT_NODE_STATUS),
   releaseNote: levelLike?.releaseNote ?? '',
   scopeIds: uniqueStringArray(levelLike?.scopeIds),
+  additionalDependencyLevelIds: uniqueStringArray(levelLike?.additionalDependencyLevelIds),
 })
 
 const shortNameFromLabel = (label) => {
@@ -302,15 +303,45 @@ const buildAncestorsByNodeId = (parentByNodeId) => {
   return ancestorsByNodeId
 }
 
+// Build a map from level ID → the node ID that owns that level.
+export const buildLevelIdToNodeIdMap = (tree) => {
+  const map = new Map()
+  const queue = [...(tree?.children ?? [])]
+
+  while (queue.length > 0) {
+    const node = queue.shift()
+    for (const level of node.levels ?? []) {
+      if (level?.id) {
+        map.set(level.id, node.id)
+      }
+    }
+    queue.push(...(node.children ?? []))
+  }
+
+  return map
+}
+
+// Build node→node dependency graph by aggregating level.additionalDependencyLevelIds.
 const buildAdditionalDependencyGraphByNodeId = (tree) => {
   const nodeIds = collectNodeIds(tree)
+  const levelIdToNodeId = buildLevelIdToNodeIdMap(tree)
   const outgoingByNodeId = new Map([...nodeIds].map((id) => [id, []]))
   const queue = [...(tree?.children ?? [])]
 
   while (queue.length > 0) {
     const current = queue.shift()
-    const outgoingIds = uniqueStringArray(current.additionalDependencyIds).filter((targetId) => nodeIds.has(targetId))
-    outgoingByNodeId.set(current.id, outgoingIds)
+    const outgoingNodeIds = new Set()
+
+    for (const level of current.levels ?? []) {
+      for (const targetLevelId of (level.additionalDependencyLevelIds ?? [])) {
+        const targetNodeId = levelIdToNodeId.get(targetLevelId)
+        if (targetNodeId && nodeIds.has(targetNodeId)) {
+          outgoingNodeIds.add(targetNodeId)
+        }
+      }
+    }
+
+    outgoingByNodeId.set(current.id, [...outgoingNodeIds])
     queue.push(...(current.children ?? []))
   }
 
@@ -409,10 +440,12 @@ const normalizeAdditionalDependencies = (tree) => {
   }
 
   const nodeIds = collectNodeIds(tree)
+  const levelIdToNodeId = buildLevelIdToNodeIdMap(tree)
   const parentByNodeId = buildParentByNodeId(tree)
   const descendantsByNodeId = buildDescendantsByNodeId(tree)
   const ancestorsByNodeId = buildAncestorsByNodeId(parentByNodeId)
   const outgoingByNodeId = buildAdditionalDependencyGraphByNodeId(tree)
+  // incomingByTargetId maps targetNodeId → [sourceNodeId]
   const incomingByTargetId = new Map([...nodeIds].map((id) => [id, []]))
 
   const normalizeNode = (node) => {
@@ -431,29 +464,36 @@ const normalizeAdditionalDependencies = (tree) => {
       }
     }
 
-    const normalizedOutgoing = uniqueStringArray(node.additionalDependencyIds).filter((targetId) => {
-      if (!nodeIds.has(targetId) || targetId === ownId) {
-        return false
-      }
+    // Normalize each level's additionalDependencyLevelIds
+    const normalizedLevels = (node.levels ?? []).map((level) => {
+      const normalizedLevelDeps = uniqueStringArray(level.additionalDependencyLevelIds ?? []).filter((targetLevelId) => {
+        const targetNodeId = levelIdToNodeId.get(targetLevelId)
+        if (!targetNodeId) return false
+        if (!nodeIds.has(targetNodeId) || targetNodeId === ownId) return false
+        if (ancestors.has(targetNodeId) || descendants.has(targetNodeId) || siblingIds.has(targetNodeId)) return false
+        if (hasReachableAdditionalDependencyPath(outgoingByNodeId, targetNodeId, ownId)) return false
+        return true
+      })
 
-      if (ancestors.has(targetId) || descendants.has(targetId) || siblingIds.has(targetId)) {
-        return false
-      }
-
-      if (hasReachableAdditionalDependencyPath(outgoingByNodeId, targetId, ownId)) {
-        return false
-      }
-
-      return true
+      return { ...level, additionalDependencyLevelIds: normalizedLevelDeps }
     })
 
-    for (const targetId of normalizedOutgoing) {
-      incomingByTargetId.get(targetId)?.push(ownId)
+    // Aggregate outgoing node IDs from all levels for incomingByTargetId tracking
+    const outgoingNodeIds = new Set()
+    for (const level of normalizedLevels) {
+      for (const targetLevelId of level.additionalDependencyLevelIds) {
+        const targetNodeId = levelIdToNodeId.get(targetLevelId)
+        if (targetNodeId) outgoingNodeIds.add(targetNodeId)
+      }
+    }
+
+    for (const targetNodeId of outgoingNodeIds) {
+      incomingByTargetId.get(targetNodeId)?.push(ownId)
     }
 
     return {
       ...node,
-      additionalDependencyIds: normalizedOutgoing,
+      levels: normalizedLevels,
       additionalDependentIds: [],
       children: (node.children ?? []).map(normalizeNode),
     }
@@ -590,20 +630,50 @@ export const getNodeAdditionalDependencies = (treeData, id) => {
     }
   }
 
+  // Aggregate outgoing node IDs from all levels
+  const levelIdToNodeId = buildLevelIdToNodeIdMap(treeData)
+  const outgoingNodeIds = new Set()
+  for (const level of node.levels ?? []) {
+    for (const targetLevelId of (level.additionalDependencyLevelIds ?? [])) {
+      const targetNodeId = levelIdToNodeId.get(targetLevelId)
+      if (targetNodeId) outgoingNodeIds.add(targetNodeId)
+    }
+  }
+
   return {
-    outgoingIds: uniqueStringArray(node.additionalDependencyIds),
+    outgoingIds: [...outgoingNodeIds],
     incomingIds: uniqueStringArray(node.additionalDependentIds),
   }
 }
 
-export const setNodeAdditionalDependencies = (treeData, sourceNodeId, nextTargetIds) => {
-  if (!sourceNodeId || !findNodeById(treeData, sourceNodeId)) {
+export const getLevelAdditionalDependencies = (treeData, nodeId, levelId) => {
+  const node = findNodeById(treeData, nodeId)
+  if (!node) return { levelIds: [] }
+  const level = (node.levels ?? []).find((l) => l.id === levelId)
+  return { levelIds: uniqueStringArray(level?.additionalDependencyLevelIds) }
+}
+
+export const setLevelAdditionalDependencies = (treeData, sourceNodeId, levelId, nextTargetLevelIds) => {
+  if (!sourceNodeId || !levelId || !findNodeById(treeData, sourceNodeId)) {
     return treeData
   }
 
-  const nextTree = updateNodeById(treeData, sourceNodeId, () => ({
-    additionalDependencyIds: uniqueStringArray(nextTargetIds).filter((targetId) => !wouldCreateAdditionalDependencyCycle(treeData, sourceNodeId, targetId)),
-  }))
+  const levelIdToNodeId = buildLevelIdToNodeIdMap(treeData)
+  const filteredLevelIds = uniqueStringArray(nextTargetLevelIds).filter((targetLevelId) => {
+    const targetNodeId = levelIdToNodeId.get(targetLevelId)
+    if (!targetNodeId) return false
+    return !wouldCreateAdditionalDependencyCycle(treeData, sourceNodeId, targetNodeId)
+  })
+
+  const nextTree = updateNodeById(treeData, sourceNodeId, (node) => {
+    const levels = ensureNodeLevels(node)
+    return {
+      levels: levels.map((level) => {
+        if (level.id !== levelId) return level
+        return { ...level, additionalDependencyLevelIds: filteredLevelIds }
+      }),
+    }
+  })
 
   return withNormalizedDependencies(nextTree)
 }
@@ -825,11 +895,11 @@ const createNewNode = (level, segmentId = null) => ({
       status: DEFAULT_NODE_STATUS,
       releaseNote: '',
       scopeIds: [],
+      additionalDependencyLevelIds: [],
     },
   ],
   ebene: level,
   segmentId,
-  additionalDependencyIds: [],
   additionalDependentIds: [],
   children: [],
   effort: createDefaultEffort(),

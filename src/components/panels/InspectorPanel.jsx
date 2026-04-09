@@ -118,12 +118,11 @@ export function InspectorPanel({
   segmentOptions,
   parentOptions,
   selectedParentId,
-  additionalDependencyOptions,
-  selectedAdditionalDependencyIds,
+  levelDependencyOptions,
+  onLevelAdditionalDependenciesChange,
   incomingDependencyLabels,
   validationMessage,
   onParentChange,
-  onAdditionalDependenciesChange,
   onSegmentChange,
   onDeleteNodeOnly,
   onDeleteNodeBranch,
@@ -380,16 +379,6 @@ export function InspectorPanel({
               comboboxProps={{ withinPortal: true, zIndex: 450 }}
             />
 
-            <MultiSelect
-              label="Additional Dependencies (für alle)"
-              data={additionalDependencyData.map((entry) => ({ value: entry.id, label: entry.shortName ? `${entry.label} (${entry.shortName})` : entry.label }))}
-              onChange={(values) => onAdditionalDependenciesChange(values)}
-              searchable
-              clearable
-              classNames={{ input: 'mantine-dark-input', label: 'mantine-dark-label', dropdown: 'mantine-dark-dropdown', option: 'mantine-dark-option', pill: 'mantine-dark-pill' }}
-              comboboxProps={{ withinPortal: true, zIndex: 450 }}
-            />
-
             <Select
               label="Status (für alle)"
               data={STATUS_OPTIONS.map((option) => ({ value: option.value, label: option.label }))}
@@ -431,8 +420,9 @@ export function InspectorPanel({
       status: normalizeStatusKey(level.status),
       releaseNote: level.releaseNote ?? '',
       scopeIds: Array.isArray(level.scopeIds) ? level.scopeIds : [],
+      additionalDependencyLevelIds: Array.isArray(level.additionalDependencyLevelIds) ? level.additionalDependencyLevelIds : [],
     }))
-    : [{ id: 'level-1', label: 'Level 1', status: normalizeStatusKey(selectedNode?.status ?? 'later'), releaseNote: '', scopeIds: [] }]
+    : [{ id: 'level-1', label: 'Level 1', status: normalizeStatusKey(selectedNode?.status ?? 'later'), releaseNote: '', scopeIds: [], additionalDependencyLevelIds: [] }]
 
   const activeProgressLevelId = selectedProgressLevelId ?? nodeLevels[0]?.id ?? 'level-1'
   const activeProgressLevel = nodeLevels.find((level) => level.id === activeProgressLevelId) ?? nodeLevels[0] ?? {
@@ -583,11 +573,6 @@ export function InspectorPanel({
     disabled: !option.isAllowed,
   }))
   const selectedParentKey = selectedParentId ?? '__root__'
-  const additionalDependencyData = (additionalDependencyOptions ?? []).map((option) => ({
-    value: option.id,
-    label: option.shortName ? `${option.label} (${option.shortName})` : option.label,
-    disabled: !option.isAllowed,
-  }))
 
   const [activeTab, setActiveTab] = useState('properties')
 
@@ -722,25 +707,6 @@ export function InspectorPanel({
                         label: 'mantine-dark-label',
                         dropdown: 'mantine-dark-dropdown',
                         option: 'mantine-dark-option',
-                      }}
-                      comboboxProps={{ withinPortal: true, zIndex: 450 }}
-                    />
-                  )}
-
-                  {additionalDependencyData.length > 0 && (
-                    <MultiSelect
-                      label="Additional Dependencies"
-                      data={additionalDependencyData}
-                      value={selectedAdditionalDependencyIds ?? []}
-                      onChange={onAdditionalDependenciesChange}
-                      searchable
-                      clearable
-                      classNames={{
-                        input: 'mantine-dark-input',
-                        label: 'mantine-dark-label',
-                        dropdown: 'mantine-dark-dropdown',
-                        option: 'mantine-dark-option',
-                        pill: 'mantine-dark-pill',
                       }}
                       comboboxProps={{ withinPortal: true, zIndex: 450 }}
                     />
@@ -982,6 +948,37 @@ export function InspectorPanel({
                     </div>
                   </div>
                 </Stack>
+
+                {(() => {
+                  const levelDepOpts = (levelDependencyOptions ?? {})[level.id] ?? []
+                  if (levelDepOpts.length === 0) return null
+                  return (
+                    <MultiSelect
+                      label="Additional Dependencies"
+                      data={(() => {
+                        const byGroup = new Map()
+                        for (const o of levelDepOpts) {
+                          const g = o.group ?? ''
+                          if (!byGroup.has(g)) byGroup.set(g, [])
+                          byGroup.get(g).push({ value: o.value, label: o.label })
+                        }
+                        return [...byGroup.entries()].map(([group, items]) => ({ group, items }))
+                      })()}
+                      value={level.additionalDependencyLevelIds}
+                      onChange={(values) => onLevelAdditionalDependenciesChange?.(level.id, values)}
+                      searchable
+                      clearable
+                      classNames={{
+                        input: 'mantine-dark-input',
+                        label: 'mantine-dark-label',
+                        dropdown: 'mantine-dark-dropdown',
+                        option: 'mantine-dark-option',
+                        pill: 'mantine-dark-pill',
+                      }}
+                      comboboxProps={{ withinPortal: true, zIndex: 450 }}
+                    />
+                  )
+                })()}
 
                 <div className="skill-panel__release-note-fill">
                   <MarkdownField

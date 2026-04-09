@@ -3,7 +3,9 @@ import { UNASSIGNED_SEGMENT_ID } from './layoutShared'
 import { solveSkillTreeLayout } from './layoutSolver'
 import {
   findNodeById,
+  getNodeAdditionalDependencies,
   getNodeLevelInfo,
+  ensureNodeLevels,
   updateNodeLevel,
   updateNodeSegment,
   wouldCreateAdditionalDependencyCycle,
@@ -387,7 +389,8 @@ export const getAdditionalDependencyOptionsForNode = (tree, nodeId) => {
     }
   }
 
-  const currentOutgoingIds = new Set(selectedNode.additionalDependencyIds ?? [])
+  const currentOutgoing = getNodeAdditionalDependencies(tree, nodeId)
+  const currentOutgoingIds = new Set(currentOutgoing.outgoingIds ?? [])
 
   return nodes
     .filter((node) => !blockedIds.has(node.id))
@@ -400,4 +403,79 @@ export const getAdditionalDependencyOptionsForNode = (tree, nodeId) => {
       reasons: [],
     }))
     .sort((left, right) => String(left.label).localeCompare(String(right.label)))
+}
+
+export const getAdditionalDependencyOptionsForLevel = (tree, nodeId, levelId) => {
+  if (!nodeId || !levelId) {
+    return []
+  }
+
+  const nodes = []
+  const parentByNodeId = new Map()
+  const queue = [...(tree.children ?? []).map((node) => ({ node, parentId: null }))]
+
+  while (queue.length > 0) {
+    const current = queue.shift()
+    nodes.push(current.node)
+    parentByNodeId.set(current.node.id, current.parentId)
+
+    for (const child of current.node.children ?? []) {
+      queue.push({ node: child, parentId: current.node.id })
+    }
+  }
+
+  const selectedNode = nodes.find((node) => node.id === nodeId)
+  if (!selectedNode) {
+    return []
+  }
+
+  const selectedLevel = ensureNodeLevels(selectedNode).find((l) => l.id === levelId)
+  const currentLevelIds = new Set(selectedLevel?.additionalDependencyLevelIds ?? [])
+
+  const blockedIds = new Set([nodeId])
+  const subtreeIds = getNodeSubtreeIds(tree, nodeId)
+  subtreeIds.forEach((id) => blockedIds.add(id))
+
+  let currentId = nodeId
+  while (parentByNodeId.has(currentId) && parentByNodeId.get(currentId) != null) {
+    const parentId = parentByNodeId.get(currentId)
+    blockedIds.add(parentId)
+    currentId = parentId
+  }
+
+  const directParentId = parentByNodeId.get(nodeId) ?? null
+  if (directParentId) {
+    const parentNode = nodes.find((node) => node.id === directParentId)
+    for (const sibling of parentNode?.children ?? []) {
+      if (sibling.id !== nodeId) {
+        blockedIds.add(sibling.id)
+      }
+    }
+  }
+
+  for (const node of nodes) {
+    if (wouldCreateAdditionalDependencyCycle(tree, nodeId, node.id)) {
+      blockedIds.add(node.id)
+    }
+  }
+
+  const options = []
+  for (const node of nodes) {
+    if (blockedIds.has(node.id)) continue
+    const levels = ensureNodeLevels(node)
+    const groupLabel = `${node.label} (${node.shortName})`
+    for (let i = 0; i < levels.length; i++) {
+      const level = levels[i]
+      options.push({
+        value: level.id,
+        label: `${node.label} (${node.shortName}) – L${i + 1}`,
+        group: groupLabel,
+        isCurrent: currentLevelIds.has(level.id),
+        isAllowed: true,
+        reasons: [],
+      })
+    }
+  }
+
+  return options.sort((a, b) => String(a.label).localeCompare(String(b.label)))
 }
