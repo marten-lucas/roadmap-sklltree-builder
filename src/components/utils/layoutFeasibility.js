@@ -30,11 +30,13 @@ export const analyzeSegmentLevelFeasibility = ({
   minimumArcGap,
 }) => {
   const boundaryBySegmentId = new Map(
-    orderedSegments.map((segment) => [
+    orderedSegments.map((segment, index) => [
       segment.id,
       {
         min: segment.slotMin,
         max: segment.slotMax,
+        isFirst: index === 0,
+        isLast: index === orderedSegments.length - 1,
       },
     ]),
   )
@@ -54,8 +56,15 @@ export const analyzeSegmentLevelFeasibility = ({
     const marginDeg = toDegrees(nodeBoundaryMarginPx / radius)
     const spanDeg = toDegrees(nodeAngularWidthPx / radius)
     const gapDeg = toDegrees(minimumArcGap / radius)
-    const leftCenter = boundary.min + marginDeg + spanDeg / 2
-    const rightCenter = boundary.max - marginDeg - spanDeg / 2
+    // At the open arc boundaries (first/last segment) there is no physical
+    // separator, so a small symbolic margin (1e-4°) is used instead of the
+    // full nodeBoundaryMarginPx. This lets nodes sit as close to the arc
+    // boundary as the packing model allows, keeping the opening gap < 120°.
+    const arcBoundaryMarginDeg = 1e-4; // Back to 1e-4, layoutSolver will handle the visual containment
+    const leftMargin = boundary.isFirst ? arcBoundaryMarginDeg : marginDeg
+    const rightMargin = boundary.isLast ? arcBoundaryMarginDeg : marginDeg
+    const leftCenter = boundary.min + leftMargin + spanDeg / 2
+    const rightCenter = boundary.max - rightMargin - spanDeg / 2
     const availableCenterSpan = Math.max(0, rightCenter - leftCenter)
     const centerGap = spanDeg + gapDeg
     const requiredCenterSpan = Math.max(0, (group.nodes.length - 1) * centerGap)

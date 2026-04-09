@@ -864,6 +864,7 @@ export const solveSkillTreeLayout = (data, config) => {
         totalSpread: rootSegmentSpread,
       })
       const slotCenterBySegmentId = new Map(rootSegmentSlots.map((slot) => [slot.id, slot.center]))
+      const rootSegmentSlotById = new Map(rootSegmentSlots.map((slot) => [slot.id, slot]))
 
       const groupItems = orderedSegmentIds.map((segmentId) => {
         const group = rootGroupsMap.get(segmentId) ?? { segmentId, nodes: [] }
@@ -910,15 +911,44 @@ export const solveSkillTreeLayout = (data, config) => {
 
       const offsets = computeOffsets(groupItems, distances)
 
+      const filledGroupItems = groupItems.filter((item) => item.group.nodes.length > 0)
+      const firstFilledItem = filledGroupItems[0] ?? null
+      const lastFilledItem = filledGroupItems[filledGroupItems.length - 1] ?? null
+
       groupItems.forEach((item, index) => {
         const slotCenter = slotCenterBySegmentId.get(item.group.segmentId) ?? centerAngle
         const packedCenter = centerAngle + offsets[index]
+        const slot = rootSegmentSlotById.get(item.group.segmentId)
 
         // Groups whose angular span is much smaller than their assigned slot
         // (e.g. two leaf-level nodes in a wide segment) drift far from the slot
-        // centre with a naive 50/50 blend. Scale the slot-centre weight up when
-        // the group occupies a small fraction of the slot so they stay centred.
-        const desiredCenter = item.group.nodes.length > 0 ? (slotCenter + packedCenter) / 2 : slotCenter
+        // centre with a naive 50/50 blend. For the outermost filled groups in a
+        // multi-segment tree, also check whether the default formula would leave
+        // the group too far from the arc boundary (which opens the top gap beyond
+        // 120°). If so, pin the group edge to the arc boundary instead.
+        const defaultDesiredCenter = item.group.nodes.length > 0 ? (slotCenter + packedCenter) / 2 : slotCenter
+        let desiredCenter = defaultDesiredCenter
+
+        if (
+          slot != null &&
+          filledGroupItems.length > 1 &&
+          item.group.nodes.length > 0 &&
+          item.span <= slot.max - slot.min
+        ) {
+                    if (item === firstFilledItem) {
+            const defaultLeftEdge = defaultDesiredCenter - item.span / 2
+            const leftGap = defaultLeftEdge - slot.min
+            if (leftGap > 0.1) {
+              desiredCenter = slot.min + item.span / 2 + 1e-3
+            }
+          } else if (item === lastFilledItem) {
+            const defaultRightEdge = defaultDesiredCenter + item.span / 2
+            const rightGap = slot.max - defaultRightEdge
+            if (rightGap > 0.1) {
+              desiredCenter = slot.max - item.span / 2 - 1e-3
+            }
+          }
+        }
 
         const delta = desiredCenter - item.center
 

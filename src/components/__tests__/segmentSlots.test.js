@@ -387,9 +387,11 @@ describe('Segment Slot Computation', () => {
       const result = calculateRadialSkillTree(tree, TREE_CONFIG)
 
       result.nodes.forEach((node) => {
-        // Angles should be within reasonable bounds
-        expect(node.angle).toBeGreaterThanOrEqual(-180)
-        expect(node.angle).toBeLessThanOrEqual(180)
+        // Angles should be within the arc bounds (centerAngle ± maxAngleSpread/2 = -90° ± 135°)
+        const arcMin = -90 - TREE_CONFIG.maxAngleSpread / 2  // -225°
+        const arcMax = -90 + TREE_CONFIG.maxAngleSpread / 2  // +45°
+        expect(node.angle).toBeGreaterThanOrEqual(arcMin - 1.5)
+        expect(node.angle).toBeLessThanOrEqual(arcMax + 1.5)
 
         // Radius should be positive
         expect(node.radius).toBeGreaterThan(0)
