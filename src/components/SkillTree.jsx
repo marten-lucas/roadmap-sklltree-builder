@@ -2194,7 +2194,7 @@ export function SkillTree() {
       const { positionX, positionY, scale } = transformApiRef.current.state
       const { minScale, maxScale } = VIEWPORT_DEFAULTS
       // Step grows with sqrt(scale): slow when zoomed out, fast when zoomed in
-      const adaptiveStep = 0.003 * Math.sqrt(scale)
+      const adaptiveStep = 0.0018 * Math.sqrt(scale)
       const delta = Math.min(Math.abs(e.deltaY), 200)
       const direction = e.deltaY < 0 ? 1 : -1
       const ratio = Math.exp(adaptiveStep * delta * direction)
@@ -2205,7 +2205,7 @@ export function SkillTree() {
       const cy = e.clientY - rect.top
       const newPositionX = cx - (cx - positionX) * (newScale / scale)
       const newPositionY = cy - (cy - positionY) * (newScale / scale)
-      transformApiRef.current.setTransform(newPositionX, newPositionY, newScale, 0)
+      transformApiRef.current.setTransform(newPositionX, newPositionY, newScale, 80)
     }
     el.addEventListener('wheel', onWheel, { passive: false })
     return () => el.removeEventListener('wheel', onWheel)

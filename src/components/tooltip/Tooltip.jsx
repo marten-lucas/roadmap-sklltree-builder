@@ -4,7 +4,7 @@ const DEFAULT_TRANSITION_PROPS = { transition: 'fade', duration: 120 }
 
 export function Tooltip({
   children,
-  withArrow = true,
+  withArrow = false,
   openDelay = 120,
   transitionProps = DEFAULT_TRANSITION_PROPS,
   ...props

@@ -3,7 +3,7 @@ import { SkillTreeNode } from '../nodes/SkillTreeNode'
 import { MarkdownTooltipContent, Tooltip } from '../tooltip'
 
 // ── Chevron helpers (Method 2: compound-path chevrons) ──────────────────────
-const CHEVRON_SPACING = 14
+const CHEVRON_SPACING = 7
 // Half-opening angle of the V. 25° keeps arm tips within the line's half-width
 // when arm length = line-width (verified: sin(25°) * lineW ≤ lineW/2 for all widths).
 const CHEVRON_HALF_OPEN = 25 * (Math.PI / 180)
@@ -423,24 +423,22 @@ export function SkillTreeCanvas({
                 {/* ring icon at spoke tip */}
                 <circle
                   className={`skill-tree-portal__ring skill-tree-portal__ring--${portal.type}`}
-                  r={portal.isMinimal ? 6 : 9}
+                  r={portal.isMinimal ? 6 : 14}
                   cx={extTipX}
                   cy={extTipY}
                 />
                 {/* invisible hit area (larger than ring for easy clicking) */}
                 <circle className="skill-tree-portal__hit" r="18" cx={extTipX} cy={extTipY} />
-                {/* label along the spoke */}
+                {/* label inside the circle at spoke tip */}
                 {!portal.isMinimal && (
                   <text
                     className="skill-tree-portal__label"
-                    x={mx}
-                    y={my}
-                    dy="-4"
+                    x={extTipX}
+                    y={extTipY}
                     textAnchor="middle"
-                    transform={`rotate(${readAngleDeg.toFixed(2)}, ${mx.toFixed(2)}, ${my.toFixed(2)})`}
+                    dominantBaseline="middle"
                   >
                     {labelName}
-                    {labelLevel && <tspan x={mx} dy="8">{labelLevel}</tspan>}
                   </text>
                 )}
               </g>
