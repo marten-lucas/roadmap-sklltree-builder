@@ -22,14 +22,27 @@ const isModelTraceEnabled = () => {
   }
 }
 
-const toNodeLevel = (levelLike, fallbackLabel = 'Level 1') => ({
-  id: levelLike?.id ?? generateUUID(),
-  label: levelLike?.label ?? fallbackLabel,
-  status: normalizeStatusKey(levelLike?.status ?? DEFAULT_NODE_STATUS),
-  releaseNote: levelLike?.releaseNote ?? '',
-  scopeIds: uniqueStringArray(levelLike?.scopeIds),
-  additionalDependencyLevelIds: uniqueStringArray(levelLike?.additionalDependencyLevelIds),
-})
+const toNodeLevel = (levelLike, fallbackLabel = 'Level 1') => {
+  // Build statuses map from existing statuses or from legacy status field
+  let statuses = {}
+  if (levelLike?.statuses && typeof levelLike.statuses === 'object' && !Array.isArray(levelLike.statuses)) {
+    for (const [rid, s] of Object.entries(levelLike.statuses)) {
+      statuses[rid] = normalizeStatusKey(s)
+    }
+  }
+  // Note: legacy levelLike.status is intentionally NOT migrated here —
+  // that migration belongs in documentPersistence.migrateV2ToV3.
+  return {
+    id: levelLike?.id ?? generateUUID(),
+    label: levelLike?.label ?? fallbackLabel,
+    statuses,
+    releaseNote: levelLike?.releaseNote ?? '',
+    scopeIds: uniqueStringArray(levelLike?.scopeIds),
+    additionalDependencyLevelIds: uniqueStringArray(levelLike?.additionalDependencyLevelIds),
+    effort: normalizeEffort(levelLike?.effort),
+    benefit: normalizeBenefit(levelLike?.benefit),
+  }
+}
 
 const shortNameFromLabel = (label) => {
   const text = String(label ?? '').trim()
@@ -537,6 +550,40 @@ export const ensureNodeLevels = (node) => {
   ]
 }
 
+export const buildHiddenNodeIdSet = (tree, releaseId = null) => {
+  const hiddenIds = new Set()
+
+  const isOwnHidden = (node) => {
+    const levels = Array.isArray(node?.levels) ? node.levels : []
+    if (levels.length > 0) {
+      return levels.every((level) => {
+        const st = releaseId
+          ? (level.statuses?.[releaseId] ?? 'later')
+          : (level.status ?? 'later')
+        return normalizeStatusKey(st) === 'hidden'
+      })
+    }
+    const fallback = releaseId ? 'later' : (node?.status ?? 'later')
+    return normalizeStatusKey(fallback) === 'hidden'
+  }
+
+  const walk = (node, parentHidden) => {
+    const nodeHidden = parentHidden || isOwnHidden(node)
+    if (nodeHidden) {
+      hiddenIds.add(node.id)
+    }
+    for (const child of node.children ?? []) {
+      walk(child, nodeHidden)
+    }
+  }
+
+  for (const child of tree?.children ?? []) {
+    walk(child, false)
+  }
+
+  return hiddenIds
+}
+
 export const findNodeById = (node, targetId) => {
   if (!node) {
     return null
@@ -601,24 +648,11 @@ const updateNodeById = (node, targetId, updater) => {
   return node
 }
 
-export const updateNodeData = (treeData, id, newLabel, newStatus) =>
-  withNormalizedDependencies(updateNodeById(treeData, id, (node) => {
-    const levels = ensureNodeLevels(node)
-    const nextStatus = newStatus ?? levels[0]?.status ?? DEFAULT_NODE_STATUS
-
-    return {
-      label: newLabel,
-      shortName: sanitizeShortName(node.shortName, newLabel),
-      status: nextStatus,
-      levels: [
-        {
-          ...levels[0],
-          status: nextStatus,
-        },
-        ...levels.slice(1),
-      ],
-    }
-  }))
+export const updateNodeData = (treeData, id, newLabel) =>
+  withNormalizedDependencies(updateNodeById(treeData, id, (node) => ({
+    label: newLabel,
+    shortName: sanitizeShortName(node.shortName, newLabel),
+  })))
 
 export const updateNodeShortName = (treeData, id, shortName) =>
   withNormalizedDependencies(updateNodeById(treeData, id, (node) => ({
@@ -682,7 +716,7 @@ export const setLevelAdditionalDependencies = (treeData, sourceNodeId, levelId, 
   return withNormalizedDependencies(nextTree)
 }
 
-export const updateNodeProgressLevel = (treeData, id, levelId, updates) => {
+export const updateNodeProgressLevel = (treeData, id, levelId, updates, releaseId = null) => {
   try {
     const node = findNodeById(treeData, id)
     const incoming = node ? (Array.isArray(node.levels) ? (node.levels.find((l) => l.id === levelId)?.scopeIds ?? []) : []) : []
@@ -698,10 +732,19 @@ export const updateNodeProgressLevel = (treeData, id, levelId, updates) => {
         return level
       }
 
+      // If `updates.status` is provided and `releaseId` is given, update statuses map
+      // instead of a (non-existent) flat status field.
+      let nextStatuses = level.statuses ?? {}
+      if (updates?.status !== undefined && releaseId) {
+        nextStatuses = { ...nextStatuses, [releaseId]: updates.status }
+      }
+
+      const { status: _statusIgnored, ...updatesRest } = updates ?? {}
+
       return {
         ...level,
-        ...updates,
-        status: updates?.status ?? level.status,
+        ...updatesRest,
+        statuses: nextStatuses,
         releaseNote: updates?.releaseNote ?? level.releaseNote ?? '',
         scopeIds: updates?.scopeIds !== undefined
           ? uniqueStringArray(updates.scopeIds)
@@ -709,10 +752,7 @@ export const updateNodeProgressLevel = (treeData, id, levelId, updates) => {
       }
     })
 
-    return {
-      levels: nextLevels,
-      status: nextLevels[0]?.status ?? DEFAULT_NODE_STATUS,
-    }
+    return { levels: nextLevels }
   }))
 
   try {
@@ -731,10 +771,10 @@ export const addNodeProgressLevel = (treeData, id, newLevelId) =>
     const levels = ensureNodeLevels(node)
     const nextIndex = levels.length + 1
     const nextLevel = toNodeLevel(
-        {
+      {
         id: newLevelId ?? generateUUID(),
         label: `Level ${nextIndex}`,
-        status: DEFAULT_NODE_STATUS,
+        statuses: {},
         releaseNote: '',
         scopeIds: [],
       },
@@ -770,7 +810,6 @@ export const removeNodeProgressLevel = (treeData, id, levelId) =>
 
     return {
       levels: nextLevels,
-      status: nextLevels[0].status,
     }
   }))
 
@@ -891,15 +930,16 @@ const createNewNode = (level, segmentId = null) => ({
   id: generateUUID(),
   label: DEFAULT_NODE_LABEL,
   shortName: shortNameFromLabel(DEFAULT_NODE_LABEL),
-  status: DEFAULT_NODE_STATUS,
   levels: [
     {
       id: generateUUID(),
       label: 'Level 1',
-      status: DEFAULT_NODE_STATUS,
+      statuses: {},
       releaseNote: '',
       scopeIds: [],
       additionalDependencyLevelIds: [],
+      effort: createDefaultEffort(),
+      benefit: createDefaultBenefit(),
     },
   ],
   ebene: level,

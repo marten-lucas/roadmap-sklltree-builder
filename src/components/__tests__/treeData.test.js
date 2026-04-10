@@ -46,31 +46,29 @@ describe('treeData', () => {
   })
 
   describe('updateNodeData', () => {
-    it('should update label and status of a node', () => {
+    it('should update label of a node', () => {
       const tree = createSimpleTree()
-      const newTree = updateNodeData(tree, 'child-react', 'React.js', 'jetzt')
+      const newTree = updateNodeData(tree, 'child-react', 'React.js')
 
       expect(tree).not.toBe(newTree) // Should be a new object
       const updatedNode = findNodeById(newTree, 'child-react')
       expect(updatedNode.label).toBe('React.js')
-      expect(updatedNode.status).toBe('jetzt')
     })
 
     it('should not mutate original tree', () => {
       const tree = createSimpleTree()
       const originalLabel = findNodeById(tree, 'child-react').label
-      updateNodeData(tree, 'child-react', 'Changed', 'später')
+      updateNodeData(tree, 'child-react', 'Changed')
 
       expect(findNodeById(tree, 'child-react').label).toBe(originalLabel)
     })
 
     it('should update nested nodes', () => {
       const tree = createSimpleTree()
-      const newTree = updateNodeData(tree, 'child-db', 'PostgreSQL', 'fertig')
+      const newTree = updateNodeData(tree, 'child-db', 'PostgreSQL')
 
       const updatedNode = findNodeById(newTree, 'child-db')
       expect(updatedNode.label).toBe('PostgreSQL')
-      expect(updatedNode.status).toBe('fertig')
     })
   })
 

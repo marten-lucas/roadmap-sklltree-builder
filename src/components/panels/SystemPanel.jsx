@@ -1,7 +1,8 @@
 import { ActionIcon, Alert, Button, NumberInput, Paper, Stack, Tabs, Text, TextInput } from '@mantine/core'
-import { useRef } from 'react'
+import { useState, useRef } from 'react'
 import { MarkdownField } from './MarkdownField'
 import { DEFAULT_STORY_POINT_MAP, computeBudgetSummary } from '../utils/effortBenefit'
+import { addRelease, deleteRelease, updateRelease } from '../utils/releases'
 
 const T_SHIRT_KEYS = ['xs', 's', 'm', 'l', 'xl']
 
@@ -24,15 +25,54 @@ export function SystemPanel({
   onResetDefault,
   roadmapData,
   commitDocument,
+  selectedReleaseId,
+  onReleaseChange,
 }) {
   const fileInputRef = useRef(null)
+  const [newReleaseName, setNewReleaseName] = useState('')
+  const [newReleaseDialogOpen, setNewReleaseDialogOpen] = useState(false)
 
   if (!isOpen) {
     return null
   }
 
+  const releases = roadmapData.releases ?? []
+  const activeRelease = releases.find((r) => r.id === selectedReleaseId) ?? releases[0] ?? null
   const allNodes = collectAllNodes(roadmapData)
-  const summary = computeBudgetSummary(allNodes, roadmapData)
+
+  const handleUpdateRelease = (field, value) => {
+    if (!activeRelease) return
+    commitDocument({
+      ...roadmapData,
+      releases: updateRelease(releases, activeRelease.id, { [field]: value }),
+    })
+  }
+
+  const handleAddRelease = () => {
+    const name = newReleaseName.trim() || `Release ${releases.length + 1}`
+    const { releases: nextReleases, newReleaseId } = addRelease(releases, name)
+    commitDocument({ ...roadmapData, releases: nextReleases })
+    onReleaseChange?.(newReleaseId)
+    setNewReleaseName('')
+    setNewReleaseDialogOpen(false)
+  }
+
+  const handleDeleteRelease = () => {
+    if (!activeRelease || releases.length <= 1) return
+    const nextReleases = deleteRelease(releases, activeRelease.id)
+    commitDocument({ ...roadmapData, releases: nextReleases })
+    onReleaseChange?.(nextReleases[0]?.id ?? null)
+  }
+
+  const activeBudget = activeRelease?.storyPointBudget ?? null
+  const summary = activeRelease
+    ? computeBudgetSummary(allNodes, roadmapData.storyPointMap ?? DEFAULT_STORY_POINT_MAP, activeBudget)
+    : { total: 0, budget: null, isOverBudget: false }
+
+  // Release tab value: either the active release id or 'sp-skala' or 'icon'
+  const activeTabValue = releases.some((r) => r.id === selectedReleaseId)
+    ? (selectedReleaseId ?? releases[0]?.id)
+    : releases[0]?.id
 
   return (
     <Paper className="skill-panel skill-panel--icon" radius={0} shadow="none">
@@ -67,7 +107,10 @@ export function SystemPanel({
       {/* ── Tabs ── */}
       <div className="skill-panel__tab-container">
         <Tabs
-          defaultValue="release"
+          value={activeTabValue}
+          onChange={(val) => {
+            if (val && val !== '__add__') onReleaseChange?.(val)
+          }}
           classNames={{
             root: 'skill-panel__tabs-root',
             panel: 'skill-panel__tab-panel',
@@ -75,60 +118,136 @@ export function SystemPanel({
           }}
         >
           <Tabs.List>
-            <Tabs.Tab value="release">Release</Tabs.Tab>
-            <Tabs.Tab value="budget">Budget</Tabs.Tab>
+            {releases.map((release) => (
+              <Tabs.Tab key={release.id} value={release.id}>
+                {release.name || 'Release'}
+              </Tabs.Tab>
+            ))}
+            <Tabs.Tab value="__add__" onClick={(e) => { e.preventDefault(); setNewReleaseDialogOpen(true) }}>
+              +
+            </Tabs.Tab>
+            <Tabs.Tab value="sp-skala">SP-Skala</Tabs.Tab>
             <Tabs.Tab value="icon">Icon</Tabs.Tab>
           </Tabs.List>
 
-          {/* ── Release Tab ── */}
-          <Tabs.Panel value="release">
-            <div className="skill-panel__tab-scroll skill-panel__tab-scroll--fill">
-              <Stack gap="md" style={{ flexShrink: 0 }}>
-                <TextInput
-                  label="Systemname"
-                  value={roadmapData?.systemName ?? ''}
-                  onChange={(e) => commitDocument({ ...roadmapData, systemName: e.currentTarget.value })}
-                  classNames={{ input: 'mantine-dark-input', label: 'mantine-dark-label' }}
-                />
+          {/* ── Per-Release Tabs ── */}
+          {releases.map((release) => (
+            <Tabs.Panel key={release.id} value={release.id}>
+              <div className="skill-panel__tab-scroll skill-panel__tab-scroll--fill">
+                <Stack gap="md" style={{ flexShrink: 0 }}>
+                  <TextInput
+                    label="Systemname"
+                    value={roadmapData?.systemName ?? ''}
+                    onChange={(e) => commitDocument({ ...roadmapData, systemName: e.currentTarget.value })}
+                    classNames={{ input: 'mantine-dark-input', label: 'mantine-dark-label' }}
+                  />
 
-                <TextInput
-                  label="Release-Name"
-                  value={roadmapData?.release?.name ?? ''}
-                  onChange={(e) => commitDocument({ ...roadmapData, release: { ...(roadmapData.release || {}), name: e.currentTarget.value } })}
-                  classNames={{ input: 'mantine-dark-input', label: 'mantine-dark-label' }}
-                />
+                  <TextInput
+                    label="Release-Name"
+                    value={release.name ?? ''}
+                    onChange={(e) => commitDocument({
+                      ...roadmapData,
+                      releases: updateRelease(releases, release.id, { name: e.currentTarget.value }),
+                    })}
+                    classNames={{ input: 'mantine-dark-input', label: 'mantine-dark-label' }}
+                  />
 
-                <TextInput
-                  label="Motto"
-                  value={roadmapData?.release?.motto ?? ''}
-                  onChange={(e) => commitDocument({ ...roadmapData, release: { ...(roadmapData.release || {}), motto: e.currentTarget.value } })}
-                  classNames={{ input: 'mantine-dark-input', label: 'mantine-dark-label' }}
-                />
+                  <TextInput
+                    label="Motto"
+                    value={release.motto ?? ''}
+                    onChange={(e) => commitDocument({
+                      ...roadmapData,
+                      releases: updateRelease(releases, release.id, { motto: e.currentTarget.value }),
+                    })}
+                    classNames={{ input: 'mantine-dark-input', label: 'mantine-dark-label' }}
+                  />
 
-                <TextInput
-                  label="Release Date"
-                  placeholder="YYYY-MM-DD"
-                  type="date"
-                  value={roadmapData?.release?.date ?? ''}
-                  onChange={(e) => commitDocument({ ...roadmapData, release: { ...(roadmapData.release || {}), date: e.currentTarget.value } })}
-                  classNames={{ input: 'mantine-dark-input', label: 'mantine-dark-label' }}
-                />
-              </Stack>
+                  <TextInput
+                    label="Release Date"
+                    placeholder="YYYY-MM-DD"
+                    type="date"
+                    value={release.date ?? ''}
+                    onChange={(e) => commitDocument({
+                      ...roadmapData,
+                      releases: updateRelease(releases, release.id, { date: e.currentTarget.value }),
+                    })}
+                    classNames={{ input: 'mantine-dark-input', label: 'mantine-dark-label' }}
+                  />
 
-              <div className="skill-panel__release-note-fill">
-                <MarkdownField
-                  fill
-                  label="Introduction"
-                  value={roadmapData?.release?.introduction ?? ''}
-                  onChange={(nextValue) => commitDocument({ ...roadmapData, release: { ...(roadmapData.release || {}), introduction: nextValue } })}
-                  minRows={4}
-                />
+                  <NumberInput
+                    label="Verfügbare Story Points (Budget)"
+                    placeholder="z.B. 40"
+                    value={release.storyPointBudget ?? ''}
+                    onChange={(val) => commitDocument({
+                      ...roadmapData,
+                      releases: updateRelease(releases, release.id, { storyPointBudget: val === '' ? null : Number(val) }),
+                    })}
+                    min={0}
+                    allowDecimal={false}
+                    classNames={{ input: 'mantine-dark-input', label: 'mantine-dark-label' }}
+                  />
+
+                  {release.id === activeRelease?.id && (
+                    <Alert color={summary.isOverBudget ? 'red' : 'teal'} variant="light">
+                      {summary.budget != null
+                        ? `Verbraucht: ${summary.total} / ${summary.budget} SP${summary.isOverBudget ? ' ⚠ Budget überschritten!' : ''}`
+                        : `Verbraucht: ${summary.total} SP (kein Budget gesetzt)`}
+                    </Alert>
+                  )}
+                </Stack>
+
+                <div className="skill-panel__release-note-fill">
+                  <MarkdownField
+                    fill
+                    label="Introduction"
+                    value={release.introduction ?? ''}
+                    onChange={(nextValue) => commitDocument({
+                      ...roadmapData,
+                      releases: updateRelease(releases, release.id, { introduction: nextValue }),
+                    })}
+                    minRows={4}
+                  />
+                </div>
+
+                {releases.length > 1 && (
+                  <div style={{ padding: '8px 0 4px' }}>
+                    <Button
+                      variant="subtle"
+                      color="red"
+                      size="xs"
+                      onClick={handleDeleteRelease}
+                    >
+                      Release löschen
+                    </Button>
+                  </div>
+                )}
               </div>
-            </div>
-          </Tabs.Panel>
+            </Tabs.Panel>
+          ))}
 
-          {/* ── Budget Tab ── */}
-          <Tabs.Panel value="budget">
+          {/* ── New Release Dialog (inline) ── */}
+          {newReleaseDialogOpen && (
+            <div style={{ padding: '12px', borderTop: '1px solid #333' }}>
+              <Stack gap="xs">
+                <Text size="sm" fw={600}>Neues Release</Text>
+                <TextInput
+                  placeholder="Release-Name"
+                  value={newReleaseName}
+                  onChange={(e) => setNewReleaseName(e.currentTarget.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') handleAddRelease() }}
+                  classNames={{ input: 'mantine-dark-input' }}
+                  autoFocus
+                />
+                <Stack gap={4} direction="row">
+                  <Button size="xs" onClick={handleAddRelease}>Erstellen</Button>
+                  <Button size="xs" variant="default" onClick={() => { setNewReleaseDialogOpen(false); setNewReleaseName('') }}>Abbrechen</Button>
+                </Stack>
+              </Stack>
+            </div>
+          )}
+
+          {/* ── SP-Skala Tab ── */}
+          <Tabs.Panel value="sp-skala">
             <div className="skill-panel__tab-scroll">
               <Stack gap="md">
                 <Text size="xs" fw={600} tt="uppercase" c="dimmed" lts="0.1em">Story Points Konfiguration</Text>
@@ -150,24 +269,6 @@ export function SystemPanel({
                     />
                   ))}
                 </Stack>
-
-                <NumberInput
-                  label="Verfügbare Story Points (Budget)"
-                  placeholder="z.B. 40"
-                  value={roadmapData?.storyPointBudget ?? ''}
-                  onChange={(val) => {
-                    commitDocument({ ...roadmapData, storyPointBudget: val === '' ? null : Number(val) })
-                  }}
-                  min={0}
-                  allowDecimal={false}
-                  classNames={{ input: 'mantine-dark-input', label: 'mantine-dark-label' }}
-                />
-
-                <Alert color={summary.isOverBudget ? 'red' : 'teal'} variant="light">
-                  {summary.budget != null
-                    ? `Verbraucht: ${summary.total} / ${summary.budget} SP${summary.isOverBudget ? ' ⚠ Budget überschritten!' : ''}`
-                    : `Verbraucht: ${summary.total} SP (kein Budget gesetzt)`}
-                </Alert>
               </Stack>
             </div>
           </Tabs.Panel>

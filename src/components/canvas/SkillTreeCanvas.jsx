@@ -1,4 +1,5 @@
-import { TREE_CONFIG, normalizeStatusKey, STATUS_STYLES } from '../config'
+import { TREE_CONFIG, STATUS_STYLES } from '../config'
+import { getDisplayStatusKey } from '../utils/nodeStatus'
 import { SkillTreeNode } from '../nodes/SkillTreeNode'
 import { MarkdownTooltipContent, Tooltip } from '../tooltip'
 
@@ -146,6 +147,7 @@ export function SkillTreeCanvas({
   onSelectNode,
   onZoomToNode,
   storyPointMap,
+  releaseId = null,
 }) {
   return (
     <svg
@@ -285,7 +287,7 @@ export function SkillTreeCanvas({
 
         {filteredLinks.filter((link) => link.sourceDepth > 0 && link.linkKind !== 'ring').map((link) => {
           const childNode = link.targetId ? layoutNodesById.get(link.targetId) : null
-          const nodeStatus = childNode ? normalizeStatusKey(childNode.status) : 'later'
+          const nodeStatus = childNode ? getDisplayStatusKey(childNode, releaseId) : 'later'
           const statusStyle = STATUS_STYLES[nodeStatus] ?? STATUS_STYLES.later
 
           return (
@@ -310,7 +312,7 @@ export function SkillTreeCanvas({
             .filter((link) => link.sourceDepth > 0 && link.linkKind !== 'ring')
             .map((link) => {
               const childNode = link.targetId ? layoutNodesById.get(link.targetId) : null
-              const nodeStatus = childNode ? normalizeStatusKey(childNode.status) : 'later'
+              const nodeStatus = childNode ? getDisplayStatusKey(childNode, releaseId) : 'later'
               const statusStyle = STATUS_STYLES[nodeStatus] ?? STATUS_STYLES.later
               const lineWidth = parseFloat(statusStyle.linkStrokeWidth)
               const samples = sampleSvgPath(link.path, CHEVRON_SPACING)
@@ -464,6 +466,7 @@ export function SkillTreeCanvas({
               onSelect={onSelectNode}
               onZoomToNode={onZoomToNode}
               storyPointMap={storyPointMap}
+              releaseId={releaseId}
               canvasOriginX={canvas.origin.x}
               nodeDeps={depSummaryByNodeId.get(node.id) ?? null}
             />

@@ -1,4 +1,4 @@
-export const DOCUMENT_SCHEMA_VERSION = 2
+export const DOCUMENT_SCHEMA_VERSION = 3
 export const LOCAL_STORAGE_DOCUMENT_KEY = 'roadmap-skilltree.document.v1'
 const LOCAL_STORAGE_TRACE_KEYS = [
   'roadmap-skilltree.e2e.modelTrace',
@@ -78,6 +78,59 @@ const migrateV1ToV2 = (document) => {
   }
 }
 
+/**
+ * Migrates a schema-version-2 document to version 3.
+ * v2: single `release` object + `storyPointBudget` at document root, level.status = string
+ * v3: `releases` array where each release has its own storyPointBudget,
+ *     level.statuses = { [releaseId]: string } replaces level.status
+ */
+const migrateV2ToV3 = (document) => {
+  if (!document) return document
+
+  // Build first release from old release object
+  const oldRelease = (document.release && typeof document.release === 'object') ? document.release : {}
+  const firstReleaseId = oldRelease.id ?? `release-${Math.random().toString(36).slice(2, 10)}`
+  const firstReleaseName = (typeof oldRelease.name === 'string' && oldRelease.name.trim()) ? oldRelease.name.trim() : 'Release 1'
+
+  const firstRelease = {
+    id: firstReleaseId,
+    name: firstReleaseName,
+    motto: typeof oldRelease.motto === 'string' ? oldRelease.motto : '',
+    introduction: typeof oldRelease.introduction === 'string' ? oldRelease.introduction : '',
+    date: typeof oldRelease.date === 'string' ? oldRelease.date : '',
+    storyPointBudget: document.storyPointBudget != null ? Number(document.storyPointBudget) : null,
+  }
+
+  // Migrate every level: level.status → level.statuses[firstReleaseId]
+  const migrateNode = (node) => {
+    const migratedLevels = Array.isArray(node.levels)
+      ? node.levels.map((level) => {
+          // If already has statuses (partial migration), keep it; otherwise convert status
+          const existingStatuses = (level.statuses && typeof level.statuses === 'object') ? level.statuses : null
+          const statuses = existingStatuses ?? { [firstReleaseId]: level.status ?? 'later' }
+          const { status: _removedStatus, ...levelRest } = level
+          return { ...levelRest, statuses }
+        })
+      : []
+
+    const { status: _removedStatus, ...nodeRest } = node
+
+    return {
+      ...nodeRest,
+      levels: migratedLevels,
+      children: (node.children ?? []).map(migrateNode),
+    }
+  }
+
+  const { release: _r, storyPointBudget: _b, ...docRest } = document
+
+  return {
+    ...docRest,
+    releases: [firstRelease],
+    children: Array.isArray(document.children) ? document.children.map(migrateNode) : [],
+  }
+}
+
 const isQuotaExceededError = (err) => {
   if (!err || typeof err !== 'object') {
     return false
@@ -127,14 +180,20 @@ export const parseDocumentPayload = (rawValue) => {
     }
   }
 
-  if (parsed.schemaVersion !== DOCUMENT_SCHEMA_VERSION && parsed.schemaVersion !== 1) {
+  if (parsed.schemaVersion !== DOCUMENT_SCHEMA_VERSION && parsed.schemaVersion !== 1 && parsed.schemaVersion !== 2) {
     return {
       ok: false,
       error: `Nicht unterstuetzte schemaVersion: ${String(parsed.schemaVersion)}`,
     }
   }
 
-  const documentToValidate = parsed.schemaVersion === 1 ? migrateV1ToV2(parsed.document) : parsed.document
+  let documentToValidate = parsed.document
+  if (parsed.schemaVersion === 1) {
+    documentToValidate = migrateV1ToV2(documentToValidate)
+  }
+  if (parsed.schemaVersion === 1 || parsed.schemaVersion === 2) {
+    documentToValidate = migrateV2ToV3(documentToValidate)
+  }
 
   if (!isValidDocumentShape(documentToValidate)) {
     return {

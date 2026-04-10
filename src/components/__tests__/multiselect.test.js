@@ -39,17 +39,18 @@ describe('multiselect helpers (unit)', () => {
       ],
     }
 
-    // apply status change for each level
+    // apply status change for each level with a releaseId
+    const releaseId = 'test-release'
     let next = tree
     const node = findNodeById(next, 'node-1')
     const levels = node.levels.map((l) => l.id)
 
     for (const levelId of levels) {
-      next = updateNodeProgressLevel(next, 'node-1', levelId, { status: 'done' })
+      next = updateNodeProgressLevel(next, 'node-1', levelId, { status: 'done' }, releaseId)
     }
 
     const updatedNode = findNodeById(next, 'node-1')
-    const statuses = (updatedNode.levels ?? []).map((l) => l.status)
+    const statuses = (updatedNode.levels ?? []).map((l) => l.statuses?.[releaseId])
     expect(statuses).toEqual(['done', 'done'])
   })
 })

@@ -12,6 +12,7 @@ export function useSkillTreeUiState() {
   const [isToolbarCollapsed, setIsToolbarCollapsed] = useState(false)
   const [selectedScopeFilterId, setSelectedScopeFilterId] = useState(SCOPE_FILTER_ALL)
   const [releaseFilter, setReleaseFilter] = useState(RELEASE_FILTER_OPTIONS.all)
+  const [selectedReleaseId, setSelectedReleaseId] = useState(null)
   const [transformKey, setTransformKey] = useState(0)
 
   const selectNodeId = (nodeId) => {
@@ -71,6 +72,8 @@ export function useSkillTreeUiState() {
     setSelectedScopeFilterId,
     releaseFilter,
     setReleaseFilter,
+    selectedReleaseId,
+    setSelectedReleaseId,
     transformKey,
     setTransformKey,
     selectNodeId,

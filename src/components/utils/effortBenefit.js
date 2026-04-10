@@ -50,11 +50,27 @@ export const normalizeStoryPointMap = (raw) => {
 }
 
 /**
+ * Returns the effort of the "display level" (first level with a set effort),
+ * with fallback to the node-root effort for backward compatibility.
+ */
+export const getNodeDisplayEffort = (node) => {
+  const levels = Array.isArray(node?.levels) ? node.levels : []
+  const withEffort = levels.find((l) => l.effort?.size && l.effort.size !== 'unclear')
+  return withEffort?.effort ?? node?.effort ?? createDefaultEffort()
+}
+
+export const getNodeDisplayBenefit = (node) => {
+  const levels = Array.isArray(node?.levels) ? node.levels : []
+  const withBenefit = levels.find((l) => l.benefit?.size && l.benefit.size !== 'unclear')
+  return withBenefit?.benefit ?? node?.benefit ?? createDefaultBenefit()
+}
+
+/**
  * Resolves the story point value for a node's effort.
  * Returns null for 'unclear' or invalid values.
  */
 export const resolveStoryPoints = (node, storyPointMap) => {
-  const effort = node?.effort
+  const effort = getNodeDisplayEffort(node)
   if (!effort || effort.size === 'unclear') return null
   if (effort.size === 'custom') {
     if (effort.customPoints == null) return null
@@ -67,11 +83,22 @@ export const resolveStoryPoints = (node, storyPointMap) => {
 }
 
 /**
- * Computes total story points and budget status from all nodes in a document.
+ * Computes total story points and budget status.
+ * Now accepts storyPointMap and budget (number|null) directly instead of a full document.
  */
-export const computeBudgetSummary = (allNodes, document) => {
-  const storyPointMap = normalizeStoryPointMap(document?.storyPointMap)
-  const budget = document?.storyPointBudget != null ? Number(document.storyPointBudget) : null
+export const computeBudgetSummary = (allNodes, storyPointMapOrDocument, budgetOrUndefined) => {
+  // Support both old call: computeBudgetSummary(nodes, document)
+  // and new call: computeBudgetSummary(nodes, storyPointMap, budget)
+  let storyPointMap, budget
+  if (budgetOrUndefined === undefined && storyPointMapOrDocument && typeof storyPointMapOrDocument === 'object' && ('children' in storyPointMapOrDocument || 'storyPointBudget' in storyPointMapOrDocument || 'releases' in storyPointMapOrDocument)) {
+    // Legacy: second arg is the full document
+    storyPointMap = normalizeStoryPointMap(storyPointMapOrDocument?.storyPointMap)
+    budget = storyPointMapOrDocument?.storyPointBudget != null ? Number(storyPointMapOrDocument.storyPointBudget) : null
+  } else {
+    storyPointMap = normalizeStoryPointMap(storyPointMapOrDocument)
+    budget = budgetOrUndefined != null ? Number(budgetOrUndefined) : null
+  }
+
   let total = 0
 
   for (const node of allNodes) {

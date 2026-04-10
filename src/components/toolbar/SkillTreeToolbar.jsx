@@ -1,4 +1,4 @@
-import { ActionIcon, Menu, Paper, Slider, Text } from '@mantine/core'
+import { ActionIcon, Menu, Paper, Select, Slider, Text } from '@mantine/core'
 import { useMemo, useState } from 'react'
 import {
   IconArrowBackUp,
@@ -7,6 +7,8 @@ import {
   IconChevronLeft,
   IconChevronRight,
   IconDownload,
+  IconEye,
+  IconEyeOff,
   IconFilter,
   IconFilters,
   IconList,
@@ -46,8 +48,10 @@ export function SkillTreeToolbar({
   onToggleCollapsed,
   onOpenDocumentPicker,
   onOpenCsvDocumentPicker,
+  onOpenJsonDocumentPicker,
   onExportHtml,
   onExportCsv,
+  onExportJson,
   onExportPdf,
   onExportSvg,
   onExportPng,
@@ -76,6 +80,12 @@ export function SkillTreeToolbar({
   onZoomOut,
   onZoomToScale,
   onFitToScreen,
+  hiddenNodeCount = 0,
+  showHiddenNodes = false,
+  onToggleShowHiddenNodes,
+  releases = [],
+  selectedReleaseId = null,
+  onReleaseChange,
 }) {
   const [toolbarSearch, setToolbarSearch] = useState('')
   const [isZoomMenuOpen, setIsZoomMenuOpen] = useState(false)
@@ -154,6 +164,9 @@ export function SkillTreeToolbar({
                 <Menu.Item onClick={onExportCsv}>
                   CSV
                 </Menu.Item>
+                <Menu.Item onClick={onExportJson}>
+                  JSON
+                </Menu.Item>
                 <Menu.Item onClick={onExportPdf}>
                   PDF
                 </Menu.Item>
@@ -198,6 +211,9 @@ export function SkillTreeToolbar({
                 </Menu.Item>
                 <Menu.Item onClick={onOpenCsvDocumentPicker}>
                   CSV
+                </Menu.Item>
+                <Menu.Item onClick={onOpenJsonDocumentPicker}>
+                  JSON
                 </Menu.Item>
               </Menu.Dropdown>
             </Menu>
@@ -399,6 +415,48 @@ export function SkillTreeToolbar({
                 ))}
               </Menu.Dropdown>
             </Menu>
+
+            <Tooltip
+              label={hiddenNodeCount === 0 ? 'No hidden nodes' : showHiddenNodes ? 'Showing hidden nodes as ghosts — click to hide' : `${hiddenNodeCount} hidden node${hiddenNodeCount !== 1 ? 's' : ''} — click to show as ghosts`}
+              position="top"
+              middlewares={TOOLBAR_TOOLTIP_MIDDLEWARES}
+            >
+              <ActionIcon
+                size="md"
+                variant={showHiddenNodes ? 'filled' : 'default'}
+                color={showHiddenNodes ? 'violet' : undefined}
+                aria-label={showHiddenNodes ? 'Hide ghost nodes' : 'Show hidden nodes as ghosts'}
+                onClick={onToggleShowHiddenNodes}
+                style={{ position: 'relative' }}
+                disabled={hiddenNodeCount === 0}
+              >
+                {showHiddenNodes ? <IconEye {...TOOLBAR_ICON_PROPS} /> : <IconEyeOff {...TOOLBAR_ICON_PROPS} />}
+                {hiddenNodeCount > 0 && (
+                  <span
+                    aria-label={`${hiddenNodeCount} hidden`}
+                    style={{
+                      position: 'absolute',
+                      top: -5,
+                      left: '50%',
+                      transform: 'translateX(-50%)',
+                      background: '#7c3aed',
+                      color: '#fff',
+                      borderRadius: '999px',
+                      fontSize: 9,
+                      fontWeight: 700,
+                      lineHeight: 1,
+                      minWidth: 14,
+                      height: 14,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      padding: '0 3px',
+                      pointerEvents: 'none',
+                    }}
+                  >{hiddenNodeCount}</span>
+                )}
+              </ActionIcon>
+            </Tooltip>
           </div>
 
           <div className="skill-tree-toolbar__cluster">
@@ -427,6 +485,20 @@ export function SkillTreeToolbar({
                 </ul>
               )}
             </div>
+            {releases.length > 0 && (
+              <Tooltip label="Release auswählen" position="top" middlewares={TOOLBAR_TOOLTIP_MIDDLEWARES}>
+                <Select
+                  size="xs"
+                  value={selectedReleaseId}
+                  onChange={(val) => val && onReleaseChange?.(val)}
+                  data={releases.map((r) => ({ value: r.id, label: r.name || 'Release' }))}
+                  classNames={{ input: 'mantine-dark-input' }}
+                  style={{ minWidth: 120, maxWidth: 180 }}
+                  aria-label="Release auswählen"
+                  allowDeselect={false}
+                />
+              </Tooltip>
+            )}
             <Text size="xs" c="dimmed" className="skill-tree-toolbar__status">{autosaveLabel}</Text>
           </div>
         </div>

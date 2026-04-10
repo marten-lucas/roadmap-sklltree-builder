@@ -1,3 +1,5 @@
+import { getNodeDisplayEffort, getNodeDisplayBenefit } from './effortBenefit'
+
 export const AXIS_SIZES = ['xs', 's', 'm', 'l', 'xl']
 export const AXIS_COUNT = AXIS_SIZES.length // 5
 export const MATRIX_PADDING = 48
@@ -18,8 +20,8 @@ export const computeMatrixLayout = (nodes, cellSize) => {
   }
 
   for (const node of nodes) {
-    const ef = node.effort?.size
-    const be = node.benefit?.size
+    const ef = getNodeDisplayEffort(node).size
+    const be = getNodeDisplayBenefit(node).size
     if (ef && be && AXIS_SIZES.includes(ef) && AXIS_SIZES.includes(be)) {
       cellNodes[ef][be].push(node)
     }

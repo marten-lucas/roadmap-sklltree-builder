@@ -6,6 +6,8 @@ import './skillTree.css'
 import { TREE_CONFIG, STATUS_STYLES, NODE_LABEL_ZOOM } from './config'
 import {
   saveDocumentToLocalStorage,
+  downloadDocumentJson,
+  readDocumentFromJsonText,
 } from './utils/documentPersistence'
 import {
   createDocumentHistoryState,
@@ -37,6 +39,7 @@ import {
   addInitialSegmentWithResult,
   addRootNodeNearWithResult,
   addSegmentNearWithResult,
+  buildHiddenNodeIdSet,
   buildLevelIdToNodeIdMap,
   deleteScopeWithResult,
   setScopeColorWithResult,
@@ -56,9 +59,8 @@ import {
   updateNodeProgressLevel,
   updateNodeShortName,
   updateSegmentLabel,
-  updateNodeEffort,
-  updateNodeBenefit,
 } from './utils/treeData'
+import { normalizeEffort, normalizeBenefit } from './utils/effortBenefit'
 import { toDegrees, toRadians } from './utils/layoutMath'
 import { SkillTreeCanvas } from './canvas'
 import { SkillTreeToolbar } from './toolbar'
@@ -79,6 +81,7 @@ import {
 } from './utils/visibility'
 import { VIEWPORT_DEFAULTS, computeFitScale, computeFitTransform, getNextZoomStep, getViewportKeyboardAction } from './utils/viewport'
 import { getInitialRoadmapDocument } from './utils/document'
+import { getSelectedReleaseId } from './utils/releases'
 import { resolveInspectorSelectedNode } from './utils/selection'
 
 // `resolveInspectorSelectedNode` is exported from `src/components/utils/selection.js`
@@ -138,6 +141,7 @@ export function SkillTree() {
   const canRedo = documentHistory.future.length > 0
   const documentFileInputRef = useRef(null)
   const csvDocumentFileInputRef = useRef(null)
+  const jsonDocumentFileInputRef = useRef(null)
   const canvasSvgRef = useRef(null)
   const transformApiRef = useRef(null)
   const canvasAreaRef = useRef(null)
@@ -178,6 +182,8 @@ export function SkillTree() {
     selectNodeId,
     selectSegmentId,
     resetSelections,
+    selectedReleaseId,
+    setSelectedReleaseId,
   } = useSkillTreeUiState()
 
   const addControlOffset = TREE_CONFIG.nodeSize * 0.82
@@ -319,10 +325,36 @@ export function SkillTree() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scopeOptions, selectedScopeFilterId])
 
+  const activeReleaseId = useMemo(
+    () => getSelectedReleaseId(roadmapData.releases ?? [], selectedReleaseId),
+    [roadmapData.releases, selectedReleaseId],
+  )
+
+  useEffect(() => {
+    const releases = roadmapData.releases ?? []
+    if (releases.length === 0) return
+    const stillExists = releases.some((r) => r.id === selectedReleaseId)
+    if (!stillExists) {
+      setSelectedReleaseId(releases[0].id)
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [roadmapData.releases])
+
+  const hiddenNodeIdSet = useMemo(
+    () => buildHiddenNodeIdSet(roadmapData, activeReleaseId),
+    [roadmapData, activeReleaseId],
+  )
+
   const nodeVisibilityModeById = useMemo(() => {
     const byId = new Map()
+    const showHiddenNodes = roadmapData.showHiddenNodes ?? false
 
     for (const node of nodes) {
+      if (hiddenNodeIdSet.has(node.id)) {
+        byId.set(node.id, showHiddenNodes ? 'ghost' : 'hidden')
+        continue
+      }
+
       const matchesScope = nodeMatchesScopeFilter(node, selectedScopeFilterId)
 
       if (!matchesScope) {
@@ -330,12 +362,12 @@ export function SkillTree() {
         continue
       }
 
-      const statusKey = getDisplayStatusKey(node)
+      const statusKey = getDisplayStatusKey(node, activeReleaseId)
       byId.set(node.id, getReleaseVisibilityMode(statusKey, releaseFilter))
     }
 
     return byId
-  }, [nodes, selectedScopeFilterId, releaseFilter])
+  }, [nodes, hiddenNodeIdSet, selectedScopeFilterId, releaseFilter, roadmapData.showHiddenNodes, activeReleaseId])
 
   const renderedNodes = useMemo(
     () => nodes.filter((node) => (nodeVisibilityModeById.get(node.id) ?? 'full') !== 'hidden'),
@@ -1072,6 +1104,10 @@ export function SkillTree() {
     })
   }
 
+  const handleToggleShowHiddenNodes = () => {
+    commitDocument({ ...roadmapData, showHiddenNodes: !(roadmapData.showHiddenNodes ?? false) })
+  }
+
   const handleCenterIconUpload = async (file) => {
     if (!file) {
       return
@@ -1151,6 +1187,39 @@ export function SkillTree() {
 
   const handleOpenCsvDocumentPicker = () => {
     csvDocumentFileInputRef.current?.click()
+  }
+
+  const handleOpenJsonDocumentPicker = () => {
+    jsonDocumentFileInputRef.current?.click()
+  }
+
+  const handleExportJson = () => {
+    try {
+      const exported = downloadDocumentJson(roadmapData)
+      if (!exported) {
+        window.alert('JSON-Export fehlgeschlagen.')
+      }
+    } catch (error) {
+      console.error('JSON export failed', error)
+      window.alert('JSON-Export fehlgeschlagen.')
+    }
+  }
+
+  const handleJsonDocumentFileSelected = async (event) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+    try {
+      const rawText = await file.text()
+      const nextDocument = readDocumentFromJsonText(rawText)
+      dispatchDocument({ type: 'replace', document: nextDocument })
+      setTransformKey((current) => current + 1)
+      resetSelections()
+    } catch (error) {
+      console.error('JSON import failed', error)
+      window.alert(`JSON-Import fehlgeschlagen: ${error?.message ?? 'Unbekannter Fehler'}`)
+    } finally {
+      event.target.value = ''
+    }
   }
 
   const closeCsvImportDialog = () => {
@@ -1329,7 +1398,7 @@ export function SkillTree() {
 
   const handleExportCsv = () => {
     try {
-      const exported = downloadDocumentCsv(roadmapData)
+      const exported = downloadDocumentCsv(roadmapData, activeReleaseId)
       if (!exported) {
         window.alert('CSV-Export fehlgeschlagen.')
       }
@@ -1927,6 +1996,22 @@ export function SkillTree() {
     }
   }
 
+  const handleSelectLevelFromListView = (nodeId, levelId) => {
+    const layoutNode = layoutNodesById.get(nodeId)
+    flushSync(() => {
+      selectNodeId(nodeId)
+      setSelectedProgressLevelId(levelId)
+    })
+    if (layoutNode && transformApiRef.current) {
+      const TARGET_SCALE = 3
+      const vw = window.innerWidth
+      const vh = window.innerHeight
+      const positionX = vw / 2 - layoutNode.x * TARGET_SCALE
+      const positionY = vh / 2 - layoutNode.y * TARGET_SCALE
+      transformApiRef.current.setTransform(positionX, positionY, TARGET_SCALE, 500, 'easeOut')
+    }
+  }
+
   const handleSelectSegment = (segmentId) => {
     selectSegmentId(segmentId)
     setSelectedPortalKey(null)
@@ -1941,8 +2026,8 @@ export function SkillTree() {
     handleSelectNode(nextSelectedNodeId)
   }
 
-  const updateNodeData = (id, newLabel, newStatus) => {
-    commitDocument(updateNodeDataInTree(roadmapData, id, newLabel, newStatus))
+  const updateNodeData = (id, newLabel) => {
+    commitDocument(updateNodeDataInTree(roadmapData, id, newLabel))
   }
 
   const handleLabelChange = (newLabel) => {
@@ -1955,7 +2040,7 @@ export function SkillTree() {
       return
     }
 
-    updateNodeData(selectedNodeId, newLabel, selectedNode.status)
+    updateNodeData(selectedNodeId, newLabel)
   }
 
   const handleShortNameChange = (newShortName, nodeIdParam) => {
@@ -2000,7 +2085,7 @@ export function SkillTree() {
       const levels = Array.isArray(targetNode?.levels) ? targetNode.levels : []
       const targetLevelId = levels[sourceLevelIndex]?.id ?? (levels[0]?.id ?? null)
       if (!targetLevelId) return tree
-      return updateNodeProgressLevel(tree, id, targetLevelId, { status: newStatus })
+      return updateNodeProgressLevel(tree, id, targetLevelId, { status: newStatus }, activeReleaseId)
     })
   }
 
@@ -2131,20 +2216,20 @@ export function SkillTree() {
     commitDocument(removeNodeProgressLevel(roadmapData, selectedNodeId, levelId))
   }
 
-  const handleEffortChange = (effort) => {
+  const handleEffortChange = (effort, levelId = activeSelectedProgressLevelId) => {
     if (!selectedNodeId && !(Array.isArray(selectedNodeIds) && selectedNodeIds.length > 0)) {
       return
     }
 
-    applyToSelectedNodes((tree, id) => updateNodeEffort(tree, id, effort))
+    applyToSelectedNodes((tree, id) => updateNodeProgressLevel(tree, id, levelId, { effort: normalizeEffort(effort) }))
   }
 
-  const handleBenefitChange = (benefit) => {
+  const handleBenefitChange = (benefit, levelId = activeSelectedProgressLevelId) => {
     if (!selectedNodeId && !(Array.isArray(selectedNodeIds) && selectedNodeIds.length > 0)) {
       return
     }
 
-    applyToSelectedNodes((tree, id) => updateNodeBenefit(tree, id, benefit))
+    applyToSelectedNodes((tree, id) => updateNodeProgressLevel(tree, id, levelId, { benefit: normalizeBenefit(benefit) }))
   }
 
   const handleLevelChange = (newLevel) => {
@@ -2275,6 +2360,14 @@ export function SkillTree() {
         onChange={handleCsvDocumentFileSelected}
       />
 
+      <input
+        ref={jsonDocumentFileInputRef}
+        type="file"
+        accept="application/json,.json"
+        style={{ display: 'none' }}
+        onChange={handleJsonDocumentFileSelected}
+      />
+
       <Modal
         opened={csvImportDialogOpen}
         onClose={closeCsvImportDialog}
@@ -2377,8 +2470,10 @@ export function SkillTree() {
         }}
         onOpenDocumentPicker={handleOpenDocumentPicker}
         onOpenCsvDocumentPicker={handleOpenCsvDocumentPicker}
+        onOpenJsonDocumentPicker={handleOpenJsonDocumentPicker}
         onExportHtml={() => void handleExportHtml()}
         onExportCsv={handleExportCsv}
+        onExportJson={handleExportJson}
         onExportPdf={() => void handleExportPdf()}
         onExportSvg={() => void handleExportSvg()}
         onExportPng={() => void handleExportPng()}
@@ -2413,6 +2508,12 @@ export function SkillTree() {
         onZoomOut={handleZoomOut}
         onZoomToScale={handleZoomToScale}
         onFitToScreen={handleFitToScreen}
+        hiddenNodeCount={hiddenNodeIdSet.size}
+        showHiddenNodes={roadmapData.showHiddenNodes ?? false}
+        onToggleShowHiddenNodes={handleToggleShowHiddenNodes}
+        releases={roadmapData.releases ?? []}
+        selectedReleaseId={activeReleaseId}
+        onReleaseChange={setSelectedReleaseId}
       />
 
       <div ref={canvasAreaRef} style={{ position: 'absolute', inset: 0, overflow: 'hidden' }}>
@@ -2484,6 +2585,7 @@ export function SkillTree() {
             onSelectNode={handleSelectNode}
             onZoomToNode={handleZoomToNode}
             storyPointMap={roadmapData.storyPointMap}
+            releaseId={activeReleaseId}
           />
         </TransformComponent>
       </TransformWrapper>
@@ -2549,6 +2651,7 @@ export function SkillTree() {
         onDeleteNodeBranch={handleDeleteNodeBranch}
         onEffortChange={handleEffortChange}
         onBenefitChange={handleBenefitChange}
+        selectedReleaseId={activeReleaseId}
         />
       )}
 
@@ -2593,6 +2696,8 @@ export function SkillTree() {
         onResetDefault={handleResetCenterIcon}
         roadmapData={roadmapData}
         commitDocument={commitDocument}
+        selectedReleaseId={activeReleaseId}
+        onReleaseChange={setSelectedReleaseId}
       />
 
       <PriorityMatrix
@@ -2606,6 +2711,7 @@ export function SkillTree() {
         onClose={() => setListViewOpen(false)}
         document={roadmapData}
         onSelectNode={handleSelectNodeFromListView}
+        onSelectLevel={handleSelectLevelFromListView}
       />
     </main>
   )

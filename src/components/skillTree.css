@@ -822,6 +822,29 @@
     padding: 0;
 }
 
+.skill-node-button--ghost {
+    opacity: 0.32;
+    filter: grayscale(0.5);
+    pointer-events: auto;
+}
+
+.skill-node-ghost-overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+    z-index: 2;
+}
+
+.skill-node-ghost-overlay svg {
+    width: 38%;
+    height: 38%;
+    stroke: rgba(167, 139, 250, 0.85);
+    filter: drop-shadow(0 0 3px rgba(124, 58, 237, 0.6));
+}
+
 .skill-node-tooltip {
     max-width: 20rem;
     padding: 0.7rem 0.8rem;
@@ -1144,8 +1167,8 @@
 
 .skill-node-vc__chips .skill-node-inner-chip--effort,
 .skill-node-vc__chips .skill-node-inner-chip--benefit {
-    width: 4px;
-    height: 4px;
+    font-size: 1em;
+    padding: 0px 3px;
 }
 
 /* --- inner chip indicators (scope dots + effort/benefit) at close / very-close --- */
@@ -1153,15 +1176,18 @@
 .skill-node-inner-chips {
     display: flex;
     flex-wrap: wrap;
-    gap: 3px;
+    gap: var(--chip-gap, 3px);
     justify-content: center;
     margin-top: 2px;
     pointer-events: none;
 }
 
 .skill-node-inner-chip {
-    border-radius: 10px;
-    border-width: 1px;
+    display: inline-flex;
+    align-items: center;
+    gap: var(--chip-gap, 2px);
+    border-radius: var(--chip-radius, 10px);
+    border-width: var(--chip-bw, 1px);
     border-style: solid;
     flex-shrink: 0;
 }
@@ -1169,7 +1195,7 @@
 .skill-node-inner-chip--scope {
     font-size: 7px;
     line-height: 1.3;
-    padding: 1px 4px;
+    padding: var(--chip-pad-v, 1px) var(--chip-pad-h, 4px);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -1177,19 +1203,23 @@
 }
 
 .skill-node-inner-chip--effort {
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    background: rgba(56, 189, 248, 0.25);
-    border-color: rgba(56, 189, 248, 0.6);
+    font-size: 7px;
+    line-height: 1.3;
+    padding: var(--chip-pad-v, 1px) var(--chip-pad-h, 4px);
+    white-space: nowrap;
+    background: rgba(249, 115, 22, 0.15);
+    border-color: rgba(249, 115, 22, 0.6);
+    color: rgba(249, 115, 22, 0.95);
 }
 
 .skill-node-inner-chip--benefit {
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    background: rgba(251, 191, 36, 0.25);
-    border-color: rgba(251, 191, 36, 0.6);
+    font-size: 7px;
+    line-height: 1.3;
+    padding: var(--chip-pad-v, 1px) var(--chip-pad-h, 4px);
+    white-space: nowrap;
+    background: rgba(20, 184, 166, 0.15);
+    border-color: rgba(20, 184, 166, 0.6);
+    color: rgba(20, 184, 166, 0.95);
 }
 
 .skill-node-foreign--close .skill-node-label-card {
@@ -1313,6 +1343,7 @@
     left: 0;
     top: 5rem;
     bottom: 0;
+    width: 280px;
     z-index: 50;
     display: flex;
     flex-direction: column;
@@ -1328,6 +1359,24 @@
     padding: 0.75rem 0.75rem 0.75rem 1.25rem;
     border-bottom: 1px solid rgba(51, 65, 85, 0.5);
     flex-shrink: 0;
+    gap: 0.5rem;
+}
+
+.list-view-drawer__levels-toggle {
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+    font-size: 0.72rem;
+    color: #64748b;
+    cursor: pointer;
+    user-select: none;
+    white-space: nowrap;
+    margin-left: auto;
+}
+
+.list-view-drawer__levels-toggle input[type="checkbox"] {
+    accent-color: #3b82f6;
+    cursor: pointer;
 }
 
 .list-view-drawer__title {
@@ -1387,34 +1436,35 @@
 }
 
 .list-view-drawer__item {
-    display: flex;
-    flex-direction: column;
+    height: 3.25rem;
+    overflow: hidden;
     border-bottom: 1px solid rgba(30, 41, 59, 0.6);
+    flex-shrink: 0;
 }
 
 .list-view-drawer__item-row {
     display: flex;
-    align-items: flex-start;
+    align-items: center;
+    height: 100%;
     gap: 0;
     margin-left: 0.5rem;
+    margin-right: 0;
 }
 
 .list-view-drawer__toggle {
     flex-shrink: 0;
     width: 1.5rem;
+    height: 100%;
     background: transparent;
     border: none;
     color: #64748b;
     cursor: pointer;
     font-size: 0.55rem;
-    padding: 0.5rem 0.25rem 0.5rem 0;
     line-height: 1;
     display: flex;
     align-items: center;
     justify-content: center;
     transition: color 120ms ease;
-    align-self: flex-start;
-    padding-top: 0.55rem;
 }
 
 .list-view-drawer__toggle:hover {
@@ -1431,11 +1481,43 @@
     min-width: 0;
     display: flex;
     flex-direction: column;
-    gap: 0.3rem;
-    padding: 0.5rem 0.75rem 0.5rem 0;
+    justify-content: center;
+    gap: 0.2rem;
+    padding: 0 0.5rem 0 0;
     cursor: pointer;
     transition: background 120ms ease;
     border-radius: 4px;
+    overflow: hidden;
+    height: 100%;
+}
+
+.list-view-drawer__item-body--level {
+    cursor: pointer;
+}
+
+.list-view-drawer__item--level {
+    opacity: 0.85;
+}
+
+.list-view-drawer__item--levels-header {
+    border-bottom: none;
+}
+
+.list-view-drawer__item-label--level {
+    font-size: 0.72rem;
+    font-weight: 400;
+    color: #94a3b8;
+    font-style: italic;
+}
+
+.list-view-drawer__levels-label {
+    font-size: 0.68rem;
+    font-weight: 600;
+    color: #475569;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    line-height: 1;
+    padding: 0.4rem 0 0.4rem 0.25rem;
 }
 
 .list-view-drawer__item-body:hover {
@@ -1452,13 +1534,16 @@
     font-weight: 500;
     color: #cbd5e1;
     line-height: 1.3;
-    word-break: break-word;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .list-view-drawer__item-chips {
     display: flex;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
     gap: 0.3rem;
+    overflow: hidden;
 }
 
 .list-view-drawer__chip {
@@ -1477,39 +1562,6 @@
     background: rgba(99, 102, 241, 0.12);
     border-color: rgba(99, 102, 241, 0.45);
     color: #a5b4fc;
-}
-
-.list-view-drawer__resize-handle {
-    position: absolute;
-    right: 0;
-    top: 0;
-    bottom: 0;
-    width: 5px;
-    cursor: ew-resize;
-    background: transparent;
-    z-index: 10;
-    transition: background 150ms ease;
-}
-
-.list-view-drawer__resize-handle:hover {
-    background: rgba(59, 130, 246, 0.35);
-}
-
-.list-view-drawer__resize-grip {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    width: 3px;
-    height: 40px;
-    border-radius: 2px;
-    background: rgba(148, 163, 184, 0.35);
-    transition: background 150ms ease;
-    pointer-events: none;
-}
-
-.list-view-drawer__resize-handle:hover .list-view-drawer__resize-grip {
-    background: rgba(59, 130, 246, 0.9);
 }
 
 /* Priority Matrix drawer */

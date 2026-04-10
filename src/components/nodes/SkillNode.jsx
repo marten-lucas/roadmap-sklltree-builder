@@ -5,7 +5,11 @@ import { getDisplayStatusKey, getLevelStatusKeys } from '../utils/nodeStatus'
 import { resolveScopeEntries } from '../utils/scopeDisplay'
 import { MarkdownTooltipContent, Tooltip } from '../tooltip'
 import { EFFORT_SIZE_LABELS, BENEFIT_SIZE_LABELS } from '../utils/effortBenefit'
+import { IconBolt, IconStar } from '@tabler/icons-react'
 
+const CHIP_ICON_STYLE = { display: 'block', flexShrink: 0 }
+const EffortIcon = () => <IconBolt size="1em" style={CHIP_ICON_STYLE} aria-hidden="true" />
+const BenefitIcon = () => <IconStar size="1em" style={CHIP_ICON_STYLE} aria-hidden="true" />
 
 const getShortName = (node) => {
   const explicitShortName = String(node?.shortName ?? '').trim().toLowerCase().slice(0, 3)
@@ -21,10 +25,10 @@ const getShortName = (node) => {
   return letters || 'skl'
 }
 
-const getTooltipLevel = (node) => {
+const getTooltipLevel = (node, releaseId = null) => {
   const levels = Array.isArray(node?.levels) ? node.levels : []
-  const levelStatusKeys = getLevelStatusKeys(node)
-  const preferredStatus = getDisplayStatusKey(node)
+  const levelStatusKeys = getLevelStatusKeys(node, releaseId)
+  const preferredStatus = getDisplayStatusKey(node, releaseId)
   const preferredLevel = levels.find((level, index) => levelStatusKeys[index] === preferredStatus && String(level?.releaseNote ?? '').trim())
 
   if (preferredLevel) {
@@ -34,8 +38,8 @@ const getTooltipLevel = (node) => {
   return levels.find((level) => String(level?.releaseNote ?? '').trim()) ?? null
 }
 
-const getTooltipReleaseNote = (node) => {
-  const tooltipLevel = getTooltipLevel(node)
+const getTooltipReleaseNote = (node, releaseId = null) => {
+  const tooltipLevel = getTooltipLevel(node, releaseId)
   const releaseNote = String(tooltipLevel?.releaseNote ?? '').trim()
 
   return releaseNote || 'Keine Release Note hinterlegt.'
@@ -69,36 +73,45 @@ const buildSegmentConicStyle = (statusKeys, colorGetter) => {
   }
 }
 
-export function SkillNode({ node, nodeSize, isSelected, onSelect, onSelectLevel, onZoomToNode, displayMode = 'full', labelMode = 'far', zoomScale = 1, scopeOptions = [], storyPointMap }) {
+export function SkillNode({ node, nodeSize, isSelected, onSelect, onSelectLevel, onZoomToNode, displayMode = 'full', labelMode = 'far', zoomScale = 1, scopeOptions = [], storyPointMap, releaseId = null }) {
   const [hoveredLevelIndex, setHoveredLevelIndex] = useState(null)
   const lastRightClickRef = useRef(0)
   const isMinimal = displayMode === 'minimal'
   const isVeryClose = !isMinimal && labelMode === 'very-close'
   const levels = Array.isArray(node?.levels) ? node.levels : []
-  const tooltipLevel = getTooltipLevel(node)
+  const tooltipLevel = getTooltipLevel(node, releaseId)
   const initVcLevel = Math.max(0, levels.indexOf(tooltipLevel))
   const [vcActiveLevel, setVcActiveLevel] = useState(initVcLevel)
   const glowPadding = isMinimal ? 8 : isVeryClose ? 36 : 18
   const renderSize = nodeSize + glowPadding * 2
-  const showChips = !isMinimal && (labelMode === 'close' || labelMode === 'very-close')
+  const showChips = !isMinimal && (labelMode === 'mid' || labelMode === 'close' || labelMode === 'very-close')
   const fwWidth = renderSize
   const fwHeight = renderSize
   const fwY = node.y - nodeSize / 2 - glowPadding
-  const statusKey = getDisplayStatusKey(node)
+  const statusKey = getDisplayStatusKey(node, releaseId)
+  const isGhost = displayMode === 'ghost'
   const statusStyles = STATUS_STYLES[statusKey] ?? STATUS_STYLES.later
   const shortName = getShortName(node)
-  const tooltipReleaseNote = getTooltipReleaseNote(node)
+  const tooltipReleaseNote = getTooltipReleaseNote(node, releaseId)
   const tooltipScopeLabels = resolveScopeEntries(tooltipLevel?.scopeIds, scopeOptions)
+  const tooltipEffort = tooltipLevel?.effort ?? node.effort
+  const tooltipBenefit = tooltipLevel?.benefit ?? node.benefit
   const activeTooltipReleaseNote = hoveredLevelIndex !== null
     ? (String(levels[hoveredLevelIndex]?.releaseNote ?? '').trim() || 'Keine Release Note hinterlegt.')
     : tooltipReleaseNote
   const activeTooltipScopeLabels = hoveredLevelIndex !== null
     ? resolveScopeEntries(levels[hoveredLevelIndex]?.scopeIds, scopeOptions)
     : tooltipScopeLabels
+  const activeTooltipEffort = hoveredLevelIndex !== null
+    ? (levels[hoveredLevelIndex]?.effort ?? node.effort)
+    : tooltipEffort
+  const activeTooltipBenefit = hoveredLevelIndex !== null
+    ? (levels[hoveredLevelIndex]?.benefit ?? node.benefit)
+    : tooltipBenefit
   const activeTooltipTitle = hoveredLevelIndex !== null && levels.length > 1
     ? `${node.label} – L${hoveredLevelIndex + 1}`
     : node.label
-  const levelStatusKeys = getLevelStatusKeys(node)
+  const levelStatusKeys = getLevelStatusKeys(node, releaseId)
   const levelRingStyle = buildSegmentConicStyle(
     levelStatusKeys,
     (key) => STATUS_STYLES[key]?.ringBand ?? STATUS_STYLES.later.ringBand,
@@ -198,8 +211,8 @@ export function SkillNode({ node, nodeSize, isSelected, onSelect, onSelectLevel,
       data-selected={isSelected ? 'true' : 'false'}
       data-export-note={tooltipReleaseNote}
       data-export-levels={JSON.stringify(exportLevelEntries)}
-      data-export-effort={node.effort?.size && node.effort.size !== 'unclear' ? `${EFFORT_SIZE_LABELS[node.effort.size] ?? node.effort.size}` : ''}
-      data-export-benefit={node.benefit?.size && node.benefit.size !== 'unclear' ? `${BENEFIT_SIZE_LABELS[node.benefit.size] ?? node.benefit.size}` : ''}
+      data-export-effort={tooltipEffort?.size && tooltipEffort.size !== 'unclear' ? `${EFFORT_SIZE_LABELS[tooltipEffort.size] ?? tooltipEffort.size}` : ''}
+      data-export-benefit={tooltipBenefit?.size && tooltipBenefit.size !== 'unclear' ? `${BENEFIT_SIZE_LABELS[tooltipBenefit.size] ?? tooltipBenefit.size}` : ''}
     >
       <div
         xmlns="http://www.w3.org/1999/xhtml"
@@ -216,7 +229,7 @@ export function SkillNode({ node, nodeSize, isSelected, onSelect, onSelectLevel,
           closeDelay={40}
           transitionProps={{ transition: 'fade', duration: 120 }}
           classNames={{ tooltip: 'skill-node-tooltip', arrow: 'skill-node-tooltip__arrow' }}
-          label={<MarkdownTooltipContent title={activeTooltipTitle} markdown={activeTooltipReleaseNote} scopeLabels={activeTooltipScopeLabels} effort={node.effort} benefit={node.benefit} storyPointMap={storyPointMap} />}
+          label={<MarkdownTooltipContent title={activeTooltipTitle} markdown={activeTooltipReleaseNote} scopeLabels={activeTooltipScopeLabels} effort={activeTooltipEffort} benefit={activeTooltipBenefit} storyPointMap={storyPointMap} />}
         >
           <Paper
             component="button"
@@ -269,9 +282,11 @@ export function SkillNode({ node, nodeSize, isSelected, onSelect, onSelectLevel,
                 })()}
                 {showChips && (() => {
                   const vcScopeLabels = resolveScopeEntries(levels[vcActiveLevel]?.scopeIds, scopeOptions)
-                  const hasChips = vcScopeLabels.length > 0 || node.effort?.size || node.benefit?.size
+                  const vcEffort = levels[vcActiveLevel]?.effort ?? node.effort
+                  const vcBenefit = levels[vcActiveLevel]?.benefit ?? node.benefit
+                  const hasChips = vcScopeLabels.length > 0 || (vcEffort?.size && vcEffort.size !== 'unclear') || (vcBenefit?.size && vcBenefit.size !== 'unclear')
                   return hasChips ? (
-                    <div className="skill-node-inner-chips skill-node-vc__chips" style={{ fontSize: `${26 / zoomScale}px` }}>
+                    <div className="skill-node-inner-chips skill-node-vc__chips" style={{ fontSize: `${26 / zoomScale}px`, '--chip-bw': `${1 / zoomScale}px`, '--chip-pad-v': `${1 / zoomScale}px`, '--chip-pad-h': `${4 / zoomScale}px`, '--chip-gap': `${3 / zoomScale}px`, '--chip-radius': `${10 / zoomScale}px` }}>
                       {vcScopeLabels.slice(0, 4).map((s, i) => (
                         <span
                           key={i}
@@ -280,11 +295,11 @@ export function SkillNode({ node, nodeSize, isSelected, onSelect, onSelectLevel,
                           title={s.label}
                         >{s.label}</span>
                       ))}
-                      {node.effort?.size && node.effort.size !== 'unclear' && (
-                        <span className="skill-node-inner-chip skill-node-inner-chip--effort" title={EFFORT_SIZE_LABELS[node.effort.size] ?? node.effort.size} />
+                      {vcEffort?.size && vcEffort.size !== 'unclear' && (
+                        <span className="skill-node-inner-chip skill-node-inner-chip--effort" title={EFFORT_SIZE_LABELS[vcEffort.size] ?? vcEffort.size}><EffortIcon />{EFFORT_SIZE_LABELS[vcEffort.size] ?? vcEffort.size}</span>
                       )}
-                      {node.benefit?.size && node.benefit.size !== 'unclear' && (
-                        <span className="skill-node-inner-chip skill-node-inner-chip--benefit" title={BENEFIT_SIZE_LABELS[node.benefit.size] ?? node.benefit.size} />
+                      {vcBenefit?.size && vcBenefit.size !== 'unclear' && (
+                        <span className="skill-node-inner-chip skill-node-inner-chip--benefit" title={BENEFIT_SIZE_LABELS[vcBenefit.size] ?? vcBenefit.size}><BenefitIcon />{BENEFIT_SIZE_LABELS[vcBenefit.size] ?? vcBenefit.size}</span>
                       )}
                     </div>
                   ) : null
@@ -308,8 +323,8 @@ export function SkillNode({ node, nodeSize, isSelected, onSelect, onSelectLevel,
                     {shortName}
                   </Text>
                 )}
-                {showChips && (tooltipScopeLabels.length > 0 || node.effort?.size || node.benefit?.size) && (
-                  <div className="skill-node-inner-chips">
+                {showChips && (tooltipScopeLabels.length > 0 || tooltipEffort?.size || tooltipBenefit?.size) && (
+                  <div className="skill-node-inner-chips" style={{ '--chip-bw': `${1 / zoomScale}px`, '--chip-pad-v': `${1 / zoomScale}px`, '--chip-pad-h': `${4 / zoomScale}px`, '--chip-gap': `${3 / zoomScale}px`, '--chip-radius': `${10 / zoomScale}px` }}>
                     {tooltipScopeLabels.slice(0, 4).map((s, i) => (
                       <span
                         key={i}
@@ -318,11 +333,11 @@ export function SkillNode({ node, nodeSize, isSelected, onSelect, onSelectLevel,
                         title={s.label}
                       >{s.label}</span>
                     ))}
-                    {node.effort?.size && node.effort.size !== 'unclear' && (
-                      <span className="skill-node-inner-chip skill-node-inner-chip--effort" title={EFFORT_SIZE_LABELS[node.effort.size] ?? node.effort.size} />
+                    {tooltipEffort?.size && tooltipEffort.size !== 'unclear' && (
+                      <span className="skill-node-inner-chip skill-node-inner-chip--effort" title={EFFORT_SIZE_LABELS[tooltipEffort.size] ?? tooltipEffort.size}><EffortIcon />{EFFORT_SIZE_LABELS[tooltipEffort.size] ?? tooltipEffort.size}</span>
                     )}
-                    {node.benefit?.size && node.benefit.size !== 'unclear' && (
-                      <span className="skill-node-inner-chip skill-node-inner-chip--benefit" title={BENEFIT_SIZE_LABELS[node.benefit.size] ?? node.benefit.size} />
+                    {tooltipBenefit?.size && tooltipBenefit.size !== 'unclear' && (
+                      <span className="skill-node-inner-chip skill-node-inner-chip--benefit" title={BENEFIT_SIZE_LABELS[tooltipBenefit.size] ?? tooltipBenefit.size}><BenefitIcon />{BENEFIT_SIZE_LABELS[tooltipBenefit.size] ?? tooltipBenefit.size}</span>
                     )}
                   </div>
                 )}
@@ -330,6 +345,17 @@ export function SkillNode({ node, nodeSize, isSelected, onSelect, onSelectLevel,
             )}
           </Paper>
         </Tooltip>
+        {isGhost && (
+          <div
+            aria-hidden="true"
+            className="skill-node-ghost-overlay"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" />
+              <line x1="1" y1="1" x2="23" y2="23" />
+            </svg>
+          </div>
+        )}
       </div>
     </foreignObject>
   )

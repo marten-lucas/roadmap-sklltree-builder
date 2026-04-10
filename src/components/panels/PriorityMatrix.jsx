@@ -1,7 +1,7 @@
 import { Text } from '@mantine/core'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { STATUS_STYLES, STATUS_LABELS } from '../config'
-import { EFFORT_SIZE_LABELS, BENEFIT_SIZE_LABELS, resolveStoryPoints } from '../utils/effortBenefit'
+import { EFFORT_SIZE_LABELS, BENEFIT_SIZE_LABELS, resolveStoryPoints, getNodeDisplayEffort, getNodeDisplayBenefit } from '../utils/effortBenefit'
 import { AXIS_SIZES, AXIS_COUNT, MATRIX_PADDING, NODE_RADIUS, computeMatrixLayout } from '../utils/matrixLayout'
 
 const CELL_MIN_SIZE = 80
@@ -25,7 +25,11 @@ const collectNodes = (document) => {
  */
 const filterPlottableNodes = (nodes) =>
   nodes.filter(
-    (n) => n.effort?.size && n.effort.size !== 'unclear' && n.benefit?.size && n.benefit.size !== 'unclear',
+    (n) => {
+      const effort = getNodeDisplayEffort(n)
+      const benefit = getNodeDisplayBenefit(n)
+      return effort?.size && effort.size !== 'unclear' && benefit?.size && benefit.size !== 'unclear'
+    },
   )
 
 // computeMatrixLayout is imported from ../utils/matrixLayout
@@ -84,8 +88,8 @@ const HoverTooltip = ({ entry, storyPointMap }) => {
   const { node, x, y } = entry
   const statusKey = node.status ?? 'later'
   const statusLabel = STATUS_LABELS[statusKey] ?? statusKey
-  const effortLabel = EFFORT_SIZE_LABELS[node.effort?.size] ?? node.effort?.size ?? '–'
-  const benefitLabel = BENEFIT_SIZE_LABELS[node.benefit?.size] ?? node.benefit?.size ?? '–'
+  const effortLabel = EFFORT_SIZE_LABELS[getNodeDisplayEffort(node).size] ?? getNodeDisplayEffort(node).size ?? '–'
+  const benefitLabel = BENEFIT_SIZE_LABELS[getNodeDisplayBenefit(node).size] ?? getNodeDisplayBenefit(node).size ?? '–'
   const sp = resolveStoryPoints(node, storyPointMap)
 
   // Tooltip positioned relative to SVG coordinate — will be overlaid via CSS translate

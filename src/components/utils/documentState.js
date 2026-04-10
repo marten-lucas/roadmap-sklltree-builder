@@ -1,4 +1,5 @@
 import { DEFAULT_STORY_POINT_MAP, normalizeStoryPointMap } from './effortBenefit'
+import { createRelease, normalizeRelease } from './releases'
 
 const HISTORY_LIMIT = 100
 const DEFAULT_CENTER_ICON_SVG = `<svg width="256" height="256" viewBox="0 0 256 256" xmlns="http://www.w3.org/2000/svg">
@@ -18,14 +19,14 @@ export const normalizeCenterIconSrc = (value) => {
   return rawValue
 }
 
-const createDefaultRelease = () => ({
-  name: '',
-  motto: '',
-  introduction: '',
-  date: '',
-})
-
 const isObject = (value) => typeof value === 'object' && value !== null
+
+const normalizeReleases = (rawReleases) => {
+  if (!Array.isArray(rawReleases) || rawReleases.length === 0) {
+    return [createRelease('Release 1')]
+  }
+  return rawReleases.map(normalizeRelease)
+}
 
 const ensureDocumentDefaults = (document) => {
   if (!isObject(document)) {
@@ -33,16 +34,16 @@ const ensureDocumentDefaults = (document) => {
   }
 
   const nextScopes = Array.isArray(document.scopes) ? document.scopes : []
-  const nextRelease = isObject(document.release) ? document.release : {}
   const hasSPMap = isObject(document.storyPointMap)
-  const hasBudget = 'storyPointBudget' in document
+  const hasShowHiddenNodes = 'showHiddenNodes' in document
+  const hasReleases = Array.isArray(document.releases) && document.releases.length > 0
 
   if (
     normalizeCenterIconSrc(document.centerIconSrc) === document.centerIconSrc
     && Array.isArray(document.scopes)
-    && isObject(document.release)
+    && hasReleases
     && hasSPMap
-    && hasBudget
+    && hasShowHiddenNodes
   ) {
     return document
   }
@@ -51,12 +52,9 @@ const ensureDocumentDefaults = (document) => {
     ...document,
     centerIconSrc: normalizeCenterIconSrc(document.centerIconSrc),
     scopes: nextScopes,
-    release: {
-      ...createDefaultRelease(),
-      ...nextRelease,
-    },
+    releases: normalizeReleases(document.releases),
     storyPointMap: hasSPMap ? normalizeStoryPointMap(document.storyPointMap) : { ...DEFAULT_STORY_POINT_MAP },
-    storyPointBudget: hasBudget ? document.storyPointBudget : null,
+    showHiddenNodes: hasShowHiddenNodes ? document.showHiddenNodes : false,
   }
 }
 
@@ -73,9 +71,9 @@ export const createEmptyDocument = () => ({
   scopes: [],
   children: [],
   centerIconSrc: DEFAULT_CENTER_ICON_SRC,
-  release: createDefaultRelease(),
+  releases: [createRelease('Release 1')],
   storyPointMap: { ...DEFAULT_STORY_POINT_MAP },
-  storyPointBudget: null,
+  showHiddenNodes: false,
 })
 
 export const cloneDocument = (document) => {

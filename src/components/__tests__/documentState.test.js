@@ -13,9 +13,9 @@ const createDoc = (suffix) => ({
   scopes: [],
   children: [{ id: `node-${suffix}`, label: `Node ${suffix}`, children: [] }],
   centerIconSrc: DEFAULT_CENTER_ICON_SRC,
-  release: { name: `Release ${suffix}`, motto: `Motto ${suffix}`, introduction: `Intro ${suffix}`, date: `2026-07-${String(suffix).padStart(2, '0')}` },
-  storyPointBudget: null,
+  releases: [{ id: `release-${suffix}`, name: `Release ${suffix}`, motto: `Motto ${suffix}`, introduction: `Intro ${suffix}`, date: `2026-07-${String(suffix).padStart(2, '0')}`, storyPointBudget: null }],
   storyPointMap: { ...DEFAULT_STORY_POINT_MAP },
+  showHiddenNodes: false,
 })
 
 describe('documentState', () => {
@@ -129,15 +129,17 @@ describe('documentState', () => {
   })
 
   it('creates an empty document for reset flows', () => {
-    expect(createEmptyDocument()).toEqual({
-      segments: [],
-      scopes: [],
-      children: [],
-      centerIconSrc: DEFAULT_CENTER_ICON_SRC,
-      release: { name: '', motto: '', introduction: '', date: '' },
-      storyPointBudget: null,
-      storyPointMap: { ...DEFAULT_STORY_POINT_MAP },
-    })
+    const doc = createEmptyDocument()
+    expect(doc.segments).toEqual([])
+    expect(doc.scopes).toEqual([])
+    expect(doc.children).toEqual([])
+    expect(doc.centerIconSrc).toBe(DEFAULT_CENTER_ICON_SRC)
+    expect(doc.storyPointMap).toEqual(DEFAULT_STORY_POINT_MAP)
+    expect(doc.showHiddenNodes).toBe(false)
+    expect(Array.isArray(doc.releases)).toBe(true)
+    expect(doc.releases).toHaveLength(1)
+    expect(doc.releases[0].name).toBe('Release 1')
+    expect(doc.releases[0].storyPointBudget).toBeNull()
   })
 
   it('defaults missing scopes without overriding existing center icon', () => {
@@ -163,7 +165,7 @@ describe('documentState', () => {
       segments: [],
       scopes: [],
       children: [],
-      release: { name: '', motto: '', introduction: '', date: '' },
+      releases: [{ id: 'r1', name: '', motto: '', introduction: '', date: '', storyPointBudget: null }],
     })
 
     expect(state.present.centerIconSrc).toBe(DEFAULT_CENTER_ICON_SRC)

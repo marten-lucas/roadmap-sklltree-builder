@@ -2,6 +2,7 @@ import { ActionIcon, Alert, Badge, Button, Divider, Group, MultiSelect, NumberIn
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { IconPercentage20 } from '@tabler/icons-react'
 import { normalizeStatusKey, STATUS_LABELS, SCOPE_COLORS } from '../config'
+import { getLevelStatus } from '../utils/nodeStatus'
 import { UNASSIGNED_SEGMENT_ID } from '../utils/layoutShared'
 import { commitInspectorDrafts } from '../utils/inspectorCommit'
 import { EFFORT_SIZE_LABELS, BENEFIT_SIZE_LABELS } from '../utils/effortBenefit'
@@ -89,6 +90,7 @@ const STATUS_OPTIONS = [
   { value: 'now', label: STATUS_LABELS.now },
   { value: 'next', label: STATUS_LABELS.next },
   { value: 'later', label: STATUS_LABELS.later },
+  { value: 'hidden', label: STATUS_LABELS.hidden },
 ]
 
 export function InspectorPanel({
@@ -131,6 +133,7 @@ export function InspectorPanel({
   onInspectorCommit,
   onEffortChange,
   onBenefitChange,
+  selectedReleaseId = null,
 }) {
   const [scopeManagerOpen, setScopeManagerOpen] = useState(false)
   const [scopeDraft, setScopeDraft] = useState('')
@@ -419,18 +422,20 @@ export function InspectorPanel({
     ? selectedNode.levels.map((level, index) => ({
       id: level.id,
       label: level.label ?? `Level ${index + 1}`,
-      status: normalizeStatusKey(level.status),
+      status: getLevelStatus(level, selectedReleaseId),
       releaseNote: level.releaseNote ?? '',
       scopeIds: Array.isArray(level.scopeIds) ? level.scopeIds : [],
       additionalDependencyLevelIds: Array.isArray(level.additionalDependencyLevelIds) ? level.additionalDependencyLevelIds : [],
+      effort: level.effort ?? null,
+      benefit: level.benefit ?? null,
     }))
-    : [{ id: 'level-1', label: 'Level 1', status: normalizeStatusKey(selectedNode?.status ?? 'later'), releaseNote: '', scopeIds: [], additionalDependencyLevelIds: [] }]
+    : [{ id: 'level-1', label: 'Level 1', status: getLevelStatus({ statuses: {}, status: selectedNode?.status }, selectedReleaseId), releaseNote: '', scopeIds: [], additionalDependencyLevelIds: [] }]
 
   const activeProgressLevelId = selectedProgressLevelId ?? nodeLevels[0]?.id ?? 'level-1'
   const activeProgressLevel = nodeLevels.find((level) => level.id === activeProgressLevelId) ?? nodeLevels[0] ?? {
     id: activeProgressLevelId,
     label: 'Level 1',
-    status: normalizeStatusKey(selectedNode?.status ?? 'later'),
+    status: getLevelStatus({ statuses: {}, status: selectedNode?.status }, selectedReleaseId),
     releaseNote: '',
     scopeIds: [],
   }
@@ -842,16 +847,16 @@ export function InspectorPanel({
                     <SegmentedControl
                       fullWidth
                       size="xs"
-                      value={selectedNode.effort?.size ?? 'unclear'}
-                      onChange={(size) => onEffortChange?.({ size, customPoints: selectedNode.effort?.customPoints ?? null })}
+                      value={level.effort?.size ?? 'unclear'}
+                      onChange={(size) => onEffortChange?.({ size, customPoints: level.effort?.customPoints ?? null })}
                       data={Object.entries(EFFORT_SIZE_LABELS).map(([value, label]) => ({ value, label }))}
                     />
-                    {selectedNode.effort?.size === 'custom' && (
+                    {level.effort?.size === 'custom' && (
                       <NumberInput
                         mt={6}
                         label="Story Points (Custom)"
                         placeholder="z.B. 7"
-                        value={selectedNode.effort?.customPoints ?? ''}
+                        value={level.effort?.customPoints ?? ''}
                         onChange={(val) => onEffortChange?.({ size: 'custom', customPoints: val === '' ? null : Number(val) })}
                         min={0}
                         allowDecimal={false}
@@ -865,7 +870,7 @@ export function InspectorPanel({
                     <SegmentedControl
                       fullWidth
                       size="xs"
-                      value={selectedNode.benefit?.size ?? 'unclear'}
+                      value={level.benefit?.size ?? 'unclear'}
                       onChange={(size) => onBenefitChange?.({ size })}
                       data={Object.entries(BENEFIT_SIZE_LABELS).map(([value, label]) => ({ value, label }))}
                     />

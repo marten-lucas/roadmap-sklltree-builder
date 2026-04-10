@@ -242,23 +242,43 @@ const buildSeparatorPathWithDetours = ({
   let rightDetourCount = 0
   let totalDetourDeg = 0
 
-  for (const blocker of blockers) {
-    if (blocker.blockEndRadius <= currentRadius + EPSILON) {
-      continue
+  // Use a while-loop so that after each detour we re-evaluate all blockers
+  // from the new (currentAngle, currentRadius). This handles cases where the
+  // detour arc ends at an angle that coincides with a different node, or
+  // where the radial after a detour would pass through a node that was not
+  // blocking the original angle.
+  const processedBlockers = new Set()
+  const MAX_ITERATIONS = blockers.length * blockers.length + 10
+  let iterations = 0
+
+  while (currentRadius < outerRadius - EPSILON && iterations < MAX_ITERATIONS) {
+    iterations++
+
+    // Find the closest unprocessed blocker at the current angle and beyond currentRadius.
+    let nextBlocker = null
+    for (const blocker of blockers) {
+      if (processedBlockers.has(blocker)) continue
+      if (blocker.blockEndRadius <= currentRadius + EPSILON) continue
+
+      const isAngleBlocked =
+        currentAngle >= blocker.angleMin - EPSILON && currentAngle <= blocker.angleMax + EPSILON
+      if (!isAngleBlocked) continue
+
+      if (nextBlocker === null || blocker.blockStartRadius < nextBlocker.blockStartRadius) {
+        nextBlocker = blocker
+      }
     }
 
-    const isAngleBlocked =
-      currentAngle >= blocker.angleMin - EPSILON && currentAngle <= blocker.angleMax + EPSILON
-
-    if (!isAngleBlocked) {
-      continue
+    if (nextBlocker === null) {
+      // No more blockers on this radial – advance straight to the outer edge.
+      break
     }
 
-    const pivotRadius = clamp(blocker.blockStartRadius, currentRadius, outerRadius)
+    const pivotRadius = clamp(nextBlocker.blockStartRadius, currentRadius, outerRadius)
     addRaySegmentToRadius(pivotRadius)
 
-    const leftEscape = clamp(blocker.angleMin - detourPadding, allowedMinAngle, allowedMaxAngle)
-    const rightEscape = clamp(blocker.angleMax + detourPadding, allowedMinAngle, allowedMaxAngle)
+    const leftEscape = clamp(nextBlocker.angleMin - detourPadding, allowedMinAngle, allowedMaxAngle)
+    const rightEscape = clamp(nextBlocker.angleMax + detourPadding, allowedMinAngle, allowedMaxAngle)
 
     const leftDistance = Math.abs(currentAngle - leftEscape)
     const rightDistance = Math.abs(rightEscape - currentAngle)
@@ -278,8 +298,10 @@ const buildSeparatorPathWithDetours = ({
 
     addArcSegmentToAngle(nextAngle)
 
-    const exitRadius = clamp(blocker.blockEndRadius, currentRadius, outerRadius)
-    addRaySegmentToRadius(exitRadius)
+    // Mark this blocker as handled. We do NOT immediately advance past its
+    // blockEndRadius because the new angle may run into yet another node
+    // between pivotRadius and blockEndRadius — the loop will catch that.
+    processedBlockers.add(nextBlocker)
   }
 
   addRaySegmentToRadius(outerRadius)

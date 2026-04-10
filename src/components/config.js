@@ -3,6 +3,7 @@ const STATUS_ALIAS_MAP = {
   now: 'now',
   next: 'next',
   later: 'later',
+  hidden: 'hidden',
   fertig: 'done',
   jetzt: 'now',
   spaeter: 'later',
@@ -23,6 +24,7 @@ export const STATUS_LABELS = {
   now: 'Now',
   next: 'Next',
   later: 'Later',
+  hidden: 'Hidden',
 }
 
 export const STATUS_STYLES = {
@@ -70,6 +72,17 @@ export const STATUS_STYLES = {
     linkStrokeWidth: '2',
     linkOpacity: '0.4',
   },
+  hidden: {
+    glow: 'none',
+    ring: '#1e2533',
+    ringBand: '#2d3748',
+    badge: '#374151',
+    textColor: '#4b5563',
+    glowSegment: 'transparent',
+    linkStroke: '#374151',
+    linkStrokeWidth: '1.5',
+    linkOpacity: '0.15',
+  },
 }
 
 /**
@@ -90,6 +103,7 @@ export const NODE_LABEL_ZOOM = {
  * 20 distinct colors available for scope assignment.
  * Ordered to cover the hue wheel with good visual separation.
  */
+// Note: #f97316 (orange) and #14b8a6 (teal) are reserved for effort/benefit chips.
 export const SCOPE_COLORS = [
   '#6366f1', // indigo
   '#8b5cf6', // violet
@@ -97,17 +111,17 @@ export const SCOPE_COLORS = [
   '#ec4899', // pink
   '#f43f5e', // rose
   '#ef4444', // red
-  '#f97316', // orange
-  '#f59e0b', // amber
-  '#eab308', // yellow
-  '#84cc16', // lime
-  '#22c55e', // green
-  '#10b981', // emerald
-  '#14b8a6', // teal
-  '#06b6d4', // cyan
-  '#0ea5e9', // sky
-  '#3b82f6', // blue
-  '#6d28d9', // dark violet
+  '#ea580c', // orange-600 (darker)
+  '#d97706', // amber-600 (darker)
+  '#ca8a04', // yellow-600
+  '#65a30d', // lime-600
+  '#16a34a', // green-600
+  '#059669', // emerald-600
+  '#0f766e', // teal-700 (darker)
+  '#0891b2', // cyan-600
+  '#0284c7', // sky-600
+  '#2563eb', // blue-600
+  '#7c3aed', // violet-600
   '#be185d', // dark pink
   '#92400e', // dark amber
   '#475569', // slate

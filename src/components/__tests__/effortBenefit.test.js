@@ -176,10 +176,10 @@ describe('computeBudgetSummary', () => {
 })
 
 describe('createEmptyDocument', () => {
-  it('includes storyPointMap and storyPointBudget', () => {
+  it('includes storyPointMap and storyPointBudget per-release', () => {
     const doc = createEmptyDocument()
     expect(doc.storyPointMap).toEqual(DEFAULT_STORY_POINT_MAP)
-    expect(doc.storyPointBudget).toBeNull()
+    expect(doc.releases[0].storyPointBudget).toBeNull()
   })
 })
 

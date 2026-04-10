@@ -3,6 +3,8 @@ import { createEmptyDocument } from './documentState'
 import { normalizeEffort, normalizeBenefit } from './effortBenefit'
 import { ensureNodeLevels, findAdditionalDependencyCycles } from './treeData'
 import { generateUUID } from './uuid'
+import { getLevelStatus } from './nodeStatus'
+import { createRelease } from './releases'
 
 export const CSV_EXPORT_FILE_NAME = 'skilltree-roadmap.csv'
 
@@ -559,10 +561,18 @@ const buildDocumentFromRows = (rows, options = {}) => {
       return {
         id: generateUUID(),
         label: `Level ${row.progressLevel || index + 1}`,
-        status: normalizeStatusKey(row.status),
+        statuses: {},
+        _importStatus: normalizeStatusKey(row.status),
         releaseNote: row.releaseNote,
         scopeIds,
         additionalDependencyLevelIds: [],
+        effort: normalizeEffort({
+          size: row.effortSizeText || 'unclear',
+          customPoints: row.effortCustomPointsText ? Number(row.effortCustomPointsText) || null : null,
+        }),
+        benefit: normalizeBenefit({
+          size: row.benefitSizeText || 'unclear',
+        }),
         // store raw refs temporarily; resolved below after all nodes are built
         _dependencyLevelRefs: row.dependencyLevelRefs ?? [],
       }
@@ -572,12 +582,12 @@ const buildDocumentFromRows = (rows, options = {}) => {
       id: generateUUID(),
       label: group.label,
       shortName: group.shortName,
-      status: levels[0]?.status ?? 'later',
       levels,
       ebene: group.level,
       segmentId,
       additionalDependentIds: [],
       children: [],
+      // keep root-level effort/benefit for backward compat (display helper reads from levels first)
       effort: normalizeEffort({
         size: group.effortSizeText || 'unclear',
         customPoints: group.effortCustomPointsText ? Number(group.effortCustomPointsText) || null : null,
@@ -695,6 +705,19 @@ const buildDocumentFromRows = (rows, options = {}) => {
   }
 
   const document = createEmptyDocument()
+  const csvRelease = document.releases[0]
+  const csvReleaseId = csvRelease?.id
+  // Assign imported statuses into the first release's statuses map
+  if (csvReleaseId) {
+    for (const node of nodeByShortName.values()) {
+      for (const level of node.levels) {
+        if (level._importStatus !== undefined) {
+          level.statuses = { [csvReleaseId]: level._importStatus }
+          delete level._importStatus
+        }
+      }
+    }
+  }
   document.segments = Array.from(segmentsByKey.values())
   document.scopes = Array.from(scopesByKey.values())
   document.children = roots
@@ -705,7 +728,7 @@ const buildDocumentFromRows = (rows, options = {}) => {
   }
 }
 
-export const serializeDocumentToCsv = (document) => {
+export const serializeDocumentToCsv = (document, releaseId = null) => {
   const segmentLabelById = new Map((document?.segments ?? []).map((segment) => [segment.id, String(segment.label ?? '').trim()]))
   const scopeLabelById = new Map((document?.scopes ?? []).map((scope) => [scope.id, String(scope.label ?? '').trim()]))
   const nodeOrderMap = buildNodeOrderMap(document)
@@ -749,11 +772,13 @@ export const serializeDocumentToCsv = (document) => {
         parentShortName,
         additionalDependencyRefs.join(', '),
         String(index + 1),
-        normalizeStatusKey(level.status ?? node.status),
+        normalizeStatusKey(getLevelStatus(level, releaseId)),
         String(level.releaseNote ?? ''),
-        String(node.effort?.size ?? 'unclear'),
-        node.effort?.size === 'custom' && node.effort?.customPoints != null ? String(node.effort.customPoints) : '',
-        String(node.benefit?.size ?? 'unclear'),
+        String((level.effort?.size && level.effort.size !== 'unclear') ? level.effort.size : (node.effort?.size ?? 'unclear')),
+        (level.effort?.size === 'custom' && level.effort?.customPoints != null)
+          ? String(level.effort.customPoints)
+          : (node.effort?.size === 'custom' && node.effort?.customPoints != null ? String(node.effort.customPoints) : ''),
+        String((level.benefit?.size && level.benefit.size !== 'unclear') ? level.benefit.size : (node.benefit?.size ?? 'unclear')),
       ])
     })
 
@@ -781,12 +806,12 @@ export const serializeDocumentToCsv = (document) => {
   return rows.map(joinCsvRow).join('\n')
 }
 
-export const downloadDocumentCsv = (roadmapDocument, fileName = CSV_EXPORT_FILE_NAME) => {
+export const downloadDocumentCsv = (roadmapDocument, releaseId = null, fileName = CSV_EXPORT_FILE_NAME) => {
   if (typeof window === 'undefined' || typeof window.document === 'undefined') {
     return false
   }
 
-  const csvText = serializeDocumentToCsv(roadmapDocument)
+  const csvText = serializeDocumentToCsv(roadmapDocument, releaseId)
   readDocumentFromCsvText(csvText)
   const blob = new Blob([csvText], { type: 'text/csv;charset=utf-8' })
   const url = window.URL.createObjectURL(blob)

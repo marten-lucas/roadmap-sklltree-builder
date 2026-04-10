@@ -5,6 +5,7 @@ import { solveSkillTreeLayout } from '../utils/layoutSolver'
 import { TREE_CONFIG } from '../config'
 import { readDocumentFromCsvText } from '../utils/csv'
 import { createSimpleTree, createCrossSegmentTree, createDenseTree, createEmptyTree, countNodesInTree } from './testUtils'
+import { pathToSegments, polylineHitsCircle } from '../utils/edgeCrossings'
 
 describe('layoutSolver', () => {
   describe('solveSkillTreeLayout', () => {
@@ -1221,6 +1222,111 @@ describe('layoutSolver', () => {
       }
 
       expect(violations, `Inward edges found:\n${violations.join('\n')}`).toEqual([])
+    })
+  })
+
+  // ---------------------------------------------------------------------------
+  // Separator path — node avoidance
+  // ---------------------------------------------------------------------------
+  describe('segment separator paths avoid nodes', () => {
+    /**
+     * Verifies that no generated separator path passes within (nodeSize / 2)
+     * of any layout node's Cartesian centre.  This is the geometric guarantee
+     * that the radial polyline avoids every node circle.
+     */
+    function assertSeparatorsAvoidNodes(tree, config = TREE_CONFIG) {
+      const result = solveSkillTreeLayout(tree, config)
+      const { nodes, segments } = result.layout
+      const separators = segments?.separators ?? []
+      const hitRadius = config.nodeSize / 2
+
+      const violations = []
+      for (const separator of separators) {
+        const segs = pathToSegments(separator.path)
+        for (const node of nodes) {
+          if (polylineHitsCircle(segs, node.x, node.y, hitRadius)) {
+            violations.push(
+              `separator ${separator.id} hits node ${node.id} (angle=${node.angle.toFixed(1)}° r=${node.radius.toFixed(0)})`
+            )
+          }
+        }
+      }
+      expect(violations, violations.join('\n')).toEqual([])
+    }
+
+    it('simple tree: no separator crosses a node', () => {
+      assertSeparatorsAvoidNodes(createSimpleTree())
+    })
+
+    it('cross-segment tree: no separator crosses a node', () => {
+      assertSeparatorsAvoidNodes(createCrossSegmentTree())
+    })
+
+    it('dense tree: no separator crosses a node', () => {
+      assertSeparatorsAvoidNodes(createDenseTree())
+    })
+
+    it('two nodes tightly packed near separator boundary: separator avoids both', () => {
+      // Construct a scenario where the left segment has a node near its right
+      // boundary and the right segment has a node near its left boundary so
+      // that the separator angle lands between them.  This historically caused
+      // the "escaped-angle hits the adjacent node" bug.
+      const tree = {
+        segments: [
+          { id: 'seg-a', label: 'Segment A' },
+          { id: 'seg-b', label: 'Segment B' },
+        ],
+        children: [
+          {
+            id: 'root-a',
+            label: 'Root A',
+            status: 'jetzt',
+            ebene: null,
+            segmentId: 'seg-a',
+            children: [
+              { id: 'a1', label: 'A1', status: 'jetzt', ebene: null, segmentId: 'seg-a', children: [] },
+              { id: 'a2', label: 'A2', status: 'jetzt', ebene: null, segmentId: 'seg-a', children: [] },
+            ],
+          },
+          {
+            id: 'root-b',
+            label: 'Root B',
+            status: 'jetzt',
+            ebene: null,
+            segmentId: 'seg-b',
+            children: [
+              { id: 'b1', label: 'B1', status: 'jetzt', ebene: null, segmentId: 'seg-b', children: [] },
+              { id: 'b2', label: 'B2', status: 'jetzt', ebene: null, segmentId: 'seg-b', children: [] },
+            ],
+          },
+        ],
+      }
+      assertSeparatorsAvoidNodes(tree)
+    })
+
+    it('three segments with multiple nodes per segment: all separators clear nodes', () => {
+      const tree = {
+        segments: [
+          { id: 's1', label: 'One' },
+          { id: 's2', label: 'Two' },
+          { id: 's3', label: 'Three' },
+        ],
+        children: Array.from({ length: 6 }, (_, i) => {
+          const seg = i < 2 ? 's1' : i < 4 ? 's2' : 's3'
+          return {
+            id: `r${i}`,
+            label: `Root ${i}`,
+            status: 'jetzt',
+            ebene: null,
+            segmentId: seg,
+            children: [
+              { id: `r${i}c1`, label: `C${i}1`, status: 'jetzt', ebene: null, segmentId: seg, children: [] },
+              { id: `r${i}c2`, label: `C${i}2`, status: 'jetzt', ebene: null, segmentId: seg, children: [] },
+            ],
+          }
+        }),
+      }
+      assertSeparatorsAvoidNodes(tree)
     })
   })
 })
