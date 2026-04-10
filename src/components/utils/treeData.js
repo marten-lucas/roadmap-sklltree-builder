@@ -102,7 +102,11 @@ const normalizeScopeEntries = (value) => {
 
     usedIds.add(id)
     usedNameKeys.add(labelKey)
-    scopes.push({ id, label })
+    const scopeEntry = { id, label }
+    if (typeof entry?.color === 'string' && /^#[0-9a-fA-F]{6}$/.test(entry.color)) {
+      scopeEntry.color = entry.color
+    }
+    scopes.push(scopeEntry)
   }
 
   return scopes
@@ -968,6 +972,35 @@ export const renameScopeWithResult = (treeData, scopeId, nextLabel) => {
             ...scope,
             label: validation.label,
           }
+        : scope,
+    ),
+  })
+
+  return {
+    ok: true,
+    error: null,
+    tree: nextTree,
+  }
+}
+
+export const setScopeColorWithResult = (treeData, scopeId, color) => {
+  const exists = (treeData.scopes ?? []).some((scope) => scope.id === scopeId)
+  if (!exists) {
+    return {
+      ok: false,
+      error: 'Scope wurde nicht gefunden.',
+      tree: treeData,
+    }
+  }
+
+  // Accept null/undefined to clear the color, or a valid 6-digit hex color.
+  const normalizedColor = color == null ? null : (typeof color === 'string' && /^#[0-9a-fA-F]{6}$/.test(color) ? color : null)
+
+  const nextTree = withNormalizedDependencies({
+    ...treeData,
+    scopes: (treeData.scopes ?? []).map((scope) =>
+      scope.id === scopeId
+        ? { ...scope, color: normalizedColor }
         : scope,
     ),
   })

@@ -8,12 +8,6 @@ const getPortalClassName = (portal, isSelected) => [
   isSelected ? 'skill-tree-portal--selected' : '',
 ].filter(Boolean).join(' ')
 
-// Ring r=13 contains the label; Cup is a semicircle r=19 centered at origin.
-// Cup mouth faces +x by default (toward node = target/incoming).
-// Source portals get rotate(180) so mouth faces outward (away from node).
-const PORTAL_RING_R = 13
-const PORTAL_CUP_PATH = 'M 0 -19 A 19 19 0 0 1 0 19'
-
 export function SkillTreeCanvas({
   canvasRef,
   canvas,
@@ -31,6 +25,7 @@ export function SkillTreeCanvas({
   selectedPortalKey,
   visibleDependencyPortals,
   visibleDependencyLines = [],
+  depSummaryByNodeId = new Map(),
   selectedLayoutNode,
   selectedControlGeometry,
   selectedSegmentLabel,
@@ -69,6 +64,22 @@ export function SkillTreeCanvas({
           <stop offset="0%" stopColor="#60a5fa" stopOpacity="0.22" />
           <stop offset="100%" stopColor="#020617" stopOpacity="0" />
         </radialGradient>
+        {/* Directional chevron markers for portal spokes.
+            stroke="context-stroke" inherits the path color so hover/selected states apply automatically. */}
+        {/* Source (outgoing): ">" points away from node */}
+        <marker id="portal-chevron-source" markerWidth="10" markerHeight="12"
+          refX="3" refY="6" orient="auto" markerUnits="userSpaceOnUse">
+          <path d="M1,2 L6,6 L1,10" fill="none"
+            stroke="context-stroke" strokeWidth="2"
+            strokeLinecap="round" strokeLinejoin="round" />
+        </marker>
+        {/* Target (incoming): "<" points toward node */}
+        <marker id="portal-chevron-target" markerWidth="10" markerHeight="12"
+          refX="7" refY="6" orient="auto" markerUnits="userSpaceOnUse">
+          <path d="M9,2 L4,6 L9,10" fill="none"
+            stroke="context-stroke" strokeWidth="2"
+            strokeLinecap="round" strokeLinejoin="round" />
+        </marker>
       </defs>
 
       <circle cx={canvas.origin.x} cy={canvas.origin.y} r={canvas.maxRadius + 160} fill="url(#nodeHalo)" />
@@ -217,37 +228,59 @@ export function SkillTreeCanvas({
           )
         })}
 
-        {renderedNodes.map((node) => {
-          const visibilityMode = nodeVisibilityModeById.get(node.id) ?? 'full'
-          const renderNodeSize = visibilityMode === 'minimal' ? minimalNodeSize : nodeSize
-
-          return (
-            <SkillTreeNode
-              key={node.id}
-              node={node}
-              nodeSize={renderNodeSize}
-              displayMode={visibilityMode}
-              labelMode={visibilityMode === 'minimal' ? 'far' : labelMode}
-              isSelected={node.id === selectedNodeId || selectedNodeIds.includes(node.id)}
-              scopeOptions={scopeOptions}
-              onSelect={onSelectNode}
-              storyPointMap={storyPointMap}
-              canvasOriginX={canvas.origin.x}
-            />
-          )
-        })}
-
-        {/* ── Dependency portals ── */}
+        {/* ── Dependency portals (spokes) — rendered before nodes so spokes sit behind circles/rectangles ── */}
         {visibleDependencyPortals.map((portal) => {
           const isPortalSelected = portal.key === selectedPortalKey
           const portalClassName = getPortalClassName(portal, isPortalSelected)
-          const portalRotation = portal.rotation ?? 0
-          const portalAngle = portal.angle ?? 0
-          const portalScale = portal.scale ?? 1
           const isSource = portal.type === 'source'
           const dotIdx = portal.otherLabel ? portal.otherLabel.indexOf('\u00B7') : -1
           const labelName = dotIdx >= 0 ? portal.otherLabel.slice(0, dotIdx) : (portal.otherLabel ?? '')
           const labelLevel = dotIdx >= 0 ? portal.otherLabel.slice(dotIdx + 1) : null
+
+          // Spoke: line from node boundary point to portal tip
+          const nodeData = layoutNodesById.get(portal.nodeId)
+          const nodeX = nodeData?.x ?? portal.x
+          const nodeY = nodeData?.y ?? portal.y
+          const angleRad = (portal.angle ?? 0) * Math.PI / 180
+          // For rounded-rect nodes (very-close) use rectangular boundary so corners don't clip
+          const halfSize = nodeSize / 2
+          const boundaryRadius = labelMode === 'very-close'
+            ? halfSize / Math.max(Math.abs(Math.cos(angleRad)), Math.abs(Math.sin(angleRad)))
+            : halfSize
+          // Coords relative to portal center (translate group origin = portal.x/y)
+          const bxLocal = (nodeX + Math.cos(angleRad) * boundaryRadius) - portal.x
+          const byLocal = (nodeY + Math.sin(angleRad) * boundaryRadius) - portal.y
+          // Extend spoke tip by the same amount the rect boundary exceeds the circle boundary
+          // → zero at cardinal angles, max at 45° corners; no extension for circle nodes
+          const spokeLen = Math.sqrt(bxLocal * bxLocal + byLocal * byLocal)
+          const ext = (labelMode === 'very-close' && !portal.isMinimal)
+            ? halfSize * (1 / Math.max(Math.abs(Math.cos(angleRad)), Math.abs(Math.sin(angleRad))) - 1)
+            : 0
+          const extTipX = spokeLen > 0 ? (-bxLocal / spokeLen) * ext : 0
+          const extTipY = spokeLen > 0 ? (-byLocal / spokeLen) * ext : 0
+          // Midpoint + rotation for label along the spoke
+          const mx = (bxLocal + extTipX) / 2
+          const my = (byLocal + extTipY) / 2
+          const lineAngleDeg = Math.atan2(byLocal, bxLocal) * 180 / Math.PI
+          const readAngleDeg = (lineAngleDeg > 90 || lineAngleDeg < -90) ? lineAngleDeg + 180 : lineAngleDeg
+
+          // Build path with intermediate points so markerMid fires a chevron every CHEVRON_SPACING units
+          const CHEVRON_SPACING = 14
+          const spokeDx = extTipX - bxLocal
+          const spokeDy = extTipY - byLocal
+          const spokeLen2 = Math.sqrt(spokeDx * spokeDx + spokeDy * spokeDy)
+          const spokePts = [[bxLocal, byLocal]]
+          if (spokeLen2 > CHEVRON_SPACING) {
+            const nSteps = Math.floor(spokeLen2 / CHEVRON_SPACING)
+            for (let ci = 1; ci <= nSteps; ci++) {
+              const t = (ci * CHEVRON_SPACING) / spokeLen2
+              if (t < 1) spokePts.push([bxLocal + spokeDx * t, byLocal + spokeDy * t])
+            }
+          }
+          spokePts.push([extTipX, extTipY])
+          const spokePathD = spokePts.map(([px, py], i) =>
+            `${i === 0 ? 'M' : 'L'}${px.toFixed(2)},${py.toFixed(2)}`
+          ).join(' ')
 
           return (
             <Tooltip
@@ -274,29 +307,51 @@ export function SkillTreeCanvas({
                   }
                 }}
               >
-                <g transform={`rotate(${portalRotation}) scale(${portalScale})`}>
-                  <circle className="skill-tree-portal__hit" r="26" />
-                  <circle className={`skill-tree-portal__ring skill-tree-portal__ring--${portal.type}`} r={PORTAL_RING_R} />
-                  <path
-                    className={`skill-tree-portal__cup skill-tree-portal__cup--${portal.type}`}
-                    d={PORTAL_CUP_PATH}
-                    transform={!isSource ? 'rotate(180)' : undefined}
-                  />
-                </g>
+                {/* spoke: interpolated path so markerMid fires a chevron at each step */}
+                <path
+                  d={spokePathD}
+                  className={`skill-tree-portal__spoke skill-tree-portal__spoke--${portal.type}`}
+                  markerMid={`url(#portal-chevron-${portal.type})`}
+                />
+                {/* invisible hit area */}
+                <circle className="skill-tree-portal__hit" r="18" cx={extTipX} cy={extTipY} />
+                {/* label along the spoke */}
                 {!portal.isMinimal && (
                   <text
                     className="skill-tree-portal__label"
-                    x="0"
-                    y={labelLevel ? '-3.5' : '0'}
+                    x={mx}
+                    y={my}
+                    dy="-4"
                     textAnchor="middle"
-                    dominantBaseline="middle"
+                    transform={`rotate(${readAngleDeg.toFixed(2)}, ${mx.toFixed(2)}, ${my.toFixed(2)})`}
                   >
                     {labelName}
-                    {labelLevel && <tspan x="0" dy="8">{labelLevel}</tspan>}
+                    {labelLevel && <tspan x={mx} dy="8">{labelLevel}</tspan>}
                   </text>
                 )}
               </g>
             </Tooltip>
+          )
+        })}
+
+        {renderedNodes.map((node) => {
+          const visibilityMode = nodeVisibilityModeById.get(node.id) ?? 'full'
+          const renderNodeSize = visibilityMode === 'minimal' ? minimalNodeSize : nodeSize
+
+          return (
+            <SkillTreeNode
+              key={node.id}
+              node={node}
+              nodeSize={renderNodeSize}
+              displayMode={visibilityMode}
+              labelMode={visibilityMode === 'minimal' ? 'far' : labelMode}
+              isSelected={node.id === selectedNodeId || selectedNodeIds.includes(node.id)}
+              scopeOptions={scopeOptions}
+              onSelect={onSelectNode}
+              storyPointMap={storyPointMap}
+              canvasOriginX={canvas.origin.x}
+              nodeDeps={depSummaryByNodeId.get(node.id) ?? null}
+            />
           )
         })}
 

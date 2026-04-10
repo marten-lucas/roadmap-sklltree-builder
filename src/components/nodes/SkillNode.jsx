@@ -2,12 +2,10 @@ import { useState } from 'react'
 import { Paper, Text } from '@mantine/core'
 import { STATUS_STYLES } from '../config'
 import { getDisplayStatusKey, getLevelStatusKeys } from '../utils/nodeStatus'
-import { resolveScopeLabels } from '../utils/scopeDisplay'
+import { resolveScopeEntries } from '../utils/scopeDisplay'
 import { MarkdownTooltipContent, Tooltip } from '../tooltip'
 import { EFFORT_SIZE_LABELS, BENEFIT_SIZE_LABELS } from '../utils/effortBenefit'
 
-const CLOSE_CARD_WIDTH = 144 // px card width below the circle
-const CLOSE_CARD_HEIGHT = 164 // px card height (slightly above max-height 156)
 
 const getShortName = (node) => {
   const explicitShortName = String(node?.shortName ?? '').trim().toLowerCase().slice(0, 3)
@@ -71,28 +69,29 @@ const buildSegmentConicStyle = (statusKeys, colorGetter) => {
   }
 }
 
-export function SkillNode({ node, nodeSize, isSelected, onSelect, onSelectLevel, displayMode = 'full', labelMode = 'far', scopeOptions = [], storyPointMap, canvasOriginX = 0 }) {
+export function SkillNode({ node, nodeSize, isSelected, onSelect, onSelectLevel, displayMode = 'full', labelMode = 'far', scopeOptions = [], storyPointMap, canvasOriginX = 0, nodeDeps = null }) {
   const [activeCardTab, setActiveCardTab] = useState(0)
   const [hoveredLevelIndex, setHoveredLevelIndex] = useState(null)
   const isMinimal = displayMode === 'minimal'
-  const glowPadding = isMinimal ? 8 : 18
+  const isVeryClose = !isMinimal && labelMode === 'very-close'
+  const glowPadding = isMinimal ? 8 : isVeryClose ? 36 : 18
   const renderSize = nodeSize + glowPadding * 2
-  const showCard = !isMinimal && labelMode === 'close'
-  const cardOverlap = Math.round(nodeSize / 4)
-  const fwWidth = showCard ? Math.max(renderSize, CLOSE_CARD_WIDTH + 2 * glowPadding) : renderSize
-  const fwHeight = renderSize + (showCard ? CLOSE_CARD_HEIGHT - cardOverlap : 0)
+  const showChips = !isMinimal && (labelMode === 'close' || labelMode === 'very-close')
+  const fwWidth = renderSize
+  const fwHeight = renderSize
+  const fwY = node.y - nodeSize / 2 - glowPadding
   const statusKey = getDisplayStatusKey(node)
   const statusStyles = STATUS_STYLES[statusKey] ?? STATUS_STYLES.later
   const shortName = getShortName(node)
   const tooltipLevel = getTooltipLevel(node)
   const tooltipReleaseNote = getTooltipReleaseNote(node)
-  const tooltipScopeLabels = resolveScopeLabels(tooltipLevel?.scopeIds, scopeOptions)
+  const tooltipScopeLabels = resolveScopeEntries(tooltipLevel?.scopeIds, scopeOptions)
   const levels = Array.isArray(node?.levels) ? node.levels : []
   const activeTooltipReleaseNote = hoveredLevelIndex !== null
     ? (String(levels[hoveredLevelIndex]?.releaseNote ?? '').trim() || 'Keine Release Note hinterlegt.')
     : tooltipReleaseNote
   const activeTooltipScopeLabels = hoveredLevelIndex !== null
-    ? resolveScopeLabels(levels[hoveredLevelIndex]?.scopeIds, scopeOptions)
+    ? resolveScopeEntries(levels[hoveredLevelIndex]?.scopeIds, scopeOptions)
     : tooltipScopeLabels
   const activeTooltipTitle = hoveredLevelIndex !== null && levels.length > 1
     ? `${node.label} – L${hoveredLevelIndex + 1}`
@@ -109,7 +108,7 @@ export function SkillNode({ node, nodeSize, isSelected, onSelect, onSelectLevel,
       status: String(level?.status ?? 'later').trim().toLowerCase(),
       statusLabel: STATUS_STYLES[String(level?.status ?? 'later').trim().toLowerCase()]?.label ?? String(level?.status ?? 'Later'),
       releaseNote: String(level?.releaseNote ?? ''),
-      scopeLabels: resolveScopeLabels(level?.scopeIds, scopeOptions),
+      scopeLabels: resolveScopeEntries(level?.scopeIds, scopeOptions),
     }))
     : []
   const levelGlowStyle = buildSegmentConicStyle(
@@ -120,13 +119,15 @@ export function SkillNode({ node, nodeSize, isSelected, onSelect, onSelectLevel,
     levelStatusKeys,
     (key) => (key === 'now' ? STATUS_STYLES.now.glowSegment : 'transparent'),
   )
-  const nodeBackground = isSelected
-    ? statusKey === 'done'
-      ? 'radial-gradient(circle at 32% 28%, rgb(100, 118, 140), rgb(45, 62, 85) 58%, rgb(15, 22, 40) 100%)'
-      : 'radial-gradient(circle at 35% 30%, rgb(28, 88, 195), rgb(14, 28, 84) 56%, rgb(2, 6, 26) 100%)'
-    : statusKey === 'done'
-      ? 'radial-gradient(circle at 32% 28%, rgb(83, 96, 117), rgb(29, 40, 60) 58%, rgb(10, 16, 31) 100%)'
-      : 'radial-gradient(circle at 32% 28%, rgb(21, 45, 94), rgb(15, 23, 42) 58%, rgb(2, 6, 23) 100%)'
+  const nodeBackground = isVeryClose
+    ? 'transparent'
+    : isSelected
+      ? statusKey === 'done'
+        ? 'radial-gradient(circle at 32% 28%, rgb(100, 118, 140), rgb(45, 62, 85) 58%, rgb(15, 22, 40) 100%)'
+        : 'radial-gradient(circle at 35% 30%, rgb(28, 88, 195), rgb(14, 28, 84) 56%, rgb(2, 6, 26) 100%)'
+      : statusKey === 'done'
+        ? 'radial-gradient(circle at 32% 28%, rgb(83, 96, 117), rgb(29, 40, 60) 58%, rgb(10, 16, 31) 100%)'
+        : 'radial-gradient(circle at 32% 28%, rgb(21, 45, 94), rgb(15, 23, 42) 58%, rgb(2, 6, 23) 100%)'
 
   const handleRingMouseMove = (event) => {
     if (levels.length <= 1) return
@@ -166,13 +167,13 @@ export function SkillNode({ node, nodeSize, isSelected, onSelect, onSelectLevel,
   }
 
 
-  const showLabel = !isMinimal && (labelMode === 'mid' || labelMode === 'close')
+  const showLabel = !isMinimal && (labelMode === 'mid' || labelMode === 'close' || labelMode === 'very-close')
   const fwX = node.x - fwWidth / 2
 
   return (
     <foreignObject
       x={fwX}
-      y={node.y - nodeSize / 2 - glowPadding}
+      y={fwY}
       width={fwWidth}
       height={fwHeight}
       className="skill-node-export-anchor"
@@ -188,12 +189,14 @@ export function SkillNode({ node, nodeSize, isSelected, onSelect, onSelectLevel,
     >
       <div
         xmlns="http://www.w3.org/1999/xhtml"
-        className={showCard ? 'skill-node-foreign skill-node-foreign--close' : 'skill-node-foreign'}
+        className={isVeryClose ? 'skill-node-foreign skill-node-foreign--veryclose' : 'skill-node-foreign'}
         style={{ padding: `${glowPadding}px` }}
         onClick={(event) => event.stopPropagation()}
       >
+        {!isMinimal && <div className="skill-node-glow-layer" style={levelGlowStyle} />}
+        {!isMinimal && <div className="skill-node-glow-layer" style={{ ...nowLevelGlowStyle, filter: isVeryClose ? undefined : 'blur(24px)' }} />}
         <Tooltip
-          disabled={labelMode === 'close'}
+          disabled={labelMode === 'close' || labelMode === 'very-close'}
           multiline
           openDelay={80}
           closeDelay={40}
@@ -208,17 +211,16 @@ export function SkillNode({ node, nodeSize, isSelected, onSelect, onSelectLevel,
             onMouseMove={handleRingMouseMove}
             onMouseLeave={handleRingMouseLeave}
             className={isMinimal ? 'skill-node-button skill-node-button--minimal' : 'skill-node-button'}
-            radius="xl"
+            radius={isVeryClose ? 'sm' : 'xl'}
             withBorder={false}
             style={{
               background: nodeBackground,
               width: `${nodeSize}px`,
               height: `${nodeSize}px`,
+              '--node-ring-color': statusStyles.ring,
             }}
           >
-            {!isMinimal && <div className="skill-node-level-glow" style={levelGlowStyle} />}
-            {!isMinimal && <div className="skill-node-level-glow" style={{ ...nowLevelGlowStyle, filter: 'blur(24px)' }} />}
-            <div className="skill-node-level-ring" style={levelRingStyle} />
+            {!isMinimal && <div className="skill-node-level-ring" style={levelRingStyle} />}
             <div className={showLabel ? 'skill-node-button__content skill-node-button__content--labeled' : 'skill-node-button__content'}>
               {showLabel && (
                 <p
@@ -236,24 +238,27 @@ export function SkillNode({ node, nodeSize, isSelected, onSelect, onSelectLevel,
                   {shortName}
                 </Text>
               )}
+              {showChips && (tooltipScopeLabels.length > 0 || node.effort?.size || node.benefit?.size) && (
+                <div className="skill-node-inner-chips">
+                  {tooltipScopeLabels.slice(0, 4).map((s, i) => (
+                    <span
+                      key={i}
+                      className="skill-node-inner-chip skill-node-inner-chip--scope"
+                      style={{ background: (s.color ?? '#fbbf24') + '22', borderColor: (s.color ?? '#fbbf24') + '99', color: s.color ?? '#fbbf24' }}
+                      title={s.label}
+                    >{s.label}</span>
+                  ))}
+                  {node.effort?.size && node.effort.size !== 'unclear' && (
+                    <span className="skill-node-inner-chip skill-node-inner-chip--effort" title={EFFORT_SIZE_LABELS[node.effort.size] ?? node.effort.size} />
+                  )}
+                  {node.benefit?.size && node.benefit.size !== 'unclear' && (
+                    <span className="skill-node-inner-chip skill-node-inner-chip--benefit" title={BENEFIT_SIZE_LABELS[node.benefit.size] ?? node.benefit.size} />
+                  )}
+                </div>
+              )}
             </div>
           </Paper>
         </Tooltip>
-        {showCard && (
-          <div className="skill-node-label-card" style={{ marginTop: -cardOverlap }}>
-            <MarkdownTooltipContent
-              title={null}
-              markdown={tooltipReleaseNote}
-              scopeLabels={tooltipScopeLabels}
-              effort={node.effort}
-              benefit={node.benefit}
-              storyPointMap={storyPointMap}
-              levels={exportLevelEntries}
-              activeLevelIndex={activeCardTab}
-              onTabChange={setActiveCardTab}
-            />
-          </div>
-        )}
       </div>
     </foreignObject>
   )

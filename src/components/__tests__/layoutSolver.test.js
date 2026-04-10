@@ -608,7 +608,10 @@ describe('layoutSolver', () => {
 
       expect(routedLinks.length).toBeGreaterThan(0)
       for (const link of routedLinks) {
-        expect(link.path).toMatch(/A /)
+        // Routed links have a shared trunk: at minimum M→L (trunk)→L (diagonal to child).
+        // An arc may be absent when parent sits exactly at the trunk angle.
+        const lCount = (link.path.match(/\bL\s/g) ?? []).length
+        expect(lCount).toBeGreaterThanOrEqual(2)
       }
     })
 
@@ -1151,6 +1154,50 @@ describe('layoutSolver', () => {
         const lineCommands = commands.filter((match) => match[1] === 'L')
         expect(lineCommands.length).toBeGreaterThanOrEqual(1)
       })
+    })
+  })
+
+  describe('crossing edge detection – crossingEdges in layout result', () => {
+    it('crossingEdges is empty for a clean non-crossing tree', () => {
+      const tree = {
+        segments: [{ id: 'seg', label: 'Seg' }],
+        children: [
+          {
+            id: 'p',
+            label: 'Parent',
+            status: 'fertig',
+            ebene: 1,
+            segmentId: 'seg',
+            children: [
+              { id: 'c1', label: 'C1', status: 'fertig', ebene: 2, segmentId: 'seg', children: [] },
+              { id: 'c2', label: 'C2', status: 'fertig', ebene: 2, segmentId: 'seg', children: [] },
+            ],
+          },
+        ],
+      }
+      const result = solveSkillTreeLayout(tree, TREE_CONFIG)
+      expect(result.layout.crossingEdges).toBeDefined()
+      expect(result.layout.crossingEdges).toHaveLength(0)
+    })
+
+    it('crossing edges are absent from layout.links and present in layout.crossingEdges', () => {
+      const result = solveSkillTreeLayout(
+        readDocumentFromCsvText(
+          readFileSync(resolve(process.cwd(), 'tests/e2e/datasets/myKyana.csv'), 'utf-8'),
+          { ignoreSegments: false, ignoreManualLevels: true },
+        ),
+        TREE_CONFIG,
+      )
+
+      const { links, crossingEdges } = result.layout
+
+      // No crossing edge ID should appear in the rendered links
+      const linkIds = new Set(links.map((l) => l.id))
+      for (const ce of crossingEdges) {
+        expect(linkIds.has(ce.id), `Crossing edge ${ce.id} must not appear in layout.links`).toBe(false)
+        expect(ce.parentId).toBeTruthy()
+        expect(ce.childId).toBeTruthy()
+      }
     })
   })
 

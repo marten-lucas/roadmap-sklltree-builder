@@ -1,8 +1,8 @@
-export const VIEWPORT_ZOOM_STEPS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 2]
+export const VIEWPORT_ZOOM_STEPS = [0.25, 0.5, 0.75, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
 
 export const VIEWPORT_DEFAULTS = {
   minScale: 0.2,
-  maxScale: 2.2,
+  maxScale: 10,
   fitPadding: 72,
   wheelStep: 0.12,
 }

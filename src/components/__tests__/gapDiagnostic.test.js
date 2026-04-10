@@ -9,9 +9,12 @@ import { readDocumentFromCsvText } from '../utils/csv'
 import { solveSkillTreeLayout } from '../utils/layoutSolver'
 import { TREE_CONFIG } from '../config'
 
-const normalizeAngle = (a) => { const n = a % 360; return n < 0 ? n + 360 : n }
+// Measure the maximum gap between consecutive node angles in the SIGNED layout
+// space (not circular-normalised).  After gap compaction, clusters are close
+// together so interior signed-space gaps should be small; the large "back of
+// the circle" gap is intentionally excluded here.
 function maxInteriorAngularGapDeg(angles) {
-  const sorted = [...new Set(angles.map(normalizeAngle))].sort((a, b) => a - b)
+  const sorted = [...new Set(angles)].sort((a, b) => a - b)
   if (sorted.length < 2) return 0
   let max = 0
   for (let i = 1; i < sorted.length; i++) max = Math.max(max, sorted[i] - sorted[i - 1])

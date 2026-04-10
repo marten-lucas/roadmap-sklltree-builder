@@ -55,7 +55,10 @@ describe('pdfExport', () => {
       nodeLabel: 'React Platform',
       shortName: 'RCT',
       statusLabel: 'Now',
-      scopeLabels: ['Frontend', 'Platform'],
+      scopeLabels: [
+        { label: 'Frontend', color: null },
+        { label: 'Platform', color: null },
+      ],
     })
   })
 

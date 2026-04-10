@@ -169,9 +169,8 @@ const buildViewerScript = () => `
       const NODE_LABEL_ZOOM = {
         farToMid: ${NODE_LABEL_ZOOM.farToMid},
         midToClose: ${NODE_LABEL_ZOOM.midToClose},
+        closeToVeryClose: ${NODE_LABEL_ZOOM.closeToVeryClose},
       }
-      const CLOSE_CARD_WIDTH = 144
-      const CLOSE_CARD_GAP = 0
 
       const STATUS_TEXT_COLORS = {
         done: '#5a6576',
@@ -319,6 +318,7 @@ const buildViewerScript = () => `
 
       const getLabelMode = (scale) => {
         if (scale < NODE_LABEL_ZOOM.farToMid) return 'far'
+        if (scale >= NODE_LABEL_ZOOM.closeToVeryClose) return 'very-close'
         if (scale >= NODE_LABEL_ZOOM.midToClose) return 'close'
         return 'mid'
       }
@@ -343,134 +343,13 @@ const buildViewerScript = () => `
         }
       }
 
-      const STATUS_RING_COLORS = {
-        done: '#9eabbb',
-        now: '#ef4444',
-        next: '#06b6d4',
-        later: '#4f5f75',
-      }
-
-      const buildCardNoteHtml = (note) =>
-        '<div class="skill-node-tooltip__note skill-node-tooltip__note--markdown" style="font-size:8px;line-height:1.35;">' +
-        '<p style="margin:0;">' + escapeLabelHtml(note || 'Keine Release Note hinterlegt.') + '</p>' +
-        '</div>'
-
-      const buildCardScopeHtml = (scopeLabels) => {
-        if (!Array.isArray(scopeLabels) || scopeLabels.length === 0) return ''
-        return '<div class="skill-node-tooltip__scopes" aria-label="Scopes">' +
-          scopeLabels.map((l) => '<span class="skill-node-tooltip__scope">' + escapeLabelHtml(l) + '</span>').join('') +
-          '</div>'
-      }
-
-      const buildCardChipsHtml = (anchor) => {
-        const effort = anchor.getAttribute('data-export-effort') || ''
-        const benefit = anchor.getAttribute('data-export-benefit') || ''
-        if (!effort && !benefit) return ''
-        return '<div class="skill-node-tooltip__chips" style="margin-bottom:3px;">' +
-          (effort ? '<span class="skill-node-chip skill-node-chip--effort" style="font-size:7px;padding:1px 4px;">⚡ ' + escapeLabelHtml(effort) + '</span>' : '') +
-          (benefit ? '<span class="skill-node-chip skill-node-chip--benefit" style="font-size:7px;padding:1px 4px;">★ ' + escapeLabelHtml(benefit) + '</span>' : '') +
-          '</div>'
-      }
-
-      const addNodeCard = (anchor) => {
-        const levelsRaw = anchor.getAttribute('data-export-levels')
-        let levels = []
-        try { levels = levelsRaw ? JSON.parse(levelsRaw) : [] } catch { levels = [] }
-
-        // Pick best initial level (prefer one with a release note)
-        let activeIndex = 0
-        for (let i = 0; i < levels.length; i++) {
-          if (String(levels[i]?.releaseNote ?? '').trim()) { activeIndex = i; break }
-        }
-
-        let card = anchor.querySelector('.skill-node-label-card')
-        if (!card) {
-          card = document.createElement('div')
-          card.className = 'skill-node-label-card'
-        }
-
-        const activeLevel = levels[activeIndex] ?? { releaseNote: '', scopeLabels: [] }
-
-        let tabBarHtml = ''
-        if (levels.length > 1) {
-          tabBarHtml = '<div class="skill-node-level-tab-bar">' +
-            levels.map((level, i) => {
-              const statusKey = String(level?.status ?? 'later').trim().toLowerCase()
-              const dotColor = STATUS_RING_COLORS[statusKey] ?? STATUS_RING_COLORS.later
-              const shortLabel = 'L' + (i + 1)
-              const isActive = i === activeIndex
-              return '<button type="button"' +
-                ' class="skill-node-level-tab' + (isActive ? ' skill-node-level-tab--active' : '') + '"' +
-                ' data-level-index="' + i + '"' +
-                ' title="' + escapeLabelHtml(String(level?.label ?? ('Level ' + (i + 1)))) + '">' +
-                '<span class="skill-node-level-tab__dot" style="background:' + dotColor + ';display:inline-block;width:5px;height:5px;border-radius:50%;flex-shrink:0;"></span>' +
-                shortLabel +
-                '</button>'
-            }).join('') +
-            '</div>'
-        }
-
-        card.innerHTML = tabBarHtml +
-          buildCardChipsHtml(anchor) +
-          buildCardNoteHtml(activeLevel.releaseNote) +
-          buildCardScopeHtml(activeLevel.scopeLabels ?? [])
-
-        if (levels.length > 1) {
-          const noteEl = card.querySelector('.skill-node-tooltip__note--markdown')
-          card.querySelectorAll('.skill-node-level-tab').forEach((tab) => {
-            tab.style.cursor = 'pointer'
-            tab.onclick = (e) => {
-              e.stopPropagation()
-              const idx = Number(tab.dataset.levelIndex)
-              card.querySelectorAll('.skill-node-level-tab').forEach((t) => t.classList.remove('skill-node-level-tab--active'))
-              tab.classList.add('skill-node-level-tab--active')
-              const lev = levels[idx] ?? {}
-              noteEl.innerHTML = '<p style="margin:0;">' + escapeLabelHtml(String(lev.releaseNote ?? '') || 'Keine Release Note hinterlegt.') + '</p>'
-              const existingScopes = card.querySelector('.skill-node-tooltip__scopes')
-              if (existingScopes) existingScopes.remove()
-              const scopeHtml = buildCardScopeHtml(lev.scopeLabels ?? [])
-              if (scopeHtml) card.insertAdjacentHTML('beforeend', scopeHtml)
-            }
-          })
-        }
-
-        const wrapper = anchor.querySelector('.skill-node-foreign')
-        const CLOSE_CARD_OVERLAP = 30 // nodeSize(120) / 4
-        if (wrapper && !anchor.querySelector('.skill-node-label-card')) {
-          wrapper.style.display = 'flex'
-          wrapper.style.flexDirection = 'column'
-          wrapper.style.alignItems = 'center'
-          wrapper.style.gap = '0'
-          card.style.marginTop = '-' + CLOSE_CARD_OVERLAP + 'px'
-          card.style.marginLeft = '0'
-          card.style.marginRight = '0'
-          card.style.width = '144px'
-          wrapper.appendChild(card)
-        }
-        if (!anchor.dataset.origFwHeight) {
-          anchor.dataset.origFwHeight = anchor.getAttribute('height') || ''
-          anchor.dataset.origFwWidth = anchor.getAttribute('width') || ''
-          anchor.dataset.origFwX = anchor.getAttribute('x') || ''
-        }
-        const origH = Number.parseFloat(anchor.dataset.origFwHeight) || 0
-        const origW = Number.parseFloat(anchor.dataset.origFwWidth) || 0
-        const origX = Number.parseFloat(anchor.dataset.origFwX) || 0
-        const newW = Math.max(origW, CLOSE_CARD_WIDTH + 36) // 36 = 2 * glowPadding(18)
-        const extraW = newW - origW
-        anchor.setAttribute('height', String(origH + 164 - 30))
-        anchor.setAttribute('width', String(newW))
-        if (extraW > 0) {
-          anchor.setAttribute('x', String(origX - extraW / 2))
-        }
-      }
-
       const applyLabelMode = (mode) => {
         if (mode === currentLabelMode) return
         currentLabelMode = mode
         nodeAnchors.forEach((anchor) => {
           if (anchor.style.display === 'none') return
           if (anchor.classList.contains('html-export__node--minimal')) {
-            if (mode !== 'close') removeNodeCard(anchor)
+            removeNodeCard(anchor)
             return
           }
           const label = anchor.getAttribute('data-export-label') || ''
@@ -493,12 +372,16 @@ const buildViewerScript = () => `
               '<p class="skill-node-button__label" style="color:#f8fafc;font-weight:500;white-space:normal;word-break:break-word;">' + escapeLabelHtml(label) + '</p>' +
               '<p class="skill-node-button__shortname" style="font-size:0.7rem;font-weight:' + fontWeight + ';line-height:1;letter-spacing:0.12em;opacity:0.65;color:' + textColor + ';">' + escapeLabelHtml(shortName) + '</p>'
             removeNodeCard(anchor)
-          } else if (mode === 'close') {
+          } else if (mode === 'close' || mode === 'very-close') {
             content.className = 'skill-node-button__content skill-node-button__content--labeled'
             content.innerHTML =
               '<p class="skill-node-button__label" style="color:#f8fafc;font-weight:500;white-space:normal;word-break:break-word;">' + escapeLabelHtml(label) + '</p>' +
               '<p class="skill-node-button__shortname" style="font-size:0.7rem;font-weight:' + fontWeight + ';line-height:1;letter-spacing:0.12em;opacity:0.65;color:' + textColor + ';">' + escapeLabelHtml(shortName) + '</p>'
-            addNodeCard(anchor)
+            removeNodeCard(anchor)
+            if (mode === 'very-close') {
+              const btn = anchor.querySelector('.skill-node-button')
+              if (btn) btn.style.borderRadius = '14px'
+            }
           }
         })
       }

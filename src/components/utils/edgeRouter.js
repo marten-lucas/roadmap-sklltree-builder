@@ -313,7 +313,9 @@ export const buildRoutedEdgeLinks = ({ edgeRouting, nodesById, origin, nodeSize 
       const minCorridorGap = nodeSize // corridor at gap/2 needs one node-diameter clearance from each ring
 
       if (levelGap >= minCorridorGap) {
-        // Place corridor at 50 % of the gap — safely between both rings.
+        // Radial-polyline routing: arc@sourceRadius → radial spoke → arc@corridorRadius → radial spoke.
+        // The corridor ring sits between the two node rings, so its arc never passes through
+        // sibling node positions and avoids the visual bridge issue of arcing on the target ring.
         const corridorRadius = sourceRadius + levelGap * 0.5
         const sourceTrunkPoint = toCartesian(trunkAngle, sourceRadius, origin)
         const corridorTrunkPoint = toCartesian(trunkAngle, corridorRadius, origin)
@@ -328,12 +330,13 @@ export const buildRoutedEdgeLinks = ({ edgeRouting, nodesById, origin, nodeSize 
 
         parts.push(`L ${corridorTrunkPoint.x} ${corridorTrunkPoint.y}`)
 
+        // Arc along the corridor ring from trunk angle to child angle — strictly radial/arc routing.
         const corridorArc = buildArc(trunkAngle, corridorRadius, childAngle, corridorChildPoint)
         if (corridorArc) {
           parts.push(corridorArc)
         }
 
-        // Radial spoke from corridor to target node.
+        // Radial spoke from corridor ring down to child node.
         parts.push(`L ${child.x} ${child.y}`)
 
         path = parts.join(' ')

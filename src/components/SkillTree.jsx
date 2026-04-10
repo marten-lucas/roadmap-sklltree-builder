@@ -38,6 +38,7 @@ import {
   addSegmentNearWithResult,
   buildLevelIdToNodeIdMap,
   deleteScopeWithResult,
+  setScopeColorWithResult,
   deleteSegment,
   deleteNodeBranch,
   deleteNodeOnly,
@@ -138,6 +139,7 @@ export function SkillTree() {
   const csvDocumentFileInputRef = useRef(null)
   const canvasSvgRef = useRef(null)
   const transformApiRef = useRef(null)
+  const canvasAreaRef = useRef(null)
   const [isPanModeActive, setIsPanModeActive] = useState(false)
   const [currentZoomScale, setCurrentZoomScale] = useState(1)
   const [exportLabelModeOverride, setExportLabelModeOverride] = useState(null)
@@ -182,7 +184,7 @@ export function SkillTree() {
     () => solveSkillTreeLayout(roadmapData, TREE_CONFIG),
     [roadmapData],
   )
-  const { nodes, links, segments, canvas } = layout
+  const { nodes, links, crossingEdges = [], segments, canvas } = layout
   const viewportWidth = typeof window !== 'undefined' ? window.innerWidth : canvas.width
   const viewportHeight = typeof window !== 'undefined' ? window.innerHeight : canvas.height
   const initialViewScale = useMemo(() => {
@@ -205,6 +207,7 @@ export function SkillTree() {
   // Responsive label mode: derived from live zoom scale (or overridden for exports)
   const zoomLabelMode = useMemo(() => {
     if (currentZoomScale < NODE_LABEL_ZOOM.farToMid) return 'far'
+    if (currentZoomScale >= NODE_LABEL_ZOOM.closeToVeryClose) return 'very-close'
     if (currentZoomScale >= NODE_LABEL_ZOOM.midToClose) return 'close'
     return 'mid'
   }, [currentZoomScale])
@@ -297,6 +300,7 @@ export function SkillTree() {
     () => (roadmapData.scopes ?? []).map((scope) => ({
       value: scope.id,
       label: scope.label,
+      color: scope.color ?? null,
     })),
     [roadmapData.scopes],
   )
@@ -682,12 +686,55 @@ export function SkillTree() {
       })
     }
 
+    // ── Auto-crossing portals ──────────────────────────────────────────────
+    // When the layout solver detects that a hierarchy edge would visually cross
+    // another edge it removes the line and places it in `crossingEdges`.  We
+    // turn those into portal pairs so the connection remains discoverable.
+    // They are marked `isCrossing: true` to exclude them from the inspector
+    // dependency summary (they are parent→child relationships, not additional
+    // dependencies).
+    // NOTE: must be registered into endpointsByNodeId BEFORE the position loop
+    // below so that the coordinates are computed together with other portals.
+    for (const crossing of crossingEdges) {
+      const parentNode = layoutNodeById.get(crossing.parentId)
+      const childNode = layoutNodeById.get(crossing.childId)
+      if (!parentNode || !childNode) continue
+
+      const parentDataNode = allNodesById.get(crossing.parentId)
+      const childDataNode = allNodesById.get(crossing.childId)
+      const parentLabel = parentDataNode?.shortName ?? parentNode.shortName ?? String(parentNode.label ?? '').slice(0, 3)
+      const childLabel = childDataNode?.shortName ?? childNode.shortName ?? String(childNode.label ?? '').slice(0, 3)
+
+      const key = `crossing:${crossing.parentId}->${crossing.childId}`
+
+      pushEndpoint(crossing.parentId, {
+        key: `${key}:source`,
+        type: 'source',
+        sourceId: crossing.parentId,
+        targetId: crossing.childId,
+        tooltip: `Verbindung zu ${childNode.label}`,
+        isInteractive: false,
+        isCrossing: true,
+        otherLabel: String(childLabel).slice(0, 3).toUpperCase(),
+      })
+
+      pushEndpoint(crossing.childId, {
+        key: `${key}:target`,
+        type: 'target',
+        sourceId: crossing.parentId,
+        targetId: crossing.childId,
+        tooltip: `Verbindung von ${parentNode.label}`,
+        isInteractive: false,
+        isCrossing: true,
+        otherLabel: String(parentLabel).slice(0, 3).toUpperCase(),
+      })
+    }
+
     const endpoints = []
-    const portalAvoidance = 20
-    const spreadStep = 14
+    const portalAvoidance = 32
     // Hemisphere split: source portals go to outer hemisphere (away from center),
-    // target portals go to inner hemisphere (toward center). 28° spread per group.
-    const HEMISPHERE_SPREAD = 28
+    // target portals go to inner hemisphere (toward center). 20° spread per group.
+    const HEMISPHERE_SPREAD = 20
 
     for (const [nodeId, nodeEndpoints] of endpointsByNodeId.entries()) {
       const layoutNode = layoutNodeById.get(nodeId)
@@ -725,7 +772,8 @@ export function SkillTree() {
         .sort((a, b) => a.key.localeCompare(b.key))
 
       const reservedAngles = []
-      const candidateOffsets = [0, -1, 1, -2, 2, -3, 3, -4, 4, -5, 5]
+      // ±90° search in 5° steps – wide enough to find free arcs on crowded nodes
+      const candidateOffsets = Array.from({ length: 37 }, (_, i) => i - 18)
 
       // Place source portals in outer hemisphere
       sourceEndpoints.forEach((endpoint, index) => {
@@ -735,9 +783,9 @@ export function SkillTree() {
         let bestPenalty = Number.POSITIVE_INFINITY
 
         for (const offsetFactor of candidateOffsets) {
-          const candidateAngle = baseAngle + offsetFactor * 9
+          const candidateAngle = baseAngle + offsetFactor * 5
           const blockedPenalty = blockedAngles.some((blocked) => isAngleNear(candidateAngle, blocked, portalAvoidance)) ? 1000 : 0
-          const reservedPenalty = reservedAngles.some((reserved) => isAngleNear(candidateAngle, reserved, 11)) ? 700 : 0
+          const reservedPenalty = reservedAngles.some((reserved) => isAngleNear(candidateAngle, reserved, 22)) ? 700 : 0
           const spreadPenalty = Math.abs(offsetFactor)
           const penalty = blockedPenalty + reservedPenalty + spreadPenalty
           if (penalty < bestPenalty) { bestPenalty = penalty; bestAngle = candidateAngle }
@@ -767,9 +815,9 @@ export function SkillTree() {
         let bestPenalty = Number.POSITIVE_INFINITY
 
         for (const offsetFactor of candidateOffsets) {
-          const candidateAngle = baseAngle + offsetFactor * 9
+          const candidateAngle = baseAngle + offsetFactor * 5
           const blockedPenalty = blockedAngles.some((blocked) => isAngleNear(candidateAngle, blocked, portalAvoidance)) ? 1000 : 0
-          const reservedPenalty = reservedAngles.some((reserved) => isAngleNear(candidateAngle, reserved, 11)) ? 700 : 0
+          const reservedPenalty = reservedAngles.some((reserved) => isAngleNear(candidateAngle, reserved, 22)) ? 700 : 0
           const spreadPenalty = Math.abs(offsetFactor)
           const penalty = blockedPenalty + reservedPenalty + spreadPenalty
           if (penalty < bestPenalty) { bestPenalty = penalty; bestAngle = candidateAngle }
@@ -793,7 +841,7 @@ export function SkillTree() {
     }
 
     return endpoints
-  }, [allNodesById, layoutNodesById, canvas.origin.x, canvas.origin.y, nodeVisibilityModeById, nodes, roadmapData.children])
+  }, [allNodesById, layoutNodesById, canvas.origin.x, canvas.origin.y, nodeVisibilityModeById, nodes, roadmapData.children, crossingEdges])
 
   const visibleDependencyPortals = useMemo(
     () => dependencyPortals.filter((portal) => (
@@ -803,6 +851,19 @@ export function SkillTree() {
     )),
     [dependencyPortals, renderedNodeIds],
   )
+
+  // For the close-zoom release-note card: requires/requiredBy labels per node
+  const depSummaryByNodeId = useMemo(() => {
+    const map = new Map()
+    for (const portal of dependencyPortals) {
+      if (portal.isCrossing) continue // hierarchy crossings are not additional dependencies
+      if (!map.has(portal.nodeId)) map.set(portal.nodeId, { requires: [], requiredBy: [] })
+      const entry = map.get(portal.nodeId)
+      if (portal.type === 'source') entry.requires.push(portal.otherLabel)
+      else entry.requiredBy.push(portal.otherLabel)
+    }
+    return map
+  }, [dependencyPortals])
 
   const visibleDependencyLines = useMemo(() => {
     // Pair source portals with their matching target portals so connections can be drawn.
@@ -1974,6 +2035,24 @@ export function SkillTree() {
     }
   }
 
+  const handleSetScopeColor = (scopeId, color) => {
+    const result = setScopeColorWithResult(roadmapData, scopeId, color)
+
+    if (!result.ok) {
+      return {
+        ok: false,
+        error: result.error,
+      }
+    }
+
+    commitDocument(result.tree)
+
+    return {
+      ok: true,
+      error: null,
+    }
+  }
+
   const handleDeleteScope = (scopeId) => {
     const result = deleteScopeWithResult(roadmapData, scopeId)
 
@@ -2099,6 +2178,32 @@ export function SkillTree() {
 
     window.addEventListener('roadmap-skilltree.toast', handler)
     return () => window.removeEventListener('roadmap-skilltree.toast', handler)
+  }, [])
+
+  useEffect(() => {
+    const el = canvasAreaRef.current
+    if (!el) return
+    const onWheel = (e) => {
+      if (!transformApiRef.current) return
+      e.preventDefault()
+      const { positionX, positionY, scale } = transformApiRef.current.state
+      const { minScale, maxScale } = VIEWPORT_DEFAULTS
+      // Step grows with sqrt(scale): slow when zoomed out, fast when zoomed in
+      const adaptiveStep = 0.003 * Math.sqrt(scale)
+      const delta = Math.min(Math.abs(e.deltaY), 200)
+      const direction = e.deltaY < 0 ? 1 : -1
+      const ratio = Math.exp(adaptiveStep * delta * direction)
+      const newScale = Math.max(minScale, Math.min(maxScale, scale * ratio))
+      if (newScale === scale) return
+      const rect = el.getBoundingClientRect()
+      const cx = e.clientX - rect.left
+      const cy = e.clientY - rect.top
+      const newPositionX = cx - (cx - positionX) * (newScale / scale)
+      const newPositionY = cy - (cy - positionY) * (newScale / scale)
+      transformApiRef.current.setTransform(newPositionX, newPositionY, newScale, 0)
+    }
+    el.addEventListener('wheel', onWheel, { passive: false })
+    return () => el.removeEventListener('wheel', onWheel)
   }, [])
 
   return (
@@ -2252,6 +2357,7 @@ export function SkillTree() {
         onFitToScreen={handleFitToScreen}
       />
 
+      <div ref={canvasAreaRef} style={{ position: 'absolute', inset: 0, overflow: 'hidden' }}>
       <TransformWrapper
         key={transformKey}
         minScale={VIEWPORT_DEFAULTS.minScale}
@@ -2259,7 +2365,7 @@ export function SkillTree() {
         initialScale={initialViewScale}
         initialPositionX={initialPositionX}
         initialPositionY={initialPositionY}
-        wheel={{ step: VIEWPORT_DEFAULTS.wheelStep }}
+        wheel={{ disabled: true }}
         limitToBounds={false}
         centerOnInit={false}
         onInit={(api) => {
@@ -2292,6 +2398,7 @@ export function SkillTree() {
             selectedPortalKey={selectedPortalKey}
             visibleDependencyPortals={visibleDependencyPortals}
             visibleDependencyLines={visibleDependencyLines}
+            depSummaryByNodeId={depSummaryByNodeId}
             selectedLayoutNode={selectedLayoutNode}
             selectedControlGeometry={selectedControlGeometry}
             selectedSegmentLabel={selectedSegmentLabel}
@@ -2321,6 +2428,7 @@ export function SkillTree() {
           />
         </TransformComponent>
       </TransformWrapper>
+      </div>
 
       {rightPanel === PANEL_INSPECTOR && (
         <InspectorPanel
@@ -2342,6 +2450,7 @@ export function SkillTree() {
         onCreateScope={handleCreateScope}
         onRenameScope={handleRenameScope}
         onDeleteScope={handleDeleteScope}
+        onSetScopeColor={handleSetScopeColor}
         onCreateSegment={handleCreateSegmentForInspector}
         onRenameSegment={handleRenameSegmentForManager}
         onDeleteSegment={handleDeleteSegmentForManager}
@@ -2390,6 +2499,7 @@ export function SkillTree() {
           onCreateScope={handleCreateScope}
           onRenameScope={handleRenameScope}
           onDeleteScope={handleDeleteScope}
+          onSetScopeColor={handleSetScopeColor}
           onClose={handleCloseScopeManager}
         />
       )}

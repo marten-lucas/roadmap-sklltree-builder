@@ -83,6 +83,49 @@ export const STATUS_STYLES = {
 export const NODE_LABEL_ZOOM = {
   farToMid: 0.7,
   midToClose: 1.0,
+  closeToVeryClose: 2.0,
+}
+
+/**
+ * 20 distinct colors available for scope assignment.
+ * Ordered to cover the hue wheel with good visual separation.
+ */
+export const SCOPE_COLORS = [
+  '#6366f1', // indigo
+  '#8b5cf6', // violet
+  '#d946ef', // fuchsia
+  '#ec4899', // pink
+  '#f43f5e', // rose
+  '#ef4444', // red
+  '#f97316', // orange
+  '#f59e0b', // amber
+  '#eab308', // yellow
+  '#84cc16', // lime
+  '#22c55e', // green
+  '#10b981', // emerald
+  '#14b8a6', // teal
+  '#06b6d4', // cyan
+  '#0ea5e9', // sky
+  '#3b82f6', // blue
+  '#6d28d9', // dark violet
+  '#be185d', // dark pink
+  '#92400e', // dark amber
+  '#475569', // slate
+]
+
+/**
+ * Returns '#ffffff' or '#0f172a' depending on the brightness of the given
+ * hex color, so that text placed on top of it remains readable.
+ */
+export const getScopeContrastColor = (hexColor) => {
+  if (!hexColor || typeof hexColor !== 'string') return '#ffffff'
+  const hex = hexColor.replace('#', '')
+  if (!/^[0-9a-fA-F]{6}$/.test(hex)) return '#ffffff'
+  const r = parseInt(hex.slice(0, 2), 16)
+  const g = parseInt(hex.slice(2, 4), 16)
+  const b = parseInt(hex.slice(4, 6), 16)
+  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255
+  return luminance > 0.55 ? '#0f172a' : '#ffffff'
 }
 
 export const TREE_CONFIG = {

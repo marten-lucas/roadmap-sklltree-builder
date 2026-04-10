@@ -1,5 +1,6 @@
 import { buildLayoutDiagnostics } from './layoutDiagnostics'
 import { buildEdgeRoutingModel, buildRoutedEdgeLinks } from './edgeRouter'
+import { detectCrossingLinks } from './edgeCrossings'
 import { analyzeSegmentLevelFeasibility, buildSegmentLevelGroups } from './layoutFeasibility'
 import {
   buildArcRadialPath,
@@ -559,16 +560,30 @@ export const solveSkillTreeLayout = (data, config) => {
     return best
   }
 
+  // Level override maps: populated between the first and second layout pass.
+  // crossingPromotedLevelById: Phase 2 — child earns +1 ring to open a routing corridor.
+  // compactedLevelById:        Phase 3 — fully-portalized node moved to an inner ring.
+  // reDemotionLevelById:       Phase 4 — auto-promoted subtree with portalized parent moved
+  //                            to lowest free ring in its own segment.
+  const crossingPromotedLevelById = new Map()
+  const compactedLevelById = new Map()
+  const reDemotionLevelById = new Map()
+
   const getEffectiveLevel = (node) => {
-    const promotedLevel = autoPromotedLevelById.get(node.data.id)
-    if (promotedLevel !== undefined) {
-      return promotedLevel
-    }
-
-    if (node.data.ebene !== undefined && node.data.ebene !== null) {
-      return node.data.ebene
-    }
-
+    const id = node.data.id
+    // Phase 4 re-demotion takes highest priority (overrides auto-promotion cascade).
+    const reDemoted = reDemotionLevelById.get(id)
+    if (reDemoted !== undefined) return reDemoted
+    // Phase 3 compaction.
+    const compacted = compactedLevelById.get(id)
+    if (compacted !== undefined) return compacted
+    // Phase 2 crossing promotion.
+    const crossingPromoted = crossingPromotedLevelById.get(id)
+    if (crossingPromoted !== undefined) return crossingPromoted
+    // Existing auto-promotion (angular conflict resolution).
+    const promoted = autoPromotedLevelById.get(id)
+    if (promoted !== undefined) return promoted
+    if (node.data.ebene !== undefined && node.data.ebene !== null) return node.data.ebene
     return node.depth
   }
 
@@ -684,6 +699,24 @@ export const solveSkillTreeLayout = (data, config) => {
     }
   }
 
+  // Base levels before any promotion — used as the cap reference for Phase 2.
+  const baseLevelById = new Map(
+    allHierarchyNodes.map((node) => [
+      node.data.id,
+      node.data.ebene !== undefined && node.data.ebene !== null ? node.data.ebene : node.depth,
+    ]),
+  )
+
+  // Accumulate Phase 2/3/4 details for meta reporting.
+  const crossingPromotionDetails = []
+  const compactionDetails = []
+  const reDemotionDetails = []
+
+  // Two-pass layout: first pass detects crossings; if level adjustments are
+  // computed, the second pass re-runs with updated effective levels.  At most
+  // two full iterations (no feedback loop).
+  let pass = null
+  for (let _layoutPass = 0; _layoutPass < 2; _layoutPass++) {
   const levelCounts = allHierarchyNodes.reduce((acc, node) => {
     const level = getEffectiveLevel(node)
     acc.set(level, (acc.get(level) ?? 0) + 1)
@@ -1422,6 +1455,98 @@ export const solveSkillTreeLayout = (data, config) => {
     }
   }
 
+  // ── Post-packing gap compaction ────────────────────────────────────────────
+  // Close large angular voids between any consecutive node clusters, whether
+  // inter-segment or intra-segment (e.g. two sub-trees of the same segment
+  // placed far apart).  All nodes are sorted by angle; edge-to-edge gaps
+  // larger than the threshold are closed by shifting the right half leftward.
+  //
+  // Running AFTER packing ensures measured positions reflect the true final
+  // node distribution.  Both `packedAngleByNodeId` and `orderedSegments` are
+  // updated in-place so downstream routing passes use consistent values.
+  {
+    const GAP_COMPACTION_THRESHOLD_DEG = 14
+    const GAP_COMPACTION_MIN_DEG = 8
+
+    // 1. Per-node halfSpan (visual footprint in degrees) and segId lookup.
+    const nodeSegId = new Map()
+    const nodeHalfSpanDeg = new Map()
+    for (const node of allNodes) {
+      const segId = getGroupedSegmentId(node.data.segmentId ?? null)
+      nodeSegId.set(node.data.id, segId)
+      const level = getEffectiveLevel(node)
+      const radius = getRadiusForLevel(level)
+      nodeHalfSpanDeg.set(node.data.id, (config.nodeSize * 0.56 * 180) / (Math.PI * Math.max(radius, 1)))
+    }
+
+    // 2. Sort all nodes by current packed angle.
+    const sorted = allNodes
+      .map((n) => ({ id: n.data.id, angle: packedAngleByNodeId.get(n.data.id) }))
+      .filter((e) => e.angle != null)
+      .sort((a, b) => a.angle - b.angle)
+
+    if (sorted.length >= 2) {
+      let anyCompaction = false
+
+      // 3. Right-to-left: close edge-to-edge gaps > threshold.
+      for (let i = sorted.length - 1; i >= 1; i--) {
+        const leftEdge  = sorted[i - 1].angle + (nodeHalfSpanDeg.get(sorted[i - 1].id) ?? 0)
+        const rightEdge = sorted[i].angle     - (nodeHalfSpanDeg.get(sorted[i].id)     ?? 0)
+        const gap = rightEdge - leftEdge
+        if (gap <= GAP_COMPACTION_THRESHOLD_DEG) continue
+        const shift = gap - GAP_COMPACTION_MIN_DEG
+        anyCompaction = true
+        for (let j = i; j < sorted.length; j++) {
+          sorted[j].angle -= shift
+          packedAngleByNodeId.set(sorted[j].id, sorted[j].angle)
+        }
+      }
+
+      if (anyCompaction) {
+        // 4. Recompute per-segment extents from the new node positions.
+        const segExtent = new Map()
+        for (const e of sorted) {
+          const segId   = nodeSegId.get(e.id)
+          const halfSpan = nodeHalfSpanDeg.get(e.id) ?? 0
+          const ext = segExtent.get(segId)
+          if (!ext) {
+            segExtent.set(segId, { min: e.angle - halfSpan, max: e.angle + halfSpan })
+          } else {
+            if (e.angle - halfSpan < ext.min) ext.min = e.angle - halfSpan
+            if (e.angle + halfSpan > ext.max) ext.max = e.angle + halfSpan
+          }
+        }
+
+        // 5. Stitch orderedSegments wedge/slot boundaries using midpoints between
+        //    adjacent extents in angular order.  Objects in segsByNewAngle are the
+        //    same references as in orderedSegments, so mutations propagate.
+        const segsByNewAngle = [...orderedSegments]
+          .filter((s) => segExtent.has(s.id))
+          .sort((a, b) => segExtent.get(a.id).min - segExtent.get(b.id).min)
+
+        for (let i = 0; i < segsByNewAngle.length - 1; i++) {
+          const leftSeg  = segsByNewAngle[i]
+          const rightSeg = segsByNewAngle[i + 1]
+          const boundary = (segExtent.get(leftSeg.id).max + segExtent.get(rightSeg.id).min) / 2
+
+          leftSeg.wedgeMax    = leftSeg.slotMax     = leftSeg.max        = boundary
+          leftSeg.slotCenter  = leftSeg.wedgeCenter = leftSeg.anchorAngle = (leftSeg.wedgeMin + boundary) / 2
+
+          rightSeg.wedgeMin   = rightSeg.slotMin    = rightSeg.min       = boundary
+          rightSeg.slotCenter = rightSeg.wedgeCenter = rightSeg.anchorAngle = (boundary + rightSeg.wedgeMax) / 2
+        }
+
+        // 6. Tighten the rightmost segment's outer boundary to its actual extent.
+        const lastSeg = segsByNewAngle[segsByNewAngle.length - 1]
+        const lastExt = segExtent.get(lastSeg.id)
+        if (lastExt && lastSeg.wedgeMax > lastExt.max) {
+          lastSeg.wedgeMax    = lastSeg.slotMax     = lastSeg.max        = lastExt.max
+          lastSeg.slotCenter  = lastSeg.wedgeCenter = lastSeg.anchorAngle = (lastSeg.wedgeMin + lastExt.max) / 2
+        }
+      }
+    }
+  }
+
   maxRadius = Math.max(config.levelSpacing, ...radiusByLevel.values())
   separatorOuterRadius = maxRadius + 120
   const recomputedFirstLevelRadius = getRadiusForLevel(firstNodeLevel)
@@ -1705,56 +1830,230 @@ export const solveSkillTreeLayout = (data, config) => {
       }
     })
 
-  const layout = {
-    nodes,
-    links: [...routedLinks, ...rootLevelBridges, ...levelOneRingArcs],
-    segments: {
-      separators: segmentSeparators,
-      labels: segmentLabels,
-    },
-    canvas: {
-      width: svgWidth,
-      height: svgHeight,
+    const allLinks = [...routedLinks, ...rootLevelBridges, ...levelOneRingArcs]
+
+    // Stash all values produced this iteration so they are accessible after the loop.
+    pass = {
+      nodes,
+      allLinks,
+      finalOrderedSegments,
+      subtreeSpan,
+      capacityIssues,
+      nodeOrderWithinLevelSegment,
+      edgeRouting,
+      feasibilityAnalysis,
+      nodeAngularWidthPx,
+      nodeBoundaryMarginPx,
+      minimumArcGap,
+      selectedSeparatorStrategy,
+      baselineSeparatorSet,
+      selectedSeparatorSet,
+      segmentSeparators,
+      segmentLabels,
+      svgWidth,
+      svgHeight,
       origin,
       maxRadius,
+    }
+
+    // ── Phase 2 & 3: crossing-aware level adjustments (first pass only) ──────
+    if (_layoutPass === 0) {
+      const firstCrossingIds = detectCrossingLinks(pass.allLinks, { nodes: pass.nodes, nodeSize: config.nodeSize })
+
+      // No crossings → first pass is already final; skip second pass.
+      if (firstCrossingIds.size === 0) break
+
+      const firstPassNodesById = new Map(pass.nodes.map((n) => [n.id, n]))
+
+      // Returns true when the node still has at least one non-portalized hierarchy edge.
+      const hasAnyLineConnections = (nodeId) =>
+        pass.allLinks.some(
+          (l) =>
+            (l.sourceId === nodeId || l.targetId === nodeId) &&
+            (l.linkKind === 'direct' || l.linkKind === 'routed') &&
+            !firstCrossingIds.has(l.id),
+        )
+
+      for (const link of pass.allLinks) {
+        if (link.linkKind !== 'direct' && link.linkKind !== 'routed') continue
+        if (!firstCrossingIds.has(link.id)) continue
+
+        const parentNode = firstPassNodesById.get(link.sourceId)
+        const childNode = firstPassNodesById.get(link.targetId)
+        if (!parentNode || !childNode) continue
+
+        // One adjustment per node — the first crossing that involves it wins.
+        if (crossingPromotedLevelById.has(link.targetId) || compactedLevelById.has(link.targetId)) continue
+
+        const gap = childNode.level - parentNode.level
+        const childHasLineChildren = pass.allLinks.some(
+          (l) =>
+            l.sourceId === link.targetId &&
+            (l.linkKind === 'direct' || l.linkKind === 'routed') &&
+            !firstCrossingIds.has(l.id),
+        )
+
+        if (gap <= 1 && childHasLineChildren) {
+          // Phase 2: push child one ring outward to open a routing corridor.
+          // Hard cap: base level + 4 (shared ceiling with auto-promotion budget).
+          const currentLevel = childNode.level
+          const baseLevel = baseLevelById.get(link.targetId) ?? currentLevel
+          const newLevel = currentLevel + 1
+          if (newLevel <= baseLevel + 4) {
+            crossingPromotedLevelById.set(link.targetId, newLevel)
+            crossingPromotionDetails.push({ childId: link.targetId, parentId: link.sourceId, fromLevel: currentLevel, toLevel: newLevel, gap })
+          }
+        } else if (!hasAnyLineConnections(link.targetId)) {
+          // Phase 3: node is fully portalized — compact to an inner ring.
+          // max(1, parentLevel − 1): just inside the parent ring; the connection
+          // stays a portal, so no line routing is affected.
+          const compactedLevel = Math.max(1, parentNode.level - 1)
+          compactedLevelById.set(link.targetId, compactedLevel)
+          compactionDetails.push({ nodeId: link.targetId, parentId: link.sourceId, fromLevel: childNode.level, toLevel: compactedLevel })
+        }
+        // gap > 1 AND childHasLineChildren: geometrically unsolvable — stays a portal,
+        // no level change.
+      }
+
+      // Phase 4: Re-root portalized-parent subtrees to lowest free ring in segment.
+      // Applies when a node was auto-promoted solely because its parent is in a distant
+      // segment, but that parent→child edge is now portalized anyway.  With the line
+      // connection gone, the auto-promotion overhead is wasted — compact the whole subtree
+      // to the first ring not already occupied by other nodes in the same segment.
+      //
+      // Preconditions (over the same `link` loop variable):
+      //   • parent→child edge is crossing (portalized)
+      //   • child was auto-promoted (cross-segment ring inflation)
+      //   • child not already adjusted by Phase 2 or 3
+      const subtreeNodeIds = (startHNode) => {
+        const ids = new Set([startHNode.data.id])
+        const queue = [...(startHNode.children ?? [])]
+        while (queue.length > 0) {
+          const hn = queue.shift()
+          ids.add(hn.data.id)
+          queue.push(...(hn.children ?? []))
+        }
+        return ids
+      }
+      const hierarchyNodeById = new Map(allHierarchyNodes.map((hn) => [hn.data.id, hn]))
+
+      for (const link of pass.allLinks) {
+        if (link.linkKind !== 'direct' && link.linkKind !== 'routed') continue
+        if (!firstCrossingIds.has(link.id)) continue
+        if (!autoPromotedLevelById.has(link.targetId)) continue
+        if (crossingPromotedLevelById.has(link.targetId) || compactedLevelById.has(link.targetId)) continue
+        if (reDemotionLevelById.has(link.targetId)) continue // first portalized edge wins
+
+        const childNode = firstPassNodesById.get(link.targetId)
+        if (!childNode) continue
+        const childHierarchyNode = hierarchyNodeById.get(link.targetId)
+        if (!childHierarchyNode) continue
+
+        const subtreeIds = subtreeNodeIds(childHierarchyNode)
+        const childSegId = getGroupedSegmentId(childNode.segmentId ?? null)
+
+        // Levels occupied in the same segment by nodes outside the subtree.
+        const occupiedInSegment = new Set()
+        for (const n of pass.nodes) {
+          if (subtreeIds.has(n.id)) continue
+          if (getGroupedSegmentId(n.segmentId ?? null) !== childSegId) continue
+          occupiedInSegment.add(n.level)
+        }
+
+        // First ring (counting from 1) not occupued by any other segment node.
+        let lowestFree = 1
+        while (occupiedInSegment.has(lowestFree)) lowestFree++
+
+        const delta = lowestFree - childNode.level
+        if (delta >= 0) continue // already at or inside lowest free ring — nothing to do
+
+        // Apply the same delta to child and every descendant (preserves internal spacing).
+        for (const id of subtreeIds) {
+          const n = firstPassNodesById.get(id)
+          if (n) reDemotionLevelById.set(id, n.level + delta)
+        }
+        reDemotionDetails.push({
+          nodeId: link.targetId,
+          parentId: link.sourceId,
+          fromLevel: childNode.level,
+          toLevel: lowestFree,
+        })
+      }
+
+      // No adjustments computed → first pass is already optimal; skip second pass.
+      if (crossingPromotedLevelById.size === 0 && compactedLevelById.size === 0 && reDemotionLevelById.size === 0) break
+    }
+  } // end two-pass layout loop
+
+  // ── Final crossing detection (definitive portals) ─────────────────────────
+  const crossingPortalIds = detectCrossingLinks(pass.allLinks, { nodes: pass.nodes, nodeSize: config.nodeSize })
+
+  // Compacted edges (Phase 3) are definitively non-routable: force them to
+  // always be portals regardless of whether the second-pass path happens to
+  // avoid geometric crossings.
+  for (const { nodeId, parentId } of compactionDetails) {
+    const edge = pass.allLinks.find((l) => l.targetId === nodeId && l.sourceId === parentId)
+    if (edge) crossingPortalIds.add(edge.id)
+  }
+
+  const crossingEdges = pass.allLinks
+    .filter((l) => crossingPortalIds.has(l.id))
+    .map((l) => ({ id: l.id, parentId: l.sourceId, childId: l.targetId }))
+
+  const layout = {
+    nodes: pass.nodes,
+    links: pass.allLinks.filter((l) => !crossingPortalIds.has(l.id)),
+    crossingEdges,
+    segments: {
+      separators: pass.segmentSeparators,
+      labels: pass.segmentLabels,
+    },
+    canvas: {
+      width: pass.svgWidth,
+      height: pass.svgHeight,
+      origin: pass.origin,
+      maxRadius: pass.maxRadius,
     },
   }
 
-  const computedLevelByNodeId = new Map(nodes.map((node) => [node.id, node.level]))
+  const computedLevelByNodeId = new Map(pass.nodes.map((node) => [node.id, node.level]))
 
   return {
     layout,
     diagnostics: buildLayoutDiagnostics({
-      nodes,
-      orderedSegments: finalOrderedSegments,
+      nodes: pass.nodes,
+      orderedSegments: pass.finalOrderedSegments,
       config,
-      subtreeSpan,
-      additionalIssues: capacityIssues,
+      subtreeSpan: pass.subtreeSpan,
+      additionalIssues: pass.capacityIssues,
     }),
     meta: {
-      orderedSegments: finalOrderedSegments,
-      subtreeSpan,
+      orderedSegments: pass.finalOrderedSegments,
+      subtreeSpan: pass.subtreeSpan,
       autoPromotedLevelById,
       promotedByConflict: [...promotedByConflict.values()],
       edgePromotionDetails,
       computedLevelByNodeId,
-      nodeOrderWithinLevelSegment,
+      nodeOrderWithinLevelSegment: pass.nodeOrderWithinLevelSegment,
       segmentOrder: optimizedSegmentIds,
-      edgeRouting,
+      edgeRouting: pass.edgeRouting,
       feasibility: {
-        isFeasible: feasibilityAnalysis.isFeasible,
-        nodeAngularWidthPx,
-        nodeBoundaryMarginPx,
-        minimumArcGapPx: minimumArcGap,
-        segmentLevelEntries: feasibilityAnalysis.segmentLevelEntries,
+        isFeasible: pass.feasibilityAnalysis.isFeasible,
+        nodeAngularWidthPx: pass.nodeAngularWidthPx,
+        nodeBoundaryMarginPx: pass.nodeBoundaryMarginPx,
+        minimumArcGapPx: pass.minimumArcGap,
+        segmentLevelEntries: pass.feasibilityAnalysis.segmentLevelEntries,
       },
-      capacityIssues,
+      capacityIssues: pass.capacityIssues,
       separatorOptimization: {
         profile: String(config.separatorHomogeneityProfile ?? 'balanced').trim().toLowerCase(),
-        selectedStrategy: selectedSeparatorStrategy,
-        baseline: baselineSeparatorSet.summary,
-        selected: selectedSeparatorSet.summary,
+        selectedStrategy: pass.selectedSeparatorStrategy,
+        baseline: pass.baselineSeparatorSet.summary,
+        selected: pass.selectedSeparatorSet.summary,
       },
+      crossingPromotionDetails,
+      compactionDetails,
+      reDemotionDetails,
     },
   }
 }

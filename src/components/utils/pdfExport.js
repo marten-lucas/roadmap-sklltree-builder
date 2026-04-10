@@ -1,6 +1,6 @@
 import { STATUS_LABELS, normalizeStatusKey } from '../config'
 import { renderMarkdownToHtml } from './markdown'
-import { resolveScopeLabels, renderScopeLabelsMarkup } from './scopeDisplay'
+import { resolveScopeEntries, renderScopeLabelsMarkup } from './scopeDisplay'
 import { getExportViewportBounds } from './svgExport'
 
 const escapeHtml = (value) => String(value ?? '')
@@ -92,7 +92,7 @@ export const collectReleaseNoteEntries = (roadmapDocument) => {
         levelLabel: level.label ?? `Level ${index + 1}`,
         statusLabel: STATUS_LABELS[statusKey] ?? STATUS_LABELS.now,
         releaseNote,
-        scopeLabels: resolveScopeLabels(level.scopeIds, scopes),
+        scopeLabels: resolveScopeEntries(level.scopeIds, scopes),
       })
     })
 

@@ -1,7 +1,7 @@
 import { ActionIcon, Alert, Badge, Button, Divider, Group, MultiSelect, NumberInput, Paper, SegmentedControl, Select, Stack, Tabs, Text, TextInput, Textarea } from '@mantine/core'
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { IconPercentage20 } from '@tabler/icons-react'
-import { normalizeStatusKey, STATUS_LABELS } from '../config'
+import { normalizeStatusKey, STATUS_LABELS, SCOPE_COLORS } from '../config'
 import { UNASSIGNED_SEGMENT_ID } from '../utils/layoutShared'
 import { commitInspectorDrafts } from '../utils/inspectorCommit'
 import { EFFORT_SIZE_LABELS, BENEFIT_SIZE_LABELS } from '../utils/effortBenefit'
@@ -107,6 +107,7 @@ export function InspectorPanel({
   onCreateScope,
   onRenameScope,
   onDeleteScope,
+  onSetScopeColor,
   onCreateSegment,
   onRenameSegment,
   onDeleteSegment,
@@ -136,6 +137,7 @@ export function InspectorPanel({
   const [scopeError, setScopeError] = useState(null)
   const [editingScopeId, setEditingScopeId] = useState(null)
   const [editingScopeLabel, setEditingScopeLabel] = useState('')
+  const [colorPickerOpenId, setColorPickerOpenId] = useState(null)
   const [nameDraft, setNameDraft] = useState(selectedNode?.label ?? '')
   const [shortNameDraft, setShortNameDraft] = useState(selectedNode?.shortName ?? '')
   const [releaseNoteDraft, setReleaseNoteDraft] = useState(
@@ -435,6 +437,7 @@ export function InspectorPanel({
   const scopeSelectData = (scopeOptions ?? []).map((scope) => ({
     value: scope.value,
     label: scope.label,
+    color: scope.color ?? null,
   }))
 
   const handleCreateScope = () => {
@@ -501,6 +504,7 @@ export function InspectorPanel({
     setScopeError(null)
     setEditingScopeId(scopeId)
     setEditingScopeLabel(label)
+    setColorPickerOpenId(null)
   }
 
   const handleRenameScope = () => {
@@ -530,6 +534,9 @@ export function InspectorPanel({
     if (editingScopeId === scopeId) {
       setEditingScopeId(null)
       setEditingScopeLabel('')
+    }
+    if (colorPickerOpenId === scopeId) {
+      setColorPickerOpenId(null)
     }
   }
 
@@ -932,13 +939,77 @@ export function InspectorPanel({
                                   </Group>
                                 </Stack>
                               ) : (
-                                <Group justify="space-between" wrap="nowrap">
-                                  <Text size="sm" truncate>{scope.label}</Text>
-                                  <Group gap={6} wrap="nowrap">
-                                    <ActionIcon size="sm" variant="subtle" color="gray" onClick={() => handleStartRenameScope(scope.value, scope.label)} aria-label="Scope umbenennen">✎</ActionIcon>
-                                    <ActionIcon size="sm" variant="subtle" color="red" onClick={() => handleDeleteScope(scope.value)} aria-label="Scope löschen">✕</ActionIcon>
+                                <Stack gap={6}>
+                                  <Group justify="space-between" wrap="nowrap">
+                                    <Group gap={8} wrap="nowrap" style={{ minWidth: 0 }}>
+                                      <button
+                                        type="button"
+                                        aria-label="Farbe ändern"
+                                        onClick={() => setColorPickerOpenId((prev) => (prev === scope.value ? null : scope.value))}
+                                        style={{
+                                          width: 16,
+                                          height: 16,
+                                          borderRadius: '50%',
+                                          background: scope.color ?? 'rgba(100,116,139,0.4)',
+                                          border: '1.5px solid rgba(148,163,184,0.35)',
+                                          cursor: 'pointer',
+                                          padding: 0,
+                                          flexShrink: 0,
+                                        }}
+                                      />
+                                      <Text size="sm" truncate>{scope.label}</Text>
+                                    </Group>
+                                    <Group gap={6} wrap="nowrap">
+                                      <ActionIcon size="sm" variant="subtle" color="gray" onClick={() => handleStartRenameScope(scope.value, scope.label)} aria-label="Scope umbenennen">✎</ActionIcon>
+                                      <ActionIcon size="sm" variant="subtle" color="red" onClick={() => handleDeleteScope(scope.value)} aria-label="Scope löschen">✕</ActionIcon>
+                                    </Group>
                                   </Group>
-                                </Group>
+                                  {colorPickerOpenId === scope.value && (
+                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, padding: '4px 0 2px' }}>
+                                      {SCOPE_COLORS.map((color) => (
+                                        <button
+                                          key={color}
+                                          type="button"
+                                          aria-label={`Farbe ${color}`}
+                                          onClick={() => { onSetScopeColor?.(scope.value, color); setColorPickerOpenId(null) }}
+                                          style={{
+                                            width: 18,
+                                            height: 18,
+                                            borderRadius: '50%',
+                                            background: color,
+                                            border: scope.color === color ? '2px solid #f8fafc' : '2px solid transparent',
+                                            outline: scope.color === color ? '2px solid #06b6d4' : 'none',
+                                            cursor: 'pointer',
+                                            padding: 0,
+                                            flexShrink: 0,
+                                          }}
+                                        />
+                                      ))}
+                                      {scope.color && (
+                                        <button
+                                          type="button"
+                                          aria-label="Farbe entfernen"
+                                          onClick={() => { onSetScopeColor?.(scope.value, null); setColorPickerOpenId(null) }}
+                                          style={{
+                                            width: 18,
+                                            height: 18,
+                                            borderRadius: '50%',
+                                            background: 'transparent',
+                                            border: '1.5px dashed rgba(148,163,184,0.5)',
+                                            cursor: 'pointer',
+                                            padding: 0,
+                                            flexShrink: 0,
+                                            fontSize: 9,
+                                            color: '#94a3b8',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                          }}
+                                        >✕</button>
+                                      )}
+                                    </div>
+                                  )}
+                                </Stack>
                               )}
                             </Paper>
                           ))}

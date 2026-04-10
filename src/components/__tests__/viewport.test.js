@@ -13,21 +13,22 @@ import {
 describe('viewport utils', () => {
   it('clamps scales to configured min/max', () => {
     expect(clampScale(-1)).toBe(VIEWPORT_DEFAULTS.minScale)
-    expect(clampScale(9)).toBe(VIEWPORT_DEFAULTS.maxScale)
+    expect(clampScale(11)).toBe(VIEWPORT_DEFAULTS.maxScale)
     expect(clampScale(1.25)).toBe(1.25)
   })
 
   it('snaps scale to nearest configured zoom step', () => {
     expect(snapScaleToStep(0.24)).toBe(0.25)
     expect(snapScaleToStep(1.1)).toBe(1)
-    expect(snapScaleToStep(1.4)).toBe(1.5)
+    expect(snapScaleToStep(1.4)).toBe(1)
   })
 
   it('returns next and previous zoom step', () => {
-    expect(getNextZoomStep(1, 1)).toBe(1.25)
+    expect(getNextZoomStep(1, 1)).toBe(2)
     expect(getNextZoomStep(1, -1)).toBe(0.75)
     expect(getNextZoomStep(0.25, -1)).toBe(0.25)
-    expect(getNextZoomStep(2, 1)).toBe(2)
+    expect(getNextZoomStep(2, 1)).toBe(3)
+    expect(getNextZoomStep(4, 1)).toBe(5)
   })
 
   it('computes fit scale with padding and limits', () => {

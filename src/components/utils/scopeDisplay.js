@@ -9,6 +9,11 @@ const normalizeScopeId = (value) => String(value ?? '').trim()
 
 const normalizeScopeLabel = (value) => String(value ?? '').trim()
 
+const sanitizeScopeColor = (color) => {
+  if (!color || typeof color !== 'string') return null
+  return /^#[0-9a-fA-F]{6}$/.test(color) ? color : null
+}
+
 export const resolveScopeLabels = (scopeIds, scopes) => {
   const scopeLabelById = new Map()
 
@@ -44,16 +49,65 @@ export const resolveScopeLabels = (scopeIds, scopes) => {
   return resolvedLabels
 }
 
-export const renderScopeLabelsMarkup = (scopeLabels) => {
-  const labels = Array.isArray(scopeLabels)
-    ? scopeLabels.map((label) => normalizeScopeLabel(label)).filter(Boolean)
-    : []
+/**
+ * Like resolveScopeLabels but returns `{ label, color }` objects.
+ * The `color` field is `null` when no color is assigned to the scope.
+ */
+export const resolveScopeEntries = (scopeIds, scopes) => {
+  const scopeById = new Map()
 
-  if (labels.length === 0) {
+  for (const scope of Array.isArray(scopes) ? scopes : []) {
+    const id = normalizeScopeId(scope?.id ?? scope?.value)
+    const label = normalizeScopeLabel(scope?.label)
+
+    if (!id || !label || scopeById.has(id)) {
+      continue
+    }
+
+    scopeById.set(id, { label, color: sanitizeScopeColor(scope?.color) })
+  }
+
+  const entries = []
+  const seenLabels = new Set()
+
+  for (const scopeId of Array.isArray(scopeIds) ? scopeIds : []) {
+    const id = normalizeScopeId(scopeId)
+    if (!id) continue
+
+    const entry = scopeById.get(id)
+    if (!entry || seenLabels.has(entry.label)) continue
+
+    seenLabels.add(entry.label)
+    entries.push(entry)
+  }
+
+  return entries
+}
+
+/**
+ * Renders scope labels/entries as HTML badge spans.
+ * Accepts either `string[]` (labels only) or `{ label, color }[]` (entries).
+ * When an entry has a color, it is applied as an inline background style.
+ */
+export const renderScopeLabelsMarkup = (scopeLabelsOrEntries) => {
+  const items = Array.isArray(scopeLabelsOrEntries) ? scopeLabelsOrEntries : []
+
+  if (items.length === 0) {
     return ''
   }
 
-  return labels
-    .map((label) => `<span class="skill-node-tooltip__scope">${escapeHtml(label)}</span>`)
+  return items
+    .map((item) => {
+      const label = typeof item === 'string' ? item : item?.label
+      const color = typeof item === 'object' && item !== null ? sanitizeScopeColor(item?.color) : null
+      const normalizedLabel = normalizeScopeLabel(label)
+      if (!normalizedLabel) return ''
+
+      const style = color
+        ? ` style="border-color:${color};color:${color}"`
+        : ''
+      return `<span class="skill-node-tooltip__scope"${style}>${escapeHtml(normalizedLabel)}</span>`
+    })
+    .filter(Boolean)
     .join('')
 }

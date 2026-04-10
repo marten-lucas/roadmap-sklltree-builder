@@ -370,7 +370,18 @@ export function SkillTreeToolbar({
                 </Menu.Item>
                 {scopeOptions.map((scope) => (
                   <Menu.Item key={scope.value} onClick={() => setSelectedScopeFilterId?.(scope.value)}>
-                    {selectedScopeFilterId === scope.value ? '● ' : ''}{scope.label}
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                      {selectedScopeFilterId === scope.value ? '● ' : ''}
+                      <span
+                        className="skill-node-tooltip__scope"
+                        style={scope.color ? {
+                          borderColor: scope.color,
+                          color: scope.color,
+                        } : undefined}
+                      >
+                        {scope.label}
+                      </span>
+                    </span>
                   </Menu.Item>
                 ))}
               </Menu.Dropdown>

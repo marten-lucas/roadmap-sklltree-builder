@@ -1,5 +1,6 @@
 import { ActionIcon, Alert, Button, Divider, Group, Paper, Text, TextInput, Stack } from '@mantine/core'
 import { useState } from 'react'
+import { SCOPE_COLORS } from '../config'
 
 const TablerCirclePlusIcon = ({ size = 18 }) => (
   <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -9,13 +10,33 @@ const TablerCirclePlusIcon = ({ size = 18 }) => (
   </svg>
 )
 
-export function ToolbarScopeManager({ scopeOptions = [], onCreateScope, onRenameScope, onDeleteScope, onClose }) {
+const ColorSwatch = ({ color, isSelected, onClick }) => (
+  <button
+    type="button"
+    aria-label={`Farbe ${color}`}
+    onClick={() => onClick(color)}
+    style={{
+      width: 20,
+      height: 20,
+      borderRadius: '50%',
+      background: color,
+      border: isSelected ? '2px solid #f8fafc' : '2px solid transparent',
+      outline: isSelected ? '2px solid #06b6d4' : 'none',
+      cursor: 'pointer',
+      padding: 0,
+      flexShrink: 0,
+    }}
+  />
+)
+
+export function ToolbarScopeManager({ scopeOptions = [], onCreateScope, onRenameScope, onDeleteScope, onSetScopeColor, onClose }) {
   const [scopeDraft, setScopeDraft] = useState('')
   const [scopeError, setScopeError] = useState(null)
   const [editingScopeId, setEditingScopeId] = useState(null)
   const [editingScopeLabel, setEditingScopeLabel] = useState('')
+  const [colorPickerOpenId, setColorPickerOpenId] = useState(null)
 
-  const scopeSelectData = (scopeOptions ?? []).map((s) => ({ value: s.id ?? s.value, label: s.label }))
+  const scopeSelectData = (scopeOptions ?? []).map((s) => ({ value: s.id ?? s.value, label: s.label, color: s.color ?? null }))
 
   const handleCreate = () => {
     const result = onCreateScope?.(scopeDraft)
@@ -32,6 +53,7 @@ export function ToolbarScopeManager({ scopeOptions = [], onCreateScope, onRename
     setScopeError(null)
     setEditingScopeId(scopeId)
     setEditingScopeLabel(label)
+    setColorPickerOpenId(null)
   }
 
   const handleRename = () => {
@@ -59,6 +81,18 @@ export function ToolbarScopeManager({ scopeOptions = [], onCreateScope, onRename
       setEditingScopeId(null)
       setEditingScopeLabel('')
     }
+    if (colorPickerOpenId === scopeId) {
+      setColorPickerOpenId(null)
+    }
+  }
+
+  const handleToggleColorPicker = (scopeId) => {
+    setColorPickerOpenId((prev) => (prev === scopeId ? null : scopeId))
+  }
+
+  const handleSelectColor = (scopeId, color) => {
+    onSetScopeColor?.(scopeId, color)
+    setColorPickerOpenId(null)
   }
 
   return (
@@ -111,13 +145,66 @@ export function ToolbarScopeManager({ scopeOptions = [], onCreateScope, onRename
                     </Group>
                   </Stack>
                 ) : (
-                  <Group justify="space-between" wrap="nowrap">
-                    <Text size="sm" truncate>{scope.label}</Text>
-                    <Group gap={6} wrap="nowrap">
-                      <ActionIcon size="sm" variant="subtle" color="gray" onClick={() => handleStartRename(scope.value, scope.label)} aria-label="Scope umbenennen">✎</ActionIcon>
-                      <ActionIcon size="sm" variant="subtle" color="red" onClick={() => handleDelete(scope.value)} aria-label="Scope löschen">✕</ActionIcon>
+                  <Stack gap={6}>
+                    <Group justify="space-between" wrap="nowrap">
+                      <Group gap={8} wrap="nowrap" style={{ minWidth: 0 }}>
+                        <button
+                          type="button"
+                          aria-label="Farbe ändern"
+                          onClick={() => handleToggleColorPicker(scope.value)}
+                          style={{
+                            width: 16,
+                            height: 16,
+                            borderRadius: '50%',
+                            background: scope.color ?? 'rgba(100,116,139,0.4)',
+                            border: '1.5px solid rgba(148,163,184,0.35)',
+                            cursor: 'pointer',
+                            padding: 0,
+                            flexShrink: 0,
+                          }}
+                        />
+                        <Text size="sm" truncate>{scope.label}</Text>
+                      </Group>
+                      <Group gap={6} wrap="nowrap">
+                        <ActionIcon size="sm" variant="subtle" color="gray" onClick={() => handleStartRename(scope.value, scope.label)} aria-label="Scope umbenennen">✎</ActionIcon>
+                        <ActionIcon size="sm" variant="subtle" color="red" onClick={() => handleDelete(scope.value)} aria-label="Scope löschen">✕</ActionIcon>
+                      </Group>
                     </Group>
-                  </Group>
+                    {colorPickerOpenId === scope.value && (
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, padding: '6px 0 2px' }}>
+                        {SCOPE_COLORS.map((color) => (
+                          <ColorSwatch
+                            key={color}
+                            color={color}
+                            isSelected={scope.color === color}
+                            onClick={(c) => handleSelectColor(scope.value, c)}
+                          />
+                        ))}
+                        {scope.color && (
+                          <button
+                            type="button"
+                            aria-label="Farbe entfernen"
+                            onClick={() => handleSelectColor(scope.value, null)}
+                            style={{
+                              width: 20,
+                              height: 20,
+                              borderRadius: '50%',
+                              background: 'transparent',
+                              border: '1.5px dashed rgba(148,163,184,0.5)',
+                              cursor: 'pointer',
+                              padding: 0,
+                              flexShrink: 0,
+                              fontSize: 10,
+                              color: '#94a3b8',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                            }}
+                          >✕</button>
+                        )}
+                      </div>
+                    )}
+                  </Stack>
                 )}
               </Paper>
             ))}
