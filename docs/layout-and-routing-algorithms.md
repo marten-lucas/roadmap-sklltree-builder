@@ -153,7 +153,31 @@ After angle assignment, each `(segment, level)` group is checked for feasibility
 
 **Post-pack nudge**: after packing converges, each group is shifted as a unit toward cross-segment parents/children to close angular gaps between connected subtrees in different segments.
 
-### 3.9 Final Cartesian Coordinates
+### 3.9 Post-Packing Gap Compaction
+
+After capacity-packing and the post-pack nudge, large angular voids can remain between node clusters — either between two different segments, or between two sub-trees within the same segment. These voids inflate the total tree spread without visual benefit.
+
+**Algorithm** (runs once, after packing converges):
+
+1. Sort all nodes by their final packed angle.
+2. Compute each node's visual half-span: `halfSpan = nodeSize × 0.56 × 180° / (π × radius)`.
+3. Scan consecutive node pairs left-to-right. For each **edge-to-edge** gap that exceeds the threshold:
+   ```
+   gap = rightNode.angle − rightNode.halfSpan − (leftNode.angle + leftNode.halfSpan)
+   if gap > GAP_COMPACTION_THRESHOLD_DEG (14°):
+       shift = gap − GAP_COMPACTION_MIN_DEG (8°)
+       move all nodes from rightNode onward leftward by shift
+   ```
+   The scan runs right-to-left so earlier shifts do not invalidate later distance measurements.
+4. Recompute per-segment angular extents from the shifted node positions.
+5. Re-stitch `orderedSegments` wedge/slot boundaries using midpoints between adjacent segment extents, so that downstream routing and separator passes see consistent boundaries.
+6. Tighten the rightmost segment's outer boundary to match its actual node extent.
+
+**Scope**: gaps between *any* two adjacent nodes in the sorted order are eligible, not only inter-segment gaps. This handles cases such as a single large segment with two widely-separated sub-trees.
+
+**Safety**: because compaction runs before the `nodes` array and the edge-routing model are built, all downstream code (routing, separators, portals) uses the compacted positions directly — no new path crossings are introduced.
+
+### 3.10 Final Cartesian Coordinates
 
 ```
 x = origin.x + radius × cos(angle_rad)
@@ -298,3 +322,4 @@ Crossing portals and additional-dependency portals go through the same pipeline 
 | Child with crossing + routing needs (has own children) promoted +1 ring | Phase 2 `crossingPromotedLevelById`, hard cap base+4 |
 | Fully-portalized node (no line connections) compacted to inner ring | Phase 3 `compactedLevelById = max(1, parentLevel−1)`, forced portal |
 | Level adjustments cannot loop indefinitely | Two-pass loop limit; maps written once between passes |
+| Large angular voids (> 14°) between node clusters are closed | Post-packing gap compaction: shift right half leftward to leave ≤ 8° gap |

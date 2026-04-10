@@ -80,6 +80,13 @@ export function SkillTreeCanvas({
             stroke="context-stroke" strokeWidth="2"
             strokeLinecap="round" strokeLinejoin="round" />
         </marker>
+        {/* Chevron marker for edge links at close/very-close zoom — same shape, sized for stroke-width 4 */}
+        <marker id="link-chevron" markerWidth="12" markerHeight="16"
+          refX="4" refY="8" orient="auto" markerUnits="userSpaceOnUse">
+          <path d="M1,2 L8,8 L1,14" fill="none"
+            stroke="context-stroke" strokeWidth="2.5"
+            strokeLinecap="round" strokeLinejoin="round" />
+        </marker>
       </defs>
 
       <circle cx={canvas.origin.x} cy={canvas.origin.y} r={canvas.maxRadius + 160} fill="url(#nodeHalo)" />
@@ -211,6 +218,7 @@ export function SkillTreeCanvas({
           const childNode = link.targetId ? layoutNodesById.get(link.targetId) : null
           const nodeStatus = childNode ? normalizeStatusKey(childNode.status) : 'later'
           const statusStyle = STATUS_STYLES[nodeStatus] ?? STATUS_STYLES.later
+          const showChevrons = labelMode === 'close' || labelMode === 'very-close'
 
           return (
             <path
@@ -224,6 +232,7 @@ export function SkillTreeCanvas({
               strokeDasharray={statusStyle.linkStrokeDasharray || 'none'}
               strokeLinecap="round"
               fill="none"
+              markerMid={showChevrons ? 'url(#link-chevron)' : undefined}
             />
           )
         })}
