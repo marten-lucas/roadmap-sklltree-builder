@@ -69,8 +69,7 @@ const buildSegmentConicStyle = (statusKeys, colorGetter) => {
   }
 }
 
-export function SkillNode({ node, nodeSize, isSelected, onSelect, onSelectLevel, displayMode = 'full', labelMode = 'far', scopeOptions = [], storyPointMap, canvasOriginX = 0, nodeDeps = null }) {
-  const [activeCardTab, setActiveCardTab] = useState(0)
+export function SkillNode({ node, nodeSize, isSelected, onSelect, onSelectLevel, displayMode = 'full', labelMode = 'far', zoomScale = 1, scopeOptions = [], storyPointMap }) {
   const [hoveredLevelIndex, setHoveredLevelIndex] = useState(null)
   const isMinimal = displayMode === 'minimal'
   const isVeryClose = !isMinimal && labelMode === 'very-close'
@@ -221,42 +220,72 @@ export function SkillNode({ node, nodeSize, isSelected, onSelect, onSelectLevel,
             }}
           >
             {!isMinimal && <div className="skill-node-level-ring" style={levelRingStyle} />}
-            <div className={showLabel ? 'skill-node-button__content skill-node-button__content--labeled' : 'skill-node-button__content'}>
-              {showLabel && (
-                <p
-                  className="skill-node-button__label"
-                  style={{ color: '#f8fafc' }}
-                >
-                  {node.label}
-                </p>
-              )}
-              {!isMinimal && (
-                <Text
-                  className="skill-node-button__shortname"
-                  style={{ color: statusStyles.textColor, fontWeight: statusKey === 'now' ? 900 : 800 }}
-                >
-                  {shortName}
-                </Text>
-              )}
-              {showChips && (tooltipScopeLabels.length > 0 || node.effort?.size || node.benefit?.size) && (
-                <div className="skill-node-inner-chips">
-                  {tooltipScopeLabels.slice(0, 4).map((s, i) => (
-                    <span
-                      key={i}
-                      className="skill-node-inner-chip skill-node-inner-chip--scope"
-                      style={{ background: (s.color ?? '#fbbf24') + '22', borderColor: (s.color ?? '#fbbf24') + '99', color: s.color ?? '#fbbf24' }}
-                      title={s.label}
-                    >{s.label}</span>
-                  ))}
-                  {node.effort?.size && node.effort.size !== 'unclear' && (
-                    <span className="skill-node-inner-chip skill-node-inner-chip--effort" title={EFFORT_SIZE_LABELS[node.effort.size] ?? node.effort.size} />
-                  )}
-                  {node.benefit?.size && node.benefit.size !== 'unclear' && (
-                    <span className="skill-node-inner-chip skill-node-inner-chip--benefit" title={BENEFIT_SIZE_LABELS[node.benefit.size] ?? node.benefit.size} />
-                  )}
-                </div>
-              )}
-            </div>
+            {isVeryClose ? (
+              <div className="skill-node-button__content skill-node-button__content--veryclose">
+                <p className="skill-node-vc__headline">{node.label}</p>
+                {String(tooltipLevel?.releaseNote ?? '').trim() && (
+                  <p
+                    className="skill-node-vc__body"
+                    style={{ fontSize: `${26 / zoomScale}px` }}
+                  >{String(tooltipLevel.releaseNote).trim()}</p>
+                )}
+                {showChips && (tooltipScopeLabels.length > 0 || node.effort?.size || node.benefit?.size) && (
+                  <div className="skill-node-inner-chips skill-node-vc__chips" style={{ fontSize: `${26 / zoomScale}px` }}>
+                    {tooltipScopeLabels.slice(0, 4).map((s, i) => (
+                      <span
+                        key={i}
+                        className="skill-node-inner-chip skill-node-inner-chip--scope"
+                        style={{ background: (s.color ?? '#fbbf24') + '22', borderColor: (s.color ?? '#fbbf24') + '99', color: s.color ?? '#fbbf24' }}
+                        title={s.label}
+                      >{s.label}</span>
+                    ))}
+                    {node.effort?.size && node.effort.size !== 'unclear' && (
+                      <span className="skill-node-inner-chip skill-node-inner-chip--effort" title={EFFORT_SIZE_LABELS[node.effort.size] ?? node.effort.size} />
+                    )}
+                    {node.benefit?.size && node.benefit.size !== 'unclear' && (
+                      <span className="skill-node-inner-chip skill-node-inner-chip--benefit" title={BENEFIT_SIZE_LABELS[node.benefit.size] ?? node.benefit.size} />
+                    )}
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className={showLabel ? 'skill-node-button__content skill-node-button__content--labeled' : 'skill-node-button__content'}>
+                {showLabel && (
+                  <p
+                    className="skill-node-button__label"
+                    style={{ color: '#f8fafc' }}
+                  >
+                    {node.label}
+                  </p>
+                )}
+                {!isMinimal && (
+                  <Text
+                    className="skill-node-button__shortname"
+                    style={{ color: statusStyles.textColor, fontWeight: statusKey === 'now' ? 900 : 800 }}
+                  >
+                    {shortName}
+                  </Text>
+                )}
+                {showChips && (tooltipScopeLabels.length > 0 || node.effort?.size || node.benefit?.size) && (
+                  <div className="skill-node-inner-chips">
+                    {tooltipScopeLabels.slice(0, 4).map((s, i) => (
+                      <span
+                        key={i}
+                        className="skill-node-inner-chip skill-node-inner-chip--scope"
+                        style={{ background: (s.color ?? '#fbbf24') + '22', borderColor: (s.color ?? '#fbbf24') + '99', color: s.color ?? '#fbbf24' }}
+                        title={s.label}
+                      >{s.label}</span>
+                    ))}
+                    {node.effort?.size && node.effort.size !== 'unclear' && (
+                      <span className="skill-node-inner-chip skill-node-inner-chip--effort" title={EFFORT_SIZE_LABELS[node.effort.size] ?? node.effort.size} />
+                    )}
+                    {node.benefit?.size && node.benefit.size !== 'unclear' && (
+                      <span className="skill-node-inner-chip skill-node-inner-chip--benefit" title={BENEFIT_SIZE_LABELS[node.benefit.size] ?? node.benefit.size} />
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
           </Paper>
         </Tooltip>
       </div>

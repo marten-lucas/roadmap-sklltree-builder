@@ -4,7 +4,6 @@ import { detectCrossingLinks } from './edgeCrossings'
 import { analyzeSegmentLevelFeasibility, buildSegmentLevelGroups } from './layoutFeasibility'
 import {
   buildArcRadialPath,
-  buildRadialArcPath,
   centerAngle,
   clamp,
   toCartesian,
@@ -379,20 +378,6 @@ export const solveSkillTreeLayout = (data, config) => {
     }
 
     return labelWidth
-  }
-  const computeAdaptiveSegmentSpread = ({ segmentIds, statsById, radius }) => {
-    if (segmentIds.length <= 1) {
-      return 0
-    }
-
-    const minimumWidthSum = segmentIds.reduce(
-      (sum, segmentId) => sum + getMinimumSegmentWidthDeg(segmentId, radius, statsById.get(segmentId)),
-      0,
-    )
-    // Preserve a small global slack budget for visual breathing room while avoiding
-    // large unused gaps when the current radius already provides enough angular room.
-    const slack = Math.max(0.1, Math.min(6, (segmentIds.length - 1) * 0.40))
-    return clamp(minimumWidthSum + slack, MIN_SEGMENT_SPREAD_DEG, config.maxAngleSpread)
   }
   const computeSegmentSlots = ({ segmentIds, statsById, radius, totalSpread }) => {
     return computeWeightedSegmentSlots({
@@ -1557,19 +1542,6 @@ export const solveSkillTreeLayout = (data, config) => {
     computeLabelBandRadius(labelInnerRadius, recomputedLabelOuterRadius),
   )
 
-  const visualSegmentSpread = computeAdaptiveSegmentSpread({
-    segmentIds: segmentEntries.map((segment) => segment.id),
-    statsById: segmentStatsById,
-    radius: segmentLabelRadius,
-  })
-  const visualSegmentSlots = computeSegmentSlots({
-    segmentIds: segmentEntries.map((segment) => segment.id),
-    statsById: segmentStatsById,
-    radius: segmentLabelRadius,
-    totalSpread: visualSegmentSpread,
-  })
-  const visualSegmentSlotById = new Map(visualSegmentSlots.map((slot) => [slot.id, slot]))
-
   const observedSegmentRangesMap = new Map()
 
   for (const node of allNodes) {
@@ -1802,16 +1774,13 @@ export const solveSkillTreeLayout = (data, config) => {
 
   const segmentLabels = finalOrderedSegments
     .filter((segment) => !segment.isVirtual)
-    .map((segment, index, visibleSegments) => {
+    .map((segment) => {
       const estimatedLabelWidthPx = getEstimatedSegmentLabelWidthPx(segment.id)
       const angularHalfSpan = toDegrees((estimatedLabelWidthPx * 0.5) / Math.max(segmentLabelRadius, 1))
       const wedgeMin = segment.wedgeMin ?? segment.slotMin ?? segment.anchorAngle
       const wedgeMax = segment.wedgeMax ?? segment.slotMax ?? segment.anchorAngle
       const safeMin = wedgeMin + angularHalfSpan
       const safeMax = wedgeMax - angularHalfSpan
-      const isFirstVisible = index === 0
-      const isLastVisible = index === visibleSegments.length - 1
-
       const preferredAnchorAngle = (wedgeMin + wedgeMax) / 2
 
       const anchorAngle = safeMin <= safeMax

@@ -2,6 +2,102 @@ import { TREE_CONFIG, normalizeStatusKey, STATUS_STYLES } from '../config'
 import { SkillTreeNode } from '../nodes/SkillTreeNode'
 import { MarkdownTooltipContent, Tooltip } from '../tooltip'
 
+// ── Chevron helpers (Method 2: compound-path chevrons) ──────────────────────
+const CHEVRON_SPACING = 14
+// Half-opening angle of the V. 25° keeps arm tips within the line's half-width
+// when arm length = line-width (verified: sin(25°) * lineW ≤ lineW/2 for all widths).
+const CHEVRON_HALF_OPEN = 25 * (Math.PI / 180)
+// Compute arm length so chevron tips stay strictly inside a line of `lineWidth`.
+// Formula: armLen * sin(halfOpen) = lineWidth/2 * 0.88  (88% of half-width)
+const chevronArm = (lineWidth) => (lineWidth * 0.44) / Math.sin(CHEVRON_HALF_OPEN)
+
+/**
+ * Sample a compound SVG path (M, L, A commands only) at ~`spacing` intervals.
+ * Returns [{x, y, angle}] where `angle` is the tangent direction in radians.
+ * Only handles M / L / A — the only commands produced by our edge-router.
+ */
+function sampleSvgPath(pathStr, spacing) {
+  const samples = []
+  const cmdRe = /([MLAZ])\s*([-\d. ,e+]*)/gi
+  let cx = 0, cy = 0
+  let match
+  while ((match = cmdRe.exec(pathStr)) !== null) {
+    const cmd = match[1].toUpperCase()
+    const args = match[2].trim().length ? match[2].trim().split(/[\s,]+/).map(Number) : []
+    if (cmd === 'M') {
+      cx = args[0]; cy = args[1]
+    } else if (cmd === 'L') {
+      const tx = args[0], ty = args[1]
+      const dx = tx - cx, dy = ty - cy
+      const len = Math.sqrt(dx * dx + dy * dy)
+      const tangent = Math.atan2(dy, dx)
+      if (len > spacing * 0.5) {
+        const n = Math.max(1, Math.floor(len / spacing))
+        for (let i = 1; i <= n; i++) {
+          const t = i / n
+          if (t < 1) samples.push({ x: cx + dx * t, y: cy + dy * t, angle: tangent })
+        }
+      }
+      cx = tx; cy = ty
+    } else if (cmd === 'A') {
+      // A rx ry rot large sweep ex ey  (our arcs always have phi=0, rx=ry)
+      const r = args[0]
+      const fa = Math.round(args[3])
+      const fs = Math.round(args[4])
+      const ex = args[5], ey = args[6]
+      const x1p = (cx - ex) / 2
+      const y1p = (cy - ey) / 2
+      const sqSum = x1p * x1p + y1p * y1p
+      if (sqSum < 1e-6) { cx = ex; cy = ey; continue }
+      const sign = (fa !== fs) ? 1 : -1
+      const sqFactor = Math.sqrt(Math.max(0, (r * r - sqSum) / sqSum))
+      const arcCx = sign * sqFactor * y1p + (cx + ex) / 2
+      const arcCy = sign * sqFactor * (-x1p) + (cy + ey) / 2
+      let startAng = Math.atan2(cy - arcCy, cx - arcCx)
+      let endAng = Math.atan2(ey - arcCy, ex - arcCx)
+      let dAng = endAng - startAng
+      if (fs === 1 && dAng < 0) dAng += 2 * Math.PI
+      if (fs === 0 && dAng > 0) dAng -= 2 * Math.PI
+      const arcLen = Math.abs(r * dAng)
+      const n = Math.max(1, Math.floor(arcLen / spacing))
+      for (let i = 1; i <= n; i++) {
+        const t = i / n
+        if (t < 1) {
+          const ang = startAng + dAng * t
+          const px = arcCx + r * Math.cos(ang)
+          const py = arcCy + r * Math.sin(ang)
+          // Tangent: perpendicular to radius in direction of travel
+          const tangent = fs === 1 ? ang + Math.PI / 2 : ang - Math.PI / 2
+          samples.push({ x: px, y: py, angle: tangent })
+        }
+      }
+      cx = ex; cy = ey
+    }
+  }
+  return samples
+}
+
+/**
+ * Build a compound SVG path string of V-shaped chevrons at each sample point.
+ * Tip points in the tangent direction; reverseDir=true flips to point backward.
+ */
+function buildChevronPath(samples, armLen, halfOpen, reverseDir = false) {
+  if (samples.length === 0) return ''
+  const parts = []
+  for (const { x, y, angle } of samples) {
+    const dir = reverseDir ? angle + Math.PI : angle
+    const a1 = dir + Math.PI + halfOpen
+    const a2 = dir + Math.PI - halfOpen
+    const ax1 = (x + armLen * Math.cos(a1)).toFixed(2)
+    const ay1 = (y + armLen * Math.sin(a1)).toFixed(2)
+    const ax2 = (x + armLen * Math.cos(a2)).toFixed(2)
+    const ay2 = (y + armLen * Math.sin(a2)).toFixed(2)
+    parts.push(`M${ax1},${ay1} L${x.toFixed(2)},${y.toFixed(2)} L${ax2},${ay2}`)
+  }
+  return parts.join(' ')
+}
+// ────────────────────────────────────────────────────────────────────────────
+
 const getPortalClassName = (portal, isSelected) => [
   'skill-tree-portal',
   portal.isInteractive ? 'skill-tree-portal--interactive' : '',
@@ -35,6 +131,7 @@ export function SkillTreeCanvas({
   nodeSize = TREE_CONFIG.nodeSize,
   minimalNodeSize = 36,
   labelMode = 'far',
+  currentZoomScale = 1,
   scopeOptions = [],
   onCanvasClick,
   onCanvasDoubleClick,
@@ -64,29 +161,6 @@ export function SkillTreeCanvas({
           <stop offset="0%" stopColor="#60a5fa" stopOpacity="0.22" />
           <stop offset="100%" stopColor="#020617" stopOpacity="0" />
         </radialGradient>
-        {/* Directional chevron markers for portal spokes.
-            stroke="context-stroke" inherits the path color so hover/selected states apply automatically. */}
-        {/* Source (outgoing): ">" points away from node */}
-        <marker id="portal-chevron-source" markerWidth="10" markerHeight="12"
-          refX="3" refY="6" orient="auto" markerUnits="userSpaceOnUse">
-          <path d="M1,2 L6,6 L1,10" fill="none"
-            stroke="context-stroke" strokeWidth="2"
-            strokeLinecap="round" strokeLinejoin="round" />
-        </marker>
-        {/* Target (incoming): "<" points toward node */}
-        <marker id="portal-chevron-target" markerWidth="10" markerHeight="12"
-          refX="7" refY="6" orient="auto" markerUnits="userSpaceOnUse">
-          <path d="M9,2 L4,6 L9,10" fill="none"
-            stroke="context-stroke" strokeWidth="2"
-            strokeLinecap="round" strokeLinejoin="round" />
-        </marker>
-        {/* Chevron marker for edge links at close/very-close zoom — same shape, sized for stroke-width 4 */}
-        <marker id="link-chevron" markerWidth="12" markerHeight="16"
-          refX="4" refY="8" orient="auto" markerUnits="userSpaceOnUse">
-          <path d="M1,2 L8,8 L1,14" fill="none"
-            stroke="context-stroke" strokeWidth="2.5"
-            strokeLinecap="round" strokeLinejoin="round" />
-        </marker>
       </defs>
 
       <circle cx={canvas.origin.x} cy={canvas.origin.y} r={canvas.maxRadius + 160} fill="url(#nodeHalo)" />
@@ -194,31 +268,24 @@ export function SkillTreeCanvas({
           )
         })}
 
-        {filteredLinks.filter((link) => link.linkKind === 'ring').map((link) => {
-          const segmentNode = link.targetId ? layoutNodesById.get(link.targetId) : null
-          const nodeStatus = segmentNode ? normalizeStatusKey(segmentNode.status) : 'later'
-          const statusStyle = STATUS_STYLES[nodeStatus] ?? STATUS_STYLES.later
-
-          return (
-            <path
-              key={link.id}
-              d={link.path}
-              data-link-source-id={link.sourceId ?? ''}
-              data-link-target-id={link.targetId ?? ''}
-              stroke={statusStyle.linkStroke}
-              strokeWidth="4"
-              strokeOpacity={statusStyle.linkOpacity}
-              strokeLinecap="round"
-              fill="none"
-            />
-          )
-        })}
+        {filteredLinks.filter((link) => link.linkKind === 'ring').map((link) => (
+          <path
+            key={link.id}
+            d={link.path}
+            data-link-source-id={link.sourceId ?? ''}
+            data-link-target-id={link.targetId ?? ''}
+            stroke="#1e3a8a"
+            strokeWidth="2"
+            strokeOpacity="0.7"
+            strokeLinecap="round"
+            fill="none"
+          />
+        ))}
 
         {filteredLinks.filter((link) => link.sourceDepth > 0 && link.linkKind !== 'ring').map((link) => {
           const childNode = link.targetId ? layoutNodesById.get(link.targetId) : null
           const nodeStatus = childNode ? normalizeStatusKey(childNode.status) : 'later'
           const statusStyle = STATUS_STYLES[nodeStatus] ?? STATUS_STYLES.later
-          const showChevrons = labelMode === 'close' || labelMode === 'very-close'
 
           return (
             <path
@@ -232,10 +299,37 @@ export function SkillTreeCanvas({
               strokeDasharray={statusStyle.linkStrokeDasharray || 'none'}
               strokeLinecap="round"
               fill="none"
-              markerMid={showChevrons ? 'url(#link-chevron)' : undefined}
             />
           )
         })}
+
+        {/* ── Connection line direction chevrons — only at close/very-close, only later+next ── */}
+        {(labelMode === 'close' || labelMode === 'very-close') &&
+          filteredLinks
+            .filter((link) => link.sourceDepth > 0 && link.linkKind !== 'ring')
+            .map((link) => {
+              const childNode = link.targetId ? layoutNodesById.get(link.targetId) : null
+              const nodeStatus = childNode ? normalizeStatusKey(childNode.status) : 'later'
+              const statusStyle = STATUS_STYLES[nodeStatus] ?? STATUS_STYLES.later
+              const lineWidth = parseFloat(statusStyle.linkStrokeWidth)
+              const samples = sampleSvgPath(link.path, CHEVRON_SPACING)
+              const chevronD = buildChevronPath(samples, chevronArm(lineWidth), CHEVRON_HALF_OPEN, false)
+              if (!chevronD) return null
+              return (
+                <path
+                  key={`lchv-${link.id}`}
+                  d={chevronD}
+                  stroke={statusStyle.linkStroke}
+                  strokeWidth="1.2"
+                  strokeOpacity={Math.min(1, parseFloat(statusStyle.linkOpacity) * 1.4)}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  fill="none"
+                  style={{ pointerEvents: 'none' }}
+                />
+              )
+            })
+        }
 
         {/* ── Dependency portals (spokes) — rendered before nodes so spokes sit behind circles/rectangles ── */}
         {visibleDependencyPortals.map((portal) => {
@@ -273,23 +367,21 @@ export function SkillTreeCanvas({
           const lineAngleDeg = Math.atan2(byLocal, bxLocal) * 180 / Math.PI
           const readAngleDeg = (lineAngleDeg > 90 || lineAngleDeg < -90) ? lineAngleDeg + 180 : lineAngleDeg
 
-          // Build path with intermediate points so markerMid fires a chevron every CHEVRON_SPACING units
-          const CHEVRON_SPACING = 14
+          // Method 2: compound-path chevrons computed directly from spoke endpoints.
           const spokeDx = extTipX - bxLocal
           const spokeDy = extTipY - byLocal
-          const spokeLen2 = Math.sqrt(spokeDx * spokeDx + spokeDy * spokeDy)
-          const spokePts = [[bxLocal, byLocal]]
-          if (spokeLen2 > CHEVRON_SPACING) {
-            const nSteps = Math.floor(spokeLen2 / CHEVRON_SPACING)
-            for (let ci = 1; ci <= nSteps; ci++) {
-              const t = (ci * CHEVRON_SPACING) / spokeLen2
-              if (t < 1) spokePts.push([bxLocal + spokeDx * t, byLocal + spokeDy * t])
+          const spokeDist = Math.sqrt(spokeDx * spokeDx + spokeDy * spokeDy)
+          const spokeLinePath = `M${bxLocal.toFixed(2)},${byLocal.toFixed(2)} L${extTipX.toFixed(2)},${extTipY.toFixed(2)}`
+          const spokeTangent = spokeDist > 0 ? Math.atan2(spokeDy, spokeDx) : 0
+          const spokeSamples = []
+          if (spokeDist > CHEVRON_SPACING * 0.5) {
+            const n = Math.floor(spokeDist / CHEVRON_SPACING)
+            for (let ci = 1; ci <= n; ci++) {
+              const t = (ci * CHEVRON_SPACING) / spokeDist
+              if (t < 1) spokeSamples.push({ x: bxLocal + spokeDx * t, y: byLocal + spokeDy * t, angle: spokeTangent })
             }
           }
-          spokePts.push([extTipX, extTipY])
-          const spokePathD = spokePts.map(([px, py], i) =>
-            `${i === 0 ? 'M' : 'L'}${px.toFixed(2)},${py.toFixed(2)}`
-          ).join(' ')
+          const spokeChevronD = buildChevronPath(spokeSamples, chevronArm(3), CHEVRON_HALF_OPEN, portal.type === 'target')
 
           return (
             <Tooltip
@@ -316,13 +408,26 @@ export function SkillTreeCanvas({
                   }
                 }}
               >
-                {/* spoke: interpolated path so markerMid fires a chevron at each step */}
+                {/* base spoke line */}
                 <path
-                  d={spokePathD}
+                  d={spokeLinePath}
                   className={`skill-tree-portal__spoke skill-tree-portal__spoke--${portal.type}`}
-                  markerMid={`url(#portal-chevron-${portal.type})`}
                 />
-                {/* invisible hit area */}
+                {/* directional chevrons overlay (Method 2: compound path) */}
+                {spokeChevronD && (
+                  <path
+                    d={spokeChevronD}
+                    className={`skill-tree-portal__chevrons skill-tree-portal__chevrons--${portal.type}`}
+                  />
+                )}
+                {/* ring icon at spoke tip */}
+                <circle
+                  className={`skill-tree-portal__ring skill-tree-portal__ring--${portal.type}`}
+                  r={portal.isMinimal ? 6 : 9}
+                  cx={extTipX}
+                  cy={extTipY}
+                />
+                {/* invisible hit area (larger than ring for easy clicking) */}
                 <circle className="skill-tree-portal__hit" r="18" cx={extTipX} cy={extTipY} />
                 {/* label along the spoke */}
                 {!portal.isMinimal && (
@@ -354,6 +459,7 @@ export function SkillTreeCanvas({
               nodeSize={renderNodeSize}
               displayMode={visibilityMode}
               labelMode={visibilityMode === 'minimal' ? 'far' : labelMode}
+              zoomScale={currentZoomScale}
               isSelected={node.id === selectedNodeId || selectedNodeIds.includes(node.id)}
               scopeOptions={scopeOptions}
               onSelect={onSelectNode}

@@ -731,38 +731,68 @@ export function SkillTree() {
     }
 
     const endpoints = []
-    const portalAvoidance = 32
-    // Hemisphere split: source portals go to outer hemisphere (away from center),
-    // target portals go to inner hemisphere (toward center). 20° spread per group.
-    const HEMISPHERE_SPREAD = 20
+    // ── Slot-based portal placement ──────────────────────────────────────────
+    // Each hemisphere is divided into N fixed slots (step=20°, ±80° from axis).
+    // Source portals use the outward hemisphere; target portals the inward hemisphere.
+    // Slots are tried in order of closeness to the hemisphere axis (center-first),
+    // so portals prefer the radial direction and fall back sideways only when blocked.
+    const SLOT_STEP = 20         // degrees between adjacent slots
+    const HEMI_SPAN = 80         // hemisphere spans ±80° from axis (9 slots total)
+    const LINK_BLOCK = 32        // block zone around each connection-line angle
+    const PORTAL_SEP = 20        // minimum separation between portals on same node
+
+    // Build ordered slot list for a hemisphere — center first, then alternating ±
+    const buildSlots = (center) => {
+      const slots = [center]
+      for (let o = SLOT_STEP; o <= HEMI_SPAN; o += SLOT_STEP) {
+        slots.push(center + o)
+        slots.push(center - o)
+      }
+      return slots
+    }
+
+    // Pick the first slot not blocked by link-lines or already-placed portals.
+    // Falls back to least-conflicted slot if every slot is blocked.
+    const pickSlot = (slots, blockedDirs, reservedAngles) => {
+      for (const slot of slots) {
+        const hitLink = blockedDirs.some((a) => isAngleNear(slot, a, LINK_BLOCK))
+        const hitPortal = reservedAngles.some((a) => isAngleNear(slot, a, PORTAL_SEP))
+        if (!hitLink && !hitPortal) return slot
+      }
+      let bestSlot = slots[0]; let bestScore = Infinity
+      for (const slot of slots) {
+        const s = blockedDirs.filter((a) => isAngleNear(slot, a, LINK_BLOCK)).length * 1000
+             + reservedAngles.filter((a) => isAngleNear(slot, a, PORTAL_SEP)).length * 50
+        if (s < bestScore) { bestScore = s; bestSlot = slot }
+      }
+      return bestSlot
+    }
 
     for (const [nodeId, nodeEndpoints] of endpointsByNodeId.entries()) {
       const layoutNode = layoutNodeById.get(nodeId)
-      if (!layoutNode) {
-        continue
-      }
+      if (!layoutNode) continue
 
-      // Use actual rendered size so portals stay tight when a node is minimal
       const isNodeMinimal = nodeVisibilityModeById.get(nodeId) === 'minimal'
       const effectiveNodeSize = isNodeMinimal ? MINIMAL_NODE_SIZE : TREE_CONFIG.nodeSize
       const portalOrbit = effectiveNodeSize * 0.74
       const endpointOrbitStep = effectiveNodeSize * 0.06
 
+      // Collect the directions to hierarchy connection lines (parent + children).
       const childAngles = nodes
         .filter((candidate) => candidate.parentId === nodeId)
         .map((candidate) => {
           const expanded = layoutNodeById.get(candidate.id) ?? candidate
           return toDegrees(Math.atan2(expanded.y - layoutNode.y, expanded.x - layoutNode.x))
         })
-      const blockedAngles = [...childAngles]
+      const linkBlockedAngles = [...childAngles]
       if (layoutNode.parentId) {
         const parentNode = layoutNodeById.get(layoutNode.parentId)
         if (parentNode) {
-          blockedAngles.push(toDegrees(Math.atan2(parentNode.y - layoutNode.y, parentNode.x - layoutNode.x)))
+          linkBlockedAngles.push(toDegrees(Math.atan2(parentNode.y - layoutNode.y, parentNode.x - layoutNode.x)))
         }
       }
 
-      // Angle pointing toward center (inner hemisphere for targets) and away (outer for sources)
+      // Radial axis: inward = toward canvas center, outward = away from center.
       const inwardAngle = toDegrees(Math.atan2(canvas.origin.y - layoutNode.y, canvas.origin.x - layoutNode.x))
       const outwardAngle = inwardAngle + 180
 
@@ -771,69 +801,44 @@ export function SkillTree() {
       const targetEndpoints = nodeEndpoints.filter((ep) => ep.type === 'target')
         .sort((a, b) => a.key.localeCompare(b.key))
 
+      // Source slots: outer hemisphere (centered on outwardAngle).
+      // Target slots: inner hemisphere (centered on inwardAngle).
+      // Each set is ordered center-first so portals prefer the radial axis.
+      const sourceSlots = buildSlots(outwardAngle)
+      const targetSlots = buildSlots(inwardAngle)
       const reservedAngles = []
-      // ±90° search in 5° steps – wide enough to find free arcs on crowded nodes
-      const candidateOffsets = Array.from({ length: 37 }, (_, i) => i - 18)
 
-      // Place source portals in outer hemisphere
+      // Place source portals (outgoing — outer hemisphere)
       sourceEndpoints.forEach((endpoint, index) => {
-        const offsetCenter = (sourceEndpoints.length - 1) / 2
-        const baseAngle = outwardAngle + (index - offsetCenter) * HEMISPHERE_SPREAD
-        let bestAngle = baseAngle
-        let bestPenalty = Number.POSITIVE_INFINITY
-
-        for (const offsetFactor of candidateOffsets) {
-          const candidateAngle = baseAngle + offsetFactor * 5
-          const blockedPenalty = blockedAngles.some((blocked) => isAngleNear(candidateAngle, blocked, portalAvoidance)) ? 1000 : 0
-          const reservedPenalty = reservedAngles.some((reserved) => isAngleNear(candidateAngle, reserved, 22)) ? 700 : 0
-          const spreadPenalty = Math.abs(offsetFactor)
-          const penalty = blockedPenalty + reservedPenalty + spreadPenalty
-          if (penalty < bestPenalty) { bestPenalty = penalty; bestAngle = candidateAngle }
-          if (penalty === 0) break
-        }
-
-        reservedAngles.push(bestAngle)
+        const angle = pickSlot(sourceSlots, linkBlockedAngles, reservedAngles)
+        reservedAngles.push(angle)
         const orbit = portalOrbit + Math.abs(index - (sourceEndpoints.length - 1) / 2) * endpointOrbitStep
-        const radians = toRadians(bestAngle)
+        const radians = toRadians(angle)
         endpoints.push({
           ...endpoint,
           nodeId,
           x: layoutNode.x + Math.cos(radians) * orbit,
           y: layoutNode.y + Math.sin(radians) * orbit,
-          angle: bestAngle,
-          rotation: bestAngle + 180,
+          angle,
+          rotation: angle + 180,
           scale: isNodeMinimal ? MINIMAL_NODE_SIZE / TREE_CONFIG.nodeSize : 1,
           isMinimal: isNodeMinimal,
         })
       })
 
-      // Place target portals in inner hemisphere
+      // Place target portals (incoming — inner hemisphere)
       targetEndpoints.forEach((endpoint, index) => {
-        const offsetCenter = (targetEndpoints.length - 1) / 2
-        const baseAngle = inwardAngle + (index - offsetCenter) * HEMISPHERE_SPREAD
-        let bestAngle = baseAngle
-        let bestPenalty = Number.POSITIVE_INFINITY
-
-        for (const offsetFactor of candidateOffsets) {
-          const candidateAngle = baseAngle + offsetFactor * 5
-          const blockedPenalty = blockedAngles.some((blocked) => isAngleNear(candidateAngle, blocked, portalAvoidance)) ? 1000 : 0
-          const reservedPenalty = reservedAngles.some((reserved) => isAngleNear(candidateAngle, reserved, 22)) ? 700 : 0
-          const spreadPenalty = Math.abs(offsetFactor)
-          const penalty = blockedPenalty + reservedPenalty + spreadPenalty
-          if (penalty < bestPenalty) { bestPenalty = penalty; bestAngle = candidateAngle }
-          if (penalty === 0) break
-        }
-
-        reservedAngles.push(bestAngle)
+        const angle = pickSlot(targetSlots, linkBlockedAngles, reservedAngles)
+        reservedAngles.push(angle)
         const orbit = portalOrbit + Math.abs(index - (targetEndpoints.length - 1) / 2) * endpointOrbitStep
-        const radians = toRadians(bestAngle)
+        const radians = toRadians(angle)
         endpoints.push({
           ...endpoint,
           nodeId,
           x: layoutNode.x + Math.cos(radians) * orbit,
           y: layoutNode.y + Math.sin(radians) * orbit,
-          angle: bestAngle,
-          rotation: bestAngle + 180,
+          angle,
+          rotation: angle + 180,
           scale: isNodeMinimal ? MINIMAL_NODE_SIZE / TREE_CONFIG.nodeSize : 1,
           isMinimal: isNodeMinimal,
         })
@@ -2408,6 +2413,7 @@ export function SkillTree() {
             nodeSize={TREE_CONFIG.nodeSize}
             minimalNodeSize={MINIMAL_NODE_SIZE}
             labelMode={activeLabelMode}
+            currentZoomScale={currentZoomScale}
             scopeOptions={scopeOptions}
             onCanvasClick={() => {
               selectNodeId(null)

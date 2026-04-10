@@ -81,9 +81,9 @@ export const STATUS_STYLES = {
  *   scale ≥ midToClose → 'close' (full name + short name + release note card)
  */
 export const NODE_LABEL_ZOOM = {
-  farToMid: 0.7,
-  midToClose: 1.0,
-  closeToVeryClose: 2.0,
+  farToMid: 1.0,
+  midToClose: 1.5,
+  closeToVeryClose: 4.0,
 }
 
 /**

@@ -278,9 +278,9 @@
     pointer-events: all;
 }
 
-/* ── Ring (thin, contains label) ── */
+/* ── Ring (filled circle at spoke tip) ── */
 .skill-tree-portal__ring {
-    fill: none;
+    fill: #020617;
     stroke-width: 1.5;
     transition: stroke-opacity 140ms ease, transform 140ms ease;
 }
@@ -324,20 +324,6 @@
     transform: scale(1.08);
 }
 
-/* selected */
-.skill-tree-portal--selected .skill-tree-portal__ring {
-    stroke-width: 3.5;
-    filter: drop-shadow(0 0 5px rgba(56, 189, 248, 0.7));
-}
-
-.skill-tree-portal--selected .skill-tree-portal__ring--target {
-    filter: drop-shadow(0 0 5px rgba(250, 204, 21, 0.6));
-}
-
-.skill-tree-portal--selected .skill-tree-portal__cup {
-    stroke-width: 4;
-}
-
 .skill-tree-portal__label {
     fill: rgba(248, 250, 252, 0.95);
     font-size: 6px;
@@ -364,19 +350,35 @@
 /* ── Spoke (line from node boundary to portal tip) ── */
 .skill-tree-portal__spoke {
     fill: none;
-    stroke-width: 10;
+    stroke-width: 3;
     stroke-linecap: butt;
-    /* no dash — chevron markers provide the directional rhythm */
     pointer-events: none;
     transition: stroke-opacity 140ms ease;
 }
 
 .skill-tree-portal__spoke--source {
-    stroke: rgba(56, 189, 248, 0.8);
+    stroke: rgba(56, 189, 248, 0.75);
 }
 
 .skill-tree-portal__spoke--target {
-    stroke: rgba(250, 204, 21, 0.8);
+    stroke: rgba(250, 204, 21, 0.75);
+}
+
+/* ── Chevron overlay (Method 2: compound-path V-marks) ── */
+.skill-tree-portal__chevrons {
+    fill: none;
+    stroke-width: 1.5;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    pointer-events: none;
+}
+
+.skill-tree-portal__chevrons--source {
+    stroke: rgba(56, 189, 248, 1.0);
+}
+
+.skill-tree-portal__chevrons--target {
+    stroke: rgba(250, 204, 21, 1.0);
 }
 
 /* ── Dot at spoke tip ── */
@@ -399,15 +401,27 @@
 
 .skill-tree-portal--interactive:hover .skill-tree-portal__spoke {
     stroke-opacity: 1;
-    stroke-width: 2;
 }
 
 .skill-tree-portal--interactive:hover .skill-tree-portal__dot {
     filter: brightness(1.3) drop-shadow(0 0 5px currentColor);
 }
 
-.skill-tree-portal--selected .skill-tree-portal__spoke {
+/* selected */
+.skill-tree-portal--selected .skill-tree-portal__ring {
     stroke-width: 2.5;
+    filter: drop-shadow(0 0 5px rgba(56, 189, 248, 0.7));
+}
+
+.skill-tree-portal--selected .skill-tree-portal__ring--target {
+    filter: drop-shadow(0 0 5px rgba(250, 204, 21, 0.6));
+}
+
+.skill-tree-portal--selected .skill-tree-portal__spoke {
+    stroke-opacity: 1;
+}
+
+.skill-tree-portal--selected .skill-tree-portal__chevrons {
     stroke-opacity: 1;
 }
 
@@ -604,6 +618,7 @@
     overflow: hidden;
     display: -webkit-box;
     -webkit-line-clamp: 2;
+    line-clamp: 2;
     -webkit-box-orient: vertical;
 }
 
@@ -1008,6 +1023,7 @@
     background: #020617 !important;
     /* Ring comes from level-ring below; no box-shadow needed */
     box-shadow: none;
+    padding: 0;
 }
 
 .skill-node-foreign--veryclose .skill-node-level-ring {
@@ -1039,6 +1055,69 @@
     -webkit-mask: none;
     mask: none;
     filter: blur(12px);
+}
+
+/* --- very-close node content layout ------------------------------------ */
+
+.skill-node-button__content--veryclose {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    justify-content: flex-start;
+    width: 100%;
+    height: 100%;
+    padding: 2px 2px 2px;
+    position: relative;
+    z-index: 2;
+    overflow: hidden;
+}
+
+.skill-node-vc__headline {
+    margin: 0 0 3px;
+    padding: 0;
+    font-size: 8px;
+    font-weight: 700;
+    line-height: 1.2;
+    color: #ffffff;
+    text-align: center;
+    white-space: normal;
+    word-break: break-word;
+    overflow: hidden;
+    width: 100%;
+    flex-shrink: 0;
+}
+
+.skill-node-vc__body {
+    margin: 0;
+    padding: 0;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+    /* font-size set dynamically via inline style (26px / zoomScale) */
+    line-height: 1.3;
+    color: #ffffff;
+    text-align: left;
+    white-space: pre-line;
+    word-break: break-word;
+    transition: font-size 120ms ease-out;
+}
+
+.skill-node-vc__chips {
+    margin-top: auto;
+    padding-top: 3px;
+    flex-shrink: 0;
+    justify-content: flex-start;
+}
+
+.skill-node-vc__chips .skill-node-inner-chip--scope {
+    font-size: 1em;
+    padding: 0px 3px;
+}
+
+.skill-node-vc__chips .skill-node-inner-chip--effort,
+.skill-node-vc__chips .skill-node-inner-chip--benefit {
+    width: 4px;
+    height: 4px;
 }
 
 /* --- inner chip indicators (scope dots + effort/benefit) at close / very-close --- */
