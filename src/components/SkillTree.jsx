@@ -15,6 +15,7 @@ import {
 } from './utils/documentState'
 import { SystemPanel, InspectorPanel, SegmentPanel, ToolbarScopeManager, ToolbarSegmentManager } from './panels'
 import { PriorityMatrix } from './panels/PriorityMatrix'
+import { ListViewDrawer } from './panels/ListViewDrawer'
 import { solveSkillTreeLayout } from './utils/layoutSolver'
 import { UNASSIGNED_SEGMENT_ID } from './utils/layoutShared'
 import { getSkillTreeShortcutAction } from './utils/keyboardShortcuts'
@@ -151,6 +152,7 @@ export function SkillTree() {
   const [csvImportOptions, setCsvImportOptions] = useState(DEFAULT_CSV_IMPORT_PROCESS_OPTIONS)
   const [pendingCsvImport, setPendingCsvImport] = useState(null)
   const [priorityMatrixOpen, setPriorityMatrixOpen] = useState(false)
+  const [listViewOpen, setListViewOpen] = useState(false)
 
   const {
     selectedNodeId,
@@ -1542,6 +1544,15 @@ export function SkillTree() {
     transformApiRef.current.setTransform(positionX, positionY, scale, 300, 'easeOut')
   }
 
+  const handleZoomToNode = (nodeX, nodeY) => {
+    if (!transformApiRef.current || !canvasAreaRef.current) return
+    const rect = canvasAreaRef.current.getBoundingClientRect()
+    const newScale = Math.min(3.0, VIEWPORT_DEFAULTS.maxScale)
+    const newPositionX = rect.width / 2 - nodeX * newScale
+    const newPositionY = rect.height / 2 - nodeY * newScale
+    transformApiRef.current.setTransform(newPositionX, newPositionY, newScale, 400, 'easeOut')
+  }
+
   const handleZoomToScale = (scale) => {
     if (!transformApiRef.current) return
     const { positionX, positionY, scale: currentScale } = transformApiRef.current.state
@@ -1899,6 +1910,23 @@ export function SkillTree() {
     setSelectedPortalKey(null)
   }
 
+  const handleSelectNodeFromListView = (nodeId) => {
+    const layoutNode = layoutNodesById.get(nodeId)
+    // Commit the selection (opens inspector) synchronously so the layout
+    // stabilises before we start animating the viewport.
+    flushSync(() => {
+      selectNodeId(nodeId)
+    })
+    if (layoutNode && transformApiRef.current) {
+      const TARGET_SCALE = 3
+      const vw = window.innerWidth
+      const vh = window.innerHeight
+      const positionX = vw / 2 - layoutNode.x * TARGET_SCALE
+      const positionY = vh / 2 - layoutNode.y * TARGET_SCALE
+      transformApiRef.current.setTransform(positionX, positionY, TARGET_SCALE, 500, 'easeOut')
+    }
+  }
+
   const handleSelectSegment = (segmentId) => {
     selectSegmentId(segmentId)
     setSelectedPortalKey(null)
@@ -2211,6 +2239,24 @@ export function SkillTree() {
     return () => el.removeEventListener('wheel', onWheel)
   }, [])
 
+  useEffect(() => {
+    const el = canvasAreaRef.current
+    if (!el) return
+    let lastRightClick = 0
+    const onContextMenu = (e) => {
+      e.preventDefault()
+      const now = Date.now()
+      if (now - lastRightClick < 400) {
+        handleFitToScreen()
+        lastRightClick = 0
+      } else {
+        lastRightClick = now
+      }
+    }
+    el.addEventListener('contextmenu', onContextMenu)
+    return () => el.removeEventListener('contextmenu', onContextMenu)
+  }, [handleFitToScreen])
+
   return (
     <main className="skill-tree-shell">
       <input
@@ -2344,7 +2390,14 @@ export function SkillTree() {
         onReset={handleReset}
         onOpenSegmentManager={handleOpenSegmentManager}
         onOpenScopeManager={handleOpenScopeManager}
-        onOpenPriorityMatrix={() => setPriorityMatrixOpen((v) => !v)}
+        onOpenPriorityMatrix={() => {
+          setPriorityMatrixOpen((v) => !v)
+          setListViewOpen(false)
+        }}
+        onOpenListView={() => {
+          setListViewOpen((v) => !v)
+          setPriorityMatrixOpen(false)
+        }}
         releaseFilter={releaseFilter}
         setReleaseFilter={setReleaseFilter}
         selectedReleaseFilterLabel={selectedReleaseFilterLabel}
@@ -2420,7 +2473,6 @@ export function SkillTree() {
               selectSegmentId(null)
               setSelectedPortalKey(null)
             }}
-            onCanvasDoubleClick={handleFitToScreen}
             onOpenCenterIconPanel={handleOpenCenterIconPanel}
             onSelectSegment={handleSelectSegment}
             onSelectPortal={handleSelectPortal}
@@ -2430,6 +2482,7 @@ export function SkillTree() {
             onAddSegmentNear={handleAddSegmentNear}
             onAddChild={handleAddChild}
             onSelectNode={handleSelectNode}
+            onZoomToNode={handleZoomToNode}
             storyPointMap={roadmapData.storyPointMap}
           />
         </TransformComponent>
@@ -2488,7 +2541,7 @@ export function SkillTree() {
 
           applyToSelectedNodes((tree, id) => {
             const validation = validateNodeSegmentChange(tree, id, nextSegmentId, TREE_CONFIG)
-            return validation.isAllowed ? validation.tree : tree
+            return validation.tree
           })
         }}
         onLevelAdditionalDependenciesChange={handleLevelAdditionalDependenciesChange}
@@ -2546,6 +2599,13 @@ export function SkillTree() {
         opened={priorityMatrixOpen}
         onClose={() => setPriorityMatrixOpen(false)}
         document={roadmapData}
+      />
+
+      <ListViewDrawer
+        opened={listViewOpen}
+        onClose={() => setListViewOpen(false)}
+        document={roadmapData}
+        onSelectNode={handleSelectNodeFromListView}
       />
     </main>
   )

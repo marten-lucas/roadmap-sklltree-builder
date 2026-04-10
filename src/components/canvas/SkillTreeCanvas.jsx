@@ -144,6 +144,7 @@ export function SkillTreeCanvas({
   onAddSegmentNear,
   onAddChild,
   onSelectNode,
+  onZoomToNode,
   storyPointMap,
 }) {
   return (
@@ -461,6 +462,7 @@ export function SkillTreeCanvas({
               isSelected={node.id === selectedNodeId || selectedNodeIds.includes(node.id)}
               scopeOptions={scopeOptions}
               onSelect={onSelectNode}
+              onZoomToNode={onZoomToNode}
               storyPointMap={storyPointMap}
               canvasOriginX={canvas.origin.x}
               nodeDeps={depSummaryByNodeId.get(node.id) ?? null}

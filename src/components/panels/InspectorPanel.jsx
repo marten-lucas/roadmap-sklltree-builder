@@ -542,7 +542,6 @@ export function InspectorPanel({
 
   const selectedSegmentKey = selectedNode?.segmentId ?? UNASSIGNED_SEGMENT_ID
   const blockedLevelHint = levelOptions.find((option) => !option.isAllowed)?.reasons?.[0] ?? null
-  const blockedSegmentHint = segmentOptions?.find((option) => !option.isAllowed)?.reasons?.[0] ?? null
 
   // Collect all short names in the tree except the current node for duplicate check
   const otherShortNames = useMemo(() => {
@@ -572,7 +571,6 @@ export function InspectorPanel({
   const segmentData = (segmentOptions ?? []).map((option) => ({
     value: option.id,
     label: option.label,
-    disabled: !option.isAllowed,
   }))
   const parentData = (parentOptions ?? []).map((option) => ({
     value: option.id,
@@ -728,7 +726,6 @@ export function InspectorPanel({
                           value={selectedSegmentKey}
                           onChange={(value) => value && onSegmentChange(value)}
                           allowDeselect={false}
-                          description={blockedSegmentHint ?? undefined}
                           flex={1}
                           classNames={{
                             input: 'mantine-dark-input',

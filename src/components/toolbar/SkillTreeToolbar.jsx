@@ -9,6 +9,7 @@ import {
   IconDownload,
   IconFilter,
   IconFilters,
+  IconList,
   IconPercentage20,
   IconRefresh,
   IconSearch,
@@ -59,6 +60,7 @@ export function SkillTreeToolbar({
   onOpenSegmentManager,
   onOpenScopeManager,
   onOpenPriorityMatrix,
+  onOpenListView,
   releaseFilter,
   setReleaseFilter,
   selectedReleaseFilterLabel,
@@ -335,6 +337,17 @@ export function SkillTreeToolbar({
                 onClick={onOpenPriorityMatrix}
               >
                 <IconChartDots {...TOOLBAR_ICON_PROPS} />
+              </ActionIcon>
+            </Tooltip>
+
+            <Tooltip label="List View" position="top" middlewares={TOOLBAR_TOOLTIP_MIDDLEWARES}>
+              <ActionIcon
+                size="md"
+                variant="default"
+                aria-label="List View"
+                onClick={onOpenListView}
+              >
+                <IconList {...TOOLBAR_ICON_PROPS} />
               </ActionIcon>
             </Tooltip>
 

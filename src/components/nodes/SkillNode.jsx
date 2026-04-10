@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { Paper, Text } from '@mantine/core'
 import { STATUS_STYLES } from '../config'
 import { getDisplayStatusKey, getLevelStatusKeys } from '../utils/nodeStatus'
@@ -69,10 +69,15 @@ const buildSegmentConicStyle = (statusKeys, colorGetter) => {
   }
 }
 
-export function SkillNode({ node, nodeSize, isSelected, onSelect, onSelectLevel, displayMode = 'full', labelMode = 'far', zoomScale = 1, scopeOptions = [], storyPointMap }) {
+export function SkillNode({ node, nodeSize, isSelected, onSelect, onSelectLevel, onZoomToNode, displayMode = 'full', labelMode = 'far', zoomScale = 1, scopeOptions = [], storyPointMap }) {
   const [hoveredLevelIndex, setHoveredLevelIndex] = useState(null)
+  const lastRightClickRef = useRef(0)
   const isMinimal = displayMode === 'minimal'
   const isVeryClose = !isMinimal && labelMode === 'very-close'
+  const levels = Array.isArray(node?.levels) ? node.levels : []
+  const tooltipLevel = getTooltipLevel(node)
+  const initVcLevel = Math.max(0, levels.indexOf(tooltipLevel))
+  const [vcActiveLevel, setVcActiveLevel] = useState(initVcLevel)
   const glowPadding = isMinimal ? 8 : isVeryClose ? 36 : 18
   const renderSize = nodeSize + glowPadding * 2
   const showChips = !isMinimal && (labelMode === 'close' || labelMode === 'very-close')
@@ -82,10 +87,8 @@ export function SkillNode({ node, nodeSize, isSelected, onSelect, onSelectLevel,
   const statusKey = getDisplayStatusKey(node)
   const statusStyles = STATUS_STYLES[statusKey] ?? STATUS_STYLES.later
   const shortName = getShortName(node)
-  const tooltipLevel = getTooltipLevel(node)
   const tooltipReleaseNote = getTooltipReleaseNote(node)
   const tooltipScopeLabels = resolveScopeEntries(tooltipLevel?.scopeIds, scopeOptions)
-  const levels = Array.isArray(node?.levels) ? node.levels : []
   const activeTooltipReleaseNote = hoveredLevelIndex !== null
     ? (String(levels[hoveredLevelIndex]?.releaseNote ?? '').trim() || 'Keine Release Note hinterlegt.')
     : tooltipReleaseNote
@@ -146,6 +149,18 @@ export function SkillNode({ node, nodeSize, isSelected, onSelect, onSelectLevel,
   }
 
   const handleRingMouseLeave = () => setHoveredLevelIndex(null)
+
+  const handleContextMenu = (event) => {
+    event.preventDefault()
+    event.stopPropagation()
+    const now = Date.now()
+    if (now - lastRightClickRef.current < 400) {
+      lastRightClickRef.current = 0
+      onZoomToNode?.(node.x, node.y)
+    } else {
+      lastRightClickRef.current = now
+    }
+  }
 
   const handleNodeClick = (event) => {
     onSelect(node.id, event)
@@ -209,6 +224,7 @@ export function SkillNode({ node, nodeSize, isSelected, onSelect, onSelectLevel,
             onClick={handleNodeClick}
             onMouseMove={handleRingMouseMove}
             onMouseLeave={handleRingMouseLeave}
+            onContextMenu={handleContextMenu}
             className={isMinimal ? 'skill-node-button skill-node-button--minimal' : 'skill-node-button'}
             radius={isVeryClose ? 'sm' : 'xl'}
             withBorder={false}
@@ -223,30 +239,56 @@ export function SkillNode({ node, nodeSize, isSelected, onSelect, onSelectLevel,
             {isVeryClose ? (
               <div className="skill-node-button__content skill-node-button__content--veryclose">
                 <p className="skill-node-vc__headline">{node.label}</p>
-                {String(tooltipLevel?.releaseNote ?? '').trim() && (
-                  <p
-                    className="skill-node-vc__body"
-                    style={{ fontSize: `${26 / zoomScale}px` }}
-                  >{String(tooltipLevel.releaseNote).trim()}</p>
-                )}
-                {showChips && (tooltipScopeLabels.length > 0 || node.effort?.size || node.benefit?.size) && (
-                  <div className="skill-node-inner-chips skill-node-vc__chips" style={{ fontSize: `${26 / zoomScale}px` }}>
-                    {tooltipScopeLabels.slice(0, 4).map((s, i) => (
-                      <span
-                        key={i}
-                        className="skill-node-inner-chip skill-node-inner-chip--scope"
-                        style={{ background: (s.color ?? '#fbbf24') + '22', borderColor: (s.color ?? '#fbbf24') + '99', color: s.color ?? '#fbbf24' }}
-                        title={s.label}
-                      >{s.label}</span>
-                    ))}
-                    {node.effort?.size && node.effort.size !== 'unclear' && (
-                      <span className="skill-node-inner-chip skill-node-inner-chip--effort" title={EFFORT_SIZE_LABELS[node.effort.size] ?? node.effort.size} />
-                    )}
-                    {node.benefit?.size && node.benefit.size !== 'unclear' && (
-                      <span className="skill-node-inner-chip skill-node-inner-chip--benefit" title={BENEFIT_SIZE_LABELS[node.benefit.size] ?? node.benefit.size} />
-                    )}
+                {levels.length > 1 && (
+                  <div className="skill-node-vc__tabs">
+                    {levels.map((_, i) => {
+                      const lsKey = levelStatusKeys[i] ?? 'later'
+                      const lsStyle = STATUS_STYLES[lsKey] ?? STATUS_STYLES.later
+                      return (
+                        <button
+                          key={i}
+                          type="button"
+                          className={`skill-node-vc__tab${vcActiveLevel === i ? ' skill-node-vc__tab--active' : ''}`}
+                          style={{ '--tab-color': lsStyle.ringBand }}
+                          onClick={(e) => { e.stopPropagation(); setVcActiveLevel(i) }}
+                        >
+                          L{i + 1}
+                        </button>
+                      )
+                    })}
                   </div>
                 )}
+                {(() => {
+                  const activeNote = String(levels[vcActiveLevel]?.releaseNote ?? '').trim()
+                  return activeNote ? (
+                    <p
+                      className="skill-node-vc__body"
+                      style={{ fontSize: `${26 / zoomScale}px` }}
+                    >{activeNote}</p>
+                  ) : null
+                })()}
+                {showChips && (() => {
+                  const vcScopeLabels = resolveScopeEntries(levels[vcActiveLevel]?.scopeIds, scopeOptions)
+                  const hasChips = vcScopeLabels.length > 0 || node.effort?.size || node.benefit?.size
+                  return hasChips ? (
+                    <div className="skill-node-inner-chips skill-node-vc__chips" style={{ fontSize: `${26 / zoomScale}px` }}>
+                      {vcScopeLabels.slice(0, 4).map((s, i) => (
+                        <span
+                          key={i}
+                          className="skill-node-inner-chip skill-node-inner-chip--scope"
+                          style={{ background: (s.color ?? '#fbbf24') + '22', borderColor: (s.color ?? '#fbbf24') + '99', color: s.color ?? '#fbbf24' }}
+                          title={s.label}
+                        >{s.label}</span>
+                      ))}
+                      {node.effort?.size && node.effort.size !== 'unclear' && (
+                        <span className="skill-node-inner-chip skill-node-inner-chip--effort" title={EFFORT_SIZE_LABELS[node.effort.size] ?? node.effort.size} />
+                      )}
+                      {node.benefit?.size && node.benefit.size !== 'unclear' && (
+                        <span className="skill-node-inner-chip skill-node-inner-chip--benefit" title={BENEFIT_SIZE_LABELS[node.benefit.size] ?? node.benefit.size} />
+                      )}
+                    </div>
+                  ) : null
+                })()}
               </div>
             ) : (
               <div className={showLabel ? 'skill-node-button__content skill-node-button__content--labeled' : 'skill-node-button__content'}>
