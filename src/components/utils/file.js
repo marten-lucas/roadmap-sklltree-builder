@@ -1,14 +1,14 @@
 export const readFileAsText = (file) => new Promise((resolve, reject) => {
   const reader = new FileReader()
   reader.onload = () => resolve(String(reader.result ?? ''))
-  reader.onerror = () => reject(new Error('Datei konnte nicht gelesen werden.'))
+  reader.onerror = () => reject(new Error('File could not be read.'))
   reader.readAsText(file)
 })
 
 export const readFileAsDataUrl = (file) => new Promise((resolve, reject) => {
   const reader = new FileReader()
   reader.onload = () => resolve(String(reader.result ?? ''))
-  reader.onerror = () => reject(new Error('Datei konnte nicht gelesen werden.'))
+  reader.onerror = () => reject(new Error('File could not be read.'))
   reader.readAsDataURL(file)
 })
 

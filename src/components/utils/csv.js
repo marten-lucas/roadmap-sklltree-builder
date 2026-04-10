@@ -129,7 +129,7 @@ const parseCsvTable = (csvText) => {
   if (inQuotes) {
     return {
       ok: false,
-      error: 'CSV enthaelt ein nicht abgeschlossenes Anfuehrungszeichen.',
+      error: 'CSV contains an unclosed quote.',
     }
   }
 
@@ -156,7 +156,7 @@ const getHeaderIndex = (headerIndexByName, aliases, required = true) => {
     return null
   }
 
-  throw new Error(`CSV fehlt Spalte. Erwartet: ${aliases.join(', ')}`)
+  throw new Error(`CSV is missing a column. Expected: ${aliases.join(', ')}`)
 }
 
 const splitMultiValueCell = (value) => String(value ?? '')
@@ -190,10 +190,10 @@ const normalizeStatusCell = (value) => {
 const formatImportErrors = (errors) => {
   const items = Array.isArray(errors) ? errors.filter(Boolean) : [String(errors ?? '')].filter(Boolean)
   if (items.length === 0) {
-    return 'CSV-Import fehlgeschlagen.'
+    return 'CSV import failed.'
   }
 
-  return `CSV-Import fehlgeschlagen:\n- ${items.join('\n- ')}`
+  return `CSV import failed:\n- ${items.join('\n- ')}`
 }
 
 const collectTreeNodes = (nodes, parentShortName = null, result = []) => {
@@ -315,7 +315,7 @@ const buildDocumentFromRows = (rows, options = {}) => {
   if (dataRows.length === 0) {
     return {
       ok: false,
-      errors: ['CSV ist leer oder enthaelt keine Datenzeilen.'],
+      errors: ['CSV is empty or contains no data rows.'],
     }
   }
 
@@ -378,26 +378,26 @@ const buildDocumentFromRows = (rows, options = {}) => {
     const rowErrors = []
 
     if (!shortName) {
-      rowErrors.push(`Zeile ${rowNumber}: ShortName fehlt.`)
+      rowErrors.push(`Row ${rowNumber}: ShortName is missing.`)
     }
 
     if (!label) {
-      rowErrors.push(`Zeile ${rowNumber}: Name fehlt.`)
+      rowErrors.push(`Row ${rowNumber}: Name is missing.`)
     }
 
     const parsedLevel = Number.parseInt(levelText, 10)
     const level = Number.isInteger(parsedLevel) && parsedLevel >= 1 ? parsedLevel : null
     if (!ignoreManualLevels && level == null) {
-      rowErrors.push(`Zeile ${rowNumber}: Ebene ist ungueltig: ${levelText || '(leer)'}.`)
+      rowErrors.push(`Row ${rowNumber}: Level is invalid: ${levelText || '(empty)'}.`)
     }
 
     if (!status) {
-      rowErrors.push(`Zeile ${rowNumber}: Status ist ungueltig: ${String(row[statusIndex] ?? '').trim() || '(leer)'}.`)
+      rowErrors.push(`Row ${rowNumber}: Status is invalid: ${String(row[statusIndex] ?? '').trim() || '(empty)'}.`)
     }
 
     const progressLevel = progressLevelText ? Number.parseInt(progressLevelText, 10) : 1
     if (!Number.isInteger(progressLevel) || progressLevel < 1) {
-      rowErrors.push(`Zeile ${rowNumber}: ProgressLevel ist ungueltig: ${progressLevelText || '(leer)'}.`)
+      rowErrors.push(`Row ${rowNumber}: ProgressLevel is invalid: ${progressLevelText || '(empty)'}.`)
     }
 
     if (rowErrors.length > 0) {
@@ -457,19 +457,19 @@ const buildDocumentFromRows = (rows, options = {}) => {
 
     group.rows.push(rowEntry)
     if (group.label !== label) {
-      errors.push(`Knoten ${shortName} hat unterschiedliche Namen in den CSV-Zeilen.`)
+      errors.push(`Node ${shortName} has inconsistent names across CSV rows.`)
     }
 
     if (!ignoreManualLevels && group.level !== level) {
-      errors.push(`Knoten ${shortName} hat unterschiedliche Ebenen in den CSV-Zeilen.`)
+      errors.push(`Node ${shortName} has inconsistent levels across CSV rows.`)
     }
 
     if (!ignoreSegments && group.segmentText !== segmentText) {
-      errors.push(`Knoten ${shortName} hat unterschiedliche Segmente in den CSV-Zeilen.`)
+      errors.push(`Node ${shortName} has inconsistent segments across CSV rows.`)
     }
 
     if (group.parentShortName !== parentShortName) {
-      errors.push(`Knoten ${shortName} hat unterschiedliche Parent-Werte in den CSV-Zeilen.`)
+      errors.push(`Node ${shortName} has inconsistent parent values across CSV rows.`)
     }
   })
 
@@ -477,7 +477,7 @@ const buildDocumentFromRows = (rows, options = {}) => {
     const progressLevels = new Set()
     for (const row of group.rows) {
       if (progressLevels.has(row.progressLevel)) {
-        errors.push(`Knoten ${group.shortName} hat den ProgressLevel ${row.progressLevel} mehrfach.`)
+        errors.push(`Node ${group.shortName} has duplicate ProgressLevel ${row.progressLevel}.`)
       }
       progressLevels.add(row.progressLevel)
     }
@@ -486,7 +486,7 @@ const buildDocumentFromRows = (rows, options = {}) => {
   const parentByShortName = new Map([...rowGroups.values()].map((group) => [group.shortName, group.parentShortName]))
   for (const [shortName, parentShortName] of parentByShortName.entries()) {
     if (parentShortName && !rowGroups.has(parentShortName)) {
-      errors.push(`Knoten ${shortName} verweist auf unbekannten Parent ${parentShortName}.`)
+      errors.push(`Node ${shortName} references unknown parent ${parentShortName}.`)
     }
   }
 
@@ -494,7 +494,7 @@ const buildDocumentFromRows = (rows, options = {}) => {
     for (const row of group.rows) {
       for (const ref of row.dependencyLevelRefs ?? []) {
         if (!rowGroups.has(ref.shortName)) {
-          errors.push(`Knoten ${group.shortName} verweist auf unbekannte AdditionalDependency ${ref.shortName}.`)
+          errors.push(`Node ${group.shortName} references unknown AdditionalDependency ${ref.shortName}.`)
         }
       }
     }
@@ -502,7 +502,7 @@ const buildDocumentFromRows = (rows, options = {}) => {
 
   const cycles = validateParentCycles(parentByShortName)
   for (const cycle of cycles) {
-    errors.push(`Parent-Zyklus gefunden: ${cycle.join(' -> ')}`)
+    errors.push(`Parent cycle detected: ${cycle.join(' -> ')}`)
   }
 
   const rootGroups = []
@@ -649,7 +649,7 @@ const buildDocumentFromRows = (rows, options = {}) => {
         if (seenRefs.has(refKey)) continue
 
         if (ref.shortName === group.shortName) {
-          errors.push(`Knoten ${group.shortName} hat unzulaessige AdditionalDependency ${ref.shortName} (auf sich selbst).`)
+          errors.push(`Node ${group.shortName} has an invalid AdditionalDependency ${ref.shortName} (self-reference).`)
           continue
         }
 
@@ -694,7 +694,7 @@ const buildDocumentFromRows = (rows, options = {}) => {
       return label || nodeId
     })
 
-    cycleErrors.push(`AdditionalDependency-Zirkelbezug gefunden: ${cycleLabels.join(' -> ')}`)
+    cycleErrors.push(`AdditionalDependency cycle detected: ${cycleLabels.join(' -> ')}`)
   }
 
   if (cycleErrors.length > 0) {

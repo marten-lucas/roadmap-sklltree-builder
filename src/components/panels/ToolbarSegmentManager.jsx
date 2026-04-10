@@ -28,7 +28,7 @@ export function ToolbarSegmentManager({ segmentOptions = [], onCreateSegment, on
   const handleCreate = () => {
     const result = onCreateSegment?.(segmentDraft)
     if (result && !result.ok) {
-      setSegmentError(result.error ?? 'Segment konnte nicht angelegt werden.')
+      setSegmentError(result.error ?? 'Segment could not be created.')
       return
     }
 
@@ -46,7 +46,7 @@ export function ToolbarSegmentManager({ segmentOptions = [], onCreateSegment, on
     if (!editingSegmentId) return
     const result = await onRenameSegment?.(editingSegmentId, editingSegmentLabel)
     if (result && !result.ok) {
-      setSegmentError(result.error ?? 'Segment konnte nicht umbenannt werden.')
+      setSegmentError(result.error ?? 'Segment could not be renamed.')
       return
     }
 
@@ -58,7 +58,7 @@ export function ToolbarSegmentManager({ segmentOptions = [], onCreateSegment, on
   const handleDelete = async (segmentId) => {
     const result = await onDeleteSegment?.(segmentId)
     if (result && !result.ok) {
-      setSegmentError(result.error ?? 'Segment konnte nicht gelöscht werden.')
+      setSegmentError(result.error ?? 'Segment could not be deleted.')
       return
     }
 
@@ -74,10 +74,10 @@ export function ToolbarSegmentManager({ segmentOptions = [], onCreateSegment, on
       <div className="skill-panel__header">
         <div>
           <Text className="skill-panel__eyebrow">Segmente</Text>
-          <Text className="skill-panel__title">Segmente verwalten</Text>
+          <Text className="skill-panel__title">Manage segments</Text>
         </div>
         <div className="skill-panel__header-actions">
-          <ActionIcon variant="subtle" color="gray" onClick={onClose} aria-label="Segment Manager schließen">✕</ActionIcon>
+          <ActionIcon variant="subtle" color="gray" onClick={onClose} aria-label="Close segment manager">✕</ActionIcon>
         </div>
       </div>
 
@@ -85,14 +85,14 @@ export function ToolbarSegmentManager({ segmentOptions = [], onCreateSegment, on
         <Stack gap="md">
           <Group align="flex-end" wrap="nowrap">
             <TextInput
-              label="Segmente verwalten"
-              placeholder="Neues Segment"
+              label="Manage segments"
+              placeholder="New segment"
               value={segmentDraft}
               onChange={(e) => setSegmentDraft(e.currentTarget.value)}
               style={{ flex: 1 }}
               classNames={{ input: 'mantine-dark-input', label: 'mantine-dark-label' }}
             />
-            <ActionIcon variant="light" color="cyan" size="lg" onClick={handleCreate} aria-label="Segment hinzufügen">
+            <ActionIcon variant="light" color="cyan" size="lg" onClick={handleCreate} aria-label="Add segment">
               <TablerCirclePlusIcon size={20} />
             </ActionIcon>
           </Group>
@@ -101,7 +101,7 @@ export function ToolbarSegmentManager({ segmentOptions = [], onCreateSegment, on
 
           <Stack gap={8}>
             {segmentSelectData.length === 0 && (
-              <Text size="sm" c="dimmed">Noch keine Segmente vorhanden.</Text>
+              <Text size="sm" c="dimmed">No segments yet.</Text>
             )}
 
             {segmentSelectData.map((segment) => (
@@ -114,16 +114,16 @@ export function ToolbarSegmentManager({ segmentOptions = [], onCreateSegment, on
                       classNames={{ input: 'mantine-dark-input' }}
                     />
                     <Group justify="space-between">
-                      <Button size="xs" variant="light" onClick={() => { setEditingSegmentId(null); setEditingSegmentLabel('') }}>Abbrechen</Button>
-                      <Button size="xs" onClick={handleRename}>Speichern</Button>
+                      <Button size="xs" variant="light" onClick={() => { setEditingSegmentId(null); setEditingSegmentLabel('') }}>Cancel</Button>
+                      <Button size="xs" onClick={handleRename}>Save</Button>
                     </Group>
                   </Stack>
                 ) : (
                   <Group justify="space-between" wrap="nowrap">
                     <Text size="sm" truncate>{segment.label}</Text>
                     <Group gap={6} wrap="nowrap">
-                      <ActionIcon size="sm" variant="subtle" color="gray" onClick={() => handleStartRename(segment.value, segment.label)} aria-label="Segment umbenennen">✎</ActionIcon>
-                      <ActionIcon size="sm" variant="subtle" color="red" onClick={() => handleDelete(segment.value)} aria-label="Segment löschen">✕</ActionIcon>
+                      <ActionIcon size="sm" variant="subtle" color="gray" onClick={() => handleStartRename(segment.value, segment.label)} aria-label="Rename segment">✎</ActionIcon>
+                      <ActionIcon size="sm" variant="subtle" color="red" onClick={() => handleDelete(segment.value)} aria-label="Delete segment">✕</ActionIcon>
                     </Group>
                   </Group>
                 )}

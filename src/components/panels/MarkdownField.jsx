@@ -9,7 +9,7 @@ const toolbarActions = [
   { action: 'italic', label: 'Kursiv', icon: IconItalic },
   { action: 'link', label: 'Link', icon: IconLink },
   { action: 'list', label: 'Liste', icon: IconList },
-  { action: 'header', label: 'Überschrift', icon: IconHeading },
+  { action: 'header', label: 'Heading', icon: IconHeading },
 ]
 
 export function MarkdownField({

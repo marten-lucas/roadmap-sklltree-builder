@@ -1,275 +1,251 @@
-# Skill Tree Layout Builder
+# Roadmap Skill Tree Builder
 
-Advanced radial skill-tree visualization with intelligent layout solving, constraint-based validation, and segment-aware positioning.
+A browser-based radial skill-tree / roadmap visualizer. Build, annotate, and export interactive skill trees from scratch or from a CSV file. The production artifact is a **single self-contained HTML file** that can be opened offline or shared without a server.
+
+---
+
+## Table of Contents
+
+- [Features](#features)
+- [Quick Start](#quick-start)
+- [Project Structure](#project-structure)
+- [Build](#build)
+- [Testing](#testing)
+- [E2E Dataset & Phase Selection](#e2e-dataset--phase-selection)
+- [Environment Variables](#environment-variables)
+- [Configuration](#configuration)
+- [Architecture Overview](#architecture-overview)
+- [Further Reading](#further-reading)
+
+---
 
 ## Features
 
-### 🎨 Layout Engine
-- **Determistic Radial Layout** - D3-hierarchy based positioning with angular constraints
-- **Segment-Aware Packing** - Intelligent division of angular space across skill domains
-- **Auto-Promotion** - Automatic level elevation for cross-segment relationships
-- **Hard Capacity Checking** - Formal feasibility detection with iterative radius adjustment
-- **Angular Spread Control** - Configurable max spread (270°) with automatic scaling
+### Layout Engine
+- **Radial Concentric Layout** — D3-hierarchy positioning with angular spread control (max 270°)
+- **Segment-Aware Packing** — angular space is divided proportionally across skill domains (segments)
+- **Multi-Phase Solver** — four automatic adjustment phases (auto-promotion, crossing-promotion, compaction, re-rooting) minimize edge crossings
+- **Deterministic Output** — identical input always produces identical layout
+- **Capacity Checking** — hard feasibility detection with iterative radius adjustment
 
-### ✅ Validation System
-- **Change-Scoped Assessment** - Only newly introduced issues block changes
-- **Per-Node Flexibility** - Child nodes can belong to different segments than parents
-- **Formal Constraint Checking** - Segment boundaries, angular spans, node distances
-- **Intelligent Issue Filtering** - Pre-existing problems don't block valid mutations
+### Data & Editing
+- **CSV Import / Export** — full round-trip via a structured CSV format (see [docs/csv-format.md](docs/csv-format.md))
+- **Node Inspector** — per-node label, status, segment, effort/benefit, scope tags, release notes
+- **Segment Manager** — create, rename, reorder, and delete topic segments
+- **Multi-select** — bulk status/segment changes
+- **Undo / Redo** — full history stack (100 entries)
+- **Hidden Nodes** — nodes with status `hidden` are excluded from layout and exports unless opted in
+- **Additional Dependencies** — non-hierarchy dependency edges rendered as portal connections
 
-### 🎯 Data Architecture
-- **Immutable Updates** - All mutations return new tree objects
-- **Independent Segmentation** - Parent ≠ Child segment relationships allowed
-- **Proportional Scaling** - Children maintain relative positioning when levels change
-- **Metadata Enrichment** - Computed levels, segment orders, node rankings
+### Exports
+- **HTML Export** — fully self-contained interactive viewer (inlined JS, CSS, data)
+- **SVG Export** — vector snapshot of the current canvas
+- **PDF Export** — release notes rendered as paginated PDF
+
+### Validation
+- **Change-Scoped** — only *newly introduced* constraint violations block a mutation
+- **Pre-existing issues** are surfaced as warnings but never block valid edits
+
+---
+
+## Quick Start
+
+```bash
+npm install
+npm run dev        # dev server at http://localhost:5173
+```
+
+---
 
 ## Project Structure
 
 ```
-src/components/skill-tree/
-├── canvas/
-├── hooks/
-├── nodes/
-├── panels/
-├── toolbar/
-├── utils/
-├── layoutSolver.js           # Core layout computation engine
-├── treeValidation.js         # Change validation & constraint checking
-├── treeData.js               # Tree mutations & traversal
-├── SkillTree.jsx             # Main visualization component
-├── InspectorPanel.jsx        # Node editing UI
-├── SegmentPanel.jsx          # Segment management
-├── config.js                 # Configuration constants
-├── data.js                   # Sample data
-└── __tests__/
-    ├── layoutSolver.test.js  # 17 layout tests
-    ├── treeValidation.test.js # 18 validation tests
-    ├── treeData.test.js      # 18 data mutation tests
-    ├── testUtils.js          # Test utilities & fixtures
-    └── README.md             # Test documentation
+roadmap-skilltree-builder/
+├── index.html
+├── vite.config.js             # Single-file HTML build plugin
+├── vitest.config.js
+├── playwright.config.js
+├── src/
+│   ├── main.jsx
+│   ├── App.jsx                # Root — renders <SkillTree />
+│   └── components/
+│       ├── SkillTree.jsx      # Top-level component
+│       ├── config.js          # TREE_CONFIG, STATUS_* constants
+│       ├── skillTree.css
+│       ├── canvas/            # SVG canvas + zoom/pan
+│       ├── hooks/             # React hooks (UI state, keyboard, etc.)
+│       ├── nodes/             # Node rendering
+│       ├── panels/            # Inspector, Segment, System, Priority Matrix panels
+│       ├── toolbar/           # Toolbar with import/export actions
+│       ├── tooltip/           # Tooltip styles and rendering
+│       └── utils/             # All pure-logic modules
+│           ├── treeData.js        # Tree mutations & traversal
+│           ├── treeValidation.js  # Constraint checking
+│           ├── layoutSolver.js    # Core layout engine
+│           ├── levelAssignment.js # Multi-phase level resolver
+│           ├── edgeRouter.js      # Radial polyline routing
+│           ├── edgeCrossings.js   # Crossing detection
+│           ├── documentState.js   # Document model & normalization
+│           ├── documentPersistence.js  # localStorage + schema migration
+│           ├── csv.js             # CSV import / export
+│           ├── htmlExport.js      # Self-contained HTML export
+│           ├── svgExport.js       # SVG export
+│           ├── pdfExport.js       # PDF (release notes) export
+│           ├── effortBenefit.js   # Effort/Benefit size normalisation
+│           ├── releases.js        # Release CRUD helpers
+│           ├── visibility.js      # Hidden-node filtering
+│           └── ...
+│       └── __tests__/         # Vitest unit & integration tests
+├── tests/
+│   └── e2e/                   # Playwright end-to-end tests
+│       ├── datasets/          # CSV fixtures (minimal/small/medium/large/huge)
+│       └── helpers.js         # Shared Playwright helpers
+└── docs/
+    ├── architecture.md
+    ├── csv-format.md
+    ├── data-model.md
+    ├── testing-guide.md
+    └── layout-and-routing-algorithms.md
 ```
 
-## Development
+---
 
-### Setup
-```bash
-npm install
-npm run dev
-```
+## Build
 
-### Build
 ```bash
 npm run build
 ```
 
-The build output is a single minified standalone file at `dist/roadmap-skilltree-builder.html`.
-It contains the app code and styles inline so it can be shared directly and opened locally without a server.
+Produces `dist/roadmap-skilltree-builder.html` — a single minified file with all JS, CSS, and the html-to-image library inlined. No server required to open it.
 
-### Testing
+---
+
+## Testing
+
+See [docs/testing-guide.md](docs/testing-guide.md) for a full walkthrough. Quick reference:
+
 ```bash
-npm run test:unit         # Fast unit suite
-npm run test:integration  # Cross-module integration tests
-npm run test:regression   # Determinism, constraints, import/export regressions
-npm run test:e2e          # Full Playwright run
-npm run test:e2e:csv      # CSV-driven E2E roundtrip (large dataset)
-npm run test:e2e:csv:small
-npm run test:e2e:csv:medium
-npm run test:e2e:csv:large
-npm run test:e2e:ui       # Playwright UI mode
-npm run test:ui           # Vitest UI
-npm run lint              # ESLint validation
+# Unit tests (Vitest)
+npm run test                          # watch mode
+npm run test:unit                     # all unit tests (fast)
+npm run test:integration              # cross-module integration tests
+npm run test:regression               # core regression suite
+npm run test:inspector-layout         # inspector + layout combined suite
+npm run test:ui                       # Vitest browser UI
+
+# End-to-end tests (Playwright)
+npm run test:e2e                      # full E2E suite (all specs)
+npm run test:e2e:ui                   # Playwright interactive UI mode
+npm run test:e2e:update-snapshots     # regenerate visual snapshots
+npm run test:builder-workflow         # CSV roundtrip + undo/redo + exports
+
+# CSV roundtrip E2E (dataset variants)
+npm run test:e2e:csv                  # large dataset (default)
+npm run test:e2e:csv:minimal          # minimal dataset
+npm run test:e2e:csv:small            # small dataset
+npm run test:e2e:csv:medium           # medium dataset
+npm run test:e2e:csv:large            # large dataset
+npm run test:e2e:csv:custom           # custom CSV (set SKILLTREE_E2E_TEMPLATE_CSV)
+
+# Layout regression baseline
+npm run test:e2e:layout:baseline
+
+npm run lint                          # ESLint
 ```
 
-### E2E Dataset + Phase Selection
-CSV E2E tests support built-in datasets (`small`, `medium`, `large`) and custom files.
+---
+
+## E2E Dataset & Phase Selection
+
+CSV E2E tests support built-in datasets and a custom file path.
 
 ```bash
-# Built-in dataset + selected phases
-SKILLTREE_E2E_DATASET=medium SKILLTREE_E2E_PHASES=statuses,scopes npm run test:e2e:csv
+# Run only specific phases against the medium dataset
+SKILLTREE_E2E_DATASET=medium \
+SKILLTREE_E2E_PHASES=statuses,scopes \
+npm run test:e2e:csv
 
 # Custom CSV file
-SKILLTREE_E2E_DATASET=custom SKILLTREE_E2E_TEMPLATE_CSV="tests/e2e/datasets/large.csv" npm run test:e2e:csv:custom
+SKILLTREE_E2E_DATASET=custom \
+SKILLTREE_E2E_TEMPLATE_CSV="tests/e2e/datasets/large.csv" \
+npm run test:e2e:csv:custom
 ```
 
-`SKILLTREE_E2E_PHASES` values:
-- `statuses`
-- `scopes`
-- `segments`
-- `roundtrip`
-- `all` (default)
+Available `SKILLTREE_E2E_PHASES` values (comma-separated, default `all`):
 
-### Test Artifacts
-All Playwright outputs, E2E exports, traces, and metrics are written below:
+| Phase | What it tests |
+|---|---|
+| `statuses` | Node status round-trip per CSV row |
+| `scopes` | Scope tag assignment |
+| `segments` | Segment assignment |
+| `roundtrip` | Full export → re-import data equivalence |
+| `all` | All phases |
 
-```text
-tests/results/
-```
+---
 
-This folder is excluded from git.
+## Environment Variables
 
-### Test Coverage
+| Variable | Default | Description |
+|---|---|---|
+| `SKILLTREE_E2E_DATASET` | `large` | Built-in dataset: `minimal`, `small`, `medium`, `large`, `custom` |
+| `SKILLTREE_E2E_TEMPLATE_CSV` | — | Absolute or relative path to a custom CSV (requires `DATASET=custom`) |
+| `SKILLTREE_E2E_PHASES` | `all` | Comma-separated phases to run in the CSV roundtrip spec |
+| `SKILLTREE_E2E_IGNORE_PROGRESS_LEVELS` | `0` | Set to `1` to skip progress-level assertions |
+| `SKILLTREE_E2E_IGNORE_SEGMENTS` | `0` | Set to `1` to skip segment assertions |
+| `SKILLTREE_E2E_VERBOSE` | `0` | Set to `1` for verbose per-row logging |
+| `SKILLTREE_TEST_RUN_LABEL` | `e2e` | Human-readable label embedded in artifact paths |
+| `SKILLTREE_TEST_RUN_ID` | auto | Explicit run ID (`YYMMDDHHNN_<label>`) |
+| `SKILLTREE_TEST_ARTIFACTS_DIR` | `tests/results` | Root directory for all test artifacts |
 
-| Module | Tests | Status |
-|--------|-------|--------|
-| **layoutSolver** | 17 | ✅ All passing |
-| **treeValidation** | 18 | ✅ All passing |
-| **treeData** | 18 | ✅ All passing |
-| **Total** | **53** | **✅ 100% Pass** |
+All Playwright traces, screenshots, exports, and metrics land in `tests/results/runs/<run-id>/`.
 
-**Test Categories:**
-- Determinism & Consistency
-- Constraint Validation
-- Edge Cases & Error Handling
-- Data Immutability
-- Cross-Segment Relationships
-- Angular Spread Constraints
-- Capacity Checking
+---
 
-### Configuration
+## Configuration
 
-[config.js](src/components/skill-tree/config.js) provides layout parameters:
+Layout and visual behaviour is controlled by `TREE_CONFIG` in [src/components/config.js](src/components/config.js):
 
-```javascript
-export const TREE_CONFIG = {
-  maxAngleSpread: 270,           // Max angular spread in degrees
-  nodeSize: 60,                  // Pixel diameter of skill nodes
-  levelSpacing: 140,             // Radial distance between levels
-  minArcAngle: 8,               // Minimum angle between siblings
-}
-```
+| Parameter | Default | Description |
+|---|---|---|
+| `nodeSize` | `120 px` | Rendered node diameter |
+| `levelSpacing` | `180 px` | Radial distance between consecutive rings |
+| `maxAngleSpread` | `270°` | Maximum arc occupied by all nodes combined |
+| `minArcGapFactor` | `1.08` | Minimum gap between siblings as a multiple of `nodeSize` |
+| `routingProfile` | `'strict'` | Edge trunk-sharing threshold (`balanced` / `strict`) |
+| `promotionProfile` | `'balanced'` | Auto-promotion aggressiveness |
+| `separatorHomogeneityProfile` | `'balanced'` | Separator detour consistency (`off` / `balanced` / `strong`) |
+| `horizontalPadding` | `600 px` | Canvas left/right padding |
+| `topPadding` / `bottomPadding` | `600 px` | Canvas top/bottom padding |
 
-## Architecture Highlights
+---
+
+## Architecture Overview
+
+See [docs/architecture.md](docs/architecture.md) for a detailed breakdown. In brief:
 
 ### Multi-Phase Layout Solving
-1. **Normalization** - Convert tree to D3 hierarchy
-2. **Segment Optimization** - Greedy ordering with swap refinement
-3. **Auto-Promotion** - Elevate cross-segment nodes
-4. **Angular Assignment** - Span-aware positioning
-5. **Capacity Checking** - Hard packing with radius adjustment
-6. **Rendering** - Convert to SVG coordinates
+1. **Segment Optimization** — greedy angular ordering with swap refinement
+2. **Level Assignment (Phase 1)** — auto-promotion resolves angular conflicts
+3. **Pass 1** — initial position computation + crossing detection
+4. **Phase 2 / 3 / 4** — crossing-promotion, compaction, subtree re-rooting
+5. **Pass 2** — re-layout with adjusted levels (only if phases 2–4 fired)
+6. **Rendering** — convert polar coordinates to SVG x/y
 
-### Validation Approach
-```
-User Change
-    ↓
-Baseline Snapshot (current state)
-    ↓
-Apply Change (hypothetical)
-    ↓
-Candidate Snapshot
-    ↓
+### Validation
+Only constraints *newly introduced* by a change block the mutation. Pre-existing issues are surfaced as informational diagnostics and never prevent valid edits.
+
+### Document Persistence
+The document is serialized as JSON (schema v3) to `localStorage` under the key `roadmap-skilltree.document.v1`. Automatic migration handles v1 → v2 → v3 on load.
+
+---
+
+## Further Reading
+
+| Document | Description |
+|---|---|
+| [docs/architecture.md](docs/architecture.md) | Component tree, data flow, module responsibilities |
+| [docs/data-model.md](docs/data-model.md) | Document schema, node/level/segment/release shapes |
+| [docs/csv-format.md](docs/csv-format.md) | CSV import/export column reference |
+| [docs/testing-guide.md](docs/testing-guide.md) | All test types, commands, fixtures, and CI notes |
+| [docs/layout-and-routing-algorithms.md](docs/layout-and-routing-algorithms.md) | In-depth layout algorithm documentation |
 Diff Issues (baseline vs candidate)
-    ↓
-Filter Scope (only this node's impact)
-    ↓
-Allow/Block Decision
-```
-
-### Data Patterns
-- **Immutable** - All mutations return new objects
-- **Recursive** - Tree operations use depth-first traversal
-- **Flat indexing** - ID-based lookups throughout
-- **Change-scoped** - Validation only considers node and descendants
-
-## Key Components
-
-### InspectorPanel.jsx
-HeroUI-based node editor with:
-- Textarea for name editing (flexible sizing)
-- Dropdown menus for Status/Ebene/Segment
-- Validation hints (compact, non-blocking)
-- Delete actions (single node & full branch)
-
-### layoutSolver.js (1200+ lines)
-Low-level layout computation:
-- `solveSkillTreeLayout()` - Main entry point
-- `buildOptimizedSegmentIdOrder()` - Segment ordering
-- `buildAutoPromotedLevels()` - Cross-segment elevation
-- Hard capacity checking loop with iterative radius growth
-
-### treeValidation.js
-Change validation pipeline:
-- `validateNodeSegmentChange()` - Segment mutations
-- `validateNodeLevelChange()` - Level mutations
-- `getSegmentOptionsForNode()` - Available options
-- `getLevelOptionsForNode()` - Available elevations
-
-## Recent Improvements
-
-### Phase 3: Hard Feasibility & Validation Fixes ✅
-- ✅ Capacity-aware angular packing with iteration
-- ✅ Change-scoped validation (not global blocking)
-- ✅ Per-node segment independence
-- ✅ Segment-boundary issues filtered from validation
-- ✅ UI dropdown rendering fixed (no overlap)
-- ✅ HeroUI standards compliance (Textarea, Dropdown)
-
-### Earlier Phases
-- Phase 2: Segment/Child ordering optimization
-- Phase 1: Layout fundamentals with D3 hierarchy
-- Phase 0: React + Vite + HeroUI setup
-
-## Testing Philosophy
-
-Tests focus on:
-1. **Correctness** - Do functions behave as documented?
-2. **Constraints** - Are boundaries respected?
-3. **Consistency** - Is output deterministic?
-4. **Edge Cases** - How do we handle extremes?
-5. **Integration** - Do components work together?
-
-See [/__tests__/README.md](src/components/skill-tree/__tests__/README.md) for detailed test documentation.
-
-## Performance
-
-- **Rendering:** < 16ms for typical trees (60 FPS)
-- **Layout:** < 100ms for 100-node trees
-- **Validation:** < 10ms for change checks
-- **Test Suite:** ~600ms for all 53 tests
-
-## Next Steps
-- [ ] E2E stabilization and execution
-- [ ] Force-directed relaxation polish layer
-- [ ] ELK integration as alternative backend
-- [ ] Performance profiling & optimization
-- [ ] Snapshot testing for layouts
-- [ ] Property-based (QuickCheck-style) tests
-
-## Inspector and Layout Regression Suite
-
-This suite locks down the refactored core with fast regression coverage before any remaining E2E work.
-
-Run the full regression suite locally:
-
-```bash
-npm run test:inspector-layout
-```
-
-The suite covers layout invariants, validation, tree mutations, segment CRUD and integration flows, document persistence, and the dedicated regression checks in [phase3Regression.test.js](src/components/skill-tree/__tests__/phase3Regression.test.js).
-
-## Builder Workflow E2E Suite
-
-Phase 1 (infrastructure and cleanup) is complete. This suite focuses on a small, high-signal set of E2E tests that run quickly and catch regressions in critical flows.
-
-Run the builder workflow suite locally:
-
-```bash
-npm install
-npm run test:builder-workflow
-```
-
-CI: A GitHub Actions workflow `/.github/workflows/phase-2-core-tests.yml` is provided to run the core suite and upload Playwright artifacts to the run's artifacts.
-
-## Built With
-
-- **React 19** - UI framework
-- **Vite 8** - Build tool
-- **D3-Hierarchy 3** - Tree layout
-- **HeroUI 2** - Component library
-- **Tailwind CSS 3** - Styling
-- **Vitest** - Testing framework
-- **ESLint** - Code quality
-
-## License
-
-MIT

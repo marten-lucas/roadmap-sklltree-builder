@@ -275,11 +275,11 @@ export function PriorityMatrix({ opened, onClose, document }) {
       style={{ width: drawerWidth != null ? `${drawerWidth}px` : '50vw' }}
     >
       <div className="priority-matrix-drawer__header">
-        <span className="priority-matrix-drawer__title">Effort vs Benefit – Priorisierungs-Matrix</span>
+        <span className="priority-matrix-drawer__title">Effort vs Benefit – Priority Matrix</span>
         <button
           className="priority-matrix-drawer__close"
           onClick={onClose}
-          aria-label="Schließen"
+          aria-label="Close"
         >
           ×
         </button>
@@ -307,7 +307,7 @@ export function PriorityMatrix({ opened, onClose, document }) {
             fontSize: 12,
             cursor: 'pointer',
           }}
-          aria-label="Zoom zurücksetzen"
+          aria-label="Reset zoom"
         >
           ⟳ Reset
         </button>

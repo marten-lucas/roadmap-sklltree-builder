@@ -103,7 +103,7 @@ export const analyzeSegmentLevelFeasibility = ({
         severity: 'error',
         segmentId: group.segmentId,
         nodeIds: entry.nodeIds,
-        message: 'Segmentkapazitaet auf dieser Ebene ist zu klein.',
+        message: 'Segment capacity at this level is too small.',
       })
     }
 

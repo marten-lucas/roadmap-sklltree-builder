@@ -501,7 +501,7 @@ export function SkillTreeCanvas({
               dominantBaseline="middle"
               className="skill-tree-empty-state-label"
             >
-              Skill hinzufügen
+              Add skill
             </text>
           </g>
         )}
@@ -534,7 +534,7 @@ export function SkillTreeCanvas({
               dominantBaseline="middle"
               className="skill-tree-empty-state-label"
             >
-              Segment hinzufügen
+              Add segment
             </text>
           </g>
         )}

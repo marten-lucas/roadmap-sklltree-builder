@@ -159,7 +159,7 @@ export const parseDocumentPayload = (rawValue) => {
   if (typeof rawValue !== 'string' || rawValue.length === 0) {
     return {
       ok: false,
-      error: 'Die Datei ist leer oder kein gueltiges JSON.',
+      error: 'The file is empty or not valid JSON.',
     }
   }
 
@@ -169,21 +169,21 @@ export const parseDocumentPayload = (rawValue) => {
   } catch {
     return {
       ok: false,
-      error: 'Die Datei enthaelt kein gueltiges JSON.',
+      error: 'The file does not contain valid JSON.',
     }
   }
 
   if (!isObject(parsed)) {
     return {
       ok: false,
-      error: 'Ungueltiges Dokumentformat.',
+      error: 'Invalid document format.',
     }
   }
 
   if (parsed.schemaVersion !== DOCUMENT_SCHEMA_VERSION && parsed.schemaVersion !== 1 && parsed.schemaVersion !== 2) {
     return {
       ok: false,
-      error: `Nicht unterstuetzte schemaVersion: ${String(parsed.schemaVersion)}`,
+      error: `Unsupported schemaVersion: ${String(parsed.schemaVersion)}`,
     }
   }
 
@@ -198,7 +198,7 @@ export const parseDocumentPayload = (rawValue) => {
   if (!isValidDocumentShape(documentToValidate)) {
     return {
       ok: false,
-      error: 'Dokumentdaten sind unvollstaendig (segments/children fehlen).',
+      error: 'Document data is incomplete (segments/children missing).'
     }
   }
 

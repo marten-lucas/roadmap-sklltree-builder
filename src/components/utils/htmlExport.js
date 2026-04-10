@@ -1909,7 +1909,7 @@ export const buildHtmlExportDocument = ({
                 <label>
                   <span>Scope</span>
                   <select id="html-export-filter-scope">
-                    <option value="__all__">Alle Scopes</option>
+                    <option value="__all__">All Scopes</option>
                     ${(roadmapDocument.scopes ?? []).map((scope) => (`
                       <option value="${escapeHtml(scope.id)}">${escapeHtml(scope.label)}</option>
                     `)).join('')}
@@ -1952,14 +1952,14 @@ export const extractDocumentPayloadFromHtml = (htmlText) => {
   if (typeof htmlText !== 'string' || htmlText.trim().length === 0) {
     return {
       ok: false,
-      error: 'Die HTML-Datei ist leer oder ungueltig.',
+      error: 'The HTML file is empty or invalid.',
     }
   }
 
   if (!/<html[\s>]/i.test(htmlText)) {
     return {
       ok: false,
-      error: 'Die Datei ist kein gueltiges HTML-Dokument. Bitte eine HTML-Exportdatei importieren.',
+      error: 'The file is not a valid HTML document. Please import an HTML export file.',
     }
   }
 
@@ -1969,7 +1969,7 @@ export const extractDocumentPayloadFromHtml = (htmlText) => {
   if (!match) {
     return {
       ok: false,
-      error: 'Die HTML-Datei enthaelt keine eingebetteten Skilltree-Daten. Bitte eine Datei verwenden, die ueber "HTML exportieren" erzeugt wurde.',
+      error: 'The HTML file contains no embedded skill tree data. Please use a file created via "Export HTML".',
     }
   }
 

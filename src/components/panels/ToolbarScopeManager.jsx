@@ -13,7 +13,7 @@ const TablerCirclePlusIcon = ({ size = 18 }) => (
 const ColorSwatch = ({ color, isSelected, onClick }) => (
   <button
     type="button"
-    aria-label={`Farbe ${color}`}
+    aria-label={`Color ${color}`}
     onClick={() => onClick(color)}
     style={{
       width: 20,
@@ -41,7 +41,7 @@ export function ToolbarScopeManager({ scopeOptions = [], onCreateScope, onRename
   const handleCreate = () => {
     const result = onCreateScope?.(scopeDraft)
     if (!result?.ok) {
-      setScopeError(result?.error ?? 'Scope konnte nicht angelegt werden.')
+      setScopeError(result?.error ?? 'Scope could not be created.')
       return
     }
 
@@ -60,7 +60,7 @@ export function ToolbarScopeManager({ scopeOptions = [], onCreateScope, onRename
     if (!editingScopeId) return
     const result = onRenameScope?.(editingScopeId, editingScopeLabel)
     if (!result?.ok) {
-      setScopeError(result?.error ?? 'Scope konnte nicht umbenannt werden.')
+      setScopeError(result?.error ?? 'Scope could not be renamed.')
       return
     }
 
@@ -72,7 +72,7 @@ export function ToolbarScopeManager({ scopeOptions = [], onCreateScope, onRename
   const handleDelete = (scopeId) => {
     const result = onDeleteScope?.(scopeId)
     if (!result?.ok) {
-      setScopeError(result?.error ?? 'Scope konnte nicht gelöscht werden.')
+      setScopeError(result?.error ?? 'Scope could not be deleted.')
       return
     }
 
@@ -100,10 +100,10 @@ export function ToolbarScopeManager({ scopeOptions = [], onCreateScope, onRename
       <div className="skill-panel__header">
         <div>
           <Text className="skill-panel__eyebrow">Scopes</Text>
-          <Text className="skill-panel__title">Scopes verwalten</Text>
+          <Text className="skill-panel__title">Manage scopes</Text>
         </div>
         <div className="skill-panel__header-actions">
-          <ActionIcon variant="subtle" color="gray" onClick={onClose} aria-label="Scope Manager schließen">✕</ActionIcon>
+          <ActionIcon variant="subtle" color="gray" onClick={onClose} aria-label="Close scope manager">✕</ActionIcon>
         </div>
       </div>
 
@@ -111,14 +111,14 @@ export function ToolbarScopeManager({ scopeOptions = [], onCreateScope, onRename
         <Stack gap="md">
           <Group align="flex-end" wrap="nowrap">
             <TextInput
-              label="Scopes verwalten"
-              placeholder="z.B. Serie A"
+              label="Manage scopes"
+              placeholder="e.g. Series A"
               value={scopeDraft}
               onChange={(e) => setScopeDraft(e.currentTarget.value)}
               style={{ flex: 1 }}
               classNames={{ input: 'mantine-dark-input', label: 'mantine-dark-label' }}
             />
-            <ActionIcon variant="light" color="cyan" size="lg" onClick={handleCreate} aria-label="Scope hinzufügen">
+            <ActionIcon variant="light" color="cyan" size="lg" onClick={handleCreate} aria-label="Add scope">
               <TablerCirclePlusIcon size={20} />
             </ActionIcon>
           </Group>
@@ -127,7 +127,7 @@ export function ToolbarScopeManager({ scopeOptions = [], onCreateScope, onRename
 
           <Stack gap={8}>
             {scopeSelectData.length === 0 && (
-              <Text size="sm" c="dimmed">Noch keine Scopes vorhanden.</Text>
+              <Text size="sm" c="dimmed">No scopes yet.</Text>
             )}
 
             {scopeSelectData.map((scope) => (
@@ -140,8 +140,8 @@ export function ToolbarScopeManager({ scopeOptions = [], onCreateScope, onRename
                       classNames={{ input: 'mantine-dark-input' }}
                     />
                     <Group justify="space-between">
-                      <Button size="xs" variant="light" onClick={() => { setEditingScopeId(null); setEditingScopeLabel('') }}>Abbrechen</Button>
-                      <Button size="xs" onClick={handleRename}>Speichern</Button>
+                      <Button size="xs" variant="light" onClick={() => { setEditingScopeId(null); setEditingScopeLabel('') }}>Cancel</Button>
+                      <Button size="xs" onClick={handleRename}>Save</Button>
                     </Group>
                   </Stack>
                 ) : (
@@ -150,7 +150,7 @@ export function ToolbarScopeManager({ scopeOptions = [], onCreateScope, onRename
                       <Group gap={8} wrap="nowrap" style={{ minWidth: 0 }}>
                         <button
                           type="button"
-                          aria-label="Farbe ändern"
+                          aria-label="Change color"
                           onClick={() => handleToggleColorPicker(scope.value)}
                           style={{
                             width: 16,
@@ -166,8 +166,8 @@ export function ToolbarScopeManager({ scopeOptions = [], onCreateScope, onRename
                         <Text size="sm" truncate>{scope.label}</Text>
                       </Group>
                       <Group gap={6} wrap="nowrap">
-                        <ActionIcon size="sm" variant="subtle" color="gray" onClick={() => handleStartRename(scope.value, scope.label)} aria-label="Scope umbenennen">✎</ActionIcon>
-                        <ActionIcon size="sm" variant="subtle" color="red" onClick={() => handleDelete(scope.value)} aria-label="Scope löschen">✕</ActionIcon>
+                        <ActionIcon size="sm" variant="subtle" color="gray" onClick={() => handleStartRename(scope.value, scope.label)} aria-label="Rename scope">✎</ActionIcon>
+                        <ActionIcon size="sm" variant="subtle" color="red" onClick={() => handleDelete(scope.value)} aria-label="Delete scope">✕</ActionIcon>
                       </Group>
                     </Group>
                     {colorPickerOpenId === scope.value && (
@@ -183,7 +183,7 @@ export function ToolbarScopeManager({ scopeOptions = [], onCreateScope, onRename
                         {scope.color && (
                           <button
                             type="button"
-                            aria-label="Farbe entfernen"
+                            aria-label="Remove color"
                             onClick={() => handleSelectColor(scope.value, null)}
                             style={{
                               width: 20,

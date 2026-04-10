@@ -11,7 +11,7 @@ import {
   wouldCreateAdditionalDependencyCycle,
 } from './treeData'
 
-const DEFAULT_INVALID_REASON = 'Die Aenderung erzeugt einen ungueltigen Layout-Zustand.'
+const DEFAULT_INVALID_REASON = 'The change produces an invalid layout state.'
 
 const toReasonList = (issues) => {
   const messages = issues.map((issue) => issue.message).filter(Boolean)
@@ -193,7 +193,7 @@ export const validateNodeLevelChange = (tree, nodeId, level, config = TREE_CONFI
           type: 'invalid-level',
           severity: 'error',
           nodeIds: [nodeId],
-          message: 'Eine Node muss auf einer hoeheren Ebene als ihr Parent liegen.',
+          message: 'A node must be at a higher level than its parent.',
         },
       ],
     }

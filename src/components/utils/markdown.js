@@ -160,7 +160,7 @@ const wrapSelectionAsHeading = (value, selectionStart, selectionEnd, level = 2) 
     const lineEnd = text.indexOf('\n', start)
     const resolvedEnd = lineEnd === -1 ? text.length : lineEnd
     const currentLine = text.slice(lineStart, resolvedEnd).replace(/^#{1,6}\s+/, '')
-    const headingText = `${marker} ${currentLine || 'Überschrift'}`
+    const headingText = `${marker} ${currentLine || 'Heading'}`
     const nextValue = `${text.slice(0, lineStart)}${headingText}${text.slice(resolvedEnd)}`
 
     return {

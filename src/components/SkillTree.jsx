@@ -442,10 +442,10 @@ export function SkillTree() {
 
   const selectedScopeFilterLabel = useMemo(() => {
     if (selectedScopeFilterId === SCOPE_FILTER_ALL) {
-      return 'Alle Scopes'
+      return 'All Scopes'
     }
 
-    return scopeOptions.find((scope) => scope.value === selectedScopeFilterId)?.label ?? 'Alle Scopes'
+    return scopeOptions.find((scope) => scope.value === selectedScopeFilterId)?.label ?? 'All Scopes'
   }, [scopeOptions, selectedScopeFilterId])
 
   const selectedReleaseFilterLabel = RELEASE_FILTER_LABELS[releaseFilter] ?? RELEASE_FILTER_LABELS.all
@@ -704,7 +704,7 @@ export function SkillTree() {
         type: 'source',
         sourceId: dependency.sourceId,
         targetId: dependency.targetId,
-        tooltip: `Benoetigt ${targetNode.label}`,
+        tooltip: `Needs ${targetNode.label}`,
         isInteractive: true,
         otherLabel: `${String(targetLabel).slice(0, 3).toUpperCase()}${targetLevelSuffix}`,
       })
@@ -714,7 +714,7 @@ export function SkillTree() {
         type: 'target',
         sourceId: dependency.sourceId,
         targetId: dependency.targetId,
-        tooltip: `Wird benoetigt von ${sourceNode.label}`,
+        tooltip: `Required by ${sourceNode.label}`,
         isInteractive: true,
         otherLabel: `${String(sourceLabel).slice(0, 3).toUpperCase()}${sourceLevelSuffix}`,
       })
@@ -757,7 +757,7 @@ export function SkillTree() {
         type: 'target',
         sourceId: crossing.parentId,
         targetId: crossing.childId,
-        tooltip: `Verbindung von ${parentNode.label}`,
+        tooltip: `Connection from ${parentNode.label}`,
         isInteractive: false,
         isCrossing: true,
         otherLabel: String(parentLabel).slice(0, 3).toUpperCase(),
@@ -1136,7 +1136,7 @@ export function SkillTree() {
       })
     } catch (error) {
       console.error('Center icon upload failed', error)
-      window.alert('SVG-Datei konnte nicht geladen werden.')
+      window.alert('SVG file could not be loaded.')
     }
   }
 
@@ -1167,11 +1167,11 @@ export function SkillTree() {
 
     if (ids.length > 1 && !opts.skipConfirm) {
       let message = opts.description
-        ? `${opts.description} auf ${ids.length} ausgewählte Knoten anwenden?`
-        : `Änderung auf ${ids.length} ausgewählte Knoten anwenden?`
+        ? `Apply "${opts.description}" to ${ids.length} selected nodes?`
+        : `Apply change to ${ids.length} selected nodes?`
 
       if (opts.applyToAllLevels) {
-        message += '\n\nHinweis: Die Änderung wird auf alle Level der jeweiligen Knoten angewendet.'
+        message += '\n\nNote: The change will be applied to all levels of each selected node.'
       }
 
       const confirmed = window.confirm(message)
@@ -1197,11 +1197,11 @@ export function SkillTree() {
     try {
       const exported = downloadDocumentJson(roadmapData)
       if (!exported) {
-        window.alert('JSON-Export fehlgeschlagen.')
+        window.alert('JSON export failed.')
       }
     } catch (error) {
       console.error('JSON export failed', error)
-      window.alert('JSON-Export fehlgeschlagen.')
+      window.alert('JSON export failed.')
     }
   }
 
@@ -1216,7 +1216,7 @@ export function SkillTree() {
       resetSelections()
     } catch (error) {
       console.error('JSON import failed', error)
-      window.alert(`JSON-Import fehlgeschlagen: ${error?.message ?? 'Unbekannter Fehler'}`)
+      window.alert(`JSON import failed: ${error?.message ?? 'Unknown error'}`)
     } finally {
       event.target.value = ''
     }
@@ -1278,7 +1278,7 @@ export function SkillTree() {
 
   const handleExportSvg = async () => {
     if (!canvasSvgRef.current) {
-      window.alert('SVG-Export derzeit nicht verfuegbar.')
+      window.alert('SVG export not available.')
       return
     }
 
@@ -1294,13 +1294,13 @@ export function SkillTree() {
         sourceDocument: window.document,
       })
       if (!exported) {
-        window.alert('SVG-Export fehlgeschlagen.')
+        window.alert('SVG export failed.')
         return
       }
 
     } catch (error) {
       console.error('SVG export failed', error)
-      window.alert('SVG-Export fehlgeschlagen.')
+      window.alert('SVG export failed.')
     } finally {
       setExportLabelModeOverride(null)
     }
@@ -1308,7 +1308,7 @@ export function SkillTree() {
 
   const handleExportPng = async () => {
     if (!canvasSvgRef.current) {
-      window.alert('PNG-Export derzeit nicht verfuegbar.')
+      window.alert('PNG export not available.')
       return
     }
 
@@ -1325,12 +1325,12 @@ export function SkillTree() {
       })
 
       if (!exported) {
-        window.alert('PNG-Export fehlgeschlagen.')
+        window.alert('PNG export failed.')
         return
       }
     } catch (error) {
       console.error('PNG export failed', error)
-      window.alert('PNG-Export fehlgeschlagen.')
+      window.alert('PNG export failed.')
     } finally {
       setExportLabelModeOverride(null)
     }
@@ -1338,7 +1338,7 @@ export function SkillTree() {
 
   const handleExportCleanSvg = async () => {
     if (!canvasSvgRef.current) {
-      window.alert('SVG-Export derzeit nicht verfuegbar.')
+      window.alert('SVG export not available.')
       return
     }
 
@@ -1354,13 +1354,13 @@ export function SkillTree() {
         sourceDocument: window.document,
       })
       if (!exported) {
-        window.alert('Clean-SVG-Export fehlgeschlagen.')
+        window.alert('Clean SVG export failed.')
         return
       }
 
     } catch (error) {
       console.error('Clean SVG export failed', error)
-      window.alert('Clean-SVG-Export fehlgeschlagen.')
+      window.alert('Clean SVG export failed.')
     } finally {
       setExportLabelModeOverride(null)
     }
@@ -1368,7 +1368,7 @@ export function SkillTree() {
 
   const handleExportHtml = async () => {
     if (!canvasSvgRef.current) {
-      window.alert('HTML-Export derzeit nicht verfuegbar.')
+      window.alert('HTML export not available.')
       return
     }
 
@@ -1384,13 +1384,13 @@ export function SkillTree() {
       })
 
       if (!exported) {
-        window.alert('HTML-Export fehlgeschlagen.')
+        window.alert('HTML export failed.')
         return
       }
 
     } catch (error) {
       console.error('HTML export failed', error)
-      window.alert('HTML-Export fehlgeschlagen.')
+      window.alert('HTML export failed.')
     } finally {
       setExportLabelModeOverride(null)
     }
@@ -1400,7 +1400,7 @@ export function SkillTree() {
     try {
       const exported = downloadDocumentCsv(roadmapData, activeReleaseId)
       if (!exported) {
-        window.alert('CSV-Export fehlgeschlagen.')
+        window.alert('CSV export failed.')
       }
     } catch (error) {
       console.error('CSV export failed', error)
@@ -1411,7 +1411,7 @@ export function SkillTree() {
 
   const handleExportPdf = async () => {
     if (!canvasSvgRef.current) {
-      window.alert('PDF-Export derzeit nicht verfuegbar.')
+      window.alert('PDF export not available.')
       return
     }
 
@@ -1428,16 +1428,16 @@ export function SkillTree() {
 
       if (!exported.ok) {
         if (exported.errorCode === 'popup-blocked') {
-          window.alert('PDF-Fenster wurde blockiert. Bitte Popups fuer diese Seite erlauben und den Export erneut starten.')
+          window.alert('PDF window was blocked. Please allow pop-ups for this page and retry the export.')
         } else {
-          window.alert('PDF-Export fehlgeschlagen. Bitte erneut versuchen.')
+          window.alert('PDF export failed. Please try again.')
         }
         return
       }
 
     } catch (error) {
       console.error('PDF export failed', error)
-      window.alert('PDF-Export fehlgeschlagen. Bitte erneut versuchen.')
+      window.alert('PDF export failed. Please try again.')
     } finally {
       setExportLabelModeOverride(null)
     }
@@ -1549,7 +1549,7 @@ export function SkillTree() {
         void (async () => {
           try {
             if (!canvasSvgRef.current) {
-              window.alert('HTML-Export derzeit nicht verfuegbar.')
+              window.alert('HTML export not available.')
               return
             }
 
@@ -1561,11 +1561,11 @@ export function SkillTree() {
             })
 
             if (!exported) {
-              window.alert('HTML-Export fehlgeschlagen.')
+              window.alert('HTML export failed.')
             }
           } catch (error) {
             console.error('HTML export shortcut failed', error)
-            window.alert('HTML-Export fehlgeschlagen.')
+            window.alert('HTML export failed.')
           }
         })()
         return
@@ -1855,7 +1855,7 @@ export function SkillTree() {
       } else {
         const anchorSegmentId = selectedSegmentId ?? existingSegments[existingSegments.length - 1]?.id
         if (!anchorSegmentId) {
-          return { ok: false, error: 'Kein Anker-Segment vorhanden.' }
+          return { ok: false, error: 'No anchor segment found.' }
         }
         const result = addSegmentNearWithResult(roadmapData, anchorSegmentId, 'right')
         createdSegmentId = result.createdSegmentId
@@ -1873,7 +1873,7 @@ export function SkillTree() {
 
       return { ok: true }
       } catch {
-        return { ok: false, error: String('Fehler beim Erstellen des Segments.') }
+        return { ok: false, error: String('Failed to create segment.') }
       }
   }
 
@@ -1894,7 +1894,7 @@ export function SkillTree() {
       } else {
         const anchorSegmentId = selectedSegmentId ?? existingSegments[existingSegments.length - 1]?.id
         if (!anchorSegmentId) {
-          return { ok: false, error: 'Kein Anker-Segment vorhanden.' }
+          return { ok: false, error: 'No anchor segment found.' }
         }
         const result = addSegmentNearWithResult(roadmapData, anchorSegmentId, 'right')
         createdSegmentId = result.createdSegmentId
@@ -1915,7 +1915,7 @@ export function SkillTree() {
   const handleRenameSegmentForManager = (segmentId, nextLabel) => {
     const exists = (roadmapData.segments ?? []).some((s) => s.id === segmentId)
     if (!exists) {
-      return { ok: false, error: 'Segment wurde nicht gefunden.' }
+      return { ok: false, error: 'Segment not found.' }
     }
 
     try {
@@ -1929,7 +1929,7 @@ export function SkillTree() {
   const handleDeleteSegmentForManager = (segmentId) => {
     const exists = (roadmapData.segments ?? []).some((s) => s.id === segmentId)
     if (!exists) {
-      return { ok: false, error: 'Segment wurde nicht gefunden.' }
+      return { ok: false, error: 'Segment not found.' }
     }
 
     try {
@@ -2246,7 +2246,7 @@ export function SkillTree() {
       return
     }
 
-    applyToSelectedNodes((tree, id) => deleteNodeOnly(tree, id), { description: 'Knoten löschen' })
+    applyToSelectedNodes((tree, id) => deleteNodeOnly(tree, id), { description: 'Delete node' })
     selectNodeId(null)
     setSelectedPortalKey(null)
   }
@@ -2256,7 +2256,7 @@ export function SkillTree() {
       return
     }
 
-    applyToSelectedNodes((tree, id) => deleteNodeBranch(tree, id), { description: 'Zweig löschen' })
+    applyToSelectedNodes((tree, id) => deleteNodeBranch(tree, id), { description: 'Delete branch' })
     selectNodeId(null)
     setSelectedPortalKey(null)
   }
@@ -2371,7 +2371,7 @@ export function SkillTree() {
       <Modal
         opened={csvImportDialogOpen}
         onClose={closeCsvImportDialog}
-        title="CSV-Import Optionen"
+        title="CSV Import Options"
         centered
         size="lg"
         closeOnClickOutside={false}
@@ -2380,7 +2380,7 @@ export function SkillTree() {
       >
         <Stack gap="md">
           <Text size="sm" c="dimmed">
-            Waehl aus, was beim Import verarbeitet werden soll.
+            Select what to process during import.
           </Text>
 
           <Text size="sm" fw={600}>
@@ -2396,7 +2396,7 @@ export function SkillTree() {
                 processSegments: checked,
               }))
             }}
-            label="Segmente verarbeiten"
+            label="Process segments"
           />
 
           <Checkbox
@@ -2408,19 +2408,19 @@ export function SkillTree() {
                 processManualLevels: checked,
               }))
             }}
-            label="Manuelle Ebenen verarbeiten"
+            label="Process manual levels"
           />
 
           <Text size="xs" c="dimmed">
-            Wenn eine Option nicht aktiviert ist, wird der betreffende Aspekt beim Import ignoriert.
+            If an option is disabled, that aspect will be ignored during import.
           </Text>
 
           <Group justify="flex-end">
             <Button variant="default" onClick={closeCsvImportDialog}>
-              Abbrechen
+              Cancel
             </Button>
             <Button onClick={handleConfirmCsvImport} disabled={!pendingCsvImport}>
-              Importieren
+              Import
             </Button>
           </Group>
         </Stack>
@@ -2429,27 +2429,27 @@ export function SkillTree() {
       <Modal
         opened={exportLabelDialogOpen}
         onClose={cancelExportLabelDialog}
-        title="Knotenbezeichnung im Export"
+        title="Node label in export"
         size="sm"
       >
         <Stack gap="md">
           <Radio.Group
             value={exportLabelDialogMode}
             onChange={setExportLabelDialogMode}
-            label="Zoomstufe für den Export wählen"
+            label="Choose zoom level for export"
           >
             <Stack gap="xs" mt="xs">
-              <Radio value="far" label="Weit weg – nur Kürzel (abc)" />
-              <Radio value="mid" label="Normal – Name + Kürzel" />
-              <Radio value="close" label="Nah – Name + Kürzel + Release Note" />
+              <Radio value="far" label="Far – abbreviation only (abc)" />
+              <Radio value="mid" label="Normal – name + abbreviation" />
+              <Radio value="close" label="Close – name + abbreviation + release note" />
             </Stack>
           </Radio.Group>
           <Group justify="flex-end">
             <Button variant="default" onClick={cancelExportLabelDialog}>
-              Abbrechen
+              Cancel
             </Button>
             <Button onClick={confirmExportLabelDialog}>
-              Exportieren
+              Export
             </Button>
           </Group>
         </Stack>

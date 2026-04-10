@@ -218,7 +218,7 @@ export function InspectorPanel({
 
     if (showToast && commitResult.shortNameCommitted) {
       try {
-        window.dispatchEvent(new CustomEvent('roadmap-skilltree.toast', { detail: { type: 'success', message: 'Shortname gespeichert' } }))
+        window.dispatchEvent(new CustomEvent('roadmap-skilltree.toast', { detail: { type: 'success', message: 'Shortname saved' } }))
       } catch {
         // ignore if window not available
       }
@@ -228,7 +228,7 @@ export function InspectorPanel({
           .replace(/[^A-Za-z0-9]/g, '')
           .toUpperCase()
         if (sanitized && sanitized.length > 3) {
-          window.dispatchEvent(new CustomEvent('roadmap-skilltree.toast', { detail: { type: 'warning', message: 'Shortname länger als 3 Zeichen (nur Warnung)' } }))
+          window.dispatchEvent(new CustomEvent('roadmap-skilltree.toast', { detail: { type: 'warning', message: 'Shortname longer than 3 characters (warning only)' } }))
         }
       } catch {
         // ignore
@@ -342,10 +342,10 @@ export function InspectorPanel({
         <div className="skill-panel__header">
           <div>
             <Text className="skill-panel__eyebrow">Inspector</Text>
-            <Text className="skill-panel__title skill-panel__title--large">{`${count} Ausgewählt${headerNames ? ' - ' + headerNames : ''}`}</Text>
+            <Text className="skill-panel__title skill-panel__title--large">{`${count} selected${headerNames ? ' - ' + headerNames : ''}`}</Text>
           </div>
           <div className="skill-panel__header-actions">
-            <ActionIcon variant="subtle" color="gray" onClick={() => { /* noop: parent closes */ }} aria-label="Inspector schließen">
+            <ActionIcon variant="subtle" color="gray" onClick={() => { /* noop: parent closes */ }} aria-label="Close inspector">
               ✕
             </ActionIcon>
           </div>
@@ -367,7 +367,7 @@ export function InspectorPanel({
             </div>
 
             <Select
-              label="Segment (für alle)"
+              label="Segment (for all)"
               data={segmentData}
               onChange={(value) => value && onSegmentChange(value)}
               allowDeselect={false}
@@ -376,7 +376,7 @@ export function InspectorPanel({
             />
 
             <Select
-              label="Parent (für alle)"
+              label="Parent (for all)"
               data={parentData}
               onChange={(value) => value && onParentChange(value)}
               allowDeselect={false}
@@ -385,7 +385,7 @@ export function InspectorPanel({
             />
 
             <Select
-              label="Status (für alle)"
+              label="Status (for all)"
               data={STATUS_OPTIONS.map((option) => ({ value: option.value, label: option.label }))}
               onChange={(value) => value && onStatusChange(value)}
               allowDeselect={false}
@@ -394,7 +394,7 @@ export function InspectorPanel({
             />
 
             <MultiSelect
-              label="Scopes (für alle)"
+              label="Scopes (for all)"
               data={(scopeOptions ?? []).map((scope) => ({ value: scope.value, label: scope.label }))}
               onChange={(values) => onScopeIdsChange(values)}
               searchable
@@ -406,9 +406,9 @@ export function InspectorPanel({
             <Divider />
 
             <div className="skill-panel__danger-zone">
-              <Text className="skill-panel__danger-title">Löschen (für ausgewählte Knoten)</Text>
-              <Button variant="default" onClick={onDeleteNodeOnly}>Skill löschen (für alle)</Button>
-              <Button color="red" variant="outline" onClick={onDeleteNodeBranch}>Zweig löschen (für alle)</Button>
+              <Text className="skill-panel__danger-title">Delete (for selected nodes)</Text>
+              <Button variant="default" onClick={onDeleteNodeOnly}>Delete skill (for all)</Button>
+              <Button color="red" variant="outline" onClick={onDeleteNodeBranch}>Delete branch (for all)</Button>
             </div>
           </Stack>
         </div>
@@ -449,7 +449,7 @@ export function InspectorPanel({
     const result = onCreateScope?.(scopeDraft)
 
     if (!result?.ok) {
-      setScopeError(result?.error ?? 'Scope konnte nicht angelegt werden.')
+      setScopeError(result?.error ?? 'Scope could not be created.')
       return
     }
 
@@ -461,7 +461,7 @@ export function InspectorPanel({
     const result = onCreateSegment?.(segmentDraft)
 
     if (!result?.ok && result !== undefined) {
-      setSegmentError(result?.error ?? 'Segment konnte nicht angelegt werden.')
+      setSegmentError(result?.error ?? 'Segment could not be created.')
       return
     }
 
@@ -482,7 +482,7 @@ export function InspectorPanel({
 
     const result = onRenameSegment?.(editingSegmentId, editingSegmentLabel)
     if (!result?.ok && result !== undefined) {
-      setSegmentError(result?.error ?? 'Segment konnte nicht umbenannt werden.')
+      setSegmentError(result?.error ?? 'Segment could not be renamed.')
       return
     }
 
@@ -494,7 +494,7 @@ export function InspectorPanel({
   const handleDeleteSegment = (segmentId) => {
     const result = onDeleteSegment?.(segmentId)
     if (!result?.ok && result !== undefined) {
-      setSegmentError(result?.error ?? 'Segment konnte nicht gelöscht werden.')
+      setSegmentError(result?.error ?? 'Segment could not be deleted.')
       return
     }
 
@@ -519,7 +519,7 @@ export function InspectorPanel({
 
     const result = onRenameScope?.(editingScopeId, editingScopeLabel)
     if (!result?.ok) {
-      setScopeError(result?.error ?? 'Scope konnte nicht umbenannt werden.')
+      setScopeError(result?.error ?? 'Scope could not be renamed.')
       return
     }
 
@@ -531,7 +531,7 @@ export function InspectorPanel({
   const handleDeleteScope = (scopeId) => {
     const result = onDeleteScope?.(scopeId)
     if (!result?.ok) {
-      setScopeError(result?.error ?? 'Scope konnte nicht gelöscht werden.')
+      setScopeError(result?.error ?? 'Scope could not be deleted.')
       return
     }
 
@@ -566,11 +566,11 @@ export function InspectorPanel({
   const shortNameDuplicateWarning = useMemo(() => {
     const draft = String(shortNameDraft ?? '').trim().toLowerCase()
     if (!draft) return null
-    return otherShortNames.has(draft) ? 'Dieser Shortname wird bereits von einem anderen Node verwendet.' : null
+    return otherShortNames.has(draft) ? 'This shortname is already used by another node.' : null
   }, [shortNameDraft, otherShortNames])
   const levelData = levelOptions.map((option) => ({
     value: String(option.value),
-    label: `Ebene ${option.value}`,
+    label: `Level ${option.value}`,
     disabled: !option.isAllowed,
   }))
   const segmentData = (segmentOptions ?? []).map((option) => ({
@@ -626,7 +626,7 @@ export function InspectorPanel({
           </Text>
         </div>
         <div className="skill-panel__header-actions">
-          <ActionIcon variant="subtle" color="gray" onClick={() => { commitCurrentDrafts(false, 'explicit'); onClose?.() }} aria-label="Inspector schließen">
+          <ActionIcon variant="subtle" color="gray" onClick={() => { commitCurrentDrafts(false, 'explicit'); onClose?.() }} aria-label="Close inspector">
             ✕
           </ActionIcon>
         </div>
@@ -644,7 +644,7 @@ export function InspectorPanel({
           }}
         >
           <Tabs.List>
-            <Tabs.Tab value="properties">Eigenschaften</Tabs.Tab>
+            <Tabs.Tab value="properties">Properties</Tabs.Tab>
 
             {nodeLevels.map((level, index) => (
               <Tabs.Tab key={level.id} value={level.id}>{`Level ${index + 1}`}</Tabs.Tab>
@@ -655,7 +655,7 @@ export function InspectorPanel({
               variant="filled"
               color="cyan"
               onClick={onAddProgressLevel}
-              aria-label="Level hinzufügen"
+              aria-label="Add level"
               ml={4}
               style={{ alignSelf: 'center' }}
             >
@@ -673,7 +673,7 @@ export function InspectorPanel({
                   <Text size="xs" fw={600} tt="uppercase" c="dimmed" lts="0.1em">Bezeichnung</Text>
                   <Textarea
                     label="Name"
-                    placeholder="Skill-Name eingeben …"
+                    placeholder="Enter skill name …"
                     value={nameDraft}
                     onChange={(event) => {
                       const nextValue = event.currentTarget.value
@@ -688,7 +688,7 @@ export function InspectorPanel({
                   />
                   <TextInput
                     label="Shortname"
-                    placeholder="z.B. API"
+                    placeholder="e.g. API"
                     value={shortNameDraft}
                     onChange={(event) => {
                       const nextValue = event.currentTarget.value
@@ -741,8 +741,8 @@ export function InspectorPanel({
                           }}
                           comboboxProps={{ withinPortal: true, zIndex: 450 }}
                         />
-                        <Tooltip label="Segmente verwalten">
-                          <ActionIcon variant="light" color="gray" onClick={() => setSegmentManagerOpen((open) => !open)} aria-label="Segmente verwalten">
+                        <Tooltip label="Manage segments">
+                          <ActionIcon variant="light" color="gray" onClick={() => setSegmentManagerOpen((open) => !open)} aria-label="Manage segments">
                             <IconPercentage20 size={15} />
                           </ActionIcon>
                         </Tooltip>
@@ -752,15 +752,15 @@ export function InspectorPanel({
                         <Stack gap="sm">
                           <Group align="flex-end" wrap="nowrap">
                             <TextInput
-                              label="Segmente verwalten"
-                              placeholder="Neues Segment"
+                              label="Manage segments"
+                              placeholder="New segment"
                               value={segmentDraft}
                               onChange={(event) => setSegmentDraft(event.currentTarget.value)}
                               style={{ flex: 1 }}
                               classNames={{ input: 'mantine-dark-input', label: 'mantine-dark-label' }}
                             />
-                            <Tooltip label="Segment hinzufügen">
-                              <ActionIcon variant="light" color="cyan" size="lg" onClick={handleCreateSegment} aria-label="Segment hinzufügen">
+                            <Tooltip label="Add segment">
+                              <ActionIcon variant="light" color="cyan" size="lg" onClick={handleCreateSegment} aria-label="Add segment">
                                 <TablerCirclePlusIcon size={20} />
                               </ActionIcon>
                             </Tooltip>
@@ -774,16 +774,16 @@ export function InspectorPanel({
                                   <Stack gap={8}>
                                     <TextInput value={editingSegmentLabel} onChange={(event) => setEditingSegmentLabel(event.currentTarget.value)} classNames={{ input: 'mantine-dark-input' }} />
                                     <Group justify="space-between">
-                                      <Button size="xs" variant="light" onClick={() => { setEditingSegmentId(null); setEditingSegmentLabel('') }}>Abbrechen</Button>
-                                      <Button size="xs" onClick={handleRenameSegment}>Speichern</Button>
+                                      <Button size="xs" variant="light" onClick={() => { setEditingSegmentId(null); setEditingSegmentLabel('') }}>Cancel</Button>
+                                      <Button size="xs" onClick={handleRenameSegment}>Save</Button>
                                     </Group>
                                   </Stack>
                                 ) : (
                                   <Group justify="space-between" wrap="nowrap">
                                     <Text size="sm" truncate>{segment.label}</Text>
                                     <Group gap={6} wrap="nowrap">
-                                      <ActionIcon size="sm" variant="subtle" color="gray" onClick={() => handleStartRenameSegment(segment.value, segment.label)} aria-label="Segment umbenennen">✎</ActionIcon>
-                                      <ActionIcon size="sm" variant="subtle" color="red" onClick={() => handleDeleteSegment(segment.value)} aria-label="Segment löschen">✕</ActionIcon>
+                                      <ActionIcon size="sm" variant="subtle" color="gray" onClick={() => handleStartRenameSegment(segment.value, segment.label)} aria-label="Rename segment">✎</ActionIcon>
+                                      <ActionIcon size="sm" variant="subtle" color="red" onClick={() => handleDeleteSegment(segment.value)} aria-label="Delete segment">✕</ActionIcon>
                                     </Group>
                                   </Group>
                                 )}
@@ -797,7 +797,7 @@ export function InspectorPanel({
                   )}
 
                   <Select
-                    label="Ebene"
+                    label="Level"
                     data={levelData}
                     value={String(currentLevel)}
                     onChange={(value) => value && onLevelChange(parseInt(value, 10))}
@@ -820,8 +820,8 @@ export function InspectorPanel({
             <div className="skill-panel__tab-bottom-bar">
               <Divider mb="sm" />
               <Group gap="sm" grow>
-                <Button variant="default" onClick={onDeleteNodeOnly}>Skill löschen</Button>
-                <Button color="red" variant="outline" onClick={onDeleteNodeBranch}>Zweig löschen</Button>
+                <Button variant="default" onClick={onDeleteNodeOnly}>Delete skill</Button>
+                <Button color="red" variant="outline" onClick={onDeleteNodeBranch}>Delete branch</Button>
               </Group>
             </div>
           </Tabs.Panel>
@@ -855,7 +855,7 @@ export function InspectorPanel({
                       <NumberInput
                         mt={6}
                         label="Story Points (Custom)"
-                        placeholder="z.B. 7"
+                        placeholder="e.g. 7"
                         value={level.effort?.customPoints ?? ''}
                         onChange={(val) => onEffortChange?.({ size: 'custom', customPoints: val === '' ? null : Number(val) })}
                         min={0}
@@ -879,8 +879,8 @@ export function InspectorPanel({
                   <div className="skill-panel__scope-block">
                     <Group justify="space-between" align="center" mb={6}>
                       <Text className="mantine-dark-label" size="sm">Scope</Text>
-                      <Tooltip label="Ohne Zuordnung gilt die Ausbaustufe fuer alle Produktgruppen.">
-                        <ActionIcon variant="subtle" color="gray" size="sm" aria-label="Scope-Hinweis">
+                      <Tooltip label="Without assignment, the level applies to all product groups.">
+                        <ActionIcon variant="subtle" color="gray" size="sm" aria-label="Scope hint">
                           <TablerInfoCircleIcon size={15} />
                         </ActionIcon>
                       </Tooltip>
@@ -903,8 +903,8 @@ export function InspectorPanel({
                         }}
                         comboboxProps={{ withinPortal: true, zIndex: 450 }}
                       />
-                      <Tooltip label="Scopes verwalten">
-                        <ActionIcon variant="light" color="gray" onClick={() => setScopeManagerOpen((open) => !open)} aria-label="Scopes verwalten">
+                      <Tooltip label="Manage scopes">
+                        <ActionIcon variant="light" color="gray" onClick={() => setScopeManagerOpen((open) => !open)} aria-label="Manage scopes">
                           <TablerAdjustmentsIcon size={15} />
                         </ActionIcon>
                       </Tooltip>
@@ -914,15 +914,15 @@ export function InspectorPanel({
                       <Stack gap="sm">
                         <Group align="flex-end" wrap="nowrap">
                           <TextInput
-                            label="Scopes verwalten"
-                            placeholder="z.B. Serie A"
+                            label="Manage scopes"
+                            placeholder="e.g. Series A"
                             value={scopeDraft}
                             onChange={(event) => setScopeDraft(event.currentTarget.value)}
                             style={{ flex: 1 }}
                             classNames={{ input: 'mantine-dark-input', label: 'mantine-dark-label' }}
                           />
-                          <Tooltip label="Scope hinzufügen">
-                            <ActionIcon variant="light" color="cyan" size="lg" onClick={handleCreateScope} aria-label="Scope hinzufügen">
+                          <Tooltip label="Add scope">
+                            <ActionIcon variant="light" color="cyan" size="lg" onClick={handleCreateScope} aria-label="Add scope">
                               <TablerCirclePlusIcon size={20} />
                             </ActionIcon>
                           </Tooltip>
@@ -936,8 +936,8 @@ export function InspectorPanel({
                                 <Stack gap={8}>
                                   <TextInput value={editingScopeLabel} onChange={(event) => setEditingScopeLabel(event.currentTarget.value)} classNames={{ input: 'mantine-dark-input' }} />
                                   <Group justify="space-between">
-                                    <Button size="xs" variant="light" onClick={() => { setEditingScopeId(null); setEditingScopeLabel('') }}>Abbrechen</Button>
-                                    <Button size="xs" onClick={handleRenameScope}>Speichern</Button>
+                                    <Button size="xs" variant="light" onClick={() => { setEditingScopeId(null); setEditingScopeLabel('') }}>Cancel</Button>
+                                    <Button size="xs" onClick={handleRenameScope}>Save</Button>
                                   </Group>
                                 </Stack>
                               ) : (
@@ -946,7 +946,7 @@ export function InspectorPanel({
                                     <Group gap={8} wrap="nowrap" style={{ minWidth: 0 }}>
                                       <button
                                         type="button"
-                                        aria-label="Farbe ändern"
+                                        aria-label="Change color"
                                         onClick={() => setColorPickerOpenId((prev) => (prev === scope.value ? null : scope.value))}
                                         style={{
                                           width: 16,
@@ -962,8 +962,8 @@ export function InspectorPanel({
                                       <Text size="sm" truncate>{scope.label}</Text>
                                     </Group>
                                     <Group gap={6} wrap="nowrap">
-                                      <ActionIcon size="sm" variant="subtle" color="gray" onClick={() => handleStartRenameScope(scope.value, scope.label)} aria-label="Scope umbenennen">✎</ActionIcon>
-                                      <ActionIcon size="sm" variant="subtle" color="red" onClick={() => handleDeleteScope(scope.value)} aria-label="Scope löschen">✕</ActionIcon>
+                                      <ActionIcon size="sm" variant="subtle" color="gray" onClick={() => handleStartRenameScope(scope.value, scope.label)} aria-label="Rename scope">✎</ActionIcon>
+                                      <ActionIcon size="sm" variant="subtle" color="red" onClick={() => handleDeleteScope(scope.value)} aria-label="Delete scope">✕</ActionIcon>
                                     </Group>
                                   </Group>
                                   {colorPickerOpenId === scope.value && (
@@ -972,7 +972,7 @@ export function InspectorPanel({
                                         <button
                                           key={color}
                                           type="button"
-                                          aria-label={`Farbe ${color}`}
+                                          aria-label={`Color ${color}`}
                                           onClick={() => { onSetScopeColor?.(scope.value, color); setColorPickerOpenId(null) }}
                                           style={{
                                             width: 18,
@@ -990,7 +990,7 @@ export function InspectorPanel({
                                       {scope.color && (
                                         <button
                                           type="button"
-                                          aria-label="Farbe entfernen"
+                                          aria-label="Remove color"
                                           onClick={() => { onSetScopeColor?.(scope.value, null); setColorPickerOpenId(null) }}
                                           style={{
                                             width: 18,
@@ -1057,7 +1057,7 @@ export function InspectorPanel({
                   <MarkdownField
                     fill
                     label="Release Note"
-                    placeholder="Beschreibe aus Kundensicht, was in dieser Ausbaustufe geliefert wurde oder als Nächstes kommt ..."
+                    placeholder="Describe from the customer's perspective what was delivered or comes next in this level..."
                     value={activeTab === level.id ? releaseNoteDraft : (level.releaseNote ?? '')}
                     onChange={(nextValue) => {
                       releaseNoteDraftRef.current = nextValue
@@ -1080,7 +1080,7 @@ export function InspectorPanel({
                     setActiveTab('properties')
                   }}
                 >
-                  Level löschen
+                  Delete level
                 </Button>
               </div>
             </Tabs.Panel>

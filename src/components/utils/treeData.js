@@ -2,7 +2,7 @@ import { normalizeStatusKey } from '../config'
 import { createDefaultEffort, createDefaultBenefit, normalizeEffort, normalizeBenefit } from './effortBenefit'
 import { generateUUID } from './uuid'
 
-const DEFAULT_NODE_LABEL = 'Neuer Skill'
+const DEFAULT_NODE_LABEL = 'New Skill'
 const DEFAULT_NODE_STATUS = 'later'
 const E2E_TRACE_ENABLED_KEY = 'roadmap-skilltree.e2e.traceEnabled'
 const E2E_MODEL_TRACE_KEY = 'roadmap-skilltree.e2e.modelTrace'
@@ -216,7 +216,7 @@ const validateScopeLabel = (treeData, label, excludedScopeId = null) => {
   if (key.length === 0) {
     return {
       ok: false,
-      error: 'Scope-Name darf nicht leer sein.',
+      error: 'Scope name must not be empty.',
     }
   }
 
@@ -231,7 +231,7 @@ const validateScopeLabel = (treeData, label, excludedScopeId = null) => {
   if (duplicate) {
     return {
       ok: false,
-      error: 'Scope-Name existiert bereits.',
+      error: 'Scope name already exists.',
     }
   }
 
@@ -952,7 +952,7 @@ const createNewNode = (level, segmentId = null) => ({
 
 const createNewSegment = () => ({
   id: `segment-${generateUUID()}`,
-  label: 'Neues Segment',
+  label: 'New Segment',
 })
 
 const createNewScope = (label) => ({
@@ -990,7 +990,7 @@ export const renameScopeWithResult = (treeData, scopeId, nextLabel) => {
   if (!existingScope) {
     return {
       ok: false,
-      error: 'Scope wurde nicht gefunden.',
+      error: 'Scope not found.',
       tree: treeData,
     }
   }
@@ -1028,7 +1028,7 @@ export const setScopeColorWithResult = (treeData, scopeId, color) => {
   if (!exists) {
     return {
       ok: false,
-      error: 'Scope wurde nicht gefunden.',
+      error: 'Scope not found.',
       tree: treeData,
     }
   }
@@ -1057,7 +1057,7 @@ export const deleteScopeWithResult = (treeData, scopeId) => {
   if (!exists) {
     return {
       ok: false,
-      error: 'Scope wurde nicht gefunden.',
+      error: 'Scope not found.',
       tree: treeData,
     }
   }

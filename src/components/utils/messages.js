@@ -3,7 +3,7 @@ export const getHtmlImportErrorMessage = (error) => {
     return error.message
   }
 
-  return 'Die Datei konnte nicht importiert werden. Bitte eine gueltige HTML-Exportdatei verwenden.'
+  return 'The file could not be imported. Please provide a valid HTML export file.'
 }
 
 export const getCsvImportErrorMessage = (error) => {
@@ -11,17 +11,17 @@ export const getCsvImportErrorMessage = (error) => {
     return error.message
   }
 
-  return 'Die Datei konnte nicht importiert werden. Bitte eine gueltige CSV-Datei verwenden.'
+  return 'The file could not be imported. Please provide a valid CSV file.'
 }
 
 export const getCsvExportErrorMessage = (error) => {
   if (error instanceof Error && error.message) {
-    return error.message.replace(/^CSV-Import fehlgeschlagen:/, 'CSV-Export fehlgeschlagen:')
+    return error.message.replace(/^CSV import failed:/, 'CSV export failed:')
   }
 
-  return 'CSV-Export fehlgeschlagen. Bitte die CSV-Konsistenz pruefen.'
+  return 'CSV export failed. Please check CSV consistency.'
 }
 
 export const confirmResetDocument = () => window.confirm(
-  'Roadmap wirklich zuruecksetzen? Dieser Schritt kann per Undo rueckgaengig gemacht werden.',
+  'Really reset the roadmap? This action can be undone with Undo.',
 )

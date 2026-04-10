@@ -94,11 +94,11 @@ export function SystemPanel({
         <div style={{ flex: 1, minWidth: 0 }}>
           <Text className="skill-panel__eyebrow">System</Text>
           <Text className="skill-panel__title skill-panel__title--node">
-            {roadmapData?.systemName ? roadmapData.systemName : 'System konfigurieren'}
+            {roadmapData?.systemName ? roadmapData.systemName : 'Configure system'}
           </Text>
         </div>
         <div className="skill-panel__header-actions">
-          <ActionIcon variant="subtle" color="gray" onClick={onClose} aria-label="System-Panel schliessen">
+          <ActionIcon variant="subtle" color="gray" onClick={onClose} aria-label="Close system panel">
             ✕
           </ActionIcon>
         </div>
@@ -126,7 +126,7 @@ export function SystemPanel({
             <Tabs.Tab value="__add__" onClick={(e) => { e.preventDefault(); setNewReleaseDialogOpen(true) }}>
               +
             </Tabs.Tab>
-            <Tabs.Tab value="sp-skala">SP-Skala</Tabs.Tab>
+            <Tabs.Tab value="sp-skala">SP Scale</Tabs.Tab>
             <Tabs.Tab value="icon">Icon</Tabs.Tab>
           </Tabs.List>
 
@@ -136,14 +136,14 @@ export function SystemPanel({
               <div className="skill-panel__tab-scroll skill-panel__tab-scroll--fill">
                 <Stack gap="md" style={{ flexShrink: 0 }}>
                   <TextInput
-                    label="Systemname"
+                    label="System name"
                     value={roadmapData?.systemName ?? ''}
                     onChange={(e) => commitDocument({ ...roadmapData, systemName: e.currentTarget.value })}
                     classNames={{ input: 'mantine-dark-input', label: 'mantine-dark-label' }}
                   />
 
                   <TextInput
-                    label="Release-Name"
+                    label="Release name"
                     value={release.name ?? ''}
                     onChange={(e) => commitDocument({
                       ...roadmapData,
@@ -175,8 +175,8 @@ export function SystemPanel({
                   />
 
                   <NumberInput
-                    label="Verfügbare Story Points (Budget)"
-                    placeholder="z.B. 40"
+                    label="Available Story Points (Budget)"
+                    placeholder="e.g. 40"
                     value={release.storyPointBudget ?? ''}
                     onChange={(val) => commitDocument({
                       ...roadmapData,
@@ -190,8 +190,8 @@ export function SystemPanel({
                   {release.id === activeRelease?.id && (
                     <Alert color={summary.isOverBudget ? 'red' : 'teal'} variant="light">
                       {summary.budget != null
-                        ? `Verbraucht: ${summary.total} / ${summary.budget} SP${summary.isOverBudget ? ' ⚠ Budget überschritten!' : ''}`
-                        : `Verbraucht: ${summary.total} SP (kein Budget gesetzt)`}
+                        ? `Used: ${summary.total} / ${summary.budget} SP${summary.isOverBudget ? ' ⚠ Budget exceeded!' : ''}`
+                        : `Used: ${summary.total} SP (no budget set)`}
                     </Alert>
                   )}
                 </Stack>
@@ -217,7 +217,7 @@ export function SystemPanel({
                       size="xs"
                       onClick={handleDeleteRelease}
                     >
-                      Release löschen
+                      Delete release
                     </Button>
                   </div>
                 )}
@@ -229,9 +229,9 @@ export function SystemPanel({
           {newReleaseDialogOpen && (
             <div style={{ padding: '12px', borderTop: '1px solid #333' }}>
               <Stack gap="xs">
-                <Text size="sm" fw={600}>Neues Release</Text>
+                <Text size="sm" fw={600}>New Release</Text>
                 <TextInput
-                  placeholder="Release-Name"
+                  placeholder="Release name"
                   value={newReleaseName}
                   onChange={(e) => setNewReleaseName(e.currentTarget.value)}
                   onKeyDown={(e) => { if (e.key === 'Enter') handleAddRelease() }}
@@ -239,8 +239,8 @@ export function SystemPanel({
                   autoFocus
                 />
                 <Stack gap={4} direction="row">
-                  <Button size="xs" onClick={handleAddRelease}>Erstellen</Button>
-                  <Button size="xs" variant="default" onClick={() => { setNewReleaseDialogOpen(false); setNewReleaseName('') }}>Abbrechen</Button>
+                  <Button size="xs" onClick={handleAddRelease}>Create</Button>
+                  <Button size="xs" variant="default" onClick={() => { setNewReleaseDialogOpen(false); setNewReleaseName('') }}>Cancel</Button>
                 </Stack>
               </Stack>
             </div>
@@ -250,12 +250,12 @@ export function SystemPanel({
           <Tabs.Panel value="sp-skala">
             <div className="skill-panel__tab-scroll">
               <Stack gap="md">
-                <Text size="xs" fw={600} tt="uppercase" c="dimmed" lts="0.1em">Story Points Konfiguration</Text>
+                <Text size="xs" fw={600} tt="uppercase" c="dimmed" lts="0.1em">Story Points Configuration</Text>
                 <Stack gap={6}>
                   {T_SHIRT_KEYS.map((key) => (
                     <NumberInput
                       key={key}
-                      label={`SP für ${key.toUpperCase()}`}
+                      label={`SP for ${key.toUpperCase()}`}
                       value={roadmapData?.storyPointMap?.[key] ?? DEFAULT_STORY_POINT_MAP[key]}
                       onChange={(val) => {
                         const v = val === '' ? DEFAULT_STORY_POINT_MAP[key] : Number(val)
@@ -278,19 +278,19 @@ export function SystemPanel({
             <div className="skill-panel__tab-scroll">
               <Stack gap="md">
                 <Paper className="skill-panel__icon-preview" radius="lg" withBorder>
-                  <img src={iconSource} alt="Center Icon Vorschau" className="skill-panel__icon-preview-image" />
+                  <img src={iconSource} alt="Center icon preview" className="skill-panel__icon-preview-image" />
                 </Paper>
 
                 <Button onClick={() => fileInputRef.current?.click()}>
-                  SVG hochladen
+                  Upload SVG
                 </Button>
 
                 <Button variant="outline" color="gray" onClick={onResetDefault}>
-                  Standard-Icon wiederherstellen
+                  Restore default icon
                 </Button>
 
                 <Text size="sm" c="dimmed">
-                  Lade eine SVG-Datei hoch. Das Icon wird in der Roadmap gespeichert und in Exporten uebernommen.
+                  Upload an SVG file. The icon will be saved to the roadmap and included in exports.
                 </Text>
               </Stack>
             </div>

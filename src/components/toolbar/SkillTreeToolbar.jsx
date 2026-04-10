@@ -121,11 +121,11 @@ export function SkillTreeToolbar({
       withBorder
     >
       <div className="skill-tree-toolbar__row">
-        <Tooltip label={isCollapsed ? 'Menü aufklappen' : 'Menü einklappen'} position="top" middlewares={TOOLBAR_TOOLTIP_MIDDLEWARES}>
+        <Tooltip label={isCollapsed ? 'Expand menu' : 'Collapse menu'} position="top" middlewares={TOOLBAR_TOOLTIP_MIDDLEWARES}>
           <ActionIcon
             size="md"
             variant="default"
-            aria-label={isCollapsed ? 'Menü aufklappen' : 'Menü einklappen'}
+            aria-label={isCollapsed ? 'Expand menu' : 'Collapse menu'}
             onClick={onToggleCollapsed}
           >
             {isCollapsed ? <IconChevronRight {...TOOLBAR_ICON_PROPS} /> : <IconChevronLeft {...TOOLBAR_ICON_PROPS} />}
@@ -144,7 +144,7 @@ export function SkillTreeToolbar({
               closeDelay={180}
             >
               <Menu.Target>
-                <Tooltip label="Export (Klick: HTML, Hover: weitere Formate)" position="top" middlewares={TOOLBAR_TOOLTIP_MIDDLEWARES}>
+                <Tooltip label="Export (click: HTML, hover: more formats)" position="top" middlewares={TOOLBAR_TOOLTIP_MIDDLEWARES}>
                   <ActionIcon
                     size="md"
                     variant="default"
@@ -192,11 +192,11 @@ export function SkillTreeToolbar({
               closeDelay={180}
             >
               <Menu.Target>
-                <Tooltip label="HTML importieren (Ctrl+O)" position="top" middlewares={TOOLBAR_TOOLTIP_MIDDLEWARES}>
+                <Tooltip label="Import HTML (Ctrl+O)" position="top" middlewares={TOOLBAR_TOOLTIP_MIDDLEWARES}>
                   <ActionIcon
                     size="md"
                     variant="default"
-                    aria-label="HTML importieren"
+                    aria-label="Import HTML"
                     onClick={onOpenDocumentPicker}
                   >
                     <IconDownload {...TOOLBAR_ICON_PROPS} />
@@ -220,11 +220,11 @@ export function SkillTreeToolbar({
           </div>
 
           <div className="skill-tree-toolbar__cluster">
-            <Tooltip label={isZoomMenuOpen ? 'Zoom-Menü ausblenden' : 'Zoom-Menü einblenden'} position="top" middlewares={TOOLBAR_TOOLTIP_MIDDLEWARES}>
+            <Tooltip label={isZoomMenuOpen ? 'Hide zoom menu' : 'Show zoom menu'} position="top" middlewares={TOOLBAR_TOOLTIP_MIDDLEWARES}>
               <ActionIcon
                 size="md"
                 variant="default"
-                aria-label={isZoomMenuOpen ? 'Zoom-Menü ausblenden' : 'Zoom-Menü einblenden'}
+                aria-label={isZoomMenuOpen ? 'Hide zoom menu' : 'Show zoom menu'}
                 onClick={() => setIsZoomMenuOpen((open) => !open)}
               >
                 {isZoomMenuOpen ? <IconX {...TOOLBAR_ICON_PROPS} /> : <IconSearch {...TOOLBAR_ICON_PROPS} />}
@@ -323,33 +323,33 @@ export function SkillTreeToolbar({
           </div>
 
           <div className="skill-tree-toolbar__cluster">
-            <Tooltip label="Segmente verwalten" position="top" middlewares={TOOLBAR_TOOLTIP_MIDDLEWARES}>
+            <Tooltip label="Manage segments" position="top" middlewares={TOOLBAR_TOOLTIP_MIDDLEWARES}>
               <ActionIcon
                 size="md"
                 variant="default"
-                aria-label="Segmente verwalten"
+                aria-label="Manage segments"
                 onClick={onOpenSegmentManager}
               >
                 <IconPercentage20 {...TOOLBAR_ICON_PROPS} />
               </ActionIcon>
             </Tooltip>
 
-            <Tooltip label="Scopes verwalten" position="top" middlewares={TOOLBAR_TOOLTIP_MIDDLEWARES}>
+            <Tooltip label="Manage scopes" position="top" middlewares={TOOLBAR_TOOLTIP_MIDDLEWARES}>
               <ActionIcon
                 size="md"
                 variant="default"
-                aria-label="Scopes verwalten"
+                aria-label="Manage scopes"
                 onClick={onOpenScopeManager}
               >
                 <IconFilters {...TOOLBAR_ICON_PROPS} />
               </ActionIcon>
             </Tooltip>
 
-            <Tooltip label="Priorisierungs-Matrix" position="top" middlewares={TOOLBAR_TOOLTIP_MIDDLEWARES}>
+            <Tooltip label="Priority Matrix" position="top" middlewares={TOOLBAR_TOOLTIP_MIDDLEWARES}>
               <ActionIcon
                 size="md"
                 variant="default"
-                aria-label="Priorisierungs-Matrix"
+                aria-label="Priority Matrix"
                 onClick={onOpenPriorityMatrix}
               >
                 <IconChartDots {...TOOLBAR_ICON_PROPS} />
@@ -395,7 +395,7 @@ export function SkillTreeToolbar({
                 <Menu.Divider />
                 <Menu.Label>Scopes</Menu.Label>
                 <Menu.Item onClick={() => setSelectedScopeFilterId?.(SCOPE_FILTER_ALL)}>
-                  {selectedScopeFilterId === SCOPE_FILTER_ALL ? '● ' : ''}Alle Scopes
+                  {selectedScopeFilterId === SCOPE_FILTER_ALL ? '● ' : ''}All Scopes
                 </Menu.Item>
                 {scopeOptions.map((scope) => (
                   <Menu.Item key={scope.value} onClick={() => setSelectedScopeFilterId?.(scope.value)}>
@@ -463,7 +463,7 @@ export function SkillTreeToolbar({
             <div className="skill-tree-toolbar__search">
               <input
                 aria-label="Node search"
-                placeholder="Suche Knoten…"
+                placeholder="Search nodes…"
                 value={toolbarSearch}
                 onChange={(e) => setToolbarSearch(e.target.value)}
               />
@@ -486,7 +486,7 @@ export function SkillTreeToolbar({
               )}
             </div>
             {releases.length > 0 && (
-              <Tooltip label="Release auswählen" position="top" middlewares={TOOLBAR_TOOLTIP_MIDDLEWARES}>
+              <Tooltip label="Select release" position="top" middlewares={TOOLBAR_TOOLTIP_MIDDLEWARES}>
                 <Select
                   size="xs"
                   value={selectedReleaseId}
@@ -494,7 +494,7 @@ export function SkillTreeToolbar({
                   data={releases.map((r) => ({ value: r.id, label: r.name || 'Release' }))}
                   classNames={{ input: 'mantine-dark-input' }}
                   style={{ minWidth: 120, maxWidth: 180 }}
-                  aria-label="Release auswählen"
+                  aria-label="Select release"
                   allowDeselect={false}
                 />
               </Tooltip>
