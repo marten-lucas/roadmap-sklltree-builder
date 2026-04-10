@@ -23,8 +23,8 @@ import { VIEWPORT_ZOOM_STEPS } from '../utils/viewport'
 import { Tooltip } from '../tooltip'
 
 const TOOLBAR_ICON_PROPS = {
-  size: 18,
-  stroke: 2.5,
+  size: 32,
+  stroke: 1.5,
 }
 
 const TOOLBAR_TOOLTIP_MIDDLEWARES = {
