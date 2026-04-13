@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { STATUS_LABELS, STATUS_STYLES, normalizeStatusKey } from '../config'
-import { BENEFIT_SIZE_LABELS, EFFORT_SIZE_LABELS } from '../utils/effortBenefit'
+import { BENEFIT_SIZE_LABELS, BENEFIT_SIZES, EFFORT_SIZE_LABELS, EFFORT_SIZES } from '../utils/effortBenefit'
 import { getDisplayStatusKey, getLevelStatus } from '../utils/nodeStatus'
 
 // ── Icons ─────────────────────────────────────────────────────────────────────
@@ -73,46 +73,47 @@ const getNodeScopeIds = (node) => {
   return ids
 }
 
-const EFFORT_OPTIONS = Object.entries(EFFORT_SIZE_LABELS)
-const BENEFIT_OPTIONS = Object.entries(BENEFIT_SIZE_LABELS)
+const ALL_SIZE_LABELS = { ...EFFORT_SIZE_LABELS }
 
-// ── Metric cell ───────────────────────────────────────────────────────────────
+// ── Metric slider ─────────────────────────────────────────────────────────────
 
-const MetricCell = ({ options, activeValue, onChange, kind, customPoints, onCustomChange }) => (
-  <div
-    className={`list-view-drawer__metric-cell list-view-drawer__metric-cell--${kind}`}
-    role="group"
-    aria-label={kind}
-  >
-    <div className="list-view-drawer__metric-btns">
-      {options.map(([value, label]) => (
-        <button
-          key={value}
-          type="button"
-          className={`list-view-drawer__metric-btn${activeValue === value ? ' list-view-drawer__metric-btn--active' : ''}`}
-          onClick={(e) => { e.stopPropagation(); onChange(value) }}
-          aria-pressed={activeValue === value}
-        >
-          {label}
-        </button>
-      ))}
-    </div>
-    {kind === 'effort' && activeValue === 'custom' && (
+const MetricSlider = ({ sizes, activeValue, onChange, kind, customPoints, onCustomChange }) => {
+  const idx = Math.max(0, sizes.indexOf(activeValue))
+  return (
+    <div
+      className={`list-view-drawer__metric-slider list-view-drawer__metric-slider--${kind}`}
+      role="group"
+      aria-label={kind}
+    >
+      <span className="list-view-drawer__slider-val">{ALL_SIZE_LABELS[activeValue] ?? activeValue}</span>
       <input
-        type="number"
-        className="list-view-drawer__metric-custom-input"
-        value={customPoints ?? ''}
+        type="range"
         min={0}
-        placeholder="pts"
+        max={sizes.length - 1}
+        step={1}
+        value={idx}
+        className="list-view-drawer__slider-input"
+        aria-valuetext={ALL_SIZE_LABELS[activeValue] ?? activeValue}
         onClick={(e) => e.stopPropagation()}
-        onChange={(e) => {
-          e.stopPropagation()
-          onCustomChange?.(e.target.value === '' ? null : Number(e.target.value))
-        }}
+        onChange={(e) => { e.stopPropagation(); onChange(sizes[Number(e.target.value)]) }}
       />
-    )}
-  </div>
-)
+      {kind === 'effort' && activeValue === 'custom' && (
+        <input
+          type="number"
+          className="list-view-drawer__metric-custom-input"
+          value={customPoints ?? ''}
+          min={0}
+          placeholder="pts"
+          onClick={(e) => e.stopPropagation()}
+          onChange={(e) => {
+            e.stopPropagation()
+            onCustomChange?.(e.target.value === '' ? null : Number(e.target.value))
+          }}
+        />
+      )}
+    </div>
+  )
+}
 
 // ── LevelRow ──────────────────────────────────────────────────────────────────
 
@@ -175,16 +176,16 @@ const LevelRow = ({
 
         {showEstimateColumns && (
           <>
-            <MetricCell
-              options={EFFORT_OPTIONS}
+            <MetricSlider
+              sizes={EFFORT_SIZES}
               activeValue={effortValue}
               kind="effort"
               customPoints={level.effort?.customPoints ?? null}
               onCustomChange={(pts) => onSetEffort({ size: 'custom', customPoints: pts })}
               onChange={(size) => onSetEffort({ size, customPoints: size === 'custom' ? (level.effort?.customPoints ?? null) : null })}
             />
-            <MetricCell
-              options={BENEFIT_OPTIONS}
+            <MetricSlider
+              sizes={BENEFIT_SIZES}
               activeValue={benefitValue}
               kind="value"
               onChange={(size) => onSetBenefit({ size })}

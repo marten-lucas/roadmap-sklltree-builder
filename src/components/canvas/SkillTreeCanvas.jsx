@@ -195,6 +195,12 @@ export function SkillTreeCanvas({
   releaseId = null,
 }) {
   const [hoveredPortalKey, setHoveredPortalKey] = useState(null)
+  const hoveredPortal = hoveredPortalKey
+    ? visibleDependencyPortals.find((portal) => portal.key === hoveredPortalKey) ?? null
+    : null
+  const hoveredPeerNodeId = hoveredPortal
+    ? (hoveredPortal.type === 'source' ? hoveredPortal.targetId : hoveredPortal.sourceId)
+    : null
 
   return (
     <svg
@@ -205,6 +211,7 @@ export function SkillTreeCanvas({
       className="skill-tree-canvas"
       onClick={onCanvasClick}
       onDoubleClick={onCanvasDoubleClick}
+      onPointerLeave={() => setHoveredPortalKey(null)}
     >
       <defs>
         <radialGradient id="nodeHalo" cx="50%" cy="50%" r="60%">
@@ -472,9 +479,14 @@ export function SkillTreeCanvas({
                     onSelectPortal(portal)
                   }
                 }}
-                onMouseEnter={() => setHoveredPortalKey(portal.key)}
-                onMouseLeave={() => setHoveredPortalKey(null)}
+                onPointerEnter={() => setHoveredPortalKey(portal.key)}
+                onPointerLeave={() => setHoveredPortalKey((prev) => (prev === portal.key ? null : prev))}
               >
+                {/* wide, invisible spoke hit-path for forgiving hover */}
+                <path
+                  d={spokeLinePath}
+                  className="skill-tree-portal__hoverline"
+                />
                 {/* base spoke line */}
                 <path
                   d={spokeLinePath}
@@ -495,7 +507,7 @@ export function SkillTreeCanvas({
                   cy={extTipY}
                 />
                 {/* invisible hit area (larger than ring for easy clicking) */}
-                <circle className="skill-tree-portal__hit" r="18" cx={extTipX} cy={extTipY} />
+                <circle className="skill-tree-portal__hit" r={portal.isMinimal ? 20 : 24} cx={extTipX} cy={extTipY} />
                 {/* label inside the circle at spoke tip */}
                 {!portal.isMinimal && (
                   <text
@@ -516,6 +528,7 @@ export function SkillTreeCanvas({
         {renderedNodes.map((node) => {
           const visibilityMode = nodeVisibilityModeById.get(node.id) ?? 'full'
           const renderNodeSize = visibilityMode === 'minimal' ? minimalNodeSize : nodeSize
+          const isNodeSelected = node.id === selectedNodeId || selectedNodeIds.includes(node.id)
 
           return (
             <SkillTreeNode
@@ -525,7 +538,8 @@ export function SkillTreeCanvas({
               displayMode={visibilityMode}
               labelMode={visibilityMode === 'minimal' ? 'far' : labelMode}
               zoomScale={currentZoomScale}
-              isSelected={node.id === selectedNodeId || selectedNodeIds.includes(node.id)}
+              isSelected={isNodeSelected}
+              isPortalPeerHovered={!isNodeSelected && hoveredPeerNodeId === node.id}
               scopeOptions={scopeOptions}
               onSelect={onSelectNode}
               onZoomToNode={onZoomToNode}

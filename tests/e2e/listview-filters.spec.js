@@ -216,15 +216,15 @@ test.describe('ListViewDrawer with status and scope filters', () => {
 
     await page.locator('button[title="Effort / Value"]').click()
     await expect(page.locator('.list-view-drawer')).toHaveClass(/list-view-drawer--wide/)
-    await expect(page.locator('.list-view-drawer__metric-cell').first()).toBeVisible()
+    await expect(page.locator('.list-view-drawer__metric-slider').first()).toBeVisible()
 
-    const firstEffortButton = page.locator('.list-view-drawer__metric-cell--effort').first().locator('.list-view-drawer__metric-btn', { hasText: 'XS' }).first()
-    await firstEffortButton.click()
-    await expect(firstEffortButton).toHaveAttribute('aria-pressed', 'true')
+    const firstEffortSlider = page.locator('.list-view-drawer__metric-slider--effort').first().locator('.list-view-drawer__slider-input').first()
+    await firstEffortSlider.fill('1')
+    await expect(firstEffortSlider).toHaveValue('1')
 
-    const firstValueButton = page.locator('.list-view-drawer__metric-cell--value').first().locator('.list-view-drawer__metric-btn', { hasText: 'L' }).first()
-    await firstValueButton.click()
-    await expect(firstValueButton).toHaveAttribute('aria-pressed', 'true')
+    const firstValueSlider = page.locator('.list-view-drawer__metric-slider--value').first().locator('.list-view-drawer__slider-input').first()
+    await firstValueSlider.fill('4')
+    await expect(firstValueSlider).toHaveValue('4')
 
     expect(pageErrors).toHaveLength(0)
   })

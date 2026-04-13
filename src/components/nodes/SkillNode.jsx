@@ -74,7 +74,7 @@ const buildSegmentConicStyle = (statusKeys, colorGetter) => {
   }
 }
 
-export function SkillNode({ node, nodeSize, isSelected, onSelect, onSelectLevel, onZoomToNode, displayMode = 'full', labelMode = 'far', zoomScale = 1, scopeOptions = [], storyPointMap, releaseId = null }) {
+export function SkillNode({ node, nodeSize, isSelected, isPortalPeerHovered = false, onSelect, onSelectLevel, onZoomToNode, displayMode = 'full', labelMode = 'far', zoomScale = 1, scopeOptions = [], storyPointMap, releaseId = null }) {
   const [hoveredLevelIndex, setHoveredLevelIndex] = useState(null)
   const lastRightClickRef = useRef(0)
   const isMinimal = displayMode === 'minimal'
@@ -197,6 +197,11 @@ export function SkillNode({ node, nodeSize, isSelected, onSelect, onSelectLevel,
 
   const showLabel = !isMinimal && (labelMode === 'mid' || labelMode === 'close' || labelMode === 'very-close')
   const fwX = node.x - fwWidth / 2
+  const nodeButtonClassName = [
+    'skill-node-button',
+    isMinimal ? 'skill-node-button--minimal' : '',
+    isPortalPeerHovered ? 'skill-node-button--portal-peer-hovered' : '',
+  ].filter(Boolean).join(' ')
 
   return (
     <foreignObject
@@ -239,7 +244,7 @@ export function SkillNode({ node, nodeSize, isSelected, onSelect, onSelectLevel,
             onMouseMove={handleRingMouseMove}
             onMouseLeave={handleRingMouseLeave}
             onContextMenu={handleContextMenu}
-            className={isMinimal ? 'skill-node-button skill-node-button--minimal' : 'skill-node-button'}
+            className={nodeButtonClassName}
             radius={isVeryClose ? 'sm' : 'xl'}
             withBorder={false}
             style={{
