@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, memo } from 'react'
 import { Paper, Text } from '@mantine/core'
 import { NODE_LABEL_ZOOM, STATUS_STYLES } from '../config'
 import { getDisplayStatusKey, getLevelStatusKeys } from '../utils/nodeStatus'
@@ -76,7 +76,7 @@ const buildSegmentConicStyle = (statusKeys, colorGetter) => {
 
 const clamp = (value, min, max) => Math.min(max, Math.max(min, value))
 
-export function SkillNode({ node, nodeSize, isSelected, isPortalPeerHovered = false, onSelect, onSelectLevel, onZoomToNode, displayMode = 'full', labelMode = 'far', zoomScale = 1, scopeOptions = [], storyPointMap, releaseId = null }) {
+const _SkillNode = ({ node, nodeSize, isSelected, isPortalPeerHovered = false, onSelect, onSelectLevel, onZoomToNode, displayMode = 'full', labelMode = 'far', zoomScale = 1, scopeOptions = [], storyPointMap, releaseId = null }) => {
   const [hoveredLevelIndex, setHoveredLevelIndex] = useState(null)
   const lastRightClickRef = useRef(0)
   const isMinimal = displayMode === 'minimal'
@@ -398,3 +398,20 @@ export function SkillNode({ node, nodeSize, isSelected, isPortalPeerHovered = fa
     </foreignObject>
   )
 }
+
+// Memoize to prevent re-renders during zoom/pan operations
+export const SkillNode = memo(_SkillNode, (prevProps, nextProps) => {
+  // Only re-render if essential props changed (data/selection), not layout/zoom state
+  return (
+    prevProps.node === nextProps.node &&
+    prevProps.nodeSize === nextProps.nodeSize &&
+    prevProps.isSelected === nextProps.isSelected &&
+    prevProps.isPortalPeerHovered === nextProps.isPortalPeerHovered &&
+    prevProps.displayMode === nextProps.displayMode &&
+    prevProps.labelMode === nextProps.labelMode &&
+    prevProps.zoomScale === nextProps.zoomScale &&
+    prevProps.releaseId === nextProps.releaseId &&
+    prevProps.nodeDeps === nextProps.nodeDeps &&
+    prevProps.storyPointMap === nextProps.storyPointMap
+  )
+})

@@ -1,11 +1,10 @@
-import { useState } from 'react'
+import { useState, useMemo, memo } from 'react'
 import { TREE_CONFIG, STATUS_STYLES } from '../config'
 import { getDisplayStatusKey } from '../utils/nodeStatus'
 import { SkillTreeNode } from '../nodes/SkillTreeNode'
 import { MarkdownTooltipContent, Tooltip } from '../tooltip'
-import { renderMarkdownToHtml } from '../utils/markdown'
 
-// ── Chevron helpers (Method 2: compound-path chevrons) ──────────────────────
+
 const CHEVRON_SPACING = 7
 // Half-opening angle of the V. 25° keeps arm tips within the line's half-width
 // when arm length = line-width (verified: sin(25°) * lineW ≤ lineW/2 for all widths).
@@ -128,45 +127,6 @@ const buildPortalPlugPath = (width, height, tipLength) => {
   ].join(' ')
 }
 
-function CenterIconTooltipContent({ systemName, release, draftRelease }) {
-  const hasRelease = Boolean(release)
-  // Merge draft values on top of active release
-  const displayRelease = draftRelease && draftRelease.id === release?.id
-    ? { ...release, ...draftRelease }
-    : release
-  
-  const introductionHtml = renderMarkdownToHtml(displayRelease?.introduction ?? '')
-
-  return (
-    <div>
-      <div className="skill-node-tooltip__title">{systemName || 'Unbenanntes System'}</div>
-      {hasRelease ? (
-        <>
-          <div className="skill-node-tooltip__note">
-            <strong>Release:</strong> {displayRelease.name || 'Unbenannt'}
-          </div>
-          <div className="skill-node-tooltip__note">
-            <strong>Motto:</strong> {displayRelease.motto || 'Keine Angabe'}
-          </div>
-          <div className="skill-node-tooltip__note">
-            <strong>Datum:</strong> {displayRelease.date || 'Keine Angabe'}
-          </div>
-          <div className="skill-node-tooltip__note skill-node-tooltip__note--markdown">
-            <strong>Introduction</strong>
-            <div
-              dangerouslySetInnerHTML={{
-                __html: introductionHtml || '<p>Keine Introduction hinterlegt.</p>',
-              }}
-            />
-          </div>
-        </>
-      ) : (
-        <div className="skill-node-tooltip__note">Kein Release ausgewählt.</div>
-      )}
-    </div>
-  )
-}
-
 export function SkillTreeCanvas({
   canvasRef,
   canvas,
@@ -186,6 +146,7 @@ export function SkillTreeCanvas({
   selectedSegmentId,
   selectedPortalKey,
   visibleDependencyPortals,
+  // eslint-disable-next-line no-unused-vars
   visibleDependencyLines = [],
   depSummaryByNodeId = new Map(),
   selectedLayoutNode,
@@ -225,23 +186,31 @@ export function SkillTreeCanvas({
     return STATUS_STYLES[nodeStatus] ?? STATUS_STYLES.later
   }
 
-  const splitDots = Array.from(
-    filteredLinks.reduce((acc, link) => {
-      if (link.sourceDepth <= 0 || link.linkKind === 'ring' || !link.splitPoint) return acc
-      const statusStyle = getLinkStatusStyle(link)
-      const key = `${link.splitPoint.x.toFixed(2)}|${link.splitPoint.y.toFixed(2)}`
-      if (!acc.has(key)) {
-        acc.set(key, {
-          key,
-          x: link.splitPoint.x,
-          y: link.splitPoint.y,
-          fill: statusStyle.linkStroke,
-          opacity: Math.min(1, parseFloat(statusStyle.linkOpacity) * 1.05),
-        })
-      }
-      return acc
-    }, new Map()).values(),
-  )
+  const splitDots = useMemo(() => {
+    const getLinkStatusStyle = (link) => {
+      const childNode = link.targetId ? layoutNodesById.get(link.targetId) : null
+      const nodeStatus = childNode ? getDisplayStatusKey(childNode, releaseId) : 'later'
+      return STATUS_STYLES[nodeStatus] ?? STATUS_STYLES.later
+    }
+    
+    return Array.from(
+      filteredLinks.reduce((acc, link) => {
+        if (link.sourceDepth <= 0 || link.linkKind === 'ring' || !link.splitPoint) return acc
+        const statusStyle = getLinkStatusStyle(link)
+        const key = `${link.splitPoint.x.toFixed(2)}|${link.splitPoint.y.toFixed(2)}`
+        if (!acc.has(key)) {
+          acc.set(key, {
+            key,
+            x: link.splitPoint.x,
+            y: link.splitPoint.y,
+            fill: statusStyle.linkStroke,
+            opacity: Math.min(1, parseFloat(statusStyle.linkOpacity) * 1.05),
+          })
+        }
+        return acc
+      }, new Map()).values(),
+    )
+  }, [filteredLinks, layoutNodesById, releaseId])
   const hoveredPeerNodeId = hoveredPortal
     ? (hoveredPortal.type === 'source' ? hoveredPortal.targetId : hoveredPortal.sourceId)
     : null
@@ -465,6 +434,7 @@ export function SkillTreeCanvas({
           const isSource = portal.type === 'source'
           const dotIdx = portal.otherLabel ? portal.otherLabel.indexOf('\u00B7') : -1
           const labelName = dotIdx >= 0 ? portal.otherLabel.slice(0, dotIdx) : (portal.otherLabel ?? '')
+          // eslint-disable-next-line no-unused-vars
           const labelLevel = dotIdx >= 0 ? portal.otherLabel.slice(dotIdx + 1) : null
 
           // Spoke: line from node boundary point to portal tip
@@ -489,9 +459,12 @@ export function SkillTreeCanvas({
           const extTipX = spokeLen > 0 ? (-bxLocal / spokeLen) * ext : 0
           const extTipY = spokeLen > 0 ? (-byLocal / spokeLen) * ext : 0
           // Midpoint + rotation for label along the spoke
+          // eslint-disable-next-line no-unused-vars
           const mx = (bxLocal + extTipX) / 2
+          // eslint-disable-next-line no-unused-vars
           const my = (byLocal + extTipY) / 2
           const lineAngleDeg = Math.atan2(byLocal, bxLocal) * 180 / Math.PI
+          // eslint-disable-next-line no-unused-vars
           const readAngleDeg = (lineAngleDeg > 90 || lineAngleDeg < -90) ? lineAngleDeg + 180 : lineAngleDeg
 
           // Method 2: compound-path chevrons computed directly from spoke endpoints.
@@ -817,4 +790,5 @@ export function SkillTreeCanvas({
   )
 }
 
-export default SkillTreeCanvas
+// Memoize canvas to prevent unnecessary re-renders during zoom/pan
+export default memo(SkillTreeCanvas)
