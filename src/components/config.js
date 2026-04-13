@@ -150,8 +150,10 @@ export const TREE_CONFIG = {
   promotionProfile: 'balanced',
   routingProfile: 'strict',
   separatorHomogeneityProfile: 'balanced',
-  levelSpacing: 180,
+  levelSpacing: 280,
   horizontalPadding: 600,
   topPadding: 600,
   bottomPadding: 600,
 }
+
+export const MINIMAL_NODE_SIZE = 48

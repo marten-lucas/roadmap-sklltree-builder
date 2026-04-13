@@ -2,6 +2,7 @@ import { TREE_CONFIG, STATUS_STYLES } from '../config'
 import { getDisplayStatusKey } from '../utils/nodeStatus'
 import { SkillTreeNode } from '../nodes/SkillTreeNode'
 import { MarkdownTooltipContent, Tooltip } from '../tooltip'
+import { renderMarkdownToHtml } from '../utils/markdown'
 
 // ── Chevron helpers (Method 2: compound-path chevrons) ──────────────────────
 const CHEVRON_SPACING = 7
@@ -105,11 +106,53 @@ const getPortalClassName = (portal, isSelected) => [
   isSelected ? 'skill-tree-portal--selected' : '',
 ].filter(Boolean).join(' ')
 
+function CenterIconTooltipContent({ systemName, release, draftRelease }) {
+  const hasRelease = Boolean(release)
+  // Merge draft values on top of active release
+  const displayRelease = draftRelease && draftRelease.id === release?.id
+    ? { ...release, ...draftRelease }
+    : release
+  
+  const introductionHtml = renderMarkdownToHtml(displayRelease?.introduction ?? '')
+
+  return (
+    <div>
+      <div className="skill-node-tooltip__title">{systemName || 'Unbenanntes System'}</div>
+      {hasRelease ? (
+        <>
+          <div className="skill-node-tooltip__note">
+            <strong>Release:</strong> {displayRelease.name || 'Unbenannt'}
+          </div>
+          <div className="skill-node-tooltip__note">
+            <strong>Motto:</strong> {displayRelease.motto || 'Keine Angabe'}
+          </div>
+          <div className="skill-node-tooltip__note">
+            <strong>Datum:</strong> {displayRelease.date || 'Keine Angabe'}
+          </div>
+          <div className="skill-node-tooltip__note skill-node-tooltip__note--markdown">
+            <strong>Introduction</strong>
+            <div
+              dangerouslySetInnerHTML={{
+                __html: introductionHtml || '<p>Keine Introduction hinterlegt.</p>',
+              }}
+            />
+          </div>
+        </>
+      ) : (
+        <div className="skill-node-tooltip__note">Kein Release ausgewählt.</div>
+      )}
+    </div>
+  )
+}
+
 export function SkillTreeCanvas({
   canvasRef,
   canvas,
   centerIconSource,
   centerIconSize,
+  systemName = '',
+  activeRelease = null,
+  draftRelease = null,
   filteredSegmentSeparators,
   filteredSegmentLabels,
   filteredLinks,
@@ -169,29 +212,41 @@ export function SkillTreeCanvas({
       <circle cx={canvas.origin.x} cy={canvas.origin.y} r={canvas.maxRadius + 160} fill="url(#nodeHalo)" />
 
       <g className="skill-tree-canvas__content">
-        <g
-          className="skill-tree-center-icon skill-tree-clickable"
-          transform={`translate(${canvas.origin.x}, ${canvas.origin.y})`}
-          data-center-icon-size={centerIconSize}
-          onMouseDown={(event) => event.stopPropagation()}
-          onClick={onOpenCenterIconPanel}
+        <Tooltip
+          withArrow
+          multiline
+          position="left"
+          offset={14}
+          openDelay={80}
+          closeDelay={40}
+          transitionProps={{ transition: 'fade', duration: 120 }}
+          classNames={{ tooltip: 'skill-node-tooltip', arrow: 'skill-node-tooltip__arrow' }}
+          label={<CenterIconTooltipContent systemName={systemName} release={activeRelease} draftRelease={draftRelease} />}
         >
-          <foreignObject
-            key={centerIconSource}
-            x={-centerIconSize / 2}
-            y={-centerIconSize / 2}
-            width={centerIconSize}
-            height={centerIconSize}
-            className="skill-tree-center-icon__foreign"
+          <g
+            className="skill-tree-center-icon skill-tree-clickable"
+            transform={`translate(${canvas.origin.x}, ${canvas.origin.y})`}
+            data-center-icon-size={centerIconSize}
+            onMouseDown={(event) => event.stopPropagation()}
+            onClick={onOpenCenterIconPanel}
           >
-            <img
-              src={centerIconSource}
-              alt="Center Icon"
-              className="skill-tree-center-icon__image"
-            />
-          </foreignObject>
-          <circle r={centerIconSize / 2 + 8} className="skill-tree-center-icon__hit-area" />
-        </g>
+            <foreignObject
+              key={centerIconSource}
+              x={-centerIconSize / 2}
+              y={-centerIconSize / 2}
+              width={centerIconSize}
+              height={centerIconSize}
+              className="skill-tree-center-icon__foreign"
+            >
+              <img
+                src={centerIconSource}
+                alt="Center Icon"
+                className="skill-tree-center-icon__image"
+              />
+            </foreignObject>
+            <circle r={centerIconSize / 2 + 8} className="skill-tree-center-icon__hit-area" />
+          </g>
+        </Tooltip>
 
         <g>
           {filteredSegmentSeparators.map((separator) => (

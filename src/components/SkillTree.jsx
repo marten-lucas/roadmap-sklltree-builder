@@ -1,5 +1,5 @@
 import { Alert, Button, Checkbox, Group, Modal, Radio, Stack, Text } from '@mantine/core'
-import { useEffect, useMemo, useReducer, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react'
 import { flushSync } from 'react-dom'
 import { TransformComponent, TransformWrapper } from 'react-zoom-pan-pinch'
 import './skillTree.css'
@@ -50,7 +50,6 @@ import {
   findNodeById,
   getNodeAdditionalDependencies,
   getNodeLevelInfo,
-  getLevelAdditionalDependencies,
   moveNodeToParent,
   renameScopeWithResult,
   removeNodeProgressLevel,
@@ -60,7 +59,7 @@ import {
   updateNodeShortName,
   updateSegmentLabel,
 } from './utils/treeData'
-import { normalizeEffort, normalizeBenefit } from './utils/effortBenefit'
+import { DEFAULT_STORY_POINT_MAP, computeBudgetSummary, normalizeEffort, normalizeBenefit } from './utils/effortBenefit'
 import { toDegrees, toRadians } from './utils/layoutMath'
 import { SkillTreeCanvas } from './canvas'
 import { SkillTreeToolbar } from './toolbar'
@@ -95,6 +94,19 @@ const LABEL_LEVEL_ONE_GAP_PX = 14
 const DEFAULT_CSV_IMPORT_PROCESS_OPTIONS = {
   processSegments: true,
   processManualLevels: true,
+}
+
+const collectAllNodes = (document) => {
+  const all = []
+  const queue = [...(document?.children ?? [])]
+
+  while (queue.length > 0) {
+    const node = queue.shift()
+    all.push(node)
+    queue.push(...(node.children ?? []))
+  }
+
+  return all
 }
 
 const estimateWrappedLineCount = (text) => {
@@ -145,6 +157,7 @@ export function SkillTree() {
   const canvasSvgRef = useRef(null)
   const transformApiRef = useRef(null)
   const canvasAreaRef = useRef(null)
+  const systemPanelRef = useRef(null)
   const [isPanModeActive, setIsPanModeActive] = useState(false)
   const [currentZoomScale, setCurrentZoomScale] = useState(1)
   const [exportLabelModeOverride, setExportLabelModeOverride] = useState(null)
@@ -157,6 +170,7 @@ export function SkillTree() {
   const [pendingCsvImport, setPendingCsvImport] = useState(null)
   const [priorityMatrixOpen, setPriorityMatrixOpen] = useState(false)
   const [listViewOpen, setListViewOpen] = useState(false)
+  const [draftRelease, setDraftRelease] = useState(null)
 
   const {
     selectedNodeId,
@@ -329,6 +343,24 @@ export function SkillTree() {
     () => getSelectedReleaseId(roadmapData.releases ?? [], selectedReleaseId),
     [roadmapData.releases, selectedReleaseId],
   )
+
+  const activeRelease = useMemo(
+    () => (roadmapData.releases ?? []).find((release) => release.id === activeReleaseId) ?? null,
+    [roadmapData.releases, activeReleaseId],
+  )
+
+  const releaseBudgetSummaries = useMemo(() => {
+    const allNodes = collectAllNodes(roadmapData)
+    const storyPointMap = roadmapData.storyPointMap ?? DEFAULT_STORY_POINT_MAP
+    const summariesByReleaseId = new Map()
+
+    for (const release of roadmapData.releases ?? []) {
+      const summary = computeBudgetSummary(allNodes, storyPointMap, release.storyPointBudget ?? null)
+      summariesByReleaseId.set(release.id, summary)
+    }
+
+    return summariesByReleaseId
+  }, [roadmapData])
 
   useEffect(() => {
     const releases = roadmapData.releases ?? []
@@ -976,7 +1008,7 @@ export function SkillTree() {
     }
 
     return endpoints
-  }, [allNodesById, layoutNodesById, canvas.origin.x, canvas.origin.y, nodeVisibilityModeById, nodes, roadmapData.children, crossingEdges])
+  }, [allNodesById, layoutNodesById, canvas.origin.x, canvas.origin.y, nodeVisibilityModeById, nodes, roadmapData, crossingEdges])
 
   const visibleDependencyPortals = useMemo(
     () => dependencyPortals.filter((portal) => (
@@ -1235,6 +1267,10 @@ export function SkillTree() {
       window.alert('SVG file could not be loaded.')
     }
   }
+
+  const handleDraftChange = useCallback((draft) => {
+    setDraftRelease(draft)
+  }, [])
 
   const commitDocument = (nextDocument) => {
     if (!nextDocument || nextDocument === roadmapData) {
@@ -1615,6 +1651,21 @@ export function SkillTree() {
 
   useEffect(() => {
     const handleKeyDown = (event) => {
+      const normalizedKey = String(event.key ?? '').toLowerCase()
+      const isPrimarySave = (event.ctrlKey || event.metaKey) && !event.altKey && !event.shiftKey && normalizedKey === 's'
+      const isTextareaTarget = event.target instanceof HTMLElement && event.target.tagName === 'TEXTAREA'
+
+      if (isPrimarySave && isTextareaTarget) {
+        event.preventDefault()
+        systemPanelRef.current?.commitDrafts?.()
+        try {
+          window.dispatchEvent(new CustomEvent('roadmap-skilltree.commit-text-drafts'))
+        } catch {
+          // Ignore environments where CustomEvent is unavailable.
+        }
+        return
+      }
+
       const action = getSkillTreeShortcutAction({
         key: event.key,
         ctrlKey: event.ctrlKey,
@@ -2336,6 +2387,22 @@ export function SkillTree() {
     applyToSelectedNodes((tree, id) => updateNodeProgressLevel(tree, id, levelId, { benefit: normalizeBenefit(benefit) }))
   }
 
+  const handleListViewLevelEffortChange = useCallback((nodeId, levelId, effort) => {
+    if (!nodeId || !levelId) {
+      return
+    }
+
+    commitDocument(updateNodeProgressLevel(roadmapData, nodeId, levelId, { effort: normalizeEffort(effort) }))
+  }, [commitDocument, roadmapData])
+
+  const handleListViewLevelBenefitChange = useCallback((nodeId, levelId, benefit) => {
+    if (!nodeId || !levelId) {
+      return
+    }
+
+    commitDocument(updateNodeProgressLevel(roadmapData, nodeId, levelId, { benefit: normalizeBenefit(benefit) }))
+  }, [commitDocument, roadmapData])
+
   const handleLevelChange = (newLevel) => {
     if (!selectedNodeId) {
       return
@@ -2618,6 +2685,7 @@ export function SkillTree() {
         releases={roadmapData.releases ?? []}
         selectedReleaseId={activeReleaseId}
         onReleaseChange={setSelectedReleaseId}
+        releaseBudgetSummaries={releaseBudgetSummaries}
       />
 
       <div ref={canvasAreaRef} style={{ position: 'absolute', inset: 0, overflow: 'hidden' }}>
@@ -2649,6 +2717,9 @@ export function SkillTree() {
             canvas={canvas}
             centerIconSource={centerIconSource}
             centerIconSize={centerIconSize}
+            systemName={roadmapData?.systemName ?? ''}
+            activeRelease={activeRelease}
+            draftRelease={draftRelease}
             filteredSegmentSeparators={filteredSegmentSeparators}
             filteredSegmentLabels={filteredSegmentLabels}
             filteredLinks={filteredLinks}
@@ -2796,6 +2867,7 @@ export function SkillTree() {
       />
 
       <SystemPanel
+        ref={systemPanelRef}
         isOpen={rightPanel === PANEL_CENTER}
         iconSource={centerIconSource}
         onClose={() => { if (rightPanel === PANEL_CENTER) setRightPanel(null) }}
@@ -2805,6 +2877,7 @@ export function SkillTree() {
         commitDocument={commitDocument}
         selectedReleaseId={activeReleaseId}
         onReleaseChange={setSelectedReleaseId}
+        onDraftChange={handleDraftChange}
       />
 
       <PriorityMatrix
@@ -2819,6 +2892,9 @@ export function SkillTree() {
         document={roadmapData}
         onSelectNode={handleSelectNodeFromListView}
         onSelectLevel={handleSelectLevelFromListView}
+        onSetLevelEffort={handleListViewLevelEffortChange}
+        onSetLevelBenefit={handleListViewLevelBenefitChange}
+        selectedReleaseId={activeReleaseId}
       />
     </main>
   )

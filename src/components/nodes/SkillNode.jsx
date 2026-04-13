@@ -5,6 +5,7 @@ import { getDisplayStatusKey, getLevelStatusKeys } from '../utils/nodeStatus'
 import { resolveScopeEntries } from '../utils/scopeDisplay'
 import { MarkdownTooltipContent, Tooltip } from '../tooltip'
 import { EFFORT_SIZE_LABELS, BENEFIT_SIZE_LABELS } from '../utils/effortBenefit'
+import { renderMarkdownToHtml } from '../utils/markdown'
 import { IconBolt, IconStar } from '@tabler/icons-react'
 
 const CHIP_ICON_STYLE = { display: 'block', flexShrink: 0 }
@@ -273,11 +274,13 @@ export function SkillNode({ node, nodeSize, isSelected, onSelect, onSelectLevel,
                 )}
                 {(() => {
                   const activeNote = String(levels[vcActiveLevel]?.releaseNote ?? '').trim()
+                  const noteHtml = renderMarkdownToHtml(activeNote)
                   return activeNote ? (
-                    <p
-                      className="skill-node-vc__body"
+                    <div
+                      className="skill-node-vc__body skill-node-vc__body--markdown"
                       style={{ fontSize: `${26 / zoomScale}px` }}
-                    >{activeNote}</p>
+                      dangerouslySetInnerHTML={{ __html: noteHtml }}
+                    />
                   ) : null
                 })()}
                 {showChips && (() => {

@@ -58,9 +58,18 @@ const normalizeAngleDeg = (angle) => {
 
 const getReadableRadialLabelRotation = (anchorAngleDeg) => {
   const normalized = normalizeAngleDeg(anchorAngleDeg)
-  // Keep a consistent radial orientation where the text foot points inward
-  // towards the centre for all segment labels.
-  return normalized - 90
+  // Base rotation aligns text perpendicular to the radius (pointing out)
+  // normalized - 90 means the text baseline follows the radial arc.
+  let rotation = normalized - 90
+  
+  // If the angle is in the left half of the circle (90 to 270 degrees),
+  // flip the text by 180 degrees so it's not upside down.
+  // We use slightly wider bounds to avoid jitter at exactly 90/270.
+  if (normalized > 91 && normalized < 269) {
+    rotation += 180
+  }
+  
+  return rotation
 }
 
 const computeLabelBandRadius = (innerRadius, outerRadius) => {
@@ -1422,7 +1431,37 @@ export const solveSkillTreeLayout = (data, config) => {
 
       const getPreferredPlacementAngle = (node) => {
         if (node.parent && node.parent.depth > 0) {
-          return getAngleForNode(node.parent)
+          const parentAngle = getAngleForNode(node.parent)
+          
+          // Cross-segment connection bias:
+          // If a node has an additional dependency that is currently assigned to a 
+          // different segment, pull its preferred angle towards that segment border.
+          const deps = data.additionalDependencies?.filter(d => d.sourceId === node.data.id || d.targetId === node.data.id) ?? []
+          if (deps.length > 0) {
+            let externalPullTotal = 0
+            let externalCount = 0
+            
+            for (const dep of deps) {
+              const otherId = dep.sourceId === node.data.id ? dep.targetId : dep.sourceId
+              const otherNode = allHierarchyNodes.find(n => n.data.id === otherId)
+              if (otherNode) {
+                const otherSegmentId = getGroupedSegmentId(otherNode.data.segmentId ?? null)
+                if (otherSegmentId !== segmentId) {
+                  const otherAngle = getAngleForNode(otherNode)
+                  externalPullTotal += otherAngle
+                  externalCount += 1
+                }
+              }
+            }
+            
+            if (externalCount > 0) {
+              const meanExternal = externalPullTotal / externalCount
+              // Strong bias to resolve portals, but staying in-segment
+              return parentAngle * 0.1 + meanExternal * 0.9
+            }
+          }
+          
+          return parentAngle
         }
 
         return getAngleForNode(node)
@@ -1481,10 +1520,49 @@ export const solveSkillTreeLayout = (data, config) => {
         return preferredCenters
       }
 
-      const sortedNodes = [...nodes].sort((leftNode, rightNode) =>
-        getPreferredPlacementAngle(leftNode) - getPreferredPlacementAngle(rightNode)
-          || getAngleForNode(leftNode) - getAngleForNode(rightNode),
-      )
+      const sortedNodes = [...nodes].sort((leftNode, rightNode) => {
+        const lp = getPreferredPlacementAngle(leftNode)
+        const rp = getPreferredPlacementAngle(rightNode)
+        if (Math.abs(lp - rp) > 0.001) return lp - rp
+
+        // Stable tie-breaker with portal reduction bias:
+        // Check if one node has an external dependency pull that wasn't strong enough
+        // to change the preferred angle significantly but should affect relative order.
+        const getOrderBias = (node) => {
+          const deps = data.additionalDependencies?.filter(d => d.sourceId === node.data.id || d.targetId === node.data.id) ?? []
+          if (deps.length === 0) return 0
+          
+          let bias = 0
+          for (const dep of deps) {
+            const otherId = dep.sourceId === node.data.id ? dep.targetId : dep.sourceId
+            const otherNode = allHierarchyNodes.find(n => n.data.id === otherId)
+            if (otherNode) {
+              const otherSegmentId = getGroupedSegmentId(otherNode.data.segmentId ?? null)
+              if (otherSegmentId !== segmentId) {
+                const otherAngle = getAngleForNode(otherNode)
+                const nodeAngle = getAngleForNode(node)
+                
+                // We use circular distance to decide which "side" the other segment is on.
+                // If otherAngle is CCW from nodeAngle (relative to segment center), 
+                // we want a negative bias.
+                const diff = normalizeAngleDeg(otherAngle - nodeAngle)
+                if (diff > 0 && diff < 180) {
+                  bias += 1000 // CW pull
+                } else if (diff > 180 && diff < 360) {
+                  bias -= 1000 // CCW pull
+                }
+              }
+            }
+          }
+          return bias
+        }
+        
+        const b1 = getOrderBias(leftNode)
+        const b2 = getOrderBias(rightNode)
+        if (b1 !== b2) return b1 - b2
+
+        return getAngleForNode(leftNode) - getAngleForNode(rightNode)
+      })
 
       if (sortedNodes.length === 1) {
         const center = clamp(getPreferredPlacementAngle(sortedNodes[0]), leftCenter, rightCenter)
@@ -1774,6 +1852,211 @@ export const solveSkillTreeLayout = (data, config) => {
   const getSegmentSpanDeg = (segmentId) => {
     const groupedSegmentId = getGroupedSegmentId(segmentId ?? null)
     return segmentSpanDegById.get(groupedSegmentId) ?? config.maxAngleSpread
+  }
+
+  // ── Late root refinement: crossing-aware adjacent swaps ───────────────────
+  // After all packing/compaction, run a small local search over adjacent root
+  // nodes inside the same segment. Keep swaps only when they reduce detected
+  // portals (with extra weight on root->child portals).
+  {
+    const scoreOrigin = { x: 0, y: 0 }
+    const shiftSubtreePackedAngles = (hierarchyNode, delta) => {
+      if (!hierarchyNode || Math.abs(delta) < 1e-6) {
+        return
+      }
+
+      if (hierarchyNode.depth > 0) {
+        const id = hierarchyNode.data.id
+        const currentAngle = packedAngleByNodeId.get(id) ?? centerAngle
+        packedAngleByNodeId.set(id, currentAngle + delta)
+      }
+
+      for (const child of hierarchyNode.children ?? []) {
+        shiftSubtreePackedAngles(child, delta)
+      }
+    }
+
+    const evaluateCurrentRootOrderScore = () => {
+      const getAbsAngularDelta = (leftAngle, rightAngle) => {
+        const left = normalizeAngleDeg(leftAngle)
+        const right = normalizeAngleDeg(rightAngle)
+        const delta = Math.abs(left - right)
+        return Math.min(delta, 360 - delta)
+      }
+
+      const evaluationNodes = allNodes.map((node) => {
+        const angle = getAngleForNode(node)
+        const level = getEffectiveLevel(node)
+        const radius = getRadiusForLevel(level)
+        const point = toCartesian(angle, radius, scoreOrigin)
+
+        return {
+          id: node.data.id,
+          segmentId: node.data.segmentId ?? null,
+          depth: node.depth,
+          level,
+          angle,
+          radius,
+          x: point.x,
+          y: point.y,
+          parentId: node.parent?.data.id ?? null,
+        }
+      })
+
+      const evaluationNodeById = new Map(evaluationNodes.map((node) => [node.id, node]))
+      const evaluationEdgeRouting = buildEdgeRoutingModel({
+        root,
+        config,
+        getEffectiveLevel,
+        getAngleForNode,
+        getRadiusForLevel,
+        getSegmentOrderIndex,
+        getSegmentSpanDeg,
+      })
+      const routedLinks = buildRoutedEdgeLinks({
+        edgeRouting: evaluationEdgeRouting,
+        nodesById: evaluationNodeById,
+        origin: scoreOrigin,
+        nodeSize: config.nodeSize,
+        getSegmentOrderIndex,
+      })
+
+      const levelOneRadiusForEvaluation = getRadiusForLevel(1)
+      const rootLevelBridges = evaluationNodes
+        .filter((node) => node.depth === 1 && node.level > 1)
+        .map((node) => ({
+          id: `root-bridge-${node.id}`,
+          linkKind: 'direct',
+          sourceDepth: 1,
+          sourceId: node.parentId ?? null,
+          targetId: node.id,
+          path: buildArcRadialPath(centerAngle, levelOneRadiusForEvaluation, node.angle, node.radius, scoreOrigin),
+        }))
+
+      const levelOneNodesForEvaluation = evaluationNodes
+        .filter((node) => node.level === 1)
+        .sort((left, right) => left.angle - right.angle)
+      const levelOneRingArcs = []
+      for (let index = 0; index < levelOneNodesForEvaluation.length - 1; index += 1) {
+        const left = levelOneNodesForEvaluation[index]
+        const right = levelOneNodesForEvaluation[index + 1]
+        const radius = left.radius
+        levelOneRingArcs.push({
+          id: `level1-ring-${left.id}-${right.id}`,
+          linkKind: 'ring',
+          sourceDepth: 1,
+          sourceId: left.id,
+          targetId: right.id,
+          path: `M ${left.x} ${left.y} A ${radius} ${radius} 0 0 1 ${right.x} ${right.y}`,
+        })
+      }
+
+      const evaluationLinks = [...routedLinks, ...rootLevelBridges, ...levelOneRingArcs]
+      const portalIds = detectCrossingLinks(evaluationLinks, {
+        nodes: evaluationNodes,
+        nodeSize: config.nodeSize,
+      })
+
+      let rootPortalCount = 0
+      let rootAngularPenalty = 0
+      for (const link of evaluationLinks) {
+        if ((link.linkKind === 'direct' || link.linkKind === 'routed') && (link.sourceDepth ?? 0) === 1) {
+          const source = evaluationNodeById.get(link.sourceId)
+          const target = evaluationNodeById.get(link.targetId)
+          if (source && target) {
+            rootAngularPenalty += getAbsAngularDelta(source.angle, target.angle)
+          }
+
+          if (portalIds.has(link.id)) {
+            rootPortalCount += 1
+          }
+        }
+      }
+
+      return {
+        totalPortalCount: portalIds.size,
+        rootPortalCount,
+        rootAngularPenalty,
+        score: portalIds.size * 10000 + rootPortalCount * 100 + rootAngularPenalty,
+      }
+    }
+
+    const rootChildren = [...(root.children ?? [])]
+    if (rootChildren.length > 1) {
+      const getAbsAngularDelta = (leftAngle, rightAngle) => {
+        const left = normalizeAngleDeg(leftAngle)
+        const right = normalizeAngleDeg(rightAngle)
+        const delta = Math.abs(left - right)
+        return Math.min(delta, 360 - delta)
+      }
+
+      let best = evaluateCurrentRootOrderScore()
+      let improved = true
+      let safety = 0
+
+      while (improved && safety < 40) {
+        improved = false
+        safety += 1
+
+        const orderedRoots = [...rootChildren].sort(
+          (left, right) => (packedAngleByNodeId.get(left.data.id) ?? centerAngle) - (packedAngleByNodeId.get(right.data.id) ?? centerAngle),
+        )
+
+        for (let index = 0; index < orderedRoots.length; index += 1) {
+          const leftRoot = orderedRoots[index]
+          const rightRoot = orderedRoots[(index + 1) % orderedRoots.length]
+          
+          // Try swapping adjacent roots globally (across segments) to further reduce portals
+          const leftAngle = packedAngleByNodeId.get(leftRoot.data.id) ?? centerAngle
+          let rightAngle = packedAngleByNodeId.get(rightRoot.data.id) ?? centerAngle
+
+          // Wrap around handle
+          if (index === orderedRoots.length - 1) {
+            rightAngle += 360
+          }
+
+          shiftSubtreePackedAngles(leftRoot, rightAngle - leftAngle)
+          shiftSubtreePackedAngles(rightRoot, leftAngle - rightAngle)
+
+          const candidate = evaluateCurrentRootOrderScore()
+
+          // Heuristic: Prefer configurations with fewer portals.
+          // If portals are equal, prefer those with lower root-angular-penalty (straighter root-child connections).
+          // We also include the total score (which includes homogeneity) as a final tie breaker.
+          let isBetter = false
+          if (candidate.totalPortalCount < best.totalPortalCount) {
+            isBetter = true
+          } else if (candidate.totalPortalCount === best.totalPortalCount) {
+            if (candidate.rootPortalCount < best.rootPortalCount) {
+              isBetter = true
+            } else if (candidate.rootPortalCount === best.rootPortalCount) {
+              if (candidate.rootAngularPenalty < best.rootAngularPenalty - 0.1) {
+                isBetter = true
+              } else if (Math.abs(candidate.rootAngularPenalty - best.rootAngularPenalty) < 0.1) {
+                if (candidate.score < best.score - 1e-6) {
+                  isBetter = true
+                }
+              }
+            }
+          }
+
+          if (isBetter) {
+            best = candidate
+            improved = true
+            
+            // Apply normalization to keep angles in check after swap
+            if (index === orderedRoots.length - 1) {
+              shiftSubtreePackedAngles(rightRoot, 360)
+            }
+            break
+          }
+
+          // Revert when not better.
+          shiftSubtreePackedAngles(leftRoot, leftAngle - rightAngle)
+          shiftSubtreePackedAngles(rightRoot, rightAngle - leftAngle)
+        }
+      }
+    }
   }
 
   const outerContentRadius = Math.max(
@@ -2182,6 +2465,7 @@ export const solveSkillTreeLayout = (data, config) => {
       origin: pass.origin,
       maxRadius: pass.maxRadius,
     },
+    rootOrder: optimizedSegmentIds,
   }
 
   const computedLevelByNodeId = new Map(pass.nodes.map((node) => [node.id, node.level]))

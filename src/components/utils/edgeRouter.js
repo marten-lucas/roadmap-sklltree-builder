@@ -271,7 +271,7 @@ export const buildEdgeRoutingModel = ({
   }
 }
 
-export const buildRoutedEdgeLinks = ({ edgeRouting, nodesById, origin, nodeSize = 48 }) => {
+export const buildRoutedEdgeLinks = ({ edgeRouting, nodesById, origin, nodeSize = 48, getSegmentOrderIndex }) => {
   const { trunkGroups, edgePlans } = edgeRouting
   const trunkGroupById = new Map(trunkGroups.map((g) => [g.id, g]))
   const childCountByParentLevel = new Map()
@@ -335,7 +335,13 @@ export const buildRoutedEdgeLinks = ({ edgeRouting, nodesById, origin, nodeSize 
         && levelGap >= minCorridorGap
         && Math.abs(childAngle - parent.angle) >= 0.5
       ) {
-        const corridorRadius = sourceRadius + levelGap * 0.5
+        const sourceNode = nodesById.get(parent.id)
+        const targetNode = nodesById.get(child.id)
+        const getSegIdx = (id) => (getSegmentOrderIndex ? getSegmentOrderIndex(id) : 0)
+        const segmentDistance = (sourceNode && targetNode) ? Math.abs(getSegIdx(sourceNode.segmentId) - getSegIdx(targetNode.segmentId)) : 0
+
+        const corridorBias = segmentDistance > 1 ? 0.62 : (segmentDistance > 0 ? 0.54 : 0.48)
+        const corridorRadius = sourceRadius + levelGap * corridorBias
         const corridorParentPoint = toCartesian(parent.angle, corridorRadius, origin)
         const corridorChildPoint = toCartesian(childAngle, corridorRadius, origin)
         const parts = [`M ${parent.x} ${parent.y}`]
@@ -359,10 +365,13 @@ export const buildRoutedEdgeLinks = ({ edgeRouting, nodesById, origin, nodeSize 
       // source-ring arc → radial to mid-corridor → corridor arc (free space) → spoke to child.
       // The corridor arc runs between the two node rings so it never sweeps through sibling nodes.
       if (levelGap >= minCorridorGap) {
-        // Radial-polyline routing: arc@sourceRadius → radial spoke → arc@corridorRadius → radial spoke.
-        // The corridor ring sits between the two node rings, so its arc never passes through
-        // sibling node positions and avoids the visual bridge issue of arcing on the target ring.
-        const corridorRadius = sourceRadius + levelGap * 0.5
+        const sourceNode = nodesById.get(parent.id)
+        const targetNode = nodesById.get(child.id)
+        const getSegIdx = (id) => (getSegmentOrderIndex ? getSegmentOrderIndex(id) : 0)
+        const segmentDistance = (sourceNode && targetNode) ? Math.abs(getSegIdx(sourceNode.segmentId) - getSegIdx(targetNode.segmentId)) : 0
+
+        const corridorBias = segmentDistance > 1 ? 0.62 : (segmentDistance > 0 ? 0.54 : 0.48)
+        const corridorRadius = sourceRadius + levelGap * corridorBias
         const corridorParentPoint = toCartesian(parent.angle, corridorRadius, origin)
         const corridorTrunkPoint = toCartesian(trunkAngle, corridorRadius, origin)
         const corridorChildPoint = toCartesian(childAngle, corridorRadius, origin)

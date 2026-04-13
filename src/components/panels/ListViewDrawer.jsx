@@ -1,5 +1,7 @@
-import { useCallback, useRef, useState } from 'react'
-import { STATUS_STYLES, normalizeStatusKey } from '../config'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { STATUS_LABELS, STATUS_STYLES, normalizeStatusKey } from '../config'
+import { BENEFIT_SIZE_LABELS, EFFORT_SIZE_LABELS } from '../utils/effortBenefit'
+import { getDisplayStatusKey, getLevelStatus } from '../utils/nodeStatus'
 
 const EyeOffIcon = () => (
   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ flexShrink: 0 }}>
@@ -30,14 +32,26 @@ const getNodeScopeIds = (node) => {
   return ids
 }
 
-const LevelRow = ({ level, depth, scopeMap, onSelectLevel }) => {
-  const statusKey = normalizeStatusKey(level.status)
+const LevelRow = ({
+  level,
+  depth,
+  scopeMap,
+  selectedReleaseId,
+  onSelectLevel,
+  showEstimateColumns,
+  onSetEffort,
+  onSetBenefit,
+}) => {
+  const statusKey = normalizeStatusKey(getLevelStatus(level, selectedReleaseId))
   const isHidden = statusKey === 'hidden'
-  const borderColor = getStatusBorderColor(level.status)
+  const borderColor = getStatusBorderColor(statusKey)
   const scopeEntries = (level.scopeIds ?? []).map((id) => scopeMap.get(id)).filter(Boolean)
+  const effortValue = level.effort?.size ?? 'unclear'
+  const benefitValue = level.benefit?.size ?? 'unclear'
+
   return (
     <li
-      className="list-view-drawer__item list-view-drawer__item--level"
+      className={`list-view-drawer__item list-view-drawer__item--level ${showEstimateColumns ? 'list-view-drawer__item--with-metrics' : ''}`}
       style={{ paddingLeft: `${0.5 + depth * 1}rem`, opacity: isHidden ? 0.55 : undefined }}
     >
       <div className="list-view-drawer__item-row" style={{ borderRight: `3px solid ${borderColor}` }}>
@@ -50,17 +64,42 @@ const LevelRow = ({ level, depth, scopeMap, onSelectLevel }) => {
           onClick={onSelectLevel}
           onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') onSelectLevel() }}
         >
-          <span className="list-view-drawer__item-label list-view-drawer__item-label--level" style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-            {isHidden && <EyeOffIcon />}
-            {level.label || 'Level'}
-            {isHidden && <span style={{ fontSize: '0.7em', color: '#6b7280', marginLeft: 2 }}>(hidden)</span>}
-          </span>
-          {scopeEntries.length > 0 && (
-            <span className="list-view-drawer__item-chips">
-              {scopeEntries.map((scope) => (
-                <ScopeChip key={scope.id} label={scope.label} color={scope.color} />
-              ))}
+          <div className="list-view-drawer__item-mainline">
+            <span className="list-view-drawer__item-label list-view-drawer__item-label--level" style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+              {isHidden && <EyeOffIcon />}
+              {level.label || 'Level'}
+              {isHidden && <span style={{ fontSize: '0.7em', color: '#6b7280', marginLeft: 2 }}>(hidden)</span>}
             </span>
+            {scopeEntries.length > 0 && (
+              <span className="list-view-drawer__item-chips">
+                {scopeEntries.map((scope) => (
+                  <ScopeChip key={scope.id} label={scope.label} color={scope.color} />
+                ))}
+              </span>
+            )}
+          </div>
+
+          {showEstimateColumns && (
+            <div className="list-view-drawer__metrics">
+              <div className="list-view-drawer__metric-column">
+                <span className="list-view-drawer__metric-label">Effort</span>
+                <SizeButtonGroup
+                  options={EFFORT_OPTIONS}
+                  activeValue={effortValue}
+                  kind="effort"
+                  onChange={(size) => onSetEffort({ size, customPoints: size === 'custom' ? (level.effort?.customPoints ?? null) : null })}
+                />
+              </div>
+              <div className="list-view-drawer__metric-column">
+                <span className="list-view-drawer__metric-label">Value</span>
+                <SizeButtonGroup
+                  options={BENEFIT_OPTIONS}
+                  activeValue={benefitValue}
+                  kind="value"
+                  onChange={(size) => onSetBenefit({ size })}
+                />
+              </div>
+            </div>
           )}
         </div>
       </div>
@@ -68,20 +107,54 @@ const LevelRow = ({ level, depth, scopeMap, onSelectLevel }) => {
   )
 }
 
-const LEVELS_KEY = (id) => `__levels__${id}`
+const EFFORT_OPTIONS = Object.entries(EFFORT_SIZE_LABELS)
+const BENEFIT_OPTIONS = Object.entries(BENEFIT_SIZE_LABELS)
 
-const TreeNode = ({ node, depth, scopeMap, collapsedIds, onToggle, onSelectNode, onSelectLevel, showLevels }) => {
+const SizeButtonGroup = ({ options, activeValue, onChange, kind }) => (
+  <div className="list-view-drawer__metric-buttons" role="group" aria-label={`${kind} selector`}>
+    {options.map(([value, label]) => (
+      <button
+        key={value}
+        type="button"
+        className={`list-view-drawer__metric-btn ${activeValue === value ? 'list-view-drawer__metric-btn--active' : ''}`}
+        onClick={(event) => {
+          event.stopPropagation()
+          onChange(value)
+        }}
+        aria-pressed={activeValue === value}
+      >
+        {label}
+      </button>
+    ))}
+  </div>
+)
+
+const TreeNode = ({
+  node,
+  depth,
+  scopeMap,
+  collapsedIds,
+  onToggle,
+  onSelectNode,
+  onSelectLevel,
+  showLevels,
+  showEstimateColumns,
+  selectedReleaseId,
+  matchesLevelFilters,
+  onSetLevelEffort,
+  onSetLevelBenefit,
+}) => {
   const hasChildren = (node.children ?? []).length > 0
   const levels = node.levels ?? []
-  const hasLevels = showLevels && levels.length > 0
+  const filteredLevels = showLevels ? levels.filter(matchesLevelFilters) : []
+  const hasLevels = showLevels && filteredLevels.length > 0
   const isCollapsed = collapsedIds.has(node.id)
-  const levelsCollapsed = collapsedIds.has(LEVELS_KEY(node.id))
-  const borderColor = getStatusBorderColor(node.status)
+  const borderColor = getStatusBorderColor(getDisplayStatusKey(node, selectedReleaseId))
   const hasExpandable = hasChildren || hasLevels
   const isExpanded = !isCollapsed
   const isNodeFullyHidden = levels.length > 0
-    ? levels.every((l) => normalizeStatusKey(l.status) === 'hidden')
-    : normalizeStatusKey(node.status) === 'hidden'
+    ? levels.every((l) => normalizeStatusKey(getLevelStatus(l, selectedReleaseId)) === 'hidden')
+    : normalizeStatusKey(getDisplayStatusKey(node, selectedReleaseId)) === 'hidden'
 
   const scopeIds = getNodeScopeIds(node)
   const scopeEntries = [...scopeIds].map((id) => scopeMap.get(id)).filter(Boolean)
@@ -109,46 +182,37 @@ const TreeNode = ({ node, depth, scopeMap, collapsedIds, onToggle, onSelectNode,
             onClick={() => onSelectNode(node.id)}
             onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') onSelectNode(node.id) }}
           >
-            <span className="list-view-drawer__item-label" style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-              {isNodeFullyHidden && <EyeOffIcon />}
-              {node.label || node.shortName || '–'}
-              {isNodeFullyHidden && <span style={{ fontSize: '0.7em', color: '#6b7280', marginLeft: 2 }}>(hidden)</span>}
-            </span>
-            {scopeEntries.length > 0 && (
-              <span className="list-view-drawer__item-chips">
-                {scopeEntries.map((scope) => (
-                  <ScopeChip key={scope.id} label={scope.label} color={scope.color} />
-                ))}
+            <div className="list-view-drawer__item-mainline">
+              <span className="list-view-drawer__item-label" style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                {isNodeFullyHidden && <EyeOffIcon />}
+                {node.label || node.shortName || '–'}
+                {isNodeFullyHidden && <span style={{ fontSize: '0.7em', color: '#6b7280', marginLeft: 2 }}>(hidden)</span>}
               </span>
-            )}
+              {scopeEntries.length > 0 && (
+                <span className="list-view-drawer__item-chips">
+                  {scopeEntries.map((scope) => (
+                    <ScopeChip key={scope.id} label={scope.label} color={scope.color} />
+                  ))}
+                </span>
+              )}
+            </div>
           </div>
         </div>
       </li>
 
       {isExpanded && hasLevels && (
         <>
-          <li
-            className="list-view-drawer__item list-view-drawer__item--levels-header"
-            style={{ paddingLeft: `${0.5 + (depth + 1) * 1}rem` }}
-          >
-            <div className="list-view-drawer__item-row">
-              <button
-                className="list-view-drawer__toggle"
-                onClick={(e) => { e.stopPropagation(); onToggle(LEVELS_KEY(node.id)) }}
-                aria-label={levelsCollapsed ? 'Show levels' : 'Hide levels'}
-              >
-                {levelsCollapsed ? '▶' : '▼'}
-              </button>
-              <span className="list-view-drawer__levels-label">Levels ({levels.length})</span>
-            </div>
-          </li>
-          {!levelsCollapsed && levels.map((level) => (
+          {filteredLevels.map((level) => (
             <LevelRow
               key={level.id}
               level={level}
               depth={depth + 2}
               scopeMap={scopeMap}
+              selectedReleaseId={selectedReleaseId}
               onSelectLevel={() => onSelectLevel(node.id, level.id)}
+              showEstimateColumns={showEstimateColumns}
+              onSetEffort={(effort) => onSetLevelEffort(node.id, level.id, effort)}
+              onSetBenefit={(benefit) => onSetLevelBenefit(node.id, level.id, benefit)}
             />
           ))}
         </>
@@ -165,17 +229,40 @@ const TreeNode = ({ node, depth, scopeMap, collapsedIds, onToggle, onSelectNode,
           onSelectNode={onSelectNode}
           onSelectLevel={onSelectLevel}
           showLevels={showLevels}
+          showEstimateColumns={showEstimateColumns}
+          selectedReleaseId={selectedReleaseId}
+          matchesLevelFilters={matchesLevelFilters}
+          onSetLevelEffort={onSetLevelEffort}
+          onSetLevelBenefit={onSetLevelBenefit}
         />
       ))}
     </>
   )
 }
 
-export function ListViewDrawer({ opened, onClose, document, onSelectNode, onSelectLevel }) {
+export function ListViewDrawer({
+  opened,
+  onClose,
+  document,
+  onSelectNode,
+  onSelectLevel,
+  onSetLevelEffort = () => {},
+  onSetLevelBenefit = () => {},
+  selectedReleaseId = null,
+}) {
   const drawerRef = useRef(null)
 
   const [collapsedIds, setCollapsedIds] = useState(new Set())
   const [showLevels, setShowLevels] = useState(true)
+  const [showEstimateColumns, setShowEstimateColumns] = useState(false)
+  const [statusFilter, setStatusFilter] = useState('all')
+  const [scopeFilter, setScopeFilter] = useState('all')
+
+  useEffect(() => {
+    if (!showLevels && showEstimateColumns) {
+      setShowEstimateColumns(false)
+    }
+  }, [showEstimateColumns, showLevels])
 
   const handleToggle = useCallback((nodeId) => {
     setCollapsedIds((prev) => {
@@ -186,41 +273,137 @@ export function ListViewDrawer({ opened, onClose, document, onSelectNode, onSele
     })
   }, [])
 
-  if (!opened) return null
-
-  const rootNodes = document?.children ?? []
+  const allRootNodes = document?.children ?? []
   const scopeMap = new Map((document?.scopes ?? []).map((s) => [s.id, s]))
+  const scopeFilterOptions = document?.scopes ?? []
+
+  const matchesScopeFilter = useCallback((scopeIds = []) => {
+    if (scopeFilter === 'all') {
+      return true
+    }
+
+    return scopeIds.includes(scopeFilter)
+  }, [scopeFilter])
+
+  const matchesLevelFilters = useCallback((level) => {
+    const statusKey = normalizeStatusKey(getLevelStatus(level, selectedReleaseId))
+    if (statusFilter !== 'all' && statusKey !== statusFilter) {
+      return false
+    }
+
+    return matchesScopeFilter(level.scopeIds ?? [])
+  }, [matchesScopeFilter, selectedReleaseId, statusFilter])
+
+  const matchesNodeFilters = useCallback((node) => {
+    const levels = node.levels ?? []
+    if (levels.length > 0) {
+      return levels.some(matchesLevelFilters)
+    }
+
+    const statusKey = normalizeStatusKey(getDisplayStatusKey(node, selectedReleaseId))
+    if (statusFilter !== 'all' && statusKey !== statusFilter) {
+      return false
+    }
+
+    return matchesScopeFilter([...getNodeScopeIds(node)])
+  }, [matchesLevelFilters, matchesScopeFilter, selectedReleaseId, statusFilter])
+
+  const filteredRootNodes = useMemo(() => {
+    const filterTree = (nodes) => {
+      const next = []
+
+      for (const node of nodes) {
+        const filteredChildren = filterTree(node.children ?? [])
+        const includeSelf = matchesNodeFilters(node)
+
+        if (includeSelf || filteredChildren.length > 0) {
+          next.push({
+            ...node,
+            children: filteredChildren,
+          })
+        }
+      }
+
+      return next
+    }
+
+    return filterTree(allRootNodes)
+  }, [allRootNodes, matchesNodeFilters])
+
+  if (!opened) return null
 
   return (
     <div
       ref={drawerRef}
-      className="list-view-drawer"
+      className={`list-view-drawer ${showEstimateColumns ? 'list-view-drawer--wide' : ''}`}
     >
       <div className="list-view-drawer__header">
-        <span className="list-view-drawer__title">Node List</span>
-        <label className="list-view-drawer__levels-toggle">
-          <input
-            type="checkbox"
-            checked={showLevels}
-            onChange={(e) => setShowLevels(e.target.checked)}
-          />
-          Levels
-        </label>
-        <button
-          className="list-view-drawer__close"
-          onClick={onClose}
-          aria-label="Close list view"
-        >
-          ×
-        </button>
+        <div className="list-view-drawer__header-top">
+          <span className="list-view-drawer__title">Node List</span>
+          <button
+            className="list-view-drawer__close"
+            onClick={onClose}
+            aria-label="Close list view"
+          >
+            ×
+          </button>
+        </div>
+
+        <div className="list-view-drawer__header-controls">
+          <label className="list-view-drawer__levels-toggle">
+            <input
+              type="checkbox"
+              checked={showLevels}
+              onChange={(e) => setShowLevels(e.target.checked)}
+            />
+            Levels
+          </label>
+
+          {showLevels && (
+            <label className="list-view-drawer__levels-toggle list-view-drawer__levels-toggle--metrics">
+              <input
+                type="checkbox"
+                checked={showEstimateColumns}
+                onChange={(e) => setShowEstimateColumns(e.target.checked)}
+              />
+              Effort/Value
+            </label>
+          )}
+
+          <select
+            className="list-view-drawer__filter-select"
+            value={statusFilter}
+            onChange={(event) => setStatusFilter(event.target.value)}
+            aria-label="Filter by status"
+          >
+            <option value="all">All Statuses</option>
+            {Object.entries(STATUS_LABELS).map(([value, label]) => (
+              <option key={value} value={value}>{label}</option>
+            ))}
+          </select>
+
+          <select
+            className="list-view-drawer__filter-select"
+            value={scopeFilter}
+            onChange={(event) => setScopeFilter(event.target.value)}
+            aria-label="Filter by scope"
+          >
+            <option value="all">All Scopes</option>
+            {scopeFilterOptions.map((scope) => (
+              <option key={scope.id} value={scope.id}>{scope.label}</option>
+            ))}
+          </select>
+        </div>
       </div>
 
       <div className="list-view-drawer__content">
-        {rootNodes.length === 0 ? (
+        {allRootNodes.length === 0 ? (
           <div className="list-view-drawer__empty">No nodes yet.</div>
+        ) : filteredRootNodes.length === 0 ? (
+          <div className="list-view-drawer__empty">No nodes match the selected filters.</div>
         ) : (
           <ul className="list-view-drawer__list">
-            {rootNodes.map((node) => (
+            {filteredRootNodes.map((node) => (
               <TreeNode
                 key={node.id}
                 node={node}
@@ -231,6 +414,11 @@ export function ListViewDrawer({ opened, onClose, document, onSelectNode, onSele
                 onSelectNode={onSelectNode}
                 onSelectLevel={onSelectLevel}
                 showLevels={showLevels}
+                showEstimateColumns={showEstimateColumns}
+                selectedReleaseId={selectedReleaseId}
+                matchesLevelFilters={matchesLevelFilters}
+                onSetLevelEffort={onSetLevelEffort}
+                onSetLevelBenefit={onSetLevelBenefit}
               />
             ))}
           </ul>

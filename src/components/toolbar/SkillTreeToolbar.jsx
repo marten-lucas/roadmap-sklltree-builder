@@ -86,6 +86,7 @@ export function SkillTreeToolbar({
   releases = [],
   selectedReleaseId = null,
   onReleaseChange,
+  releaseBudgetSummaries = new Map(),
 }) {
   const [toolbarSearch, setToolbarSearch] = useState('')
   const [isZoomMenuOpen, setIsZoomMenuOpen] = useState(false)
@@ -112,6 +113,12 @@ export function SkillTreeToolbar({
     value: Math.round(step * 100),
     label: '',
   }))
+  const selectedReleaseBudgetSummary = selectedReleaseId ? releaseBudgetSummaries.get(selectedReleaseId) : null
+
+  const budgetChipText = selectedReleaseBudgetSummary?.budget != null
+    ? `${selectedReleaseBudgetSummary.total}/${selectedReleaseBudgetSummary.budget} SP`
+    : null
+  const budgetIsOver = selectedReleaseBudgetSummary?.isOverBudget ?? false
 
   return (
     <Paper
@@ -486,18 +493,44 @@ export function SkillTreeToolbar({
               )}
             </div>
             {releases.length > 0 && (
-              <Tooltip label="Select release" position="top" middlewares={TOOLBAR_TOOLTIP_MIDDLEWARES}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                 <Select
                   size="xs"
                   value={selectedReleaseId}
                   onChange={(val) => val && onReleaseChange?.(val)}
-                  data={releases.map((r) => ({ value: r.id, label: r.name || 'Release' }))}
+                  data={releases.map((r) => ({
+                    value: r.id,
+                    label: r.name || 'Release',
+                  }))}
                   classNames={{ input: 'mantine-dark-input' }}
                   style={{ minWidth: 120, maxWidth: 180 }}
                   aria-label="Select release"
                   allowDeselect={false}
                 />
-              </Tooltip>
+                {budgetChipText && (
+                  <Tooltip
+                    label={budgetIsOver ? 'Budget exceeded' : 'Within budget'}
+                    position="top"
+                    middlewares={TOOLBAR_TOOLTIP_MIDDLEWARES}
+                  >
+                    <Text
+                      size="xs"
+                      style={{
+                        padding: '2px 8px',
+                        borderRadius: 999,
+                        background: budgetIsOver ? 'rgba(239,68,68,0.18)' : 'rgba(34,197,94,0.15)',
+                        border: `1px solid ${budgetIsOver ? 'rgba(239,68,68,0.55)' : 'rgba(34,197,94,0.45)'}`,
+                        color: budgetIsOver ? '#f87171' : '#86efac',
+                        fontWeight: 600,
+                        whiteSpace: 'nowrap',
+                        cursor: 'default',
+                      }}
+                    >
+                      {budgetChipText}
+                    </Text>
+                  </Tooltip>
+                )}
+              </div>
             )}
             <Text size="xs" c="dimmed" className="skill-tree-toolbar__status">{autosaveLabel}</Text>
           </div>

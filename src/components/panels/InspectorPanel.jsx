@@ -275,6 +275,15 @@ export function InspectorPanel({
     }
   }, [commitCurrentDrafts])
 
+  useEffect(() => {
+    const handleCommitTextDrafts = () => {
+      commitCurrentDrafts(true, 'shortcut')
+    }
+
+    window.addEventListener('roadmap-skilltree.commit-text-drafts', handleCommitTextDrafts)
+    return () => window.removeEventListener('roadmap-skilltree.commit-text-drafts', handleCommitTextDrafts)
+  }, [commitCurrentDrafts])
+
   const handleScopeIdsChange = useCallback((nextScopeIds) => {
     const levels = Array.isArray(selectedNode?.levels) ? selectedNode.levels : []
     const activeId = selectedProgressLevelId ?? (levels[0] && levels[0].id)

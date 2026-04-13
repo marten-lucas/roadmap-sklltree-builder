@@ -65,7 +65,11 @@ export const buildAutoPromotedLevels = ({ root, segmentOrderIndexById, config })
       }
 
       const segmentDistance = Math.abs(sourceSegmentOrder - targetSegmentOrder)
-      if (segmentDistance <= 1) {
+      const numSegments = segmentOrderIndexById.size
+      // Circular distance: e.g. in 4 segments, distance between 0 and 3 is 1 (3-4 = -1)
+      const circularDistance = Math.min(segmentDistance, Math.abs(segmentDistance - numSegments))
+      
+      if (circularDistance <= 1) {
         continue
       }
 

@@ -190,10 +190,10 @@ const normalizeStatusCell = (value) => {
 const formatImportErrors = (errors) => {
   const items = Array.isArray(errors) ? errors.filter(Boolean) : [String(errors ?? '')].filter(Boolean)
   if (items.length === 0) {
-    return 'CSV import failed.'
+    return 'CSV-Import fehlgeschlagen.'
   }
 
-  return `CSV import failed:\n- ${items.join('\n- ')}`
+  return `CSV-Import fehlgeschlagen:\n- ${items.join('\n- ')}`
 }
 
 const collectTreeNodes = (nodes, parentShortName = null, result = []) => {
@@ -392,7 +392,7 @@ const buildDocumentFromRows = (rows, options = {}) => {
     }
 
     if (!status) {
-      rowErrors.push(`Row ${rowNumber}: Status is invalid: ${String(row[statusIndex] ?? '').trim() || '(empty)'}.`)
+      rowErrors.push(`Reihe ${rowNumber}: Status ist ungueltig: ${String(row[statusIndex] ?? '').trim() || '(leer)'}.`)
     }
 
     const progressLevel = progressLevelText ? Number.parseInt(progressLevelText, 10) : 1
@@ -486,7 +486,7 @@ const buildDocumentFromRows = (rows, options = {}) => {
   const parentByShortName = new Map([...rowGroups.values()].map((group) => [group.shortName, group.parentShortName]))
   for (const [shortName, parentShortName] of parentByShortName.entries()) {
     if (parentShortName && !rowGroups.has(parentShortName)) {
-      errors.push(`Node ${shortName} references unknown parent ${parentShortName}.`)
+      errors.push(`Node ${shortName} referenziert unbekannten Parent ${parentShortName}.`)
     }
   }
 
@@ -494,7 +494,7 @@ const buildDocumentFromRows = (rows, options = {}) => {
     for (const row of group.rows) {
       for (const ref of row.dependencyLevelRefs ?? []) {
         if (!rowGroups.has(ref.shortName)) {
-          errors.push(`Node ${group.shortName} references unknown AdditionalDependency ${ref.shortName}.`)
+          errors.push(`Node ${group.shortName} referenziert unbekannte AdditionalDependency ${ref.shortName}.`)
         }
       }
     }
@@ -694,7 +694,7 @@ const buildDocumentFromRows = (rows, options = {}) => {
       return label || nodeId
     })
 
-    cycleErrors.push(`AdditionalDependency cycle detected: ${cycleLabels.join(' -> ')}`)
+    cycleErrors.push(`AdditionalDependency-Zirkelbezug gefunden: ${cycleLabels.join(' -> ')}`)
   }
 
   if (cycleErrors.length > 0) {

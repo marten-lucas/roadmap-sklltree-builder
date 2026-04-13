@@ -1,5 +1,5 @@
 import { ActionIcon, Alert, Button, NumberInput, Paper, Stack, Tabs, Text, TextInput } from '@mantine/core'
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useImperativeHandle, useRef, useState, forwardRef } from 'react'
 import { MarkdownField } from './MarkdownField'
 import { DEFAULT_STORY_POINT_MAP, computeBudgetSummary } from '../utils/effortBenefit'
 import { addRelease, deleteRelease, updateRelease } from '../utils/releases'
@@ -17,17 +17,21 @@ const collectAllNodes = (document) => {
   return all
 }
 
-export function SystemPanel({
-  isOpen,
-  iconSource,
-  onClose,
-  onUpload,
-  onResetDefault,
-  roadmapData,
-  commitDocument,
-  selectedReleaseId,
-  onReleaseChange,
-}) {
+export const SystemPanel = forwardRef(function SystemPanel(
+  {
+    isOpen,
+    iconSource,
+    onClose,
+    onUpload,
+    onResetDefault,
+    roadmapData,
+    commitDocument,
+    selectedReleaseId,
+    onReleaseChange,
+    onDraftChange,
+  },
+  forwardedRef,
+) {
   const fileInputRef = useRef(null)
   const [activeTabValue, setActiveTabValue] = useState(selectedReleaseId ?? 'system')
   const [systemNameDraft, setSystemNameDraft] = useState('')
@@ -74,11 +78,29 @@ export function SystemPanel({
     setIntroductionDraft(activeRelease?.introduction ?? '')
   }, [activeRelease?.id, activeRelease?.name, activeRelease?.motto, activeRelease?.date, activeRelease?.introduction])
 
-  if (!isOpen) {
-    return null
-  }
+  useImperativeHandle(
+    forwardedRef,
+    () => ({
+      commitDrafts: () => commitTextDrafts(),
+    }),
+    [releaseDraftId],
+  )
 
-  const allNodes = collectAllNodes(roadmapData)
+  useEffect(() => {
+    if (!onDraftChange) {
+      return
+    }
+
+    const draftRelease = {
+      id: releaseDraftId,
+      name: releaseNameDraft,
+      motto: releaseMottoDraft,
+      date: releaseDateDraft,
+      introduction: introductionDraft,
+    }
+
+    onDraftChange(draftRelease)
+  }, [releaseDraftId, releaseNameDraft, releaseMottoDraft, releaseDateDraft, introductionDraft, onDraftChange])
 
   const commitTextDrafts = (releaseId = releaseDraftId) => {
     let nextRoadmapData = roadmapData
@@ -124,6 +146,20 @@ export function SystemPanel({
       commitDocument(nextRoadmapData)
     }
   }
+
+  useImperativeHandle(
+    forwardedRef,
+    () => ({
+      commitDrafts: () => commitTextDrafts(),
+    }),
+    [releaseDraftId],
+  )
+
+  if (!isOpen) {
+    return null
+  }
+
+  const allNodes = collectAllNodes(roadmapData)
 
   const handleAddRelease = () => {
     const name = 'Neues Release'
@@ -381,4 +417,5 @@ export function SystemPanel({
       </div>
     </Paper>
   )
-}
+})
+

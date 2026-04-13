@@ -221,7 +221,7 @@ Arc along the source ring from the parent's angle to the child's angle, then rad
 
 #### Multiple children — sufficient corridor gap (`levelGap ≥ nodeSize`)
 
-The corridor ring sits at `sourceRadius + levelGap × 0.5`, safely between the two node rings.
+The corridor ring sits at a biased radius between the two node rings. For edges that span multiple segments (large angular distance), the corridor is biased towards the target ring (`0.62 × levelGap`) to "duck" under potential blockers in intermediate segments. For single-segment edges, the corridor sits at a neutral `0.48-0.54 × levelGap`.
 
 ```
 M parent
@@ -244,21 +244,18 @@ M parent
 → A @targetRadius               (arc from trunk angle to child angle)
 ```
 
-#### Root bridge (depth-1 node auto-promoted to level > 1)
+### 4.4 Automated Root Order Refinement
 
-```
-M origin_point  →  A @levelOneRadius  →  L node
-```
+After the packing and compaction phases, a **Late Root Refinement** pass runs a local search over the root-level nodes.
 
-#### Level-1 ring arc (visual connective tissue between adjacent level-1 siblings)
+1. **Greedy Swaps**: Adjacent roots in the global circular order are swapped.
+2. **Scoring**: A configuration is "better" if:
+    - It has fewer total portals (most important).
+    - It has fewer portals involving root-level edges.
+    - It has lower total angular penalty (straighter root-child connections).
+3. **Global Scope**: Swaps are attempted across segment boundaries to ensure the best possible global root order, significantly reducing portals in complex multi-segment trees.
 
-```
-M nodeA  →  A @levelOneRadius 0 0 1  nodeB
-```
-
-Rendered as a thin background arc; not interactive. These arcs are excluded from crossing detection.
-
-### 4.4 Segment Separator Lines
+### 4.5 Segment Separator Lines
 
 Separator lines are drawn between adjacent segments. They follow a radial spoke from `separatorInnerRadius` to `separatorOuterRadius` but deflect around any node that blocks the nominal angle. Detours are arc segments at the blocker's radius, stepping left or right to clear the node, then resuming the radial direction.
 
