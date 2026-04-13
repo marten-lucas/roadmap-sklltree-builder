@@ -323,20 +323,20 @@ describe('layoutSolver', () => {
       })
     })
 
-    it('should render segment labels readable from below (text foot down, never upside-down)', () => {
-      // A label is readable from below when its SVG rotation places the reading
-      // direction in the right half-plane: rotation normalised to [0°, 360°) must
-      // NOT fall in the open interval (90°, 270°), which would invert the text.
+    it('should keep segment label text foot oriented toward center', () => {
       const trees = [createSimpleTree(), createCrossSegmentTree(), createDenseTree()]
 
       trees.forEach((tree) => {
         const result = solveSkillTreeLayout(tree, TREE_CONFIG)
 
         result.layout.segments.labels.forEach((label) => {
-          const normalizedRotation = ((label.rotation % 360) + 360) % 360
-          const isUpsideDown = normalizedRotation > 90 && normalizedRotation < 270
+          const expectedRotation = label.anchorAngle - 90
+          const delta = ((label.rotation - expectedRotation + 540) % 360) - 180
 
-          expect(isUpsideDown, `segment label "${label.text}" at anchorAngle=${label.anchorAngle.toFixed(1)}° has upside-down rotation ${label.rotation.toFixed(1)}°`).toBe(false)
+          expect(
+            Math.abs(delta),
+            `segment label "${label.text}" at anchorAngle=${label.anchorAngle.toFixed(1)}° has rotation ${label.rotation.toFixed(1)}°; expected inward-foot radial rotation ${expectedRotation.toFixed(1)}°`,
+          ).toBeLessThan(1e-6)
         })
       })
     })

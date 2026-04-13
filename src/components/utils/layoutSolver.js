@@ -58,18 +58,9 @@ const normalizeAngleDeg = (angle) => {
 
 const getReadableRadialLabelRotation = (anchorAngleDeg) => {
   const normalized = normalizeAngleDeg(anchorAngleDeg)
-  // Radial orientation: text points along the spoke outward from centre.
-  // SVG 0°=right, angles increase clockwise, so a radial label at angle θ
-  // needs rotation θ−90 (top of text faces outward).
-  // The reading direction becomes inverted when (normalized − 90) lands in
-  // (90°, 270°), i.e. when normalized > 180°. Flip those cases by +180° so
-  // text is always readable from below (never upside-down).
-  const radial = normalized - 90
-  if (normalized > 180 && normalized < 360) {
-    return radial + 180
-  }
-
-  return radial
+  // Keep a consistent radial orientation where the text foot points inward
+  // towards the centre for all segment labels.
+  return normalized - 90
 }
 
 const computeLabelBandRadius = (innerRadius, outerRadius) => {
@@ -905,6 +896,177 @@ export const solveSkillTreeLayout = (data, config) => {
       })
       const slotCenterBySegmentId = new Map(rootSegmentSlots.map((slot) => [slot.id, slot.center]))
       const rootSegmentSlotById = new Map(rootSegmentSlots.map((slot) => [slot.id, slot]))
+
+      // Local refinement for root order inside each segment:
+      // reorder roots by the barycenter of their immediate children angles.
+      // This preserves each segment footprint (same occupied angle slots) but can
+      // reduce avoidable crossings for root->child edges.
+      const optimizeRootOrderInsideSegments = () => {
+        for (const group of rootGroupsMap.values()) {
+          if ((group.nodes?.length ?? 0) <= 1) {
+            continue
+          }
+
+          const rootAnglesSorted = [...group.nodes]
+            .map((node) => ({ node, angle: angleByNodeId.get(node.data.id) ?? centerAngle }))
+            .sort((left, right) => left.angle - right.angle)
+            .map((entry) => entry.angle)
+
+          const childAngleBarycenter = (node) => {
+            const children = node.children ?? []
+            if (children.length === 0) {
+              return angleByNodeId.get(node.data.id) ?? centerAngle
+            }
+
+            const childAngles = children
+              .map((child) => angleByNodeId.get(child.data.id))
+              .filter((angle) => angle != null)
+
+            if (childAngles.length === 0) {
+              return angleByNodeId.get(node.data.id) ?? centerAngle
+            }
+
+            return childAngles.reduce((sum, angle) => sum + angle, 0) / childAngles.length
+          }
+
+          const rootGeometryById = new Map(
+            group.nodes.map((node) => [
+              node.data.id,
+              {
+                node,
+                rootAngle: angleByNodeId.get(node.data.id) ?? centerAngle,
+                childAngles: (node.children ?? [])
+                  .map((child) => angleByNodeId.get(child.data.id))
+                  .filter((angle) => angle != null),
+              },
+            ]),
+          )
+
+          const barycenterOrder = [...group.nodes]
+            .map((node) => ({
+              node,
+              key: childAngleBarycenter(node),
+              currentAngle: angleByNodeId.get(node.data.id) ?? centerAngle,
+            }))
+            .sort((left, right) => {
+              if (Math.abs(left.key - right.key) > 1e-6) {
+                return left.key - right.key
+              }
+              return left.currentAngle - right.currentAngle
+            })
+
+          const enumeratePermutations = (nodes) => {
+            if (nodes.length > 6) {
+              return [nodes]
+            }
+
+            const result = []
+            const work = [...nodes]
+
+            const permute = (startIndex) => {
+              if (startIndex >= work.length - 1) {
+                result.push([...work])
+                return
+              }
+
+              for (let index = startIndex; index < work.length; index += 1) {
+                const tmp = work[startIndex]
+                work[startIndex] = work[index]
+                work[index] = tmp
+                permute(startIndex + 1)
+                work[index] = work[startIndex]
+                work[startIndex] = tmp
+              }
+            }
+
+            permute(0)
+            return result
+          }
+
+          const scoreOrder = (orderedNodes) => {
+            const assignedAngleByRootId = new Map(
+              orderedNodes.map((node, index) => [node.data.id, rootAnglesSorted[index]]),
+            )
+
+            const edges = []
+            for (const node of orderedNodes) {
+              const geometry = rootGeometryById.get(node.data.id)
+              if (!geometry) {
+                continue
+              }
+
+              const parentAngle = assignedAngleByRootId.get(node.data.id) ?? geometry.rootAngle
+              const delta = parentAngle - geometry.rootAngle
+              const children = geometry.childAngles
+
+              if (children.length === 0) {
+                edges.push({ rootId: node.data.id, parentAngle, childAngle: parentAngle })
+                continue
+              }
+
+              for (const childAngle of children) {
+                edges.push({ rootId: node.data.id, parentAngle, childAngle: childAngle + delta })
+              }
+            }
+
+            let inversionCount = 0
+            for (let left = 0; left < edges.length; left += 1) {
+              for (let right = left + 1; right < edges.length; right += 1) {
+                const a = edges[left]
+                const b = edges[right]
+                if (a.rootId === b.rootId) {
+                  continue
+                }
+
+                if ((a.parentAngle < b.parentAngle && a.childAngle > b.childAngle)
+                  || (a.parentAngle > b.parentAngle && a.childAngle < b.childAngle)) {
+                  inversionCount += 1
+                }
+              }
+            }
+
+            // Soft tie-breaker to preserve stable ordering when crossing score is equal.
+            let displacementPenalty = 0
+            for (let index = 0; index < orderedNodes.length; index += 1) {
+              const currentIndex = group.nodes.indexOf(orderedNodes[index])
+              displacementPenalty += Math.abs(currentIndex - index)
+            }
+
+            return inversionCount * 1000 + displacementPenalty
+          }
+
+          const candidateOrders = []
+          candidateOrders.push(group.nodes)
+          candidateOrders.push(barycenterOrder.map((entry) => entry.node))
+          candidateOrders.push(...enumeratePermutations(group.nodes))
+
+          let bestOrder = group.nodes
+          let bestScore = scoreOrder(bestOrder)
+
+          for (const candidate of candidateOrders) {
+            const candidateScore = scoreOrder(candidate)
+            if (candidateScore < bestScore) {
+              bestScore = candidateScore
+              bestOrder = candidate
+            }
+          }
+
+          const desiredOrder = bestOrder.map((node) => ({ node }))
+
+          desiredOrder.forEach((entry, index) => {
+            const currentAngle = angleByNodeId.get(entry.node.data.id) ?? centerAngle
+            const targetAngle = rootAnglesSorted[index]
+            const delta = targetAngle - currentAngle
+            if (Math.abs(delta) > 0.01) {
+              shiftSubtreeAngles(entry.node, delta)
+            }
+          })
+
+          group.nodes = desiredOrder.map((entry) => entry.node)
+        }
+      }
+
+      optimizeRootOrderInsideSegments()
 
       const groupItems = orderedSegmentIds.map((segmentId) => {
         const group = rootGroupsMap.get(segmentId) ?? { segmentId, nodes: [] }
