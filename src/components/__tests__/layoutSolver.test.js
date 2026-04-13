@@ -593,6 +593,71 @@ describe('layoutSolver', () => {
       expect(links.every((l) => l.linkKind === 'routed')).toBe(true)
     })
 
+    it('routed shared-trunk links should expose one common split point', () => {
+      const tree = {
+        segments: [{ id: 'seg', label: 'Seg' }],
+        children: [
+          {
+            id: 'l1',
+            label: 'L1',
+            status: 'fertig',
+            ebene: 1,
+            segmentId: 'seg',
+            children: [
+              { id: 'c1', label: 'C1', status: 'fertig', ebene: 2, segmentId: 'seg', children: [] },
+              { id: 'c2', label: 'C2', status: 'fertig', ebene: 2, segmentId: 'seg', children: [] },
+              { id: 'c3', label: 'C3', status: 'fertig', ebene: 2, segmentId: 'seg', children: [] },
+            ],
+          },
+        ],
+      }
+
+      const result = solveSkillTreeLayout(tree, TREE_CONFIG)
+      const routedLinks = result.layout.links.filter((link) => link.linkKind === 'routed')
+      expect(routedLinks.length).toBeGreaterThan(1)
+
+      const points = routedLinks.map((link) => link.splitPoint)
+      points.forEach((point) => {
+        expect(point).toBeTruthy()
+        expect(Number.isFinite(point.x)).toBe(true)
+        expect(Number.isFinite(point.y)).toBe(true)
+      })
+
+      const uniquePointCount = new Set(points.map((p) => `${p.x.toFixed(3)}|${p.y.toFixed(3)}`)).size
+      expect(uniquePointCount).toBe(1)
+    })
+
+    it('direct links should not expose split points', () => {
+      const tree = {
+        segments: [{ id: 'seg', label: 'Seg' }],
+        children: [
+          {
+            id: 'l1',
+            label: 'L1',
+            status: 'fertig',
+            ebene: 1,
+            segmentId: 'seg',
+            children: [
+              {
+                id: 'l2',
+                label: 'L2',
+                status: 'fertig',
+                ebene: 2,
+                segmentId: 'seg',
+                children: [],
+              },
+            ],
+          },
+        ],
+      }
+
+      const result = solveSkillTreeLayout(tree, TREE_CONFIG)
+      const links = result.layout.links.filter((link) => link.linkKind !== 'ring')
+      expect(links.length).toBe(1)
+      expect(links[0].linkKind).toBe('direct')
+      expect(links[0].splitPoint).toBeNull()
+    })
+
     it('routed paths should contain an arc command', () => {
       const tree = {
         segments: [{ id: 'seg', label: 'Seg' }],

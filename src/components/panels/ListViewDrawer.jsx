@@ -73,19 +73,34 @@ const getNodeScopeIds = (node) => {
   return ids
 }
 
-const ALL_SIZE_LABELS = { ...EFFORT_SIZE_LABELS }
+const EFFORT_LABELS = { ...EFFORT_SIZE_LABELS }
+const BENEFIT_LABELS = { ...BENEFIT_SIZE_LABELS }
 
 // ── Metric slider ─────────────────────────────────────────────────────────────
 
 const MetricSlider = ({ sizes, activeValue, onChange, kind, customPoints, onCustomChange }) => {
-  const idx = Math.max(0, sizes.indexOf(activeValue))
+  const labels = kind === 'value' ? BENEFIT_LABELS : EFFORT_LABELS
+  const [draftValue, setDraftValue] = useState(activeValue)
+  const draftValueRef = useRef(activeValue)
+
+  useEffect(() => {
+    setDraftValue(activeValue)
+    draftValueRef.current = activeValue
+  }, [activeValue])
+
+  const commitDraft = useCallback((e) => {
+    e?.stopPropagation?.()
+    if (draftValueRef.current !== activeValue) onChange(draftValueRef.current)
+  }, [activeValue, onChange])
+
+  const idx = Math.max(0, sizes.indexOf(draftValue))
   return (
     <div
       className={`list-view-drawer__metric-slider list-view-drawer__metric-slider--${kind}`}
       role="group"
       aria-label={kind}
     >
-      <span className="list-view-drawer__slider-val">{ALL_SIZE_LABELS[activeValue] ?? activeValue}</span>
+      <span className="list-view-drawer__slider-val">{labels[draftValue] ?? draftValue}</span>
       <input
         type="range"
         min={0}
@@ -93,11 +108,31 @@ const MetricSlider = ({ sizes, activeValue, onChange, kind, customPoints, onCust
         step={1}
         value={idx}
         className="list-view-drawer__slider-input"
-        aria-valuetext={ALL_SIZE_LABELS[activeValue] ?? activeValue}
+        aria-valuetext={labels[draftValue] ?? draftValue}
+        onPointerDown={(e) => e.stopPropagation()}
         onClick={(e) => e.stopPropagation()}
-        onChange={(e) => { e.stopPropagation(); onChange(sizes[Number(e.target.value)]) }}
+        onInput={(e) => {
+          e.stopPropagation()
+          const nextValue = sizes[Number(e.currentTarget.value)]
+          draftValueRef.current = nextValue
+          setDraftValue(nextValue)
+        }}
+        onPointerUp={commitDraft}
+        onKeyUp={(e) => {
+          if (e.key === 'ArrowLeft' || e.key === 'ArrowRight' || e.key === 'Home' || e.key === 'End') commitDraft(e)
+        }}
+        onBlur={commitDraft}
       />
-      {kind === 'effort' && activeValue === 'custom' && (
+      <div className="list-view-drawer__slider-ticks" aria-hidden="true">
+        {sizes.map((size, tickIdx) => (
+          <span
+            key={size}
+            className={`list-view-drawer__slider-tick${tickIdx <= idx ? ' list-view-drawer__slider-tick--active' : ''}`}
+            title={labels[size] ?? size}
+          />
+        ))}
+      </div>
+      {kind === 'effort' && draftValue === 'custom' && (
         <input
           type="number"
           className="list-view-drawer__metric-custom-input"
@@ -133,8 +168,8 @@ const LevelRow = ({
   const isHidden = statusKey === 'hidden'
   const borderColor = getStatusBorderColor(statusKey)
   const scopeEntries = (level.scopeIds ?? []).map((id) => scopeMap.get(id)).filter(Boolean)
-  const effortValue = level.effort?.size ?? 'unclear'
   const benefitValue = level.benefit?.size ?? 'unclear'
+  const effortValue = level.effort?.size ?? 'unclear'
 
   return (
     <li
@@ -177,18 +212,18 @@ const LevelRow = ({
         {showEstimateColumns && (
           <>
             <MetricSlider
+              sizes={BENEFIT_SIZES}
+              activeValue={benefitValue}
+              kind="value"
+              onChange={(size) => onSetBenefit({ size })}
+            />
+            <MetricSlider
               sizes={EFFORT_SIZES}
               activeValue={effortValue}
               kind="effort"
               customPoints={level.effort?.customPoints ?? null}
               onCustomChange={(pts) => onSetEffort({ size: 'custom', customPoints: pts })}
               onChange={(size) => onSetEffort({ size, customPoints: size === 'custom' ? (level.effort?.customPoints ?? null) : null })}
-            />
-            <MetricSlider
-              sizes={BENEFIT_SIZES}
-              activeValue={benefitValue}
-              kind="value"
-              onChange={(size) => onSetBenefit({ size })}
             />
           </>
         )}
@@ -361,10 +396,11 @@ export function ListViewDrawer({
   const handleResizePointerDown = useCallback((e) => {
     e.preventDefault()
     const startX = e.clientX
+    const minWidth = showEstimateColumns ? 640 : 280
     // Use live DOM width; fall back to 420 if element not yet measured
     const startWidth = drawerRef.current?.getBoundingClientRect().width ?? 420
     const onMove = (mv) => {
-      const newWidth = Math.max(280, Math.min(1400, startWidth + (mv.clientX - startX)))
+      const newWidth = Math.max(minWidth, Math.min(1400, startWidth + (mv.clientX - startX)))
       setDrawerWidth(newWidth)
     }
     const onUp = () => {
@@ -373,11 +409,17 @@ export function ListViewDrawer({
     }
     window.addEventListener('pointermove', onMove)
     window.addEventListener('pointerup', onUp)
-  }, [])
+  }, [showEstimateColumns])
 
   useEffect(() => {
     if (!showLevels && showEstimateColumns) setShowEstimateColumns(false)
   }, [showEstimateColumns, showLevels])
+
+  useEffect(() => {
+    if (showEstimateColumns && drawerWidth !== null && drawerWidth < 640) {
+      setDrawerWidth(640)
+    }
+  }, [showEstimateColumns, drawerWidth])
 
   const handleToggle = useCallback((nodeId) => {
     setCollapsedIds((prev) => {
@@ -445,12 +487,13 @@ export function ListViewDrawer({
       ? (showLevels ? flatLevelEntries.length === 0 : flatNodes.length === 0)
       : filteredRootNodes.length === 0
   )
+  const drawerStyle = drawerWidth !== null ? { width: `${drawerWidth}px` } : undefined
 
   return (
     <div
       ref={drawerRef}
       className={`list-view-drawer${showEstimateColumns && drawerWidth === null ? ' list-view-drawer--wide' : ''}`}
-      style={drawerWidth !== null ? { width: `${drawerWidth}px` } : undefined}
+      style={drawerStyle}
     >
       <div
         className="list-view-drawer__resize-handle"
@@ -543,8 +586,8 @@ export function ListViewDrawer({
         {showEstimateColumns && showLevels && (
           <div className="list-view-drawer__metrics-header" aria-hidden="true">
             <span className="list-view-drawer__metrics-header-spacer" />
-            <span className="list-view-drawer__metrics-header-col list-view-drawer__metrics-header-col--effort">Effort</span>
             <span className="list-view-drawer__metrics-header-col list-view-drawer__metrics-header-col--value">Value</span>
+            <span className="list-view-drawer__metrics-header-col list-view-drawer__metrics-header-col--effort">Effort</span>
           </div>
         )}
 

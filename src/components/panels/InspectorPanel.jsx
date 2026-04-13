@@ -1,4 +1,4 @@
-import { ActionIcon, Alert, Badge, Button, Divider, Group, MultiSelect, NumberInput, Paper, Select, Slider, Stack, Tabs, Text, TextInput, Textarea } from '@mantine/core'
+import { ActionIcon, Alert, Badge, Button, Divider, Group, MultiSelect, NumberInput, Paper, SegmentedControl, Select, Slider, Stack, Tabs, Text, TextInput, Textarea } from '@mantine/core'
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { IconPercentage20 } from '@tabler/icons-react'
 import { normalizeStatusKey, STATUS_LABELS, SCOPE_COLORS } from '../config'
@@ -107,6 +107,30 @@ const MAX_SCOPE_CHIPS_PER_ENTRY = 4
 
 const EFFORT_MARKS = EFFORT_SIZES.map((s, i) => ({ value: i, label: EFFORT_SIZE_LABELS[s] }))
 const BENEFIT_MARKS = BENEFIT_SIZES.map((s, i) => ({ value: i, label: BENEFIT_SIZE_LABELS[s] }))
+
+const DiscreteInspectorSlider = ({ sizes, labels, value, marks, onCommit }) => {
+  const [draftIndex, setDraftIndex] = useState(Math.max(0, sizes.indexOf(value ?? sizes[0])))
+
+  useEffect(() => {
+    setDraftIndex(Math.max(0, sizes.indexOf(value ?? sizes[0])))
+  }, [sizes, value])
+
+  return (
+    <Slider
+      min={0}
+      max={sizes.length - 1}
+      step={1}
+      value={draftIndex}
+      onChange={setDraftIndex}
+      onChangeEnd={(idx) => onCommit?.(sizes[idx])}
+      marks={marks}
+      label={(idx) => labels[sizes[idx]]}
+      size="xs"
+      mb={28}
+      classNames={{ markLabel: 'mantine-dark-label' }}
+    />
+  )
+}
 
 export function InspectorPanel({
   selectedNode,
@@ -972,20 +996,12 @@ export function InspectorPanel({
 
                   <div>
                     <Text className="mantine-dark-label" size="sm" mb={6}>Effort</Text>
-                    <Slider
-                      min={0}
-                      max={EFFORT_SIZES.length - 1}
-                      step={1}
-                      value={Math.max(0, EFFORT_SIZES.indexOf(level.effort?.size ?? 'unclear'))}
-                      onChange={(idx) => {
-                        const size = EFFORT_SIZES[idx]
-                        onEffortChange?.({ size, customPoints: level.effort?.customPoints ?? null })
-                      }}
+                    <DiscreteInspectorSlider
+                      sizes={EFFORT_SIZES}
+                      labels={EFFORT_SIZE_LABELS}
+                      value={level.effort?.size ?? 'unclear'}
                       marks={EFFORT_MARKS}
-                      label={(idx) => EFFORT_SIZE_LABELS[EFFORT_SIZES[idx]]}
-                      size="xs"
-                      mb={28}
-                      classNames={{ markLabel: 'mantine-dark-label' }}
+                      onCommit={(size) => onEffortChange?.({ size, customPoints: level.effort?.customPoints ?? null })}
                     />
                     {level.effort?.size === 'custom' && (
                       <NumberInput
@@ -1003,17 +1019,12 @@ export function InspectorPanel({
 
                   <div>
                     <Text className="mantine-dark-label" size="sm" mb={6}>Benefit</Text>
-                    <Slider
-                      min={0}
-                      max={BENEFIT_SIZES.length - 1}
-                      step={1}
-                      value={Math.max(0, BENEFIT_SIZES.indexOf(level.benefit?.size ?? 'unclear'))}
-                      onChange={(idx) => onBenefitChange?.({ size: BENEFIT_SIZES[idx] })}
+                    <DiscreteInspectorSlider
+                      sizes={BENEFIT_SIZES}
+                      labels={BENEFIT_SIZE_LABELS}
+                      value={level.benefit?.size ?? 'unclear'}
                       marks={BENEFIT_MARKS}
-                      label={(idx) => BENEFIT_SIZE_LABELS[BENEFIT_SIZES[idx]]}
-                      size="xs"
-                      mb={28}
-                      classNames={{ markLabel: 'mantine-dark-label' }}
+                      onCommit={(size) => onBenefitChange?.({ size })}
                     />
                   </div>
 

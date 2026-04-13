@@ -275,19 +275,27 @@
     pointer-events: all;
 }
 
-/* ── Ring (filled circle at spoke tip) ── */
+/* ── Portal symbol at spoke tip (plug/socket) ── */
 .skill-tree-portal__ring {
     fill: #020617;
+    stroke: currentColor;
     stroke-width: 1.5;
+    stroke-linecap: round;
+    stroke-linejoin: round;
     transition: stroke-opacity 140ms ease, transform 140ms ease;
 }
 
 .skill-tree-portal__ring--source {
+    color: rgba(56, 189, 248, 0.85);
     stroke: rgba(56, 189, 248, 0.85);
+    fill: rgba(2, 6, 23, 0.95);
     filter: drop-shadow(0 0 3px rgba(56, 189, 248, 0.45));
 }
 
 .skill-tree-portal__ring--target {
+    color: rgba(250, 204, 21, 0.85);
+    fill: none;
+    stroke-width: 3;
     stroke: rgba(250, 204, 21, 0.85);
     filter: drop-shadow(0 0 3px rgba(250, 204, 21, 0.38));
 }
@@ -313,12 +321,10 @@
 /* hover */
 .skill-tree-portal--interactive:hover .skill-tree-portal__ring {
     stroke-opacity: 1;
-    transform: scale(1.08);
 }
 
 .skill-tree-portal--interactive:hover .skill-tree-portal__cup {
     stroke-opacity: 1;
-    transform: scale(1.08);
 }
 
 .skill-tree-portal__label {
@@ -356,7 +362,7 @@
 .skill-tree-portal__hoverline {
     fill: none;
     stroke: rgba(255, 255, 255, 0.001);
-    stroke-width: 16;
+    stroke-width: 24;
     stroke-linecap: round;
     pointer-events: stroke;
 }
@@ -434,61 +440,14 @@
     stroke-width: 2.5;
 }
 
-@keyframes portal-peer-pulse {
-
-    0%,
-    100% {
-        transform: scale(1.0);
-        filter: drop-shadow(0 0 4px currentColor);
-    }
-
-    50% {
-        transform: scale(1.2);
-        filter: drop-shadow(0 0 10px currentColor);
-    }
-}
-
-/* peer-hovered: counterpart portal highlighted when one side is hovered */
-.skill-tree-portal--peer-hovered .skill-tree-portal__ring {
-    animation: portal-peer-pulse 1s ease-in-out infinite;
-    transform-box: fill-box;
-    transform-origin: center center;
-    stroke-opacity: 1;
-    stroke-width: 2;
-}
-
-.skill-tree-portal--peer-hovered .skill-tree-portal__ring--source {
-    filter: drop-shadow(0 0 8px rgba(56, 189, 248, 0.95));
-}
-
-.skill-tree-portal--peer-hovered .skill-tree-portal__ring--target {
-    filter: drop-shadow(0 0 8px rgba(250, 204, 21, 0.95));
-}
-
-.skill-tree-portal--peer-hovered .skill-tree-portal__spoke {
-    stroke-opacity: 1;
-}
-
-.skill-tree-portal--peer-hovered .skill-tree-portal__spoke--source {
-    stroke: rgba(56, 189, 248, 1);
-}
-
-.skill-tree-portal--peer-hovered .skill-tree-portal__spoke--target {
-    stroke: rgba(250, 204, 21, 1);
-}
-
-.skill-tree-portal--peer-hovered .skill-tree-portal__chevrons {
-    stroke-opacity: 1;
-}
-
+/* peer-hovered: portal remains static; only the counterpart node pulses */
+.skill-tree-portal--peer-hovered .skill-tree-portal__ring,
+.skill-tree-portal--peer-hovered .skill-tree-portal__dot,
+.skill-tree-portal--peer-hovered .skill-tree-portal__spoke,
+.skill-tree-portal--peer-hovered .skill-tree-portal__chevrons,
 .skill-tree-portal--peer-hovered .skill-tree-portal__label {
-    fill: #ffffff;
-}
-
-.skill-tree-portal--peer-hovered .skill-tree-portal__dot {
-    animation: portal-peer-pulse 1s ease-in-out infinite;
-    transform-box: fill-box;
-    transform-origin: center center;
+    animation: none;
+    transform: none;
 }
 
 .skill-panel {
@@ -879,6 +838,7 @@
 }
 
 @keyframes node-peer-hover-pulse {
+
     0%,
     100% {
         transform: translateY(0) scale(1);
@@ -1478,13 +1438,15 @@
     z-index: 50;
     display: flex;
     flex-direction: column;
+    --listview-effort-col-width: 190px;
+    --listview-value-col-width: 150px;
     background: rgba(2, 6, 23, 0.92);
     border-right: 1px solid rgba(51, 65, 85, 0.7);
     backdrop-filter: blur(18px);
 }
 
 .list-view-drawer--wide {
-    width: 720px;
+    width: 640px;
 }
 
 .list-view-drawer__resize-handle {
@@ -1659,11 +1621,11 @@
 }
 
 .list-view-drawer__metrics-header-col--effort {
-    width: 200px;
+    width: var(--listview-effort-col-width, 190px);
 }
 
 .list-view-drawer__metrics-header-col--value {
-    width: 160px;
+    width: var(--listview-value-col-width, 150px);
 }
 
 .list-view-drawer__content::-webkit-scrollbar {
@@ -1847,11 +1809,11 @@
 }
 
 .list-view-drawer__metric-slider--effort {
-    width: 200px;
+    width: var(--listview-effort-col-width, 190px);
 }
 
 .list-view-drawer__metric-slider--value {
-    width: 160px;
+    width: var(--listview-value-col-width, 150px);
 }
 
 .list-view-drawer__slider-val {
@@ -1873,6 +1835,25 @@
     outline: none;
     cursor: pointer;
     accent-color: #3b82f6;
+}
+
+.list-view-drawer__slider-ticks {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0 1px;
+}
+
+.list-view-drawer__slider-tick {
+    width: 2px;
+    height: 6px;
+    border-radius: 2px;
+    background: rgba(100, 116, 139, 0.65);
+    transition: background 120ms ease;
+}
+
+.list-view-drawer__slider-tick--active {
+    background: rgba(147, 197, 253, 0.95);
 }
 
 .list-view-drawer__slider-input::-webkit-slider-thumb {

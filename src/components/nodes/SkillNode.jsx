@@ -1,6 +1,6 @@
 import { useState, useRef } from 'react'
 import { Paper, Text } from '@mantine/core'
-import { STATUS_STYLES } from '../config'
+import { NODE_LABEL_ZOOM, STATUS_STYLES } from '../config'
 import { getDisplayStatusKey, getLevelStatusKeys } from '../utils/nodeStatus'
 import { resolveScopeEntries } from '../utils/scopeDisplay'
 import { MarkdownTooltipContent, Tooltip } from '../tooltip'
@@ -74,16 +74,23 @@ const buildSegmentConicStyle = (statusKeys, colorGetter) => {
   }
 }
 
+const clamp = (value, min, max) => Math.min(max, Math.max(min, value))
+
 export function SkillNode({ node, nodeSize, isSelected, isPortalPeerHovered = false, onSelect, onSelectLevel, onZoomToNode, displayMode = 'full', labelMode = 'far', zoomScale = 1, scopeOptions = [], storyPointMap, releaseId = null }) {
   const [hoveredLevelIndex, setHoveredLevelIndex] = useState(null)
   const lastRightClickRef = useRef(0)
   const isMinimal = displayMode === 'minimal'
   const isVeryClose = !isMinimal && labelMode === 'very-close'
+  const farZoomProgress = clamp(
+    (NODE_LABEL_ZOOM.closeToVeryClose - zoomScale) / (NODE_LABEL_ZOOM.closeToVeryClose - NODE_LABEL_ZOOM.farToMid),
+    0,
+    1,
+  )
   const levels = Array.isArray(node?.levels) ? node.levels : []
   const tooltipLevel = getTooltipLevel(node, releaseId)
   const initVcLevel = Math.max(0, levels.indexOf(tooltipLevel))
   const [vcActiveLevel, setVcActiveLevel] = useState(initVcLevel)
-  const glowPadding = isMinimal ? 8 : isVeryClose ? 36 : 18
+  const glowPadding = isMinimal ? 8 : isVeryClose ? 36 : Math.round(18 + farZoomProgress * 10)
   const renderSize = nodeSize + glowPadding * 2
   const showChips = !isMinimal && (labelMode === 'mid' || labelMode === 'close' || labelMode === 'very-close')
   const fwWidth = renderSize
@@ -135,6 +142,29 @@ export function SkillNode({ node, nodeSize, isSelected, isPortalPeerHovered = fa
     levelStatusKeys,
     (key) => (key === 'now' ? STATUS_STYLES.now.glowSegment : 'transparent'),
   )
+  const zoomGlowProgress = clamp(
+    (zoomScale - NODE_LABEL_ZOOM.farToMid) / ((NODE_LABEL_ZOOM.closeToVeryClose + 1) - NODE_LABEL_ZOOM.farToMid),
+    0,
+    1,
+  )
+  const primaryGlowInset = isVeryClose ? glowPadding : Math.max(6, glowPadding - (10 + farZoomProgress * 5))
+  const secondaryGlowInset = isVeryClose ? glowPadding : Math.max(4, glowPadding - (12 + farZoomProgress * 7))
+  const primaryGlowStyle = {
+    ...levelGlowStyle,
+    inset: `${primaryGlowInset}px`,
+    opacity: isVeryClose
+      ? (0.72 + zoomGlowProgress * 0.24).toFixed(2)
+      : (0.52 + zoomGlowProgress * 0.20).toFixed(2),
+    filter: `blur(${(isVeryClose ? 10 + zoomGlowProgress * 6 : 10 + zoomGlowProgress * 4).toFixed(2)}px)`,
+  }
+  const secondaryGlowStyle = {
+    ...nowLevelGlowStyle,
+    inset: `${secondaryGlowInset}px`,
+    opacity: isVeryClose
+      ? (0.50 + zoomGlowProgress * 0.25).toFixed(2)
+      : (0.36 + zoomGlowProgress * 0.18).toFixed(2),
+    filter: `blur(${(isVeryClose ? 14 + zoomGlowProgress * 10 : 24 + zoomGlowProgress * 6).toFixed(2)}px)`,
+  }
   const nodeBackground = isVeryClose
     ? 'transparent'
     : isSelected
@@ -226,8 +256,8 @@ export function SkillNode({ node, nodeSize, isSelected, isPortalPeerHovered = fa
         style={{ padding: `${glowPadding}px` }}
         onClick={(event) => event.stopPropagation()}
       >
-        {!isMinimal && <div className="skill-node-glow-layer" style={levelGlowStyle} />}
-        {!isMinimal && <div className="skill-node-glow-layer" style={{ ...nowLevelGlowStyle, filter: isVeryClose ? undefined : 'blur(24px)' }} />}
+        {!isMinimal && <div className="skill-node-glow-layer" style={primaryGlowStyle} />}
+        {!isMinimal && <div className="skill-node-glow-layer" style={secondaryGlowStyle} />}
         <Tooltip
           disabled={labelMode === 'close' || labelMode === 'very-close'}
           multiline

@@ -88,6 +88,13 @@ import { resolveInspectorSelectedNode } from './utils/selection'
 
 const AUTOSAVE_DEBOUNCE_MS = 450
 const MINIMAL_NODE_SIZE = 36
+
+const getPortalCounterpartNodeId = (portal) => {
+  if (!portal) return null
+  if (portal.nodeId === portal.sourceId) return portal.targetId
+  if (portal.nodeId === portal.targetId) return portal.sourceId
+  return portal.type === 'source' ? portal.targetId : portal.sourceId
+}
 const MAX_SEGMENT_LABEL_CHARS_PER_LINE = 15
 const CENTER_LABEL_GAP_PX = 12
 const LABEL_LEVEL_ONE_GAP_PX = 14
@@ -2169,8 +2176,8 @@ export function SkillTree() {
       return
     }
 
-    const nextSelectedNodeId = portal.type === 'source' ? portal.targetId : portal.sourceId
-    handleSelectNode(nextSelectedNodeId)
+    const nextSelectedNodeId = getPortalCounterpartNodeId(portal)
+    if (nextSelectedNodeId) handleSelectNode(nextSelectedNodeId)
   }
 
   const updateNodeData = (id, newLabel) => {

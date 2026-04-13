@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { TREE_CONFIG, STATUS_STYLES } from '../config'
 import { getDisplayStatusKey } from '../utils/nodeStatus'
 import { SkillTreeNode } from '../nodes/SkillTreeNode'
@@ -108,6 +108,33 @@ const getPortalClassName = (portal, isSelected, isPeerHovered) => [
   isPeerHovered ? 'skill-tree-portal--peer-hovered' : '',
 ].filter(Boolean).join(' ')
 
+const getCounterpartNodeId = (portal) => {
+  if (!portal) return null
+  if (portal.nodeId === portal.sourceId) return portal.targetId
+  if (portal.nodeId === portal.targetId) return portal.sourceId
+  return portal.type === 'source' ? portal.targetId : portal.sourceId
+}
+
+const buildPortalSocketPath = (size) => {
+  const radius = size * 0.5
+  // Open semicircle (socket): right half of a circle, open on the left.
+  return `M 0 ${-radius} A ${radius} ${radius} 0 0 1 0 ${radius}`
+}
+
+const buildPortalPlugPath = (width, height, tipLength) => {
+  const halfH = height * 0.5
+  const bodyStart = -width * 0.5
+  const bodyEnd = width * 0.5 - tipLength
+  return [
+    `M ${bodyStart} ${-halfH}`,
+    `L ${bodyEnd} ${-halfH}`,
+    `L ${width * 0.5} 0`,
+    `L ${bodyEnd} ${halfH}`,
+    `L ${bodyStart} ${halfH}`,
+    'Z',
+  ].join(' ')
+}
+
 function CenterIconTooltipContent({ systemName, release, draftRelease }) {
   const hasRelease = Boolean(release)
   // Merge draft values on top of active release
@@ -194,13 +221,107 @@ export function SkillTreeCanvas({
   storyPointMap,
   releaseId = null,
 }) {
+  const hoverClearTimeoutRef = useRef(null)
   const [hoveredPortalKey, setHoveredPortalKey] = useState(null)
+  const clearHoverClearTimeout = () => {
+    if (hoverClearTimeoutRef.current) {
+      clearTimeout(hoverClearTimeoutRef.current)
+      hoverClearTimeoutRef.current = null
+    }
+  }
+  const setHoveredPortalImmediate = (portalKey) => {
+    clearHoverClearTimeout()
+    setHoveredPortalKey((prev) => (prev === portalKey ? prev : portalKey))
+  }
+  const scheduleHoveredPortalClear = (portalKey, delayMs = 110) => {
+    clearHoverClearTimeout()
+    hoverClearTimeoutRef.current = setTimeout(() => {
+      setHoveredPortalKey((prev) => (prev === portalKey ? null : prev))
+      hoverClearTimeoutRef.current = null
+    }, delayMs)
+  }
+
+  useEffect(() => () => clearHoverClearTimeout(), [])
+
   const hoveredPortal = hoveredPortalKey
     ? visibleDependencyPortals.find((portal) => portal.key === hoveredPortalKey) ?? null
     : null
-  const hoveredPeerNodeId = hoveredPortal
-    ? (hoveredPortal.type === 'source' ? hoveredPortal.targetId : hoveredPortal.sourceId)
-    : null
+
+  const interactivePortals = useMemo(
+    () => visibleDependencyPortals.filter((portal) => portal.isInteractive),
+    [visibleDependencyPortals],
+  )
+  const interactivePortalByKey = useMemo(
+    () => new Map(interactivePortals.map((portal) => [portal.key, portal])),
+    [interactivePortals],
+  )
+
+  const resolveNearestPortalAtPointer = (event) => {
+    if (interactivePortals.length === 0) return null
+
+    const rootDocument = event.currentTarget?.ownerDocument ?? document
+    const nearestRadius = Math.max(10, Math.min(34, 18 / Math.max(currentZoomScale, 0.35)))
+    const sampleOffsets = [
+      [0, 0],
+      [nearestRadius, 0],
+      [-nearestRadius, 0],
+      [0, nearestRadius],
+      [0, -nearestRadius],
+      [nearestRadius * 0.7, nearestRadius * 0.7],
+      [nearestRadius * 0.7, -nearestRadius * 0.7],
+      [-nearestRadius * 0.7, nearestRadius * 0.7],
+      [-nearestRadius * 0.7, -nearestRadius * 0.7],
+    ]
+
+    for (const [dx, dy] of sampleOffsets) {
+      const elements = rootDocument.elementsFromPoint(event.clientX + dx, event.clientY + dy)
+      for (const el of elements) {
+        const hitGroup = el.closest?.('.skill-tree-portal--interactive[data-portal-key]')
+        const portalKey = hitGroup?.getAttribute('data-portal-key')
+        if (!portalKey) continue
+        const portal = interactivePortalByKey.get(portalKey)
+        if (portal) {
+          return portal
+        }
+      }
+    }
+
+    return null
+  }
+
+  const getLinkStatusStyle = (link) => {
+    const childNode = link.targetId ? layoutNodesById.get(link.targetId) : null
+    const nodeStatus = childNode ? getDisplayStatusKey(childNode, releaseId) : 'later'
+    return STATUS_STYLES[nodeStatus] ?? STATUS_STYLES.later
+  }
+
+  const splitDots = Array.from(
+    filteredLinks.reduce((acc, link) => {
+      if (link.sourceDepth <= 0 || link.linkKind === 'ring' || !link.splitPoint) return acc
+      const statusStyle = getLinkStatusStyle(link)
+      const key = `${link.splitPoint.x.toFixed(2)}|${link.splitPoint.y.toFixed(2)}`
+      if (!acc.has(key)) {
+        acc.set(key, {
+          key,
+          x: link.splitPoint.x,
+          y: link.splitPoint.y,
+          fill: statusStyle.linkStroke,
+          opacity: Math.min(1, parseFloat(statusStyle.linkOpacity) * 1.05),
+        })
+      }
+      return acc
+    }, new Map()).values(),
+  )
+  const hoveredPeerNodeId = hoveredPortal ? getCounterpartNodeId(hoveredPortal) : null
+  const minBackgroundFadeRings = 10
+  const minBackgroundFadeRadius = TREE_CONFIG.levelSpacing * minBackgroundFadeRings
+  // Grow fade radius with the rendered outer ring so added rings extend the gradient.
+  const dynamicFadeRadius = canvas.maxRadius + TREE_CONFIG.levelSpacing * 1.6
+  const backgroundFadeRadius = Math.max(minBackgroundFadeRadius, dynamicFadeRadius)
+  const backgroundRadius = backgroundFadeRadius + TREE_CONFIG.levelSpacing * 2.8
+  const backgroundFadeOffset = Math.min(100, (backgroundFadeRadius / backgroundRadius) * 100)
+  const backgroundInnerOffset = Math.max(0, backgroundFadeOffset * 0.5)
+  const backgroundOuterOffset = Math.min(100, backgroundFadeOffset * 0.86)
 
   return (
     <svg
@@ -211,16 +332,30 @@ export function SkillTreeCanvas({
       className="skill-tree-canvas"
       onClick={onCanvasClick}
       onDoubleClick={onCanvasDoubleClick}
-      onPointerLeave={() => setHoveredPortalKey(null)}
+      onPointerMove={(event) => {
+        const nearest = resolveNearestPortalAtPointer(event)
+        if (nearest) {
+          setHoveredPortalImmediate(nearest.key)
+        } else if (hoveredPortalKey) {
+          scheduleHoveredPortalClear(hoveredPortalKey)
+        }
+      }}
+      onPointerLeave={() => {
+        clearHoverClearTimeout()
+        setHoveredPortalKey(null)
+      }}
     >
       <defs>
-        <radialGradient id="nodeHalo" cx="50%" cy="50%" r="60%">
+        <radialGradient id="nodeHalo" cx="50%" cy="50%" r="100%">
           <stop offset="0%" stopColor="#60a5fa" stopOpacity="0.22" />
+          <stop offset={`${backgroundInnerOffset.toFixed(1)}%`} stopColor="#1e3a8a" stopOpacity="0.16" />
+          <stop offset={`${backgroundOuterOffset.toFixed(1)}%`} stopColor="#0f172a" stopOpacity="0.08" />
+          <stop offset={`${backgroundFadeOffset.toFixed(1)}%`} stopColor="#020617" stopOpacity="0.03" />
           <stop offset="100%" stopColor="#020617" stopOpacity="0" />
         </radialGradient>
       </defs>
 
-      <circle cx={canvas.origin.x} cy={canvas.origin.y} r={canvas.maxRadius + 160} fill="url(#nodeHalo)" />
+      <circle cx={canvas.origin.x} cy={canvas.origin.y} r={backgroundRadius} fill="url(#nodeHalo)" />
 
       <g className="skill-tree-canvas__content">
         <Tooltip
@@ -267,8 +402,8 @@ export function SkillTreeCanvas({
               data-segment-left={separator.leftSegmentId ?? ''}
               data-segment-right={separator.rightSegmentId ?? ''}
               fill="none"
-              stroke="#1e3a8a"
-              strokeOpacity="0.7"
+              stroke="#000000"
+              strokeOpacity="1"
               strokeWidth="2"
               strokeLinecap="round"
             />
@@ -343,18 +478,16 @@ export function SkillTreeCanvas({
             d={link.path}
             data-link-source-id={link.sourceId ?? ''}
             data-link-target-id={link.targetId ?? ''}
-            stroke="#1e3a8a"
+            stroke="#000000"
             strokeWidth="2"
-            strokeOpacity="0.7"
+            strokeOpacity="1"
             strokeLinecap="round"
             fill="none"
           />
         ))}
 
         {filteredLinks.filter((link) => link.sourceDepth > 0 && link.linkKind !== 'ring').map((link) => {
-          const childNode = link.targetId ? layoutNodesById.get(link.targetId) : null
-          const nodeStatus = childNode ? getDisplayStatusKey(childNode, releaseId) : 'later'
-          const statusStyle = STATUS_STYLES[nodeStatus] ?? STATUS_STYLES.later
+          const statusStyle = getLinkStatusStyle(link)
 
           return (
             <path
@@ -372,14 +505,24 @@ export function SkillTreeCanvas({
           )
         })}
 
+        {splitDots.map((dot) => (
+          <circle
+            key={`split-dot-${dot.key}`}
+            cx={dot.x}
+            cy={dot.y}
+            r={3.1}
+            fill={dot.fill}
+            fillOpacity={dot.opacity}
+            style={{ pointerEvents: 'none' }}
+          />
+        ))}
+
         {/* ── Connection line direction chevrons — only at close/very-close, only later+next ── */}
         {(labelMode === 'close' || labelMode === 'very-close') &&
           filteredLinks
             .filter((link) => link.sourceDepth > 0 && link.linkKind !== 'ring')
             .map((link) => {
-              const childNode = link.targetId ? layoutNodesById.get(link.targetId) : null
-              const nodeStatus = childNode ? getDisplayStatusKey(childNode, releaseId) : 'later'
-              const statusStyle = STATUS_STYLES[nodeStatus] ?? STATUS_STYLES.later
+              const statusStyle = getLinkStatusStyle(link)
               const lineWidth = parseFloat(statusStyle.linkStrokeWidth)
               const samples = sampleSvgPath(link.path, CHEVRON_SPACING)
               const chevronD = buildChevronPath(samples, chevronArm(lineWidth), CHEVRON_HALF_OPEN, false)
@@ -468,6 +611,7 @@ export function SkillTreeCanvas({
             >
               <g
                 className={portalClassName}
+                data-portal-key={portal.key}
                 data-portal-node-id={portal.nodeId}
                 data-portal-source-id={portal.sourceId}
                 data-portal-target-id={portal.targetId}
@@ -479,8 +623,8 @@ export function SkillTreeCanvas({
                     onSelectPortal(portal)
                   }
                 }}
-                onPointerEnter={() => setHoveredPortalKey(portal.key)}
-                onPointerLeave={() => setHoveredPortalKey((prev) => (prev === portal.key ? null : prev))}
+                onPointerEnter={() => setHoveredPortalImmediate(portal.key)}
+                onPointerLeave={() => scheduleHoveredPortalClear(portal.key)}
               >
                 {/* wide, invisible spoke hit-path for forgiving hover */}
                 <path
@@ -499,16 +643,23 @@ export function SkillTreeCanvas({
                     className={`skill-tree-portal__chevrons skill-tree-portal__chevrons--${portal.type}`}
                   />
                 )}
-                {/* ring icon at spoke tip */}
-                <circle
-                  className={`skill-tree-portal__ring skill-tree-portal__ring--${portal.type}`}
-                  r={portal.isMinimal ? 6 : 14}
-                  cx={extTipX}
-                  cy={extTipY}
-                />
+                {/* socket/plug icon at spoke tip */}
+                {isSource ? (
+                  <path
+                    className={`skill-tree-portal__ring skill-tree-portal__ring--${portal.type}`}
+                    d={buildPortalPlugPath(portal.isMinimal ? 14 : 28, portal.isMinimal ? 8 : 14, portal.isMinimal ? 4 : 7)}
+                    transform={`translate(${extTipX} ${extTipY}) rotate(${(spokeTangent * 180) / Math.PI})`}
+                  />
+                ) : (
+                  <path
+                    className={`skill-tree-portal__ring skill-tree-portal__ring--${portal.type}`}
+                    d={buildPortalSocketPath(portal.isMinimal ? 10 : 18)}
+                    transform={`translate(${extTipX} ${extTipY}) rotate(${(spokeTangent * 180) / Math.PI})`}
+                  />
+                )}
                 {/* invisible hit area (larger than ring for easy clicking) */}
-                <circle className="skill-tree-portal__hit" r={portal.isMinimal ? 20 : 24} cx={extTipX} cy={extTipY} />
-                {/* label inside the circle at spoke tip */}
+                <circle className="skill-tree-portal__hit" r={portal.isMinimal ? 30 : 36} cx={extTipX} cy={extTipY} />
+                {/* label inside the portal symbol at spoke tip */}
                 {!portal.isMinimal && (
                   <text
                     className="skill-tree-portal__label"

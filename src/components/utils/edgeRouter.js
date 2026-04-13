@@ -326,6 +326,7 @@ export const buildRoutedEdgeLinks = ({ edgeRouting, nodesById, origin, nodeSize 
     }
 
     let path
+    let splitPoint = null
     let linkKind = shared ? 'routed' : 'direct'
 
     const levelGap = targetRadius - sourceRadius
@@ -406,6 +407,9 @@ export const buildRoutedEdgeLinks = ({ edgeRouting, nodesById, origin, nodeSize 
           parts.push(corridorArc)
         }
 
+        // Visual split between shared trunk and branch-specific segment.
+        splitPoint = { x: corridorTrunkPoint.x, y: corridorTrunkPoint.y }
+
         // Radial spoke from corridor ring down to child node.
         parts.push(`L ${child.x} ${child.y}`)
 
@@ -429,6 +433,9 @@ export const buildRoutedEdgeLinks = ({ edgeRouting, nodesById, origin, nodeSize 
           parts.push(targetArc)
         }
 
+        // Visual split point where trunk ray transitions into the child arc.
+        splitPoint = { x: targetTrunkPoint.x, y: targetTrunkPoint.y }
+
         path = parts.join(' ')
       }
     }
@@ -440,6 +447,7 @@ export const buildRoutedEdgeLinks = ({ edgeRouting, nodesById, origin, nodeSize 
       sourceId: plan.parentId,
       targetId: plan.childId,
       path,
+      splitPoint,
     })
   }
 
