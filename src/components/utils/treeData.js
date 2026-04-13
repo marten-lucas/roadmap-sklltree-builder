@@ -22,6 +22,15 @@ const isModelTraceEnabled = () => {
   }
 }
 
+const getDefaultLevelLabel = (index) => `Level ${index + 1}`
+
+const normalizeLevelLabel = (label, index) => {
+  const trimmed = String(label ?? '').trim()
+  return trimmed || getDefaultLevelLabel(index)
+}
+
+const isDefaultLevelLabel = (label, index) => String(label ?? '').trim() === getDefaultLevelLabel(index)
+
 const toNodeLevel = (levelLike, fallbackLabel = 'Level 1') => {
   // Build statuses map from existing statuses or from legacy status field
   let statuses = {}
@@ -732,6 +741,8 @@ export const updateNodeProgressLevel = (treeData, id, levelId, updates, releaseI
         return level
       }
 
+      const levelIndex = levels.findIndex((entry) => entry.id === levelId)
+
       // If `updates.status` is provided and `releaseId` is given, update statuses map
       // instead of a (non-existent) flat status field.
       let nextStatuses = level.statuses ?? {}
@@ -744,6 +755,9 @@ export const updateNodeProgressLevel = (treeData, id, levelId, updates, releaseI
       return {
         ...level,
         ...updatesRest,
+        label: updates?.label !== undefined
+          ? normalizeLevelLabel(updates.label, levelIndex >= 0 ? levelIndex : 0)
+          : normalizeLevelLabel(level.label, levelIndex >= 0 ? levelIndex : 0),
         statuses: nextStatuses,
         releaseNote: updates?.releaseNote ?? level.releaseNote ?? '',
         scopeIds: updates?.scopeIds !== undefined
@@ -770,15 +784,16 @@ export const addNodeProgressLevel = (treeData, id, newLevelId) =>
   withNormalizedDependencies(updateNodeById(treeData, id, (node) => {
     const levels = ensureNodeLevels(node)
     const nextIndex = levels.length + 1
+    const nextLabel = getDefaultLevelLabel(nextIndex - 1)
     const nextLevel = toNodeLevel(
       {
         id: newLevelId ?? generateUUID(),
-        label: `Level ${nextIndex}`,
+        label: nextLabel,
         statuses: {},
         releaseNote: '',
         scopeIds: [],
       },
-      `Level ${nextIndex}`,
+      nextLabel,
     )
 
     return {
@@ -795,12 +810,23 @@ export const removeNodeProgressLevel = (treeData, id, levelId) =>
       }
     }
 
-    const nextLevels = levels
-      .filter((level) => level.id !== levelId)
-      .map((level, index) => ({
+    const nextLevels = []
+
+    levels.forEach((level, originalIndex) => {
+      if (level.id === levelId) {
+        return
+      }
+
+      const nextIndex = nextLevels.length
+      const nextLabel = isDefaultLevelLabel(level.label, originalIndex)
+        ? getDefaultLevelLabel(nextIndex)
+        : normalizeLevelLabel(level.label, nextIndex)
+
+      nextLevels.push({
         ...level,
-        label: `Level ${index + 1}`,
-      }))
+        label: nextLabel,
+      })
+    })
 
     if (nextLevels.length === 0) {
       return {

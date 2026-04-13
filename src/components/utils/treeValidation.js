@@ -275,14 +275,15 @@ export const getLevelOptionsForNode = (tree, nodeId, config = TREE_CONFIG) => {
 
   for (let level = levelInfo.parentLevel + 1; level <= levelInfo.maxLevel + 1; level += 1) {
     const validation = validateNodeLevelChange(tree, nodeId, level, config)
+    const blockingIssues = (validation.introducedIssues ?? []).filter((issue) => issue.type !== 'segment-boundary')
     const isCurrent = level === currentLevel
-    const isAllowed = validation.isAllowed || isCurrent
+    const isAllowed = blockingIssues.length === 0 || isCurrent
 
     options.push({
       value: level,
       isAllowed,
       isCurrent,
-      reasons: isAllowed ? [] : toReasonList(validation.introducedIssues),
+      reasons: isAllowed ? [] : toReasonList(blockingIssues),
     })
   }
 

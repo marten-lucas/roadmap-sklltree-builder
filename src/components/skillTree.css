@@ -474,6 +474,8 @@
     border-right: 0;
     border-top: 0;
     border-bottom: 0;
+    display: flex;
+    flex-direction: column;
 }
 
 .skill-panel__icon-preview {

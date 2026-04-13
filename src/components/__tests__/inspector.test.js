@@ -77,6 +77,7 @@ describe('InspectorPanel render', () => {
 
     expect(html).toContain('Inspector')
     expect(html).toContain('Node 1')
+    expect(html).toContain('Level Name')
   })
 })
 

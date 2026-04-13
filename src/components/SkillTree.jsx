@@ -580,7 +580,9 @@ export function SkillTree() {
       return null
     }
 
-    const relevantIssue = diagnostics.issues.find((issue) => issue.nodeIds?.includes(selectedNodeId))
+    const relevantIssue = diagnostics.issues.find(
+      (issue) => issue.nodeIds?.includes(selectedNodeId) && issue.type !== 'segment-boundary',
+    )
 
     return relevantIssue?.message ?? null
   }, [diagnostics, selectedNodeId])
@@ -2097,6 +2099,14 @@ export function SkillTree() {
     applyToSelectedNodes((tree, id) => updateNodeProgressLevel(tree, id, levelId, { releaseNote }))
   }
 
+  const handleLevelLabelChange = (label, levelId = activeSelectedProgressLevelId) => {
+    if (!selectedNodeId || !levelId) {
+      return
+    }
+
+    commitDocument(updateNodeProgressLevel(roadmapData, selectedNodeId, levelId, { label }))
+  }
+
   const handleLevelScopesChange = (scopeIds, levelId = activeSelectedProgressLevelId) => {
     if ((!selectedNodeId && !(Array.isArray(selectedNodeIds) && selectedNodeIds.length > 0)) || !levelId) {
       return
@@ -2606,6 +2616,7 @@ export function SkillTree() {
         onShortNameChange={handleShortNameChange}
         onStatusChange={handleStatusChange}
         onReleaseNoteChange={handleReleaseNoteChange}
+        onLevelLabelChange={handleLevelLabelChange}
         onScopeIdsChange={handleLevelScopesChange}
         scopeOptions={scopeOptions}
         onCreateScope={handleCreateScope}

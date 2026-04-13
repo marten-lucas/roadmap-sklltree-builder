@@ -104,6 +104,7 @@ export function InspectorPanel({
   onShortNameChange,
   onStatusChange,
   onReleaseNoteChange,
+  onLevelLabelChange,
   onScopeIdsChange,
   scopeOptions,
   onCreateScope,
@@ -160,6 +161,7 @@ export function InspectorPanel({
   const [segmentError, setSegmentError] = useState(null)
   const [editingSegmentId, setEditingSegmentId] = useState(null)
   const [editingSegmentLabel, setEditingSegmentLabel] = useState('')
+  const [levelLabelDrafts, setLevelLabelDrafts] = useState({})
 
   useEffect(() => {
     const nextName = selectedNode?.label ?? ''
@@ -177,6 +179,9 @@ export function InspectorPanel({
     setNameDraft(nextName)
     setShortNameDraft(nextShortName)
     setReleaseNoteDraft(nextReleaseNote)
+    setLevelLabelDrafts(Object.fromEntries(
+      (selectedNode?.levels ?? []).map((level, index) => [level.id, level.label ?? `Level ${index + 1}`]),
+    ))
     /* eslint-enable react-hooks/set-state-in-effect */
   }, [selectedNode])
 
@@ -570,7 +575,7 @@ export function InspectorPanel({
   }, [shortNameDraft, otherShortNames])
   const levelData = levelOptions.map((option) => ({
     value: String(option.value),
-    label: `Level ${option.value}`,
+    label: `Ring ${option.value}`,
     disabled: !option.isAllowed,
   }))
   const segmentData = (segmentOptions ?? []).map((option) => ({
@@ -797,7 +802,7 @@ export function InspectorPanel({
                   )}
 
                   <Select
-                    label="Level"
+                    label="Ring"
                     data={levelData}
                     value={String(currentLevel)}
                     onChange={(value) => value && onLevelChange(parseInt(value, 10))}
@@ -831,6 +836,24 @@ export function InspectorPanel({
             <Tabs.Panel key={level.id} value={level.id}>
               <div className="skill-panel__tab-scroll skill-panel__tab-scroll--level">
                 <Stack gap="md" style={{ flexShrink: 0 }}>
+                  <TextInput
+                    label="Level Name"
+                    placeholder="e.g. Foundation"
+                    value={levelLabelDrafts[level.id] ?? level.label}
+                    onChange={(event) => {
+                      const nextValue = event.currentTarget.value
+                      setLevelLabelDrafts((prev) => ({
+                        ...prev,
+                        [level.id]: nextValue,
+                      }))
+                    }}
+                    onBlur={() => {
+                      const nextValue = levelLabelDrafts[level.id] ?? level.label
+                      onLevelLabelChange?.(nextValue, level.id)
+                    }}
+                    classNames={{ input: 'mantine-dark-input', label: 'mantine-dark-label' }}
+                  />
+
                   <div>
                     <Text className="mantine-dark-label" size="sm" mb={6}>Status</Text>
                     <SegmentedControl

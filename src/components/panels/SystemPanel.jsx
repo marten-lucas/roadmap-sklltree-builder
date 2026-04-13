@@ -32,6 +32,12 @@ export function SystemPanel({
   const [newReleaseName, setNewReleaseName] = useState('')
   const [newReleaseDialogOpen, setNewReleaseDialogOpen] = useState(false)
   const [activeTabValue, setActiveTabValue] = useState(selectedReleaseId ?? 'system')
+  const [systemNameDraft, setSystemNameDraft] = useState('')
+  const [releaseDraftId, setReleaseDraftId] = useState(null)
+  const [releaseNameDraft, setReleaseNameDraft] = useState('')
+  const [releaseMottoDraft, setReleaseMottoDraft] = useState('')
+  const [releaseDateDraft, setReleaseDateDraft] = useState('')
+  const [introductionDraft, setIntroductionDraft] = useState('')
 
   const releases = roadmapData.releases ?? []
 
@@ -55,19 +61,70 @@ export function SystemPanel({
     })
   }, [releases, selectedReleaseId])
 
+  const activeRelease = releases.find((r) => r.id === selectedReleaseId) ?? releases[0] ?? null
+
+  useEffect(() => {
+    setSystemNameDraft(roadmapData?.systemName ?? '')
+  }, [roadmapData?.systemName])
+
+  useEffect(() => {
+    const nextReleaseId = activeRelease?.id ?? null
+    setReleaseDraftId(nextReleaseId)
+    setReleaseNameDraft(activeRelease?.name ?? '')
+    setReleaseMottoDraft(activeRelease?.motto ?? '')
+    setReleaseDateDraft(activeRelease?.date ?? '')
+    setIntroductionDraft(activeRelease?.introduction ?? '')
+  }, [activeRelease?.id, activeRelease?.name, activeRelease?.motto, activeRelease?.date, activeRelease?.introduction])
+
   if (!isOpen) {
     return null
   }
 
-  const activeRelease = releases.find((r) => r.id === selectedReleaseId) ?? releases[0] ?? null
   const allNodes = collectAllNodes(roadmapData)
 
-  const handleUpdateRelease = (field, value) => {
-    if (!activeRelease) return
-    commitDocument({
-      ...roadmapData,
-      releases: updateRelease(releases, activeRelease.id, { [field]: value }),
-    })
+  const commitTextDrafts = (releaseId = releaseDraftId) => {
+    let nextRoadmapData = roadmapData
+    let hasChanges = false
+
+    if (systemNameDraft !== (roadmapData?.systemName ?? '')) {
+      nextRoadmapData = {
+        ...nextRoadmapData,
+        systemName: systemNameDraft,
+      }
+      hasChanges = true
+    }
+
+    if (releaseId) {
+      const release = releases.find((entry) => entry.id === releaseId)
+      if (release) {
+        const releasePatch = {}
+
+        if (releaseNameDraft !== (release.name ?? '')) {
+          releasePatch.name = releaseNameDraft
+        }
+        if (releaseMottoDraft !== (release.motto ?? '')) {
+          releasePatch.motto = releaseMottoDraft
+        }
+        if (releaseDateDraft !== (release.date ?? '')) {
+          releasePatch.date = releaseDateDraft
+        }
+        if (introductionDraft !== (release.introduction ?? '')) {
+          releasePatch.introduction = introductionDraft
+        }
+
+        if (Object.keys(releasePatch).length > 0) {
+          nextRoadmapData = {
+            ...nextRoadmapData,
+            releases: updateRelease(nextRoadmapData.releases ?? releases, releaseId, releasePatch),
+          }
+          hasChanges = true
+        }
+      }
+    }
+
+    if (hasChanges) {
+      commitDocument(nextRoadmapData)
+    }
   }
 
   const handleAddRelease = () => {
@@ -118,7 +175,15 @@ export function SystemPanel({
           </Text>
         </div>
         <div className="skill-panel__header-actions">
-          <ActionIcon variant="subtle" color="gray" onClick={onClose} aria-label="Close system panel">
+          <ActionIcon
+            variant="subtle"
+            color="gray"
+            onClick={() => {
+              commitTextDrafts()
+              onClose()
+            }}
+            aria-label="Close system panel"
+          >
             ✕
           </ActionIcon>
         </div>
@@ -132,6 +197,8 @@ export function SystemPanel({
             if (!val || val === '__add__') {
               return
             }
+
+            commitTextDrafts()
 
             setActiveTabValue(val)
 
@@ -165,21 +232,23 @@ export function SystemPanel({
                 <Stack gap="md" style={{ flexShrink: 0 }}>
                   <TextInput
                     label="Release name"
-                    value={release.name ?? ''}
-                    onChange={(e) => commitDocument({
-                      ...roadmapData,
-                      releases: updateRelease(releases, release.id, { name: e.currentTarget.value }),
-                    })}
+                    value={releaseDraftId === release.id ? releaseNameDraft : (release.name ?? '')}
+                    onChange={(e) => {
+                      setReleaseDraftId(release.id)
+                      setReleaseNameDraft(e.currentTarget.value)
+                    }}
+                    onBlur={() => commitTextDrafts(release.id)}
                     classNames={{ input: 'mantine-dark-input', label: 'mantine-dark-label' }}
                   />
 
                   <TextInput
                     label="Motto"
-                    value={release.motto ?? ''}
-                    onChange={(e) => commitDocument({
-                      ...roadmapData,
-                      releases: updateRelease(releases, release.id, { motto: e.currentTarget.value }),
-                    })}
+                    value={releaseDraftId === release.id ? releaseMottoDraft : (release.motto ?? '')}
+                    onChange={(e) => {
+                      setReleaseDraftId(release.id)
+                      setReleaseMottoDraft(e.currentTarget.value)
+                    }}
+                    onBlur={() => commitTextDrafts(release.id)}
                     classNames={{ input: 'mantine-dark-input', label: 'mantine-dark-label' }}
                   />
 
@@ -187,11 +256,12 @@ export function SystemPanel({
                     label="Release Date"
                     placeholder="YYYY-MM-DD"
                     type="date"
-                    value={release.date ?? ''}
-                    onChange={(e) => commitDocument({
-                      ...roadmapData,
-                      releases: updateRelease(releases, release.id, { date: e.currentTarget.value }),
-                    })}
+                    value={releaseDraftId === release.id ? releaseDateDraft : (release.date ?? '')}
+                    onChange={(e) => {
+                      setReleaseDraftId(release.id)
+                      setReleaseDateDraft(e.currentTarget.value)
+                    }}
+                    onBlur={() => commitTextDrafts(release.id)}
                     classNames={{ input: 'mantine-dark-input', label: 'mantine-dark-label' }}
                   />
 
@@ -221,11 +291,12 @@ export function SystemPanel({
                   <MarkdownField
                     fill
                     label="Introduction"
-                    value={release.introduction ?? ''}
-                    onChange={(nextValue) => commitDocument({
-                      ...roadmapData,
-                      releases: updateRelease(releases, release.id, { introduction: nextValue }),
-                    })}
+                    value={releaseDraftId === release.id ? introductionDraft : (release.introduction ?? '')}
+                    onChange={(nextValue) => {
+                      setReleaseDraftId(release.id)
+                      setIntroductionDraft(nextValue)
+                    }}
+                    onBlur={() => commitTextDrafts(release.id)}
                     minRows={4}
                   />
                 </div>
@@ -273,8 +344,9 @@ export function SystemPanel({
               <Stack gap="md">
                 <TextInput
                   label="Systemname"
-                  value={roadmapData?.systemName ?? ''}
-                  onChange={(e) => commitDocument({ ...roadmapData, systemName: e.currentTarget.value })}
+                  value={systemNameDraft}
+                  onChange={(e) => setSystemNameDraft(e.currentTarget.value)}
+                  onBlur={() => commitTextDrafts()}
                   classNames={{ input: 'mantine-dark-input', label: 'mantine-dark-label' }}
                 />
 

@@ -7,6 +7,7 @@ import {
   getNodeAdditionalDependencies,
   moveNodeToParent,
   renameScopeWithResult,
+  removeNodeProgressLevel,
   setLevelAdditionalDependencies,
   updateNodeProgressLevel,
   updateNodeData,
@@ -271,6 +272,49 @@ describe('treeData', () => {
         expect(node.x).toBeCloseTo(previous.x, 6)
         expect(node.y).toBeCloseTo(previous.y, 6)
       })
+    })
+  })
+
+  describe('progress level labels', () => {
+    it('should update a level label without mutating the original tree', () => {
+      const tree = createSimpleTree()
+      const nextTree = updateNodeProgressLevel(tree, 'child-react', LEVEL_CHILD_REACT_1, { label: 'Foundation' })
+
+      expect(findNodeById(nextTree, 'child-react').levels[0].label).toBe('Foundation')
+      expect(findNodeById(tree, 'child-react').levels[0].label).not.toBe('Foundation')
+    })
+
+    it('should restore the default label when an updated level label is blank', () => {
+      const tree = createSimpleTree()
+      const nextTree = updateNodeProgressLevel(tree, 'child-react', LEVEL_CHILD_REACT_1, { label: '   ' })
+
+      expect(findNodeById(nextTree, 'child-react').levels[0].label).toBe('Level 1')
+    })
+
+    it('should preserve custom labels when deleting another level', () => {
+      const tree = {
+        segments: [{ id: 'seg-1', label: 'Segment 1' }],
+        children: [
+          {
+            id: 'node-1',
+            label: 'Node 1',
+            status: 'later',
+            ebene: 1,
+            segmentId: 'seg-1',
+            levels: [
+              { id: 'level-1', label: 'Level 1', statuses: {}, releaseNote: '', scopeIds: [], additionalDependencyLevelIds: [] },
+              { id: 'level-2', label: 'Foundation', statuses: {}, releaseNote: '', scopeIds: [], additionalDependencyLevelIds: [] },
+              { id: 'level-3', label: 'Level 3', statuses: {}, releaseNote: '', scopeIds: [], additionalDependencyLevelIds: [] },
+            ],
+            children: [],
+          },
+        ],
+      }
+
+      const nextTree = removeNodeProgressLevel(tree, 'node-1', 'level-1')
+      const nextLevels = findNodeById(nextTree, 'node-1').levels
+
+      expect(nextLevels.map((level) => level.label)).toEqual(['Foundation', 'Level 2'])
     })
   })
 
