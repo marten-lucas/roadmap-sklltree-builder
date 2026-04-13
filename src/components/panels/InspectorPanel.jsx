@@ -603,11 +603,6 @@ export function InspectorPanel({
   }))
   const selectedParentKey = selectedParentId ?? '__root__'
 
-  const relationLabelByType = {
-    hierarchy: 'Tree',
-    additional: 'Dependency',
-  }
-
   const renderDependencyGroup = (title, entries) => (
     <Stack gap={6} style={{ flex: 1, minWidth: 0 }}>
       <Text size="sm" fw={600}>{`${title} (${entries.length})`}</Text>
@@ -632,9 +627,6 @@ export function InspectorPanel({
               >
                 <Text size="sm" fw={500}>
                   {entry.shortName ? `${entry.shortName} - ${entry.label}` : entry.label}
-                </Text>
-                <Text size="xs" c="dimmed">
-                  {entry.relationTypes.map((type) => relationLabelByType[type] ?? type).join(' + ')}
                 </Text>
                 {(entry.scopes ?? []).length > 0 && (
                   <Group gap={6} mt={6} wrap="wrap">
@@ -666,7 +658,7 @@ export function InspectorPanel({
           </Stack>
         </>
       ) : (
-        <Text size="sm" c="dimmed">Keine Abhaengigkeiten</Text>
+        <Text size="sm" c="dimmed">No dependencies</Text>
       )}
     </Stack>
   )
@@ -911,7 +903,7 @@ export function InspectorPanel({
                     }}
                   >
                     <Stack gap="sm">
-                      <Text size="xs" fw={700} tt="uppercase" c="cyan.2" lts="0.11em">Abhaengigkeiten</Text>
+                      <Text size="xs" fw={700} tt="uppercase" c="cyan.2" lts="0.11em">Dependencies</Text>
                       <Group align="flex-start" grow>
                         {renderDependencyGroup('Requires', dependencyRequires)}
                         {renderDependencyGroup('Enables', dependencyEnables)}
