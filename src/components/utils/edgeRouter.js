@@ -274,6 +274,12 @@ export const buildEdgeRoutingModel = ({
 export const buildRoutedEdgeLinks = ({ edgeRouting, nodesById, origin, nodeSize = 48 }) => {
   const { trunkGroups, edgePlans } = edgeRouting
   const trunkGroupById = new Map(trunkGroups.map((g) => [g.id, g]))
+  const childCountByParentLevel = new Map()
+
+  for (const plan of edgePlans) {
+    const key = `${plan.parentId}|${plan.targetLevel}`
+    childCountByParentLevel.set(key, (childCountByParentLevel.get(key) ?? 0) + 1)
+  }
 
   const links = []
 
@@ -299,36 +305,78 @@ export const buildRoutedEdgeLinks = ({ edgeRouting, nodesById, origin, nodeSize 
       return `A ${radius} ${radius} 0 0 ${sweep} ${toPoint.x} ${toPoint.y}`
     }
 
+    const hasSourceRingBlockerBetween = (fromAngle, toAngle) => {
+      const minAngle = Math.min(fromAngle, toAngle)
+      const maxAngle = Math.max(fromAngle, toAngle)
+      const sourceRingTolerancePx = nodeSize * 0.55
+
+      return Array.from(nodesById.values()).some((node) => {
+        if (node.id === parent.id || node.id === child.id) return false
+        if (Math.abs((node.radius ?? 0) - sourceRadius) > sourceRingTolerancePx) return false
+        return node.angle > minAngle + 0.2 && node.angle < maxAngle - 0.2
+      })
+    }
+
     let path
 
+    const levelGap = targetRadius - sourceRadius
+    const minCorridorGap = nodeSize // corridor at gap/2 needs one node-diameter clearance from each ring
+    const parentTargetLevelKey = `${plan.parentId}|${plan.targetLevel}`
+    const hasPeerChildrenAtTargetLevel = (childCountByParentLevel.get(parentTargetLevelKey) ?? 0) > 1
+
     if (!shared) {
-      path = buildRadialArcPath(parent.angle, sourceRadius, childAngle, targetRadius, origin)
+      const hasSourceRingBlocker = hasSourceRingBlockerBetween(parent.angle, childAngle)
+
+      // If a parent has multiple children on the same target level but this edge ended
+      // up in a singleton cluster, a direct source-ring arc can still sweep through
+      // nearby nodes and get portalized. Route via the mid-level corridor instead.
+      if (
+        (hasPeerChildrenAtTargetLevel || hasSourceRingBlocker)
+        && levelGap >= minCorridorGap
+        && Math.abs(childAngle - parent.angle) >= 0.5
+      ) {
+        const corridorRadius = sourceRadius + levelGap * 0.5
+        const corridorParentPoint = toCartesian(parent.angle, corridorRadius, origin)
+        const corridorChildPoint = toCartesian(childAngle, corridorRadius, origin)
+        const parts = [`M ${parent.x} ${parent.y}`]
+
+        parts.push(`L ${corridorParentPoint.x} ${corridorParentPoint.y}`)
+
+        const corridorArc = buildArc(parent.angle, corridorRadius, childAngle, corridorChildPoint)
+        if (corridorArc) {
+          parts.push(corridorArc)
+        }
+
+        parts.push(`L ${child.x} ${child.y}`)
+        path = parts.join(' ')
+      } else {
+        path = buildRadialArcPath(parent.angle, sourceRadius, childAngle, targetRadius, origin)
+      }
     } else if (Math.abs(childAngle - trunkAngle) < 0.5) {
       path = buildRadialArcPath(parent.angle, sourceRadius, childAngle, targetRadius, origin)
     } else {
       // Shared trunk with corridor routing:
       // source-ring arc → radial to mid-corridor → corridor arc (free space) → spoke to child.
       // The corridor arc runs between the two node rings so it never sweeps through sibling nodes.
-      const levelGap = targetRadius - sourceRadius
-      const minCorridorGap = nodeSize // corridor at gap/2 needs one node-diameter clearance from each ring
-
       if (levelGap >= minCorridorGap) {
         // Radial-polyline routing: arc@sourceRadius → radial spoke → arc@corridorRadius → radial spoke.
         // The corridor ring sits between the two node rings, so its arc never passes through
         // sibling node positions and avoids the visual bridge issue of arcing on the target ring.
         const corridorRadius = sourceRadius + levelGap * 0.5
-        const sourceTrunkPoint = toCartesian(trunkAngle, sourceRadius, origin)
+        const corridorParentPoint = toCartesian(parent.angle, corridorRadius, origin)
         const corridorTrunkPoint = toCartesian(trunkAngle, corridorRadius, origin)
         const corridorChildPoint = toCartesian(childAngle, corridorRadius, origin)
 
         const parts = [`M ${parent.x} ${parent.y}`]
 
-        const sourceArc = buildArc(parent.angle, sourceRadius, trunkAngle, sourceTrunkPoint)
-        if (sourceArc) {
-          parts.push(sourceArc)
-        }
+        // Always enter the corridor radially to avoid sweeping arcs across
+        // populated source rings (which can trigger avoidable portalization).
+        parts.push(`L ${corridorParentPoint.x} ${corridorParentPoint.y}`)
 
-        parts.push(`L ${corridorTrunkPoint.x} ${corridorTrunkPoint.y}`)
+        const parentToTrunkCorridorArc = buildArc(parent.angle, corridorRadius, trunkAngle, corridorTrunkPoint)
+        if (parentToTrunkCorridorArc) {
+          parts.push(parentToTrunkCorridorArc)
+        }
 
         // Arc along the corridor ring from trunk angle to child angle — strictly radial/arc routing.
         const corridorArc = buildArc(trunkAngle, corridorRadius, childAngle, corridorChildPoint)

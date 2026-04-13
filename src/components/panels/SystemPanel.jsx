@@ -29,8 +29,6 @@ export function SystemPanel({
   onReleaseChange,
 }) {
   const fileInputRef = useRef(null)
-  const [newReleaseName, setNewReleaseName] = useState('')
-  const [newReleaseDialogOpen, setNewReleaseDialogOpen] = useState(false)
   const [activeTabValue, setActiveTabValue] = useState(selectedReleaseId ?? 'system')
   const [systemNameDraft, setSystemNameDraft] = useState('')
   const [releaseDraftId, setReleaseDraftId] = useState(null)
@@ -128,13 +126,11 @@ export function SystemPanel({
   }
 
   const handleAddRelease = () => {
-    const name = newReleaseName.trim() || `Release ${releases.length + 1}`
+    const name = 'Neues Release'
     const { releases: nextReleases, newReleaseId } = addRelease(releases, name)
     commitDocument({ ...roadmapData, releases: nextReleases })
     setActiveTabValue(newReleaseId)
     onReleaseChange?.(newReleaseId)
-    setNewReleaseName('')
-    setNewReleaseDialogOpen(false)
   }
 
   const handleDeleteRelease = () => {
@@ -218,7 +214,14 @@ export function SystemPanel({
                 {release.name || 'Release'}
               </Tabs.Tab>
             ))}
-            <Tabs.Tab value="__add__" onClick={(e) => { e.preventDefault(); setNewReleaseDialogOpen(true) }}>
+            <Tabs.Tab
+              value="__add__"
+              onClick={(e) => {
+                e.preventDefault()
+                commitTextDrafts()
+                handleAddRelease()
+              }}
+            >
               +
             </Tabs.Tab>
             <Tabs.Tab value="system">System</Tabs.Tab>
@@ -316,27 +319,6 @@ export function SystemPanel({
               </div>
             </Tabs.Panel>
           ))}
-
-          {/* ── New Release Dialog (inline) ── */}
-          {newReleaseDialogOpen && (
-            <div style={{ padding: '12px', borderTop: '1px solid #333' }}>
-              <Stack gap="xs">
-                <Text size="sm" fw={600}>New Release</Text>
-                <TextInput
-                  placeholder="Release name"
-                  value={newReleaseName}
-                  onChange={(e) => setNewReleaseName(e.currentTarget.value)}
-                  onKeyDown={(e) => { if (e.key === 'Enter') handleAddRelease() }}
-                  classNames={{ input: 'mantine-dark-input' }}
-                  autoFocus
-                />
-                <Stack gap={4} direction="row">
-                  <Button size="xs" onClick={handleAddRelease}>Create</Button>
-                  <Button size="xs" variant="default" onClick={() => { setNewReleaseDialogOpen(false); setNewReleaseName('') }}>Cancel</Button>
-                </Stack>
-              </Stack>
-            </div>
-          )}
 
           {/* ── SP-Skala Tab ── */}
           <Tabs.Panel value="system">

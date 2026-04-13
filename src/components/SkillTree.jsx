@@ -575,6 +575,100 @@ export function SkillTree() {
       }))
   }, [allNodesById, selectedNodeAdditionalDependencies])
 
+  const selectedNodeDependencySummary = useMemo(() => {
+    if (!selectedNodeId) {
+      return {
+        requires: [],
+        enables: [],
+      }
+    }
+
+    const requiresById = new Map()
+    const enablesById = new Map()
+
+    const scopeById = new Map((roadmapData.scopes ?? []).map((scope) => [scope.id, scope]))
+
+    const resolveNodeScopes = (node) => {
+      const seen = new Set()
+      const entries = []
+
+      for (const level of (node.levels ?? [])) {
+        for (const scopeId of (level.scopeIds ?? [])) {
+          if (seen.has(scopeId)) {
+            continue
+          }
+
+          seen.add(scopeId)
+          const scope = scopeById.get(scopeId)
+          if (!scope) {
+            continue
+          }
+
+          entries.push({
+            id: scope.id,
+            label: scope.label,
+            color: scope.color ?? null,
+          })
+        }
+      }
+
+      return entries
+    }
+
+    const upsert = (map, nodeId, relationType) => {
+      if (!nodeId || nodeId === selectedNodeId) {
+        return
+      }
+
+      const node = allNodesById.get(nodeId)
+      if (!node) {
+        return
+      }
+
+      const existing = map.get(nodeId)
+      if (existing) {
+        existing.relationTypes.add(relationType)
+        return
+      }
+
+      map.set(nodeId, {
+        id: node.id,
+        label: node.label,
+        shortName: node.shortName ?? '',
+        scopes: resolveNodeScopes(node),
+        relationTypes: new Set([relationType]),
+      })
+    }
+
+    if (selectedNodeParentId) {
+      upsert(requiresById, selectedNodeParentId, 'hierarchy')
+    }
+
+    for (const child of (selectedNode?.children ?? [])) {
+      upsert(enablesById, child.id, 'hierarchy')
+    }
+
+    for (const nodeId of (selectedNodeAdditionalDependencies.outgoingIds ?? [])) {
+      upsert(requiresById, nodeId, 'additional')
+    }
+
+    for (const nodeId of (selectedNodeAdditionalDependencies.incomingIds ?? [])) {
+      upsert(enablesById, nodeId, 'additional')
+    }
+
+    const toSortedList = (map) => [...map.values()]
+      .map((entry) => ({
+        ...entry,
+        relationTypes: [...entry.relationTypes],
+      }))
+      .sort((left, right) => String(left.label ?? '').localeCompare(String(right.label ?? '')))
+
+    return {
+      requires: toSortedList(requiresById),
+      enables: toSortedList(enablesById),
+    }
+  }, [allNodesById, roadmapData.scopes, selectedNode, selectedNodeAdditionalDependencies, selectedNodeId, selectedNodeParentId])
+
   const selectedNodeValidationMessage = useMemo(() => {
     if (!selectedNodeId || diagnostics.isValid) {
       return null
@@ -2636,6 +2730,8 @@ export function SkillTree() {
         selectedParentId={selectedNodeParentId}
         levelDependencyOptions={selectedNodeLevelDependencyOptions}
         incomingDependencyLabels={selectedNodeIncomingDependencyLabels}
+        dependencyRequires={selectedNodeDependencySummary.requires}
+        dependencyEnables={selectedNodeDependencySummary.enables}
         validationMessage={selectedNodeValidationMessage}
         onParentChange={(nextParentKey) => {
           if (!selectedNodeId && !(Array.isArray(selectedNodeIds) && selectedNodeIds.length > 0)) {

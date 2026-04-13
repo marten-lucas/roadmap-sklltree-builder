@@ -1247,6 +1247,30 @@ describe('layoutSolver', () => {
       )
       expect(line).toBeTruthy()
     })
+
+    it('no-level/no-segment import keeps CLT→LKE as a line (not portal)', () => {
+      const csvPath = resolve(process.cwd(), 'tests/e2e/datasets/myKyana.csv')
+      const csvText = readFileSync(csvPath, 'utf-8')
+      const doc = readDocumentFromCsvText(csvText, { ignoreSegments: true, ignoreManualLevels: true })
+      const result = solveSkillTreeLayout(doc, TREE_CONFIG)
+
+      const nodeByShortName = new Map(result.layout.nodes.map((node) => [node.shortName, node]))
+      const clt = nodeByShortName.get('CLT')
+      const lke = nodeByShortName.get('LKE')
+
+      expect(clt).toBeTruthy()
+      expect(lke).toBeTruthy()
+
+      const portal = result.layout.crossingEdges.find(
+        (edge) => edge.parentId === clt.id && edge.childId === lke.id,
+      )
+      expect(portal).toBeFalsy()
+
+      const line = result.layout.links.find(
+        (edge) => edge.sourceId === clt.id && edge.targetId === lke.id,
+      )
+      expect(line).toBeTruthy()
+    })
   })
 
   // ---------------------------------------------------------------------------

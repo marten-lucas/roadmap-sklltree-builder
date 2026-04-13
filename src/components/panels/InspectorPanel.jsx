@@ -93,6 +93,18 @@ const STATUS_OPTIONS = [
   { value: 'hidden', label: STATUS_LABELS.hidden },
 ]
 
+const dependencyScopeChipStyle = {
+  borderRadius: 999,
+  border: '1px solid rgba(148, 163, 184, 0.45)',
+  padding: '1px 7px',
+  fontSize: '0.68rem',
+  lineHeight: 1.5,
+  display: 'inline-flex',
+  alignItems: 'center',
+}
+
+const MAX_SCOPE_CHIPS_PER_ENTRY = 4
+
 export function InspectorPanel({
   selectedNode,
   selectedNodeIds,
@@ -125,6 +137,8 @@ export function InspectorPanel({
   levelDependencyOptions,
   onLevelAdditionalDependenciesChange,
   incomingDependencyLabels,
+  dependencyRequires = [],
+  dependencyEnables = [],
   validationMessage,
   onParentChange,
   onSegmentChange,
@@ -551,7 +565,7 @@ export function InspectorPanel({
   }
 
   const selectedSegmentKey = selectedNode?.segmentId ?? UNASSIGNED_SEGMENT_ID
-  const blockedLevelHint = levelOptions.find((option) => !option.isAllowed)?.reasons?.[0] ?? null
+  const blockedRingHint = levelOptions.find((option) => !option.isAllowed)?.reasons?.[0] ?? null
 
   // Collect all short names in the tree except the current node for duplicate check
   const otherShortNames = useMemo(() => {
@@ -573,7 +587,7 @@ export function InspectorPanel({
     if (!draft) return null
     return otherShortNames.has(draft) ? 'This shortname is already used by another node.' : null
   }, [shortNameDraft, otherShortNames])
-  const levelData = levelOptions.map((option) => ({
+  const ringData = levelOptions.map((option) => ({
     value: String(option.value),
     label: `Ring ${option.value}`,
     disabled: !option.isAllowed,
@@ -588,6 +602,74 @@ export function InspectorPanel({
     disabled: !option.isAllowed,
   }))
   const selectedParentKey = selectedParentId ?? '__root__'
+
+  const relationLabelByType = {
+    hierarchy: 'Tree',
+    additional: 'Dependency',
+  }
+
+  const renderDependencyGroup = (title, entries) => (
+    <Stack gap={6} style={{ flex: 1, minWidth: 0 }}>
+      <Text size="sm" fw={600}>{`${title} (${entries.length})`}</Text>
+
+      {entries.length > 0 ? (
+        <>
+          <Stack gap={4}>
+            {entries.map((entry) => (
+              <button
+                key={`${title}-row-${entry.id}`}
+                type="button"
+                onClick={() => onFocusNode?.(entry.id)}
+                style={{
+                  textAlign: 'left',
+                  background: 'rgba(15, 23, 42, 0.45)',
+                  border: '1px solid rgba(148, 163, 184, 0.25)',
+                  borderRadius: 8,
+                  padding: '8px 10px',
+                  color: '#e2e8f0',
+                  cursor: 'pointer',
+                }}
+              >
+                <Text size="sm" fw={500}>
+                  {entry.shortName ? `${entry.shortName} - ${entry.label}` : entry.label}
+                </Text>
+                <Text size="xs" c="dimmed">
+                  {entry.relationTypes.map((type) => relationLabelByType[type] ?? type).join(' + ')}
+                </Text>
+                {(entry.scopes ?? []).length > 0 && (
+                  <Group gap={6} mt={6} wrap="wrap">
+                    {entry.scopes.slice(0, MAX_SCOPE_CHIPS_PER_ENTRY).map((scope) => (
+                      <span
+                        key={`${entry.id}-scope-${scope.id}`}
+                        style={scope.color
+                          ? {
+                              ...dependencyScopeChipStyle,
+                              borderColor: scope.color,
+                              color: scope.color,
+                            }
+                          : dependencyScopeChipStyle}
+                      >
+                        {scope.label}
+                      </span>
+                    ))}
+                    {entry.scopes.length > MAX_SCOPE_CHIPS_PER_ENTRY && (
+                      <span
+                        style={dependencyScopeChipStyle}
+                      >
+                        +{entry.scopes.length - MAX_SCOPE_CHIPS_PER_ENTRY}
+                      </span>
+                    )}
+                  </Group>
+                )}
+              </button>
+            ))}
+          </Stack>
+        </>
+      ) : (
+        <Text size="sm" c="dimmed">Keine Abhaengigkeiten</Text>
+      )}
+    </Stack>
+  )
 
   const [activeTab, setActiveTab] = useState('properties')
 
@@ -803,11 +885,11 @@ export function InspectorPanel({
 
                   <Select
                     label="Ring"
-                    data={levelData}
+                    data={ringData}
                     value={String(currentLevel)}
                     onChange={(value) => value && onLevelChange(parseInt(value, 10))}
                     allowDeselect={false}
-                    description={blockedLevelHint ?? undefined}
+                    description={blockedRingHint ?? undefined}
                     classNames={{
                       input: 'mantine-dark-input',
                       label: 'mantine-dark-label',
@@ -817,6 +899,25 @@ export function InspectorPanel({
                     }}
                     comboboxProps={{ withinPortal: true, zIndex: 450 }}
                   />
+
+                  <Paper
+                    p="md"
+                    radius="md"
+                    withBorder
+                    style={{
+                      marginTop: 10,
+                      background: 'linear-gradient(180deg, rgba(8, 47, 73, 0.24) 0%, rgba(15, 23, 42, 0.52) 100%)',
+                      borderColor: 'rgba(56, 189, 248, 0.28)',
+                    }}
+                  >
+                    <Stack gap="sm">
+                      <Text size="xs" fw={700} tt="uppercase" c="cyan.2" lts="0.11em">Abhaengigkeiten</Text>
+                      <Group align="flex-start" grow>
+                        {renderDependencyGroup('Requires', dependencyRequires)}
+                        {renderDependencyGroup('Enables', dependencyEnables)}
+                      </Group>
+                    </Stack>
+                  </Paper>
                 </Stack>
 
               </Stack>

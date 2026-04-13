@@ -1909,11 +1909,13 @@ export const solveSkillTreeLayout = (data, config) => {
           }
         } else if (!hasAnyLineConnections(link.targetId)) {
           // Phase 3: node is fully portalized — compact to an inner ring.
-          // max(1, parentLevel − 1): just inside the parent ring; the connection
-          // stays a portal, so no line routing is affected.
-          const compactedLevel = Math.max(1, parentNode.level - 1)
-          compactedLevelById.set(link.targetId, compactedLevel)
-          compactionDetails.push({ nodeId: link.targetId, parentId: link.sourceId, fromLevel: childNode.level, toLevel: compactedLevel })
+          // Keep hierarchy edges outward: compaction may move a far-away node inward,
+          // but never onto or inside the parent ring.
+          const compactedLevel = Math.max(parentNode.level + 1, 1)
+          if (compactedLevel < childNode.level) {
+            compactedLevelById.set(link.targetId, compactedLevel)
+            compactionDetails.push({ nodeId: link.targetId, parentId: link.sourceId, fromLevel: childNode.level, toLevel: compactedLevel })
+          }
         }
         // gap > 1 AND childHasLineChildren: geometrically unsolvable — stays a portal,
         // no level change.
