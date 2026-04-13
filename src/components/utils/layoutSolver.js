@@ -1890,9 +1890,22 @@ export const solveSkillTreeLayout = (data, config) => {
           const currentLevel = childNode.level
           const baseLevel = baseLevelById.get(link.targetId) ?? currentLevel
           const newLevel = currentLevel + 1
+          const wouldBreakChildOutwardInvariant = pass.allLinks.some((childLink) => {
+            if (childLink.sourceId !== link.targetId) return false
+            if (childLink.linkKind !== 'direct' && childLink.linkKind !== 'routed') return false
+            if (firstCrossingIds.has(childLink.id)) return false
+
+            const grandChildNode = firstPassNodesById.get(childLink.targetId)
+            if (!grandChildNode) return false
+
+            return grandChildNode.level <= newLevel
+          })
+
           if (newLevel <= baseLevel + 4) {
-            crossingPromotedLevelById.set(link.targetId, newLevel)
-            crossingPromotionDetails.push({ childId: link.targetId, parentId: link.sourceId, fromLevel: currentLevel, toLevel: newLevel, gap })
+            if (!wouldBreakChildOutwardInvariant) {
+              crossingPromotedLevelById.set(link.targetId, newLevel)
+              crossingPromotionDetails.push({ childId: link.targetId, parentId: link.sourceId, fromLevel: currentLevel, toLevel: newLevel, gap })
+            }
           }
         } else if (!hasAnyLineConnections(link.targetId)) {
           // Phase 3: node is fully portalized — compact to an inner ring.

@@ -1223,6 +1223,30 @@ describe('layoutSolver', () => {
 
       expect(violations, `Inward edges found:\n${violations.join('\n')}`).toEqual([])
     })
+
+    it('no-level/no-segment import keeps CPP→PPD as a line (not portal)', () => {
+      const csvPath = resolve(process.cwd(), 'tests/e2e/datasets/myKyana.csv')
+      const csvText = readFileSync(csvPath, 'utf-8')
+      const doc = readDocumentFromCsvText(csvText, { ignoreSegments: true, ignoreManualLevels: true })
+      const result = solveSkillTreeLayout(doc, TREE_CONFIG)
+
+      const nodeByShortName = new Map(result.layout.nodes.map((node) => [node.shortName, node]))
+      const cpp = nodeByShortName.get('CPP')
+      const ppd = nodeByShortName.get('PPD')
+
+      expect(cpp).toBeTruthy()
+      expect(ppd).toBeTruthy()
+
+      const portal = result.layout.crossingEdges.find(
+        (edge) => edge.parentId === cpp.id && edge.childId === ppd.id,
+      )
+      expect(portal).toBeFalsy()
+
+      const line = result.layout.links.find(
+        (edge) => edge.sourceId === cpp.id && edge.targetId === ppd.id,
+      )
+      expect(line).toBeTruthy()
+    })
   })
 
   // ---------------------------------------------------------------------------
