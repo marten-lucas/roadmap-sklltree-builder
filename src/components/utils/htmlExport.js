@@ -151,6 +151,7 @@ const buildReleaseNotesMarkup = (entries, introductionMarkdown = '') => {
 
 const buildViewerScript = () => `
     (() => {
+  window.__skilltreeExportViewerReady = true
       const RELEASE_FILTER = {
         all: 'all',
         now: 'now',
@@ -158,7 +159,7 @@ const buildViewerScript = () => `
       }
       const SCOPE_FILTER_ALL = '__all__'
       const MINIMAL_NODE_SCALE = 0.32
-      const VIEWPORT_ZOOM_STEPS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 2]
+      const VIEWPORT_ZOOM_STEPS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 2, 3, 4, 5, 7.5, 10]
       const VIEWPORT = {
         minScale: ${VIEWPORT_DEFAULTS.minScale},
         maxScale: ${VIEWPORT_DEFAULTS.maxScale},
@@ -310,11 +311,57 @@ const buildViewerScript = () => `
       const segmentSeparators = Array.from(document.querySelectorAll('[data-segment-left][data-segment-right]'))
       const portalElements = Array.from(document.querySelectorAll('[data-portal-node-id][data-portal-source-id][data-portal-target-id]'))
       const tooltipNodeElements = Array.from(document.querySelectorAll('[data-tooltip-node-id]'))
+      const nodeAnchorById = new Map(nodeAnchors.map((anchor) => [anchor.getAttribute('data-node-id'), anchor]))
+      const portalElementsByBaseKey = new Map()
+
+      portalElements.forEach((portalElement) => {
+        const portalKey = String(portalElement.getAttribute('data-portal-key') ?? '')
+        const baseKey = portalKey.replace(/:(?:source|target)$/, '')
+        if (!baseKey) {
+          return
+        }
+
+        const existing = portalElementsByBaseKey.get(baseKey) ?? []
+        existing.push(portalElement)
+        portalElementsByBaseKey.set(baseKey, existing)
+      })
 
       // --- Responsive label mode logic ------------------------------------
 
       const escapeLabelHtml = (value) => String(value ?? '')
         .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+
+      const renderSimpleMarkdown = (value) => {
+        const escaped = escapeLabelHtml(value)
+        return escaped.replace(/\\n/g, '<br/>')
+      }
+
+      const parseExportLevels = (value) => {
+        try {
+          const parsed = JSON.parse(String(value ?? '[]'))
+          return Array.isArray(parsed) ? parsed : []
+        } catch {
+          return []
+        }
+      }
+
+      const getPreferredVeryCloseLevel = (levels, fallbackNote) => {
+        if (!Array.isArray(levels) || levels.length === 0) {
+          return {
+            label: 'L1',
+            releaseNote: String(fallbackNote ?? '').trim(),
+          }
+        }
+
+        const withNotes = levels.find((level) => String(level?.releaseNote ?? '').trim())
+        const first = levels[0] ?? null
+        const selected = withNotes ?? first
+
+        return {
+          label: String(selected?.label ?? 'L1'),
+          releaseNote: String(selected?.releaseNote ?? fallbackNote ?? '').trim(),
+        }
+      }
 
       const getLabelMode = (scale) => {
         if (scale < NODE_LABEL_ZOOM.farToMid) return 'far'
@@ -341,6 +388,21 @@ const buildViewerScript = () => `
           anchor.setAttribute('width', anchor.dataset.origFwWidth)
           anchor.setAttribute('x', anchor.dataset.origFwX)
         }
+      }
+
+      const setTooltipMode = (mode) => {
+        const hideTooltips = mode === 'close' || mode === 'very-close'
+
+        tooltipNodeElements.forEach((tooltipNode) => {
+          const nodeId = tooltipNode.getAttribute('data-tooltip-node-id')
+          if (!nodeId) {
+            return
+          }
+
+          const anchor = nodeAnchorById.get(nodeId)
+          const isVisible = anchor && anchor.style.display !== 'none'
+          tooltipNode.style.display = hideTooltips || !isVisible ? 'none' : ''
+        })
       }
 
       const applyLabelMode = (mode) => {
@@ -372,18 +434,44 @@ const buildViewerScript = () => `
               '<p class="skill-node-button__label" style="color:#f8fafc;font-weight:500;white-space:normal;word-break:break-word;">' + escapeLabelHtml(label) + '</p>' +
               '<p class="skill-node-button__shortname" style="font-size:0.7rem;font-weight:' + fontWeight + ';line-height:1;letter-spacing:0.12em;opacity:0.65;color:' + textColor + ';">' + escapeLabelHtml(shortName) + '</p>'
             removeNodeCard(anchor)
-          } else if (mode === 'close' || mode === 'very-close') {
+          } else if (mode === 'close') {
             content.className = 'skill-node-button__content skill-node-button__content--labeled'
             content.innerHTML =
               '<p class="skill-node-button__label" style="color:#f8fafc;font-weight:500;white-space:normal;word-break:break-word;">' + escapeLabelHtml(label) + '</p>' +
               '<p class="skill-node-button__shortname" style="font-size:0.7rem;font-weight:' + fontWeight + ';line-height:1;letter-spacing:0.12em;opacity:0.65;color:' + textColor + ';">' + escapeLabelHtml(shortName) + '</p>'
             removeNodeCard(anchor)
-            if (mode === 'very-close') {
-              const btn = anchor.querySelector('.skill-node-button')
-              if (btn) btn.style.borderRadius = '14px'
+            const wrapper = anchor.querySelector('.skill-node-foreign')
+            if (wrapper) {
+              wrapper.classList.remove('skill-node-foreign--veryclose')
             }
+            const btn = anchor.querySelector('.skill-node-button')
+            if (btn) {
+              btn.style.borderRadius = ''
+            }
+          } else if (mode === 'very-close') {
+            const levels = parseExportLevels(anchor.getAttribute('data-export-levels'))
+            const fallbackNote = anchor.getAttribute('data-export-note') || ''
+            const preferredLevel = getPreferredVeryCloseLevel(levels, fallbackNote)
+            const markdownHtml = renderSimpleMarkdown(preferredLevel.releaseNote || 'Keine Release Note hinterlegt.')
+            const wrapper = anchor.querySelector('.skill-node-foreign')
+            if (wrapper) {
+              wrapper.classList.add('skill-node-foreign--veryclose')
+            }
+
+            content.className = 'skill-node-button__content skill-node-button__content--veryclose'
+            content.innerHTML =
+              '<p class="skill-node-vc__headline">' + escapeLabelHtml(label) + '</p>' +
+              '<div class="skill-node-vc__body skill-node-vc__body--markdown">' + markdownHtml + '</div>'
+
+            const btn = anchor.querySelector('.skill-node-button')
+            if (btn) {
+              btn.style.borderRadius = '14px'
+            }
+            removeNodeCard(anchor)
           }
         })
+
+        setTooltipMode(mode)
       }
 
       // -------------------------------------------------------------------
@@ -1082,7 +1170,95 @@ const buildViewerScript = () => `
           const isVisible = !!nodeId && visibleNodeIds.has(nodeId)
           tooltipNode.style.display = isVisible ? '' : 'none'
         })
+
+        setTooltipMode(currentLabelMode ?? getLabelMode(panZoomState.scale))
       }
+
+      let hoveredPortalElement = null
+
+      const clearPortalPeerHighlight = () => {
+        portalElements.forEach((portalElement) => {
+          portalElement.classList.remove('skill-tree-portal--peer-hovered')
+        })
+
+        nodeAnchors.forEach((anchor) => {
+          const nodeButton = anchor.querySelector('.skill-node-button')
+          nodeButton?.classList.remove('skill-node-button--portal-peer-hovered')
+        })
+      }
+
+      const getPortalCounterpartNodeId = (portalElement) => {
+        const nodeId = String(portalElement.getAttribute('data-portal-node-id') ?? '')
+        const sourceId = String(portalElement.getAttribute('data-portal-source-id') ?? '')
+        const targetId = String(portalElement.getAttribute('data-portal-target-id') ?? '')
+
+        if (!nodeId || !sourceId || !targetId) {
+          return null
+        }
+
+        if (nodeId === sourceId) {
+          return targetId
+        }
+
+        if (nodeId === targetId) {
+          return sourceId
+        }
+
+        const portalKey = String(portalElement.getAttribute('data-portal-key') ?? '')
+        if (portalKey.endsWith(':source')) {
+          return targetId
+        }
+
+        if (portalKey.endsWith(':target')) {
+          return sourceId
+        }
+
+        return targetId
+      }
+
+      const setPortalPeerHighlight = (portalElement) => {
+        clearPortalPeerHighlight()
+        if (!portalElement || portalElement.style.display === 'none') {
+          return
+        }
+
+        const portalKey = String(portalElement.getAttribute('data-portal-key') ?? '')
+        const baseKey = portalKey.replace(/:(?:source|target)$/, '')
+        const relatedPortals = baseKey ? (portalElementsByBaseKey.get(baseKey) ?? []) : []
+
+        relatedPortals.forEach((candidate) => {
+          if (candidate !== portalElement && candidate.style.display !== 'none') {
+            candidate.classList.add('skill-tree-portal--peer-hovered')
+          }
+        })
+
+        const counterpartNodeId = getPortalCounterpartNodeId(portalElement)
+        if (!counterpartNodeId) {
+          return
+        }
+
+        const counterpartAnchor = nodeAnchorById.get(counterpartNodeId)
+        if (!counterpartAnchor || counterpartAnchor.style.display === 'none') {
+          return
+        }
+
+        const counterpartNodeButton = counterpartAnchor.querySelector('.skill-node-button')
+        counterpartNodeButton?.classList.add('skill-node-button--portal-peer-hovered')
+      }
+
+      portalElements.forEach((portalElement) => {
+        portalElement.addEventListener('pointerenter', () => {
+          hoveredPortalElement = portalElement
+          setPortalPeerHighlight(portalElement)
+        })
+
+        portalElement.addEventListener('pointerleave', () => {
+          if (hoveredPortalElement === portalElement) {
+            hoveredPortalElement = null
+          }
+          clearPortalPeerHighlight()
+        })
+      })
 
       if (scopeFilterSelect) {
         const existingValues = new Set(Array.from(scopeFilterSelect.options).map((option) => option.value))
@@ -1888,7 +2064,7 @@ export const buildHtmlExportDocument = ({
             <div class="html-export__menu-panel html-export__menu-panel--zoom">
               <div class="html-export__zoom-controls">
                 <button id="html-export-zoom-out" class="html-export__menu-action html-export__menu-action--icon" type="button" aria-label="Zoom out">−</button>
-                <input id="html-export-zoom-slider" class="html-export__zoom-slider" type="range" min="25" max="200" step="1" value="100" aria-label="Zoom">
+                <input id="html-export-zoom-slider" class="html-export__zoom-slider" type="range" min="25" max="1000" step="1" value="100" aria-label="Zoom">
                 <span id="html-export-zoom-value" class="html-export__zoom-value">100%</span>
                 <button id="html-export-zoom-in" class="html-export__menu-action html-export__menu-action--icon" type="button" aria-label="Zoom in">+</button>
               </div>

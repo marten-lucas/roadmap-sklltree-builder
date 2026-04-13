@@ -362,7 +362,7 @@
 .skill-tree-portal__hoverline {
     fill: none;
     stroke: rgba(255, 255, 255, 0.001);
-    stroke-width: 24;
+    stroke-width: 16;
     stroke-linecap: round;
     pointer-events: stroke;
 }
@@ -440,14 +440,61 @@
     stroke-width: 2.5;
 }
 
-/* peer-hovered: portal remains static; only the counterpart node pulses */
-.skill-tree-portal--peer-hovered .skill-tree-portal__ring,
-.skill-tree-portal--peer-hovered .skill-tree-portal__dot,
-.skill-tree-portal--peer-hovered .skill-tree-portal__spoke,
-.skill-tree-portal--peer-hovered .skill-tree-portal__chevrons,
+@keyframes portal-peer-pulse {
+
+    0%,
+    100% {
+        transform: scale(1.0);
+        filter: drop-shadow(0 0 4px currentColor);
+    }
+
+    50% {
+        transform: scale(1.2);
+        filter: drop-shadow(0 0 10px currentColor);
+    }
+}
+
+/* peer-hovered: counterpart portal highlighted when one side is hovered */
+.skill-tree-portal--peer-hovered .skill-tree-portal__ring {
+    animation: portal-peer-pulse 1s ease-in-out infinite;
+    transform-box: fill-box;
+    transform-origin: center center;
+    stroke-opacity: 1;
+    stroke-width: 2;
+}
+
+.skill-tree-portal--peer-hovered .skill-tree-portal__ring--source {
+    filter: drop-shadow(0 0 8px rgba(56, 189, 248, 0.95));
+}
+
+.skill-tree-portal--peer-hovered .skill-tree-portal__ring--target {
+    filter: drop-shadow(0 0 8px rgba(250, 204, 21, 0.95));
+}
+
+.skill-tree-portal--peer-hovered .skill-tree-portal__spoke {
+    stroke-opacity: 1;
+}
+
+.skill-tree-portal--peer-hovered .skill-tree-portal__spoke--source {
+    stroke: rgba(56, 189, 248, 1);
+}
+
+.skill-tree-portal--peer-hovered .skill-tree-portal__spoke--target {
+    stroke: rgba(250, 204, 21, 1);
+}
+
+.skill-tree-portal--peer-hovered .skill-tree-portal__chevrons {
+    stroke-opacity: 1;
+}
+
 .skill-tree-portal--peer-hovered .skill-tree-portal__label {
-    animation: none;
-    transform: none;
+    fill: #ffffff;
+}
+
+.skill-tree-portal--peer-hovered .skill-tree-portal__dot {
+    animation: portal-peer-pulse 1s ease-in-out infinite;
+    transform-box: fill-box;
+    transform-origin: center center;
 }
 
 .skill-panel {

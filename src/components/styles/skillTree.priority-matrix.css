@@ -1,0 +1,111 @@
+/* Priority Matrix drawer */
+.priority-matrix-drawer {
+    position: absolute;
+    left: 0;
+    top: 5rem;
+    bottom: 0;
+    z-index: 50;
+    display: flex;
+    flex-direction: column;
+    background: rgba(2, 6, 23, 0.92);
+    border-right: 1px solid rgba(51, 65, 85, 0.7);
+    backdrop-filter: blur(18px);
+}
+
+.priority-matrix-drawer__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.75rem 0.75rem 0.75rem 1.25rem;
+    border-bottom: 1px solid rgba(51, 65, 85, 0.5);
+    flex-shrink: 0;
+}
+
+.priority-matrix-drawer__title {
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: #e2e8f0;
+}
+
+.priority-matrix-drawer__close {
+    background: transparent;
+    border: none;
+    color: #94a3b8;
+    cursor: pointer;
+    font-size: 1.25rem;
+    line-height: 1;
+    padding: 0.2rem 0.5rem;
+    border-radius: 4px;
+    transition: color 150ms ease, background 150ms ease;
+}
+
+.priority-matrix-drawer__close:hover {
+    color: #e2e8f0;
+    background: rgba(71, 85, 105, 0.3);
+}
+
+.priority-matrix-drawer__content {
+    flex: 1;
+    position: relative;
+    overflow: hidden;
+    min-height: 0;
+    background: #0f172a;
+}
+
+.priority-matrix-drawer__resize-handle {
+    position: absolute;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    width: 5px;
+    cursor: ew-resize;
+    background: transparent;
+    z-index: 10;
+    transition: background 150ms ease;
+}
+
+.priority-matrix-drawer__resize-handle:hover {
+    background: rgba(59, 130, 246, 0.35);
+}
+
+.priority-matrix-drawer__resize-grip {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 3px;
+    height: 40px;
+    border-radius: 2px;
+    background: rgba(148, 163, 184, 0.35);
+    transition: background 150ms ease;
+    pointer-events: none;
+}
+
+.priority-matrix-drawer__resize-handle:hover .priority-matrix-drawer__resize-grip {
+    background: rgba(59, 130, 246, 0.9);
+}
+
+/* Priority Matrix tooltip */
+.priority-matrix__tooltip {
+    background: rgba(15, 23, 42, 0.95);
+    border: 1px solid rgba(71, 85, 105, 0.7);
+    border-radius: 6px;
+    padding: 8px 12px;
+    min-width: 160px;
+    max-width: 240px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+    z-index: 20;
+}
+
+.priority-matrix__tooltip-title {
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: #e2e8f0;
+    margin-bottom: 4px;
+}
+
+.priority-matrix__tooltip-row {
+    font-size: 0.72rem;
+    color: #94a3b8;
+    line-height: 1.5;
+}
