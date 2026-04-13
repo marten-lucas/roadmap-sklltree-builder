@@ -1,4 +1,4 @@
-import { Alert, Button, Checkbox, Group, Modal, Radio, Stack, Text } from '@mantine/core'
+import { Alert, Button, Checkbox, Divider, Group, Modal, Radio, Stack, Text } from '@mantine/core'
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react'
 import { flushSync } from 'react-dom'
 import { TransformComponent, TransformWrapper } from 'react-zoom-pan-pinch'
@@ -55,6 +55,8 @@ import {
   removeNodeProgressLevel,
   setLevelAdditionalDependencies,
   updateNodeData as updateNodeDataInTree,
+  updateNodeEffort,
+  updateNodeBenefit,
   updateNodeProgressLevel,
   updateNodeShortName,
   updateSegmentLabel,
@@ -88,6 +90,7 @@ import { resolveInspectorSelectedNode } from './utils/selection'
 
 const AUTOSAVE_DEBOUNCE_MS = 450
 const MINIMAL_NODE_SIZE = 36
+const MATRIX_SELECTION_ZOOM_SCALE = 4
 
 const getPortalCounterpartNodeId = (portal) => {
   if (!portal) return null
@@ -171,6 +174,10 @@ export function SkillTree() {
   const [exportLabelDialogOpen, setExportLabelDialogOpen] = useState(false)
   const [exportLabelDialogMode, setExportLabelDialogMode] = useState('mid')
   const exportLabelDialogResolveRef = useRef(null)
+  const [htmlExportDialogOpen, setHtmlExportDialogOpen] = useState(false)
+  const [htmlExportReleaseIds, setHtmlExportReleaseIds] = useState([])
+  const [htmlExportIncludePriorityMatrix, setHtmlExportIncludePriorityMatrix] = useState(false)
+  const htmlExportDialogResolveRef = useRef(null)
   const [lastSavedAt, setLastSavedAt] = useState(null)
   const [csvImportDialogOpen, setCsvImportDialogOpen] = useState(false)
   const [csvImportOptions, setCsvImportOptions] = useState(DEFAULT_CSV_IMPORT_PROCESS_OPTIONS)
@@ -839,7 +846,7 @@ export function SkillTree() {
         type: 'source',
         sourceId: dependency.sourceId,
         targetId: dependency.targetId,
-        tooltip: `Needs ${targetNode.label}`,
+        tooltip: `Requires ${targetNode.label}`,
         isInteractive: true,
         otherLabel: `${String(targetLabel).slice(0, 3).toUpperCase()}${targetLevelSuffix}`,
       })
@@ -849,7 +856,7 @@ export function SkillTree() {
         type: 'target',
         sourceId: dependency.sourceId,
         targetId: dependency.targetId,
-        tooltip: `Required by ${sourceNode.label}`,
+        tooltip: `Enables ${sourceNode.label}`,
         isInteractive: true,
         otherLabel: `${String(sourceLabel).slice(0, 3).toUpperCase()}${sourceLevelSuffix}`,
       })
@@ -970,14 +977,14 @@ export function SkillTree() {
       const targetEndpoints = nodeEndpoints.filter((ep) => ep.type === 'target')
         .sort((a, b) => a.key.localeCompare(b.key))
 
-      // Source slots: outer hemisphere (centered on outwardAngle).
-      // Target slots: inner hemisphere (centered on inwardAngle).
+      // Source slots: inner hemisphere (requires socket, centered on inwardAngle).
+      // Target slots: outer hemisphere (enables plug, centered on outwardAngle).
       // Each set is ordered center-first so portals prefer the radial axis.
-      const sourceSlots = buildSlots(outwardAngle)
-      const targetSlots = buildSlots(inwardAngle)
+      const sourceSlots = buildSlots(inwardAngle)
+      const targetSlots = buildSlots(outwardAngle)
       const reservedAngles = []
 
-      // Place source portals (outgoing — outer hemisphere)
+      // Place source portals (requires — inner hemisphere)
       sourceEndpoints.forEach((endpoint, index) => {
         const angle = pickSlot(sourceSlots, linkBlockedAngles, reservedAngles)
         reservedAngles.push(angle)
@@ -995,7 +1002,7 @@ export function SkillTree() {
         })
       })
 
-      // Place target portals (incoming — inner hemisphere)
+      // Place target portals (enables — outer hemisphere)
       targetEndpoints.forEach((endpoint, index) => {
         const angle = pickSlot(targetSlots, linkBlockedAngles, reservedAngles)
         reservedAngles.push(angle)
@@ -1415,6 +1422,40 @@ export function SkillTree() {
     exportLabelDialogResolveRef.current = null
   }
 
+  const openHtmlExportDialog = () => new Promise((resolve) => {
+    const releaseIds = (roadmapData.releases ?? []).map((release) => release.id).filter(Boolean)
+    htmlExportDialogResolveRef.current = resolve
+    setHtmlExportReleaseIds(releaseIds)
+    setHtmlExportIncludePriorityMatrix(false)
+    setHtmlExportDialogOpen(true)
+  })
+
+  const confirmHtmlExportDialog = () => {
+    setHtmlExportDialogOpen(false)
+    htmlExportDialogResolveRef.current?.({ releaseIds: htmlExportReleaseIds, includePriorityMatrix: htmlExportIncludePriorityMatrix })
+    htmlExportDialogResolveRef.current = null
+  }
+
+  const cancelHtmlExportDialog = () => {
+    setHtmlExportDialogOpen(false)
+    htmlExportDialogResolveRef.current?.(null)
+    htmlExportDialogResolveRef.current = null
+  }
+
+  const toggleHtmlExportReleaseId = (releaseId, checked) => {
+    setHtmlExportReleaseIds((current) => {
+      if (!releaseId) {
+        return current
+      }
+
+      if (checked) {
+        return current.includes(releaseId) ? current : [...current, releaseId]
+      }
+
+      return current.filter((id) => id !== releaseId)
+    })
+  }
+
   const handleExportSvg = async () => {
     if (!canvasSvgRef.current) {
       window.alert('SVG export not available.')
@@ -1513,6 +1554,13 @@ export function SkillTree() {
 
     try {
       flushSync(() => resetSelections())
+      const dialogResult = await openHtmlExportDialog()
+      if (dialogResult === null) return
+      const { releaseIds: selectedReleaseIds, includePriorityMatrix } = dialogResult
+      if (!Array.isArray(selectedReleaseIds) || selectedReleaseIds.length === 0) {
+        window.alert('Please select at least one release for HTML export.')
+        return
+      }
       // Render in 'far' mode so the HTML viewer script has the base dimensions
       // and can apply responsive label modes dynamically.
       flushSync(() => setExportLabelModeOverride('far'))
@@ -1520,6 +1568,8 @@ export function SkillTree() {
       const exported = exportHtmlFromSkillTree({
         svgElement: canvasSvgRef.current,
         roadmapDocument: roadmapData,
+        selectedReleaseIds,
+        includePriorityMatrix,
       })
 
       if (!exported) {
@@ -1700,28 +1750,7 @@ export function SkillTree() {
 
       if (action === 'export-html') {
         event.preventDefault()
-        void (async () => {
-          try {
-            if (!canvasSvgRef.current) {
-              window.alert('HTML export not available.')
-              return
-            }
-
-            flushSync(() => resetSelections())
-            const { exportHtmlFromSkillTree } = await import('./utils/htmlExport')
-            const exported = exportHtmlFromSkillTree({
-              svgElement: canvasSvgRef.current,
-              roadmapDocument: roadmapData,
-            })
-
-            if (!exported) {
-              window.alert('HTML export failed.')
-            }
-          } catch (error) {
-            console.error('HTML export shortcut failed', error)
-            window.alert('HTML export failed.')
-          }
-        })()
+        void handleExportHtml()
         return
       }
 
@@ -1774,6 +1803,22 @@ export function SkillTree() {
     const newPositionX = rect.width / 2 - nodeX * newScale
     const newPositionY = rect.height / 2 - nodeY * newScale
     transformApiRef.current.setTransform(newPositionX, newPositionY, newScale, 400, 'easeOut')
+  }
+
+  const focusNodeInViewport = (nodeId, options = {}) => {
+    const layoutNode = layoutNodesById.get(nodeId)
+    if (!layoutNode || !transformApiRef.current || !canvasAreaRef.current) {
+      return
+    }
+
+    const { scale, duration = 360 } = options
+    const rect = canvasAreaRef.current.getBoundingClientRect()
+    const activeScale = Number.isFinite(scale)
+      ? Math.max(VIEWPORT_DEFAULTS.minScale, Math.min(VIEWPORT_DEFAULTS.maxScale, scale))
+      : transformApiRef.current.state.scale
+    const positionX = rect.width / 2 - layoutNode.x * activeScale
+    const positionY = rect.height / 2 - layoutNode.y * activeScale
+    transformApiRef.current.setTransform(positionX, positionY, activeScale, duration, 'easeOut')
   }
 
   const handleZoomToScale = (scale) => {
@@ -2135,33 +2180,95 @@ export function SkillTree() {
 
   const handleSelectNodeFromListView = (nodeId) => {
     const layoutNode = layoutNodesById.get(nodeId)
-    // Commit the selection (opens inspector) synchronously so the layout
-    // stabilises before we start animating the viewport.
+    // Only set selection for zoom focus, don't open inspector
     flushSync(() => {
-      selectNodeId(nodeId)
+      setSelectedNodeId(nodeId)
+      setSelectedNodeIds([nodeId])
+      setSelectedPortalKey(null)
     })
-    if (layoutNode && transformApiRef.current) {
-      const TARGET_SCALE = 3
-      const vw = window.innerWidth
-      const vh = window.innerHeight
-      const positionX = vw / 2 - layoutNode.x * TARGET_SCALE
-      const positionY = vh / 2 - layoutNode.y * TARGET_SCALE
+    if (layoutNode && transformApiRef.current && canvasAreaRef.current) {
+      const TARGET_SCALE = 4 // 400% zoom
+      const rect = canvasAreaRef.current.getBoundingClientRect()
+      // Keep selected node in the right third so it is not hidden by the left drawer.
+      const targetX = rect.width * (2 / 3)
+      const positionX = targetX - layoutNode.x * TARGET_SCALE
+      const positionY = rect.height / 2 - layoutNode.y * TARGET_SCALE
       transformApiRef.current.setTransform(positionX, positionY, TARGET_SCALE, 500, 'easeOut')
     }
   }
 
-  const handleSelectLevelFromListView = (nodeId, levelId) => {
-    const layoutNode = layoutNodesById.get(nodeId)
+  const handleSelectNodeFromMatrix = (nodeId) => {
     flushSync(() => {
       selectNodeId(nodeId)
-      setSelectedProgressLevelId(levelId)
+      setRightPanel(null)
+      setSelectedPortalKey(null)
     })
-    if (layoutNode && transformApiRef.current) {
-      const TARGET_SCALE = 3
-      const vw = window.innerWidth
-      const vh = window.innerHeight
-      const positionX = vw / 2 - layoutNode.x * TARGET_SCALE
-      const positionY = vh / 2 - layoutNode.y * TARGET_SCALE
+
+    const applyMatrixZoom = () => {
+      const layoutNode = layoutNodesById.get(nodeId) ?? nodes.find((node) => node.id === nodeId)
+      if (!layoutNode || !transformApiRef.current || !canvasAreaRef.current) {
+        return
+      }
+
+      const rect = canvasAreaRef.current.getBoundingClientRect()
+      // Keep matrix-selected node in the right third so the left matrix drawer does not cover it.
+      const targetX = rect.width * (2 / 3)
+      const positionX = targetX - layoutNode.x * MATRIX_SELECTION_ZOOM_SCALE
+      const positionY = rect.height / 2 - layoutNode.y * MATRIX_SELECTION_ZOOM_SCALE
+      transformApiRef.current.setTransform(positionX, positionY, MATRIX_SELECTION_ZOOM_SCALE, 500, 'easeOut')
+    }
+
+    if (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function') {
+      window.requestAnimationFrame(applyMatrixZoom)
+    } else {
+      applyMatrixZoom()
+    }
+  }
+
+  const handleMoveNodeFromMatrix = (nodeId, effortSize, benefitSize) => {
+    if (!nodeId) return
+
+    const targetNode = findNodeById(roadmapData, nodeId)
+    if (!targetNode) return
+
+    const nextEffort = normalizeEffort({ size: effortSize, customPoints: null })
+    const nextBenefit = normalizeBenefit({ size: benefitSize })
+
+    let nextTree = roadmapData
+    const levels = Array.isArray(targetNode.levels) ? targetNode.levels : []
+    const effortLevel = levels.find((level) => level?.effort?.size && level.effort.size !== 'unclear') ?? levels[0] ?? null
+    const benefitLevel = levels.find((level) => level?.benefit?.size && level.benefit.size !== 'unclear') ?? levels[0] ?? null
+
+    if (effortLevel?.id) {
+      nextTree = updateNodeProgressLevel(nextTree, nodeId, effortLevel.id, { effort: nextEffort })
+    } else {
+      nextTree = updateNodeEffort(nextTree, nodeId, nextEffort)
+    }
+
+    if (benefitLevel?.id) {
+      nextTree = updateNodeProgressLevel(nextTree, nodeId, benefitLevel.id, { benefit: nextBenefit })
+    } else {
+      nextTree = updateNodeBenefit(nextTree, nodeId, nextBenefit)
+    }
+
+    commitDocument(nextTree)
+  }
+
+  const handleSelectLevelFromListView = (nodeId, levelId) => {
+    const layoutNode = layoutNodesById.get(nodeId)
+    // Only set selection for zoom focus, don't open inspector
+    flushSync(() => {
+      setSelectedNodeId(nodeId)
+      setSelectedProgressLevelId(levelId)
+      setSelectedPortalKey(null)
+    })
+    if (layoutNode && transformApiRef.current && canvasAreaRef.current) {
+      const TARGET_SCALE = 4 // 400% zoom
+      const rect = canvasAreaRef.current.getBoundingClientRect()
+      // Keep selected node in the right third so it is not hidden by the left drawer.
+      const targetX = rect.width * (2 / 3)
+      const positionX = targetX - layoutNode.x * TARGET_SCALE
+      const positionY = rect.height / 2 - layoutNode.y * TARGET_SCALE
       transformApiRef.current.setTransform(positionX, positionY, TARGET_SCALE, 500, 'easeOut')
     }
   }
@@ -2177,7 +2284,12 @@ export function SkillTree() {
     }
 
     const nextSelectedNodeId = getPortalCounterpartNodeId(portal)
-    if (nextSelectedNodeId) handleSelectNode(nextSelectedNodeId)
+    if (!nextSelectedNodeId) {
+      return
+    }
+
+    handleSelectNode(nextSelectedNodeId)
+    focusNodeInViewport(nextSelectedNodeId)
   }
 
   const updateNodeData = (id, newLabel) => {
@@ -2633,6 +2745,67 @@ export function SkillTree() {
         </Stack>
       </Modal>
 
+      <Modal
+        opened={htmlExportDialogOpen}
+        onClose={cancelHtmlExportDialog}
+        title="HTML export releases"
+        size="sm"
+      >
+        <Stack gap="md">
+          <Text size="sm" c="dimmed">
+            Select which releases should be included in the exported HTML.
+          </Text>
+
+          <Group justify="space-between">
+            <Text size="sm" fw={600}>Releases</Text>
+            <Button
+              variant="subtle"
+              size="compact-sm"
+              onClick={() => {
+                const allReleaseIds = (roadmapData.releases ?? []).map((release) => release.id).filter(Boolean)
+                const allSelected = allReleaseIds.length > 0 && htmlExportReleaseIds.length === allReleaseIds.length
+                setHtmlExportReleaseIds(allSelected ? [] : allReleaseIds)
+              }}
+            >
+              {(() => {
+                const allReleaseIds = (roadmapData.releases ?? []).map((release) => release.id).filter(Boolean)
+                const allSelected = allReleaseIds.length > 0 && htmlExportReleaseIds.length === allReleaseIds.length
+                return allSelected ? 'Deselect all' : 'Select all'
+              })()}
+            </Button>
+          </Group>
+
+          <Stack gap="xs">
+            {(roadmapData.releases ?? []).map((release) => (
+              <Checkbox
+                key={release.id}
+                checked={htmlExportReleaseIds.includes(release.id)}
+                onChange={(event) => toggleHtmlExportReleaseId(release.id, event.currentTarget.checked)}
+                label={String(release.name ?? '').trim() || 'Untitled release'}
+              />
+            ))}
+          </Stack>
+
+          <Divider />
+
+          <Text size="sm" fw={600}>Options</Text>
+          <Checkbox
+            checked={htmlExportIncludePriorityMatrix}
+            onChange={(event) => setHtmlExportIncludePriorityMatrix(event.currentTarget.checked)}
+            label="Include Priority Matrix"
+          />
+
+          <Group justify="flex-end">
+            <Button variant="default" onClick={cancelHtmlExportDialog}>
+              Cancel
+            </Button>
+            <Button onClick={confirmHtmlExportDialog} disabled={htmlExportReleaseIds.length === 0}>
+              Export
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
+
       {globalToast.visible && (
         <div style={{ position: 'fixed', top: 12, left: '50%', transform: 'translateX(-50%)', zIndex: 9999 }}>
           <Alert color={globalToast.type === 'warning' ? 'yellow' : globalToast.type === 'success' ? 'teal' : 'blue'}>
@@ -2891,6 +3064,9 @@ export function SkillTree() {
         opened={priorityMatrixOpen}
         onClose={() => setPriorityMatrixOpen(false)}
         document={roadmapData}
+        onSelectNode={handleSelectNodeFromMatrix}
+        onMoveNode={handleMoveNodeFromMatrix}
+        selectedReleaseId={activeReleaseId}
       />
 
       <ListViewDrawer
@@ -2902,6 +3078,8 @@ export function SkillTree() {
         onSetLevelEffort={handleListViewLevelEffortChange}
         onSetLevelBenefit={handleListViewLevelBenefitChange}
         selectedReleaseId={activeReleaseId}
+        selectedNodeId={selectedNodeId}
+        selectedProgressLevelId={selectedProgressLevelId}
       />
     </main>
   )

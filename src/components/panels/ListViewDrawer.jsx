@@ -78,73 +78,166 @@ const BENEFIT_LABELS = { ...BENEFIT_SIZE_LABELS }
 
 // ── Metric slider ─────────────────────────────────────────────────────────────
 
-const MetricSlider = ({ sizes, activeValue, onChange, kind, customPoints, onCustomChange }) => {
+const MetricSlider = ({ sizes, activeValue, onChange, kind, customPoints, onCustomChange, isSelected = false }) => {
   const labels = kind === 'value' ? BENEFIT_LABELS : EFFORT_LABELS
   const [draftValue, setDraftValue] = useState(activeValue)
+  const [wheelArmed, setWheelArmed] = useState(false)
   const draftValueRef = useRef(activeValue)
+  const lastNonCustomValueRef = useRef(activeValue === 'custom' ? 'unclear' : activeValue)
+  const sliderRootRef = useRef(null)
+
+  const getDisplayLabel = useCallback((value) => {
+    if (value === 'unclear') return '?'
+    if (value === 'custom') return 'C'
+    return labels[value] ?? value
+  }, [labels])
 
   useEffect(() => {
     setDraftValue(activeValue)
     draftValueRef.current = activeValue
+    if (activeValue !== 'custom') lastNonCustomValueRef.current = activeValue
   }, [activeValue])
+
+  useEffect(() => {
+    if (!wheelArmed) return undefined
+
+    const handleWindowPointerDown = (event) => {
+      if (!sliderRootRef.current?.contains(event.target)) {
+        setWheelArmed(false)
+      }
+    }
+
+    const handleWindowKeyDown = (event) => {
+      if (event.key === 'Escape') setWheelArmed(false)
+    }
+
+    window.addEventListener('pointerdown', handleWindowPointerDown, true)
+    window.addEventListener('keydown', handleWindowKeyDown)
+
+    return () => {
+      window.removeEventListener('pointerdown', handleWindowPointerDown, true)
+      window.removeEventListener('keydown', handleWindowKeyDown)
+    }
+  }, [wheelArmed])
 
   const commitDraft = useCallback((e) => {
     e?.stopPropagation?.()
     if (draftValueRef.current !== activeValue) onChange(draftValueRef.current)
   }, [activeValue, onChange])
 
+  const handleWheel = useCallback((e) => {
+    if (!wheelArmed) return
+    e.preventDefault()
+    e.stopPropagation()
+    const currentIdx = Math.max(0, sizes.indexOf(draftValueRef.current))
+    const deltaSign = e.deltaY > 0 ? 1 : -1
+    const nextIdx = Math.max(0, Math.min(sizes.length - 1, currentIdx + deltaSign))
+    const nextValue = sizes[nextIdx]
+    draftValueRef.current = nextValue
+    setDraftValue(nextValue)
+    onChange(nextValue)
+  }, [wheelArmed, sizes, onChange])
+
   const idx = Math.max(0, sizes.indexOf(draftValue))
+  const showCustomInput = kind === 'effort' && draftValue === 'custom'
+  const displayLabel = getDisplayLabel(draftValue)
+
+  useEffect(() => {
+    if (showCustomInput && wheelArmed) setWheelArmed(false)
+  }, [showCustomInput, wheelArmed])
+
   return (
     <div
-      className={`list-view-drawer__metric-slider list-view-drawer__metric-slider--${kind}`}
+      ref={sliderRootRef}
+      className={`list-view-drawer__metric-slider list-view-drawer__metric-slider--${kind}${isSelected ? ' list-view-drawer__metric-slider--selected' : ''}${wheelArmed ? ' list-view-drawer__metric-slider--wheel-armed' : ''}`}
       role="group"
       aria-label={kind}
+      onWheel={handleWheel}
     >
-      <span className="list-view-drawer__slider-val">{labels[draftValue] ?? draftValue}</span>
-      <input
-        type="range"
-        min={0}
-        max={sizes.length - 1}
-        step={1}
-        value={idx}
-        className="list-view-drawer__slider-input"
-        aria-valuetext={labels[draftValue] ?? draftValue}
-        onPointerDown={(e) => e.stopPropagation()}
-        onClick={(e) => e.stopPropagation()}
-        onInput={(e) => {
+      <span 
+        className="list-view-drawer__slider-label"
+        title="Click to activate wheel control"
+        onClick={(e) => {
           e.stopPropagation()
-          const nextValue = sizes[Number(e.currentTarget.value)]
-          draftValueRef.current = nextValue
-          setDraftValue(nextValue)
+          setWheelArmed(true)
         }}
-        onPointerUp={commitDraft}
-        onKeyUp={(e) => {
-          if (e.key === 'ArrowLeft' || e.key === 'ArrowRight' || e.key === 'Home' || e.key === 'End') commitDraft(e)
-        }}
-        onBlur={commitDraft}
-      />
-      <div className="list-view-drawer__slider-ticks" aria-hidden="true">
-        {sizes.map((size, tickIdx) => (
-          <span
-            key={size}
-            className={`list-view-drawer__slider-tick${tickIdx <= idx ? ' list-view-drawer__slider-tick--active' : ''}`}
-            title={labels[size] ?? size}
+      >
+        {displayLabel}
+      </span>
+      {showCustomInput ? (
+        <div className="list-view-drawer__metric-custom-editor">
+          <label className="list-view-drawer__metric-custom-toggle" onClick={(e) => e.stopPropagation()}>
+            <input
+              type="checkbox"
+              checked={showCustomInput}
+              aria-label="Custom effort"
+              onChange={(e) => {
+                e.stopPropagation()
+                if (!e.currentTarget.checked) {
+                  const restoreValue = lastNonCustomValueRef.current === 'custom' ? 'unclear' : lastNonCustomValueRef.current
+                  draftValueRef.current = restoreValue
+                  setDraftValue(restoreValue)
+                  onChange(restoreValue)
+                }
+              }}
+            />
+            <span>Custom</span>
+          </label>
+          <input
+            type="number"
+            className="list-view-drawer__metric-custom-input"
+            value={customPoints ?? ''}
+            min={0}
+            placeholder="pts"
+            onClick={(e) => e.stopPropagation()}
+            onChange={(e) => {
+              e.stopPropagation()
+              onCustomChange?.(e.target.value === '' ? null : Number(e.target.value))
+            }}
           />
-        ))}
-      </div>
-      {kind === 'effort' && draftValue === 'custom' && (
-        <input
-          type="number"
-          className="list-view-drawer__metric-custom-input"
-          value={customPoints ?? ''}
-          min={0}
-          placeholder="pts"
-          onClick={(e) => e.stopPropagation()}
-          onChange={(e) => {
-            e.stopPropagation()
-            onCustomChange?.(e.target.value === '' ? null : Number(e.target.value))
-          }}
-        />
+        </div>
+      ) : (
+        <div className="list-view-drawer__slider-inner">
+          <input
+            type="range"
+            min={0}
+            max={sizes.length - 1}
+            step={1}
+            value={idx}
+            className="list-view-drawer__slider-input"
+            aria-valuetext={displayLabel}
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => e.stopPropagation()}
+            onInput={(e) => {
+              e.stopPropagation()
+              const nextValue = sizes[Number(e.currentTarget.value)]
+              if (nextValue !== 'custom') lastNonCustomValueRef.current = nextValue
+              draftValueRef.current = nextValue
+              setDraftValue(nextValue)
+            }}
+            onPointerUp={commitDraft}
+            onKeyUp={(e) => {
+              if (e.key === 'ArrowLeft' || e.key === 'ArrowRight' || e.key === 'Home' || e.key === 'End') commitDraft(e)
+            }}
+            onBlur={commitDraft}
+          />
+          <div
+            className="list-view-drawer__slider-ticks"
+            aria-hidden="true"
+            onClick={(e) => {
+              e.stopPropagation()
+              setWheelArmed(true)
+            }}
+          >
+            {sizes.map((size, tickIdx) => (
+              <span
+                key={size}
+                className={`list-view-drawer__slider-tick${tickIdx <= idx ? ' list-view-drawer__slider-tick--active' : ''}`}
+                title={getDisplayLabel(size)}
+              />
+            ))}
+          </div>
+        </div>
       )}
     </div>
   )
@@ -154,6 +247,9 @@ const MetricSlider = ({ sizes, activeValue, onChange, kind, customPoints, onCust
 
 const LevelRow = ({
   level,
+  nodeId,
+  selectedNodeId,
+  selectedProgressLevelId,
   nodeLabel,
   depth,
   scopeMap,
@@ -170,6 +266,7 @@ const LevelRow = ({
   const scopeEntries = (level.scopeIds ?? []).map((id) => scopeMap.get(id)).filter(Boolean)
   const benefitValue = level.benefit?.size ?? 'unclear'
   const effortValue = level.effort?.size ?? 'unclear'
+  const isSelected = selectedNodeId === nodeId && selectedProgressLevelId === level.id
 
   return (
     <li
@@ -184,7 +281,7 @@ const LevelRow = ({
           <span className="list-view-drawer__toggle list-view-drawer__toggle--leaf" aria-hidden="true" />
         )}
         <div
-          className="list-view-drawer__item-body list-view-drawer__item-body--level"
+          className={`list-view-drawer__item-body list-view-drawer__item-body--level${isSelected ? ' list-view-drawer__item-body--selected' : ''}`}
           role="button"
           tabIndex={0}
           onClick={onSelectLevel}
@@ -215,12 +312,14 @@ const LevelRow = ({
               sizes={BENEFIT_SIZES}
               activeValue={benefitValue}
               kind="value"
+              isSelected={isSelected}
               onChange={(size) => onSetBenefit({ size })}
             />
             <MetricSlider
               sizes={EFFORT_SIZES}
               activeValue={effortValue}
               kind="effort"
+              isSelected={isSelected}
               customPoints={level.effort?.customPoints ?? null}
               onCustomChange={(pts) => onSetEffort({ size: 'custom', customPoints: pts })}
               onChange={(size) => onSetEffort({ size, customPoints: size === 'custom' ? (level.effort?.customPoints ?? null) : null })}
@@ -248,6 +347,8 @@ const TreeNode = ({
   matchesLevelFilters,
   onSetLevelEffort,
   onSetLevelBenefit,
+  selectedNodeId,
+  selectedProgressLevelId,
 }) => {
   const hasChildren = (node.children ?? []).length > 0
   const levels = node.levels ?? []
@@ -257,6 +358,7 @@ const TreeNode = ({
   const borderColor = getStatusBorderColor(getDisplayStatusKey(node, selectedReleaseId))
   const hasExpandable = hasChildren || hasLevels
   const isExpanded = !isCollapsed
+  const isNodeSelected = selectedNodeId === node.id && !selectedProgressLevelId
   const isNodeFullyHidden = levels.length > 0
     ? levels.every((l) => normalizeStatusKey(getLevelStatus(l, selectedReleaseId)) === 'hidden')
     : normalizeStatusKey(getDisplayStatusKey(node, selectedReleaseId)) === 'hidden'
@@ -281,7 +383,7 @@ const TreeNode = ({
             {hasExpandable ? (isCollapsed ? '▶' : '▼') : ''}
           </button>
           <div
-            className="list-view-drawer__item-body"
+            className={`list-view-drawer__item-body${isNodeSelected ? ' list-view-drawer__item-body--selected' : ''}`}
             role="button"
             tabIndex={0}
             onClick={() => onSelectNode(node.id)}
@@ -293,7 +395,7 @@ const TreeNode = ({
                 {node.label || node.shortName || '\u2013'}
                 {isNodeFullyHidden && <span style={{ fontSize: '0.7em', color: '#6b7280', marginLeft: 2 }}>(hidden)</span>}
               </span>
-              {scopeEntries.length > 0 && (
+              {scopeEntries.length > 0 && !showLevels && (
                 <span className="list-view-drawer__item-chips">
                   {scopeEntries.map((scope) => (
                     <ScopeChip key={scope.id} label={scope.label} color={scope.color} />
@@ -309,6 +411,9 @@ const TreeNode = ({
         <LevelRow
           key={level.id}
           level={level}
+          nodeId={node.id}
+          selectedNodeId={selectedNodeId}
+          selectedProgressLevelId={selectedProgressLevelId}
           depth={depth + 2}
           scopeMap={scopeMap}
           selectedReleaseId={selectedReleaseId}
@@ -336,6 +441,8 @@ const TreeNode = ({
           matchesLevelFilters={matchesLevelFilters}
           onSetLevelEffort={onSetLevelEffort}
           onSetLevelBenefit={onSetLevelBenefit}
+          selectedNodeId={selectedNodeId}
+          selectedProgressLevelId={selectedProgressLevelId}
         />
       ))}
     </>
@@ -381,6 +488,8 @@ export function ListViewDrawer({
   onSetLevelEffort = () => {},
   onSetLevelBenefit = () => {},
   selectedReleaseId = null,
+  selectedNodeId = null,
+  selectedProgressLevelId = null,
 }) {
   const drawerRef = useRef(null)
 
@@ -602,6 +711,9 @@ export function ListViewDrawer({
               <LevelRow
                 key={`${node.id}::${level.id}`}
                 level={level}
+                nodeId={node.id}
+                selectedNodeId={selectedNodeId}
+                selectedProgressLevelId={selectedProgressLevelId}
                 nodeLabel={node.label || node.shortName}
                 depth={0}
                 scopeMap={scopeMap}
@@ -625,7 +737,7 @@ export function ListViewDrawer({
                 <li key={node.id} className="list-view-drawer__item" style={{ paddingLeft: '0.5rem' }}>
                   <div className="list-view-drawer__item-row" style={{ borderRight: `3px solid ${borderColor}` }}>
                     <div
-                      className="list-view-drawer__item-body"
+                      className={`list-view-drawer__item-body${selectedNodeId === node.id && !selectedProgressLevelId ? ' list-view-drawer__item-body--selected' : ''}`}
                       role="button"
                       tabIndex={0}
                       onClick={() => onSelectNode(node.id)}
@@ -666,6 +778,8 @@ export function ListViewDrawer({
                 matchesLevelFilters={matchesLevelFilters}
                 onSetLevelEffort={onSetLevelEffort}
                 onSetLevelBenefit={onSetLevelBenefit}
+                selectedNodeId={selectedNodeId}
+                selectedProgressLevelId={selectedProgressLevelId}
               />
             ))}
           </ul>

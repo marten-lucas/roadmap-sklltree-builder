@@ -3,12 +3,14 @@ import { TREE_CONFIG, STATUS_STYLES } from '../config'
 import { getDisplayStatusKey } from '../utils/nodeStatus'
 import { SkillTreeNode } from '../nodes/SkillTreeNode'
 import { MarkdownTooltipContent, Tooltip } from '../tooltip'
+import { renderMarkdownToHtml } from '../utils/markdown'
 
 
 const CHEVRON_SPACING = 7
 // Half-opening angle of the V. 25° keeps arm tips within the line's half-width
 // when arm length = line-width (verified: sin(25°) * lineW ≤ lineW/2 for all widths).
 const CHEVRON_HALF_OPEN = 25 * (Math.PI / 180)
+const LATER_SOURCE_LINK_STROKE = '#4c5458'
 // Compute arm length so chevron tips stay strictly inside a line of `lineWidth`.
 // Formula: armLen * sin(halfOpen) = lineWidth/2 * 0.88  (88% of half-width)
 const chevronArm = (lineWidth) => (lineWidth * 0.44) / Math.sin(CHEVRON_HALF_OPEN)
@@ -127,6 +129,43 @@ const buildPortalPlugPath = (width, height, tipLength) => {
   ].join(' ')
 }
 
+function CenterIconTooltipContent({ systemName, release, draftRelease }) {
+  const hasRelease = Boolean(release)
+  const displayRelease = draftRelease && draftRelease.id === release?.id
+    ? { ...release, ...draftRelease }
+    : release
+  const introductionHtml = renderMarkdownToHtml(displayRelease?.introduction ?? '')
+
+  return (
+    <div>
+      <div className="skill-node-tooltip__title">{systemName || 'Unbenanntes System'}</div>
+      {hasRelease ? (
+        <>
+          <div className="skill-node-tooltip__note">
+            <strong>Release:</strong> {displayRelease.name || 'Unbenannt'}
+          </div>
+          <div className="skill-node-tooltip__note">
+            <strong>Motto:</strong> {displayRelease.motto || 'Keine Angabe'}
+          </div>
+          <div className="skill-node-tooltip__note">
+            <strong>Datum:</strong> {displayRelease.date || 'Keine Angabe'}
+          </div>
+          <div className="skill-node-tooltip__note skill-node-tooltip__note--markdown">
+            <strong>Introduction</strong>
+            <div
+              dangerouslySetInnerHTML={{
+                __html: introductionHtml || '<p>Keine Introduction hinterlegt.</p>',
+              }}
+            />
+          </div>
+        </>
+      ) : (
+        <div className="skill-node-tooltip__note">Kein Release ausgewählt.</div>
+      )}
+    </div>
+  )
+}
+
 export function SkillTreeCanvas({
   canvasRef,
   canvas,
@@ -181,16 +220,32 @@ export function SkillTreeCanvas({
     : null
 
   const getLinkStatusStyle = (link) => {
+    const sourceNode = link.sourceId ? layoutNodesById.get(link.sourceId) : null
+    const sourceStatus = sourceNode ? getDisplayStatusKey(sourceNode, releaseId) : null
     const childNode = link.targetId ? layoutNodesById.get(link.targetId) : null
     const nodeStatus = childNode ? getDisplayStatusKey(childNode, releaseId) : 'later'
-    return STATUS_STYLES[nodeStatus] ?? STATUS_STYLES.later
+    const baseStyle = STATUS_STYLES[nodeStatus] ?? STATUS_STYLES.later
+
+    if (sourceStatus === 'later') {
+      return { ...baseStyle, linkStroke: LATER_SOURCE_LINK_STROKE }
+    }
+
+    return baseStyle
   }
 
   const splitDots = useMemo(() => {
     const getLinkStatusStyle = (link) => {
+      const sourceNode = link.sourceId ? layoutNodesById.get(link.sourceId) : null
+      const sourceStatus = sourceNode ? getDisplayStatusKey(sourceNode, releaseId) : null
       const childNode = link.targetId ? layoutNodesById.get(link.targetId) : null
       const nodeStatus = childNode ? getDisplayStatusKey(childNode, releaseId) : 'later'
-      return STATUS_STYLES[nodeStatus] ?? STATUS_STYLES.later
+      const baseStyle = STATUS_STYLES[nodeStatus] ?? STATUS_STYLES.later
+
+      if (sourceStatus === 'later') {
+        return { ...baseStyle, linkStroke: LATER_SOURCE_LINK_STROKE }
+      }
+
+      return baseStyle
     }
     
     return Array.from(
@@ -204,7 +259,6 @@ export function SkillTreeCanvas({
             x: link.splitPoint.x,
             y: link.splitPoint.y,
             fill: statusStyle.linkStroke,
-            opacity: Math.min(1, parseFloat(statusStyle.linkOpacity) * 1.05),
           })
         }
         return acc
@@ -214,8 +268,9 @@ export function SkillTreeCanvas({
   const hoveredPeerNodeId = hoveredPortal
     ? (hoveredPortal.type === 'source' ? hoveredPortal.targetId : hoveredPortal.sourceId)
     : null
-  // Gradient circle grows with the actual occupied rings + 1 ring buffer so the fade always reaches black.
-  const backgroundRadius = canvas.maxRadius + TREE_CONFIG.levelSpacing
+  // Dynamic fade radius based on occupied rings (+buffer), rendered across full canvas
+  // so the transition reaches black without a hard circle edge.
+  const backgroundRadius = canvas.maxRadius + TREE_CONFIG.levelSpacing * 2
 
   return (
     <svg
@@ -229,14 +284,21 @@ export function SkillTreeCanvas({
       onPointerLeave={() => setHoveredPortalKey(null)}
     >
       <defs>
-        <radialGradient id="nodeHalo" cx="50%" cy="50%" r="100%">
+        <radialGradient
+          id="nodeHalo"
+          gradientUnits="userSpaceOnUse"
+          colorInterpolation="linearRGB"
+          cx={canvas.origin.x}
+          cy={canvas.origin.y}
+          r={backgroundRadius}
+        >
           <stop offset="0%" stopColor="#60a5fa" stopOpacity="0.22" />
-          <stop offset="35%" stopColor="#1e40af" stopOpacity="0.12" />
-          <stop offset="100%" stopColor="#020617" stopOpacity="0" />
+          <stop offset="80%" stopColor="#60a5fa" stopOpacity="0.08" />
+          <stop offset="100%" stopColor="#60a5fa" stopOpacity="0" />
         </radialGradient>
       </defs>
 
-      <circle cx={canvas.origin.x} cy={canvas.origin.y} r={backgroundRadius} fill="url(#nodeHalo)" />
+      <rect x="0" y="0" width={canvas.width} height={canvas.height} fill="url(#nodeHalo)" />
 
       <g className="skill-tree-canvas__content">
         <Tooltip
@@ -285,7 +347,7 @@ export function SkillTreeCanvas({
               fill="none"
               stroke="#000000"
               strokeOpacity="1"
-              strokeWidth="2"
+              strokeWidth="9"
               strokeLinecap="round"
             />
           ))}
@@ -360,7 +422,7 @@ export function SkillTreeCanvas({
             data-link-source-id={link.sourceId ?? ''}
             data-link-target-id={link.targetId ?? ''}
             stroke="#000000"
-            strokeWidth="2"
+            strokeWidth="9"
             strokeOpacity="1"
             strokeLinecap="round"
             fill="none"
@@ -385,18 +447,6 @@ export function SkillTreeCanvas({
             />
           )
         })}
-
-        {splitDots.map((dot) => (
-          <circle
-            key={`split-dot-${dot.key}`}
-            cx={dot.x}
-            cy={dot.y}
-            r={3.1}
-            fill={dot.fill}
-            fillOpacity={dot.opacity}
-            style={{ pointerEvents: 'none' }}
-          />
-        ))}
 
         {/* ── Connection line direction chevrons — only at close/very-close, only later+next ── */}
         {(labelMode === 'close' || labelMode === 'very-close') &&
@@ -423,6 +473,18 @@ export function SkillTreeCanvas({
               )
             })
         }
+
+        {splitDots.map((dot) => (
+          <circle
+            key={`split-dot-${dot.key}`}
+            cx={dot.x}
+            cy={dot.y}
+            r={9}
+            fill={dot.fill}
+            fillOpacity={1}
+            style={{ pointerEvents: 'none' }}
+          />
+        ))}
 
         {/* ── Dependency portals (spokes) — rendered before nodes so spokes sit behind circles/rectangles ── */}
         {visibleDependencyPortals.map((portal) => {
@@ -482,6 +544,17 @@ export function SkillTreeCanvas({
             }
           }
           const spokeChevronD = buildChevronPath(spokeSamples, chevronArm(3), CHEVRON_HALF_OPEN, portal.type === 'target')
+          const zoomSafe = Math.max(0.35, currentZoomScale)
+          const baseHitRadius = portal.isMinimal ? 20 : 24
+          const baseHoverStrokeWidth = 16
+          const portalHitRadius = Math.max(16, Math.min(56, baseHitRadius / zoomSafe))
+          const portalHoverStrokeWidth = Math.max(12, Math.min(44, baseHoverStrokeWidth / zoomSafe))
+          const handlePortalClick = (event) => {
+            event.stopPropagation()
+            if (portal.isInteractive) {
+              onSelectPortal(portal)
+            }
+          }
 
           return (
             <Tooltip
@@ -501,24 +574,27 @@ export function SkillTreeCanvas({
                 data-portal-target-id={portal.targetId}
                 transform={`translate(${portal.x} ${portal.y})`}
                 onMouseDown={(event) => event.stopPropagation()}
-                onClick={(event) => {
-                  event.stopPropagation()
-                  if (portal.isInteractive) {
-                    onSelectPortal(portal)
-                  }
-                }}
+                onClick={handlePortalClick}
                 onPointerEnter={() => setHoveredPortalKey(portal.key)}
+                onPointerMove={() => setHoveredPortalKey(portal.key)}
                 onPointerLeave={() => setHoveredPortalKey((prev) => (prev === portal.key ? null : prev))}
               >
                 {/* wide, invisible spoke hit-path for forgiving hover */}
                 <path
                   d={spokeLinePath}
                   className="skill-tree-portal__hoverline"
+                  style={{ strokeWidth: portalHoverStrokeWidth }}
+                  onPointerEnter={() => setHoveredPortalKey(portal.key)}
+                  onPointerMove={() => setHoveredPortalKey(portal.key)}
+                  onClick={handlePortalClick}
                 />
                 {/* base spoke line */}
                 <path
                   d={spokeLinePath}
                   className={`skill-tree-portal__spoke skill-tree-portal__spoke--${portal.type}`}
+                  onPointerEnter={() => setHoveredPortalKey(portal.key)}
+                  onPointerMove={() => setHoveredPortalKey(portal.key)}
+                  onClick={handlePortalClick}
                 />
                 {/* directional chevrons overlay (Method 2: compound path) */}
                 {spokeChevronD && (
@@ -528,13 +604,13 @@ export function SkillTreeCanvas({
                   />
                 )}
                 {/* socket/plug icon at spoke tip:
-                     source = this node depends on another (eingehend) → Buchse (socket)
-                     target = another node depends on this (ausgehend) → Stecker (plug) */}
+                     source = requires (Buchse, inward-facing)
+                     target = enables (Stecker, outward-facing) */}
                 {isSource ? (
                   <path
                     className={`skill-tree-portal__ring skill-tree-portal__ring--${portal.type}`}
                     d={buildPortalSocketPath(portal.isMinimal ? 10 : 18)}
-                    transform={`translate(${extTipX} ${extTipY}) rotate(${(spokeTangent * 180) / Math.PI})`}
+                    transform={`translate(${extTipX} ${extTipY}) rotate(${(spokeTangent * 180) / Math.PI + 180})`}
                   />
                 ) : (
                   <path
@@ -544,7 +620,15 @@ export function SkillTreeCanvas({
                   />
                 )}
                 {/* invisible hit area (larger than ring for easy clicking) */}
-                <circle className="skill-tree-portal__hit" r={portal.isMinimal ? 20 : 24} cx={extTipX} cy={extTipY} />
+                <circle
+                  className="skill-tree-portal__hit"
+                  r={portalHitRadius}
+                  cx={extTipX}
+                  cy={extTipY}
+                  onPointerEnter={() => setHoveredPortalKey(portal.key)}
+                  onPointerMove={() => setHoveredPortalKey(portal.key)}
+                  onClick={handlePortalClick}
+                />
                 {/* label inside the portal symbol at spoke tip */}
                 {!portal.isMinimal && (
                   <text
@@ -576,7 +660,7 @@ export function SkillTreeCanvas({
               labelMode={visibilityMode === 'minimal' ? 'far' : labelMode}
               zoomScale={currentZoomScale}
               isSelected={isNodeSelected}
-              isPortalPeerHovered={!isNodeSelected && hoveredPeerNodeId === node.id}
+              isPortalPeerHovered={hoveredPeerNodeId === node.id}
               scopeOptions={scopeOptions}
               onSelect={onSelectNode}
               onZoomToNode={onZoomToNode}

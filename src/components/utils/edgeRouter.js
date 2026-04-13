@@ -407,8 +407,9 @@ export const buildRoutedEdgeLinks = ({ edgeRouting, nodesById, origin, nodeSize 
           parts.push(corridorArc)
         }
 
-        // Visual split between shared trunk and branch-specific segment.
-        splitPoint = { x: corridorTrunkPoint.x, y: corridorTrunkPoint.y }
+        // Split marker at the true elbow where the branch-specific radial spoke
+        // meets the corridor-radius arc.
+        splitPoint = { x: corridorChildPoint.x, y: corridorChildPoint.y }
 
         // Radial spoke from corridor ring down to child node.
         parts.push(`L ${child.x} ${child.y}`)
@@ -433,7 +434,8 @@ export const buildRoutedEdgeLinks = ({ edgeRouting, nodesById, origin, nodeSize 
           parts.push(targetArc)
         }
 
-        // Visual split point where trunk ray transitions into the child arc.
+        // Split marker at the true elbow where the radial trunk segment meets
+        // the target-radius arc.
         splitPoint = { x: targetTrunkPoint.x, y: targetTrunkPoint.y }
 
         path = parts.join(' ')

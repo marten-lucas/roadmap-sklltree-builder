@@ -227,6 +227,11 @@ const _SkillNode = ({ node, nodeSize, isSelected, isPortalPeerHovered = false, o
 
   const showLabel = !isMinimal && (labelMode === 'mid' || labelMode === 'close' || labelMode === 'very-close')
   const fwX = node.x - fwWidth / 2
+  const peerPulseStrength = clamp(0.85 + (1 / Math.max(zoomScale, 0.35) - 1) * 0.75, 0.85, 1.7)
+  const peerPulseScale = (1.015 + peerPulseStrength * 0.018).toFixed(3)
+  const peerPulseFar = (12 + peerPulseStrength * 8).toFixed(1)
+  const peerPulseNear = (22 + peerPulseStrength * 9).toFixed(1)
+  const peerPulseSlowdown = (0.92 + (2 - peerPulseStrength) * 0.16).toFixed(2)
   const nodeButtonClassName = [
     'skill-node-button',
     isMinimal ? 'skill-node-button--minimal' : '',
@@ -282,6 +287,12 @@ const _SkillNode = ({ node, nodeSize, isSelected, isPortalPeerHovered = false, o
               width: `${nodeSize}px`,
               height: `${nodeSize}px`,
               '--node-ring-color': statusStyles.ring,
+              '--portal-peer-pulse-scale': peerPulseScale,
+              '--portal-peer-pulse-far': `${peerPulseFar}px`,
+              '--portal-peer-pulse-near': `${peerPulseNear}px`,
+              '--portal-peer-pulse-alpha-idle': (0.5 + peerPulseStrength * 0.16).toFixed(2),
+              '--portal-peer-pulse-alpha-active': (0.74 + peerPulseStrength * 0.14).toFixed(2),
+              '--portal-peer-pulse-duration': `${peerPulseSlowdown}s`,
             }}
           >
             {!isMinimal && <div className="skill-node-level-ring" style={levelRingStyle} />}

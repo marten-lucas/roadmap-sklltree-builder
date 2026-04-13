@@ -1,0 +1,139 @@
+import { test, expect } from '@playwright/test'
+import { startFresh } from './helpers.js'
+
+const readCanvasScale = async (page) => page.evaluate(() => {
+  const selectors = [
+    '.react-transform-component',
+    '.react-transform-element',
+    '.skill-tree-transform-content',
+  ]
+
+  const scales = selectors
+    .flatMap((selector) => Array.from(document.querySelectorAll(selector)))
+    .map((element) => window.getComputedStyle(element).transform)
+    .filter((transform) => transform && transform !== 'none')
+    .map((transform) => {
+      const matrix = new DOMMatrixReadOnly(transform)
+      return Math.abs(matrix.a)
+    })
+
+  if (scales.length === 0) return 1
+  return Number(Math.max(...scales).toFixed(3))
+})
+
+test.describe('ListView effort/value refinements', () => {
+  test.use({ viewport: { width: 1600, height: 900 } })
+
+  test('loads seeded dataset, uses list mode effort/value, supports wheel, and selects without inspector', async ({ page }) => {
+    await startFresh(page)
+
+    await page.getByRole('button', { name: 'List View', exact: true }).click()
+    await expect(page.locator('.list-view-drawer')).toBeVisible({ timeout: 10_000 })
+
+    const treeModeButton = page.locator('.list-view-drawer button[title="Tree view"]')
+    const listModeButton = page.locator('.list-view-drawer button[title="List view"]')
+
+    await expect(treeModeButton).toBeVisible()
+    await expect(listModeButton).toBeVisible()
+
+    const listAlreadyActive = await listModeButton.evaluate((element) => element.classList.contains('list-view-drawer__icon-toggle--active'))
+    if (!listAlreadyActive) {
+      await listModeButton.click({ force: true })
+    }
+
+    await expect(listModeButton).toHaveClass(/list-view-drawer__icon-toggle--active/)
+    await expect(treeModeButton).not.toHaveClass(/list-view-drawer__icon-toggle--active/)
+
+    await page.locator('.list-view-drawer button[title="Effort / Value"]').click()
+
+    const firstEffortMetric = page.locator('.list-view-drawer__metric-slider--effort').first()
+    await expect(firstEffortMetric).toBeVisible()
+
+    const isSingleLineRow = await firstEffortMetric.evaluate((element) => {
+      return window.getComputedStyle(element).flexDirection === 'row'
+    })
+    expect.soft(isSingleLineRow).toBe(true)
+
+    const effortSlider = firstEffortMetric.locator('.list-view-drawer__slider-input')
+    await expect(effortSlider).toBeVisible()
+
+    const effortLabel = firstEffortMetric.locator('.list-view-drawer__slider-label')
+    await effortSlider.fill('0')
+    await expect(effortLabel).toHaveText('?')
+
+    const readEffortWidths = async () => firstEffortMetric.evaluate((element) => {
+      const slider = element.querySelector('.list-view-drawer__slider-input')
+      return {
+        sliderWidth: slider ? slider.getBoundingClientRect().width : 0,
+      }
+    })
+
+    const widthAtUnclear = await readEffortWidths()
+    expect.soft(widthAtUnclear.sliderWidth).toBeGreaterThan(80)
+
+    const beforeWheelValue = Number(await effortSlider.inputValue())
+    await firstEffortMetric.locator('.list-view-drawer__slider-label').click()
+    await page.mouse.wheel(0, 150)
+
+    await expect
+      .poll(async () => Number(await effortSlider.inputValue()))
+      .not.toBe(beforeWheelValue)
+
+    await effortSlider.fill('2')
+    const widthAtRegular = await readEffortWidths()
+    expect.soft(Math.abs(widthAtUnclear.sliderWidth - widthAtRegular.sliderWidth)).toBeLessThan(1.5)
+
+    await effortSlider.fill('6')
+    const customInput = firstEffortMetric.locator('.list-view-drawer__metric-custom-input')
+    await expect(customInput).toBeVisible()
+    await expect(firstEffortMetric.locator('.list-view-drawer__slider-input')).toHaveCount(0)
+
+    const customToggle = firstEffortMetric.locator('.list-view-drawer__metric-custom-toggle input[type="checkbox"]')
+    await expect(customToggle).toBeVisible()
+    await expect(customToggle).toBeChecked()
+
+    const customEditorWidth = await firstEffortMetric.evaluate((element) => {
+      const editor = element.querySelector('.list-view-drawer__metric-custom-editor')
+      return editor ? editor.getBoundingClientRect().width : 0
+    })
+    expect.soft(customEditorWidth).toBeGreaterThan(80)
+
+    await customToggle.click()
+    const effortSliderAfterUncheck = firstEffortMetric.locator('.list-view-drawer__slider-input')
+    await expect(effortSliderAfterUncheck).toBeVisible()
+
+    const widthAfterUncheck = await firstEffortMetric.evaluate((element) => {
+      const slider = element.querySelector('.list-view-drawer__slider-input')
+      return slider ? slider.getBoundingClientRect().width : 0
+    })
+    expect.soft(Math.abs(widthAtRegular.sliderWidth - widthAfterUncheck)).toBeLessThan(1.5)
+
+    const firstValueMetric = page.locator('.list-view-drawer__metric-slider--value').first()
+    const valueSlider = firstValueMetric.locator('.list-view-drawer__slider-input')
+    await expect(valueSlider).toBeVisible()
+    await valueSlider.fill('0')
+    const valueWidthAtUnclear = await firstValueMetric.evaluate((element) => {
+      const slider = element.querySelector('.list-view-drawer__slider-input')
+      return slider ? slider.getBoundingClientRect().width : 0
+    })
+    await valueSlider.fill('5')
+    const valueWidthAtHigh = await firstValueMetric.evaluate((element) => {
+      const slider = element.querySelector('.list-view-drawer__slider-input')
+      return slider ? slider.getBoundingClientRect().width : 0
+    })
+    expect.soft(Math.abs(valueWidthAtUnclear - valueWidthAtHigh)).toBeLessThan(1.5)
+
+    await expect.soft(page.locator('.skill-panel--inspector')).toHaveCount(0)
+
+    await page.locator('.list-view-drawer__item-body--level').first().click()
+
+    await expect.soft(page.locator('.skill-panel--inspector')).toHaveCount(0)
+
+    await expect
+      .poll(async () => readCanvasScale(page))
+      .toBeGreaterThan(3.95)
+
+    const scale = await readCanvasScale(page)
+    expect.soft(scale).toBeLessThan(4.05)
+  })
+})

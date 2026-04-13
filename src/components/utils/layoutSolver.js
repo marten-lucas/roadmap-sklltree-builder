@@ -2074,10 +2074,18 @@ export const solveSkillTreeLayout = (data, config) => {
     }
   }
 
+  // Keep enough outer radius so controls anchored beyond segment labels stay inside the SVG.
+  // This is especially important when there are no segments yet and the "add segment" button
+  // sits at ~1.32x segmentLabelRadius.
+  const emptySegmentAddControlRadius = finalOrderedSegments.length === 0
+    ? segmentLabelRadius * 1.32 + config.nodeSize * 0.5
+    : 0
+
   const outerContentRadius = Math.max(
     maxRadius + config.nodeSize,
     separatorOuterRadius + config.nodeSize * 0.35,
     segmentLabelRadius + config.nodeSize,
+    emptySegmentAddControlRadius,
   )
   const svgWidth = outerContentRadius * 2 + config.horizontalPadding * 2
   const svgHeight = outerContentRadius * 2 + config.topPadding + config.bottomPadding

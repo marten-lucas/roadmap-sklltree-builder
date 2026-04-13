@@ -2,6 +2,7 @@ import { STATUS_LABELS, normalizeStatusKey } from '../config'
 import { renderMarkdownToHtml } from './markdown'
 import { resolveScopeEntries, renderScopeLabelsMarkup } from './scopeDisplay'
 import { getExportViewportBounds } from './svgExport'
+import { getLevelStatus } from './nodeStatus'
 
 const escapeHtml = (value) => String(value ?? '')
   .replace(/&/g, '&amp;')
@@ -64,7 +65,7 @@ const formatDisplayDate = (value) => {
   return parsed.toLocaleDateString()
 }
 
-export const collectReleaseNoteEntries = (roadmapDocument) => {
+export const collectReleaseNoteEntries = (roadmapDocument, releaseId = null) => {
   const segmentLabelById = new Map((roadmapDocument?.segments ?? []).map((segment) => [segment.id, segment.label]))
   const scopes = Array.isArray(roadmapDocument?.scopes) ? roadmapDocument.scopes : []
   const entries = []
@@ -77,9 +78,9 @@ export const collectReleaseNoteEntries = (roadmapDocument) => {
 
     levels.forEach((level, index) => {
       const releaseNote = String(level?.releaseNote ?? '').trim()
-      const statusKey = normalizeStatusKey(level.status ?? node.status)
+      const statusKey = normalizeStatusKey(getLevelStatus(level, releaseId))
 
-      if (!releaseNote || normalizeStatusKey(level.status ?? node.status) !== 'now') {
+      if (!releaseNote || statusKey !== 'now') {
         return
       }
 

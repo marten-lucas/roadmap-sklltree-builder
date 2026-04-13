@@ -137,13 +137,64 @@ describe('htmlExport', () => {
     const result = extractDocumentPayloadFromHtml('<html><body>Missing data</body></html>')
 
     expect(result.ok).toBe(false)
-    expect(result.error).toMatch(/HTML exportieren/)
+    expect(result.error).toMatch(/Export HTML/)
   })
 
   it('rejects non-html content early', () => {
     const result = extractDocumentPayloadFromHtml('{"schemaVersion":1}')
 
     expect(result.ok).toBe(false)
-    expect(result.error).toMatch(/kein gueltiges HTML/)
+    expect(result.error).toMatch(/valid HTML document/)
+  })
+
+  it('exports only selected releases when release ids are provided', () => {
+    const document = {
+      systemName: 'Release Filter Demo',
+      releases: [
+        { id: 'release-a', name: 'Release A', motto: 'A', introduction: 'Intro A', date: '2026-07-01', storyPointBudget: null },
+        { id: 'release-b', name: 'Release B', motto: 'B', introduction: 'Intro B', date: '2026-08-01', storyPointBudget: null },
+      ],
+      segments: [{ id: 'segment-1', label: 'Segment 1' }],
+      scopes: [],
+      children: [
+        {
+          id: 'node-1',
+          label: 'Node 1',
+          shortName: 'N1',
+          segmentId: 'segment-1',
+          levels: [
+            {
+              id: 'level-1',
+              label: 'Level 1',
+              statuses: {
+                'release-a': 'now',
+                'release-b': 'later',
+              },
+              releaseNote: 'Release note for selected release.',
+              scopeIds: [],
+            },
+          ],
+          children: [],
+        },
+      ],
+    }
+
+    const html = buildHtmlExportDocument({
+      svgMarkup: '<svg viewBox="0 0 100 100"></svg>',
+      roadmapDocument: document,
+      styleText: '',
+      selectedReleaseIds: ['release-a'],
+    })
+
+    expect(html).toContain('Release A')
+    expect(html).not.toContain('Release B')
+
+    const extracted = extractDocumentPayloadFromHtml(html)
+    expect(extracted.ok).toBe(true)
+    expect(extracted.value.releases).toEqual([
+      { id: 'release-a', name: 'Release A', motto: 'A', introduction: 'Intro A', date: '2026-07-01', storyPointBudget: null },
+    ])
+    const statuses = extracted.value.children[0].levels[0].statuses
+    expect(statuses).toEqual({ 'release-a': 'now' })
   })
 })

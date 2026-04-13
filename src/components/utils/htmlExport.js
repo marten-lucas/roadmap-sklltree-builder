@@ -4,7 +4,10 @@ import { renderMarkdownToHtml } from './markdown'
 import { renderScopeLabelsMarkup } from './scopeDisplay'
 import { serializeSvgElementForExport } from './svgExport'
 import { VIEWPORT_DEFAULTS } from './viewport'
-import { NODE_LABEL_ZOOM } from '../config'
+import { NODE_LABEL_ZOOM, STATUS_STYLES } from '../config'
+import { AXIS_SIZES, AXIS_COUNT, MATRIX_PADDING, NODE_RADIUS, computeMatrixLayout } from './matrixLayout'
+import { getNodeDisplayEffort, getNodeDisplayBenefit, EFFORT_SIZE_LABELS, BENEFIT_SIZE_LABELS } from './effortBenefit'
+import { getDisplayStatusKey } from './nodeStatus'
 import htmlToImageBundle from 'html-to-image/dist/html-to-image.js?raw'
 
 export const HTML_EXPORT_DATA_SCRIPT_ID = 'skilltree-export-data'
@@ -13,6 +16,73 @@ const HTML_TO_IMAGE_BUNDLE = String(htmlToImageBundle).replace(/<\/script/gi, '<
 const XML_PREFIX_PATTERN = /^<\?xml[^>]*\?>\s*/i
 
 const normalizeScopeKey = (label) => String(label ?? '').trim().toLowerCase()
+
+const getResolvedReleaseIds = (roadmapDocument, selectedReleaseIds = null) => {
+  const allReleaseIds = (Array.isArray(roadmapDocument?.releases) ? roadmapDocument.releases : [])
+    .map((release) => release?.id)
+    .filter(Boolean)
+
+  if (allReleaseIds.length === 0) {
+    return []
+  }
+
+  if (!Array.isArray(selectedReleaseIds) || selectedReleaseIds.length === 0) {
+    return allReleaseIds
+  }
+
+  const allowedIds = new Set(allReleaseIds)
+  const filteredIds = selectedReleaseIds.filter((releaseId) => allowedIds.has(releaseId))
+  return filteredIds.length > 0 ? filteredIds : allReleaseIds
+}
+
+const filterDocumentByReleaseIds = (roadmapDocument, releaseIds) => {
+  if (!roadmapDocument || typeof roadmapDocument !== 'object') {
+    return roadmapDocument
+  }
+
+  if (!Array.isArray(roadmapDocument.releases) || roadmapDocument.releases.length === 0) {
+    return roadmapDocument
+  }
+
+  const releaseIdSet = new Set(releaseIds)
+  const filteredDocument = JSON.parse(JSON.stringify(roadmapDocument))
+  filteredDocument.releases = (filteredDocument.releases ?? []).filter((release) => releaseIdSet.has(release?.id))
+
+  const walk = (node) => {
+    if (!node || typeof node !== 'object') {
+      return
+    }
+
+    const levels = Array.isArray(node.levels) ? node.levels : []
+    node.levels = levels.map((level) => {
+      if (!level || typeof level !== 'object' || !level.statuses || typeof level.statuses !== 'object') {
+        return level
+      }
+
+      const nextStatuses = {}
+      for (const [releaseId, status] of Object.entries(level.statuses)) {
+        if (releaseIdSet.has(releaseId)) {
+          nextStatuses[releaseId] = status
+        }
+      }
+
+      return {
+        ...level,
+        statuses: nextStatuses,
+      }
+    })
+
+    for (const child of node.children ?? []) {
+      walk(child)
+    }
+  }
+
+  for (const root of filteredDocument.children ?? []) {
+    walk(root)
+  }
+
+  return filteredDocument
+}
 
 const canonicalizeDocumentForExport = (doc) => {
   if (!doc || typeof doc !== 'object' || !Array.isArray(doc.scopes)) return doc
@@ -147,6 +217,123 @@ const buildReleaseNotesMarkup = (entries, introductionMarkdown = '') => {
   })
 
   return parts.join('\n')
+}
+
+const MATRIX_CELL_SIZE = 100
+const MATRIX_CONTENT_WIDTH = MATRIX_PADDING * 2 + AXIS_COUNT * MATRIX_CELL_SIZE
+const MATRIX_BOTTOM_LABEL_SPACE = 44
+const MATRIX_CONTENT_HEIGHT = MATRIX_PADDING + AXIS_COUNT * MATRIX_CELL_SIZE + MATRIX_BOTTOM_LABEL_SPACE
+
+const resolveMatrixStatusKey = (node, releaseId = null) => {
+  const levels = Array.isArray(node?.levels) ? node.levels : []
+  if (levels.length > 0) {
+    return getDisplayStatusKey(node, releaseId) ?? 'later'
+  }
+  return node?.status ?? 'later'
+}
+
+const collectMatrixNodes = (document) => {
+  const result = []
+  const queue = [...(document?.children ?? [])]
+  while (queue.length > 0) {
+    const node = queue.shift()
+    result.push(node)
+    queue.push(...(node.children ?? []))
+  }
+  return result
+}
+
+const buildPriorityMatrixSvgMarkup = (roadmapDocument, releaseId = null) => {
+  const allNodes = collectMatrixNodes(roadmapDocument)
+  const plottable = allNodes.filter((n) => {
+    const effort = getNodeDisplayEffort(n)
+    const benefit = getNodeDisplayBenefit(n)
+    return AXIS_SIZES.includes(effort?.size) && AXIS_SIZES.includes(benefit?.size)
+  })
+
+  const positioned = computeMatrixLayout(plottable, MATRIX_CELL_SIZE)
+  const entries = positioned.map((entry) => ({
+    ...entry,
+    statusKey: resolveMatrixStatusKey(entry.node, releaseId),
+  }))
+
+  const cellRects = AXIS_SIZES.flatMap((efKey, col) =>
+    AXIS_SIZES.map((beKey, row) => {
+      const invertedRow = AXIS_COUNT - 1 - row
+      const cx = MATRIX_PADDING + col * MATRIX_CELL_SIZE
+      const cy = MATRIX_PADDING + invertedRow * MATRIX_CELL_SIZE
+      const isEvenCell = (col + invertedRow) % 2 === 0
+      return `<rect x="${cx}" y="${cy}" width="${MATRIX_CELL_SIZE}" height="${MATRIX_CELL_SIZE}" fill="${isEvenCell ? 'rgba(30,41,59,0.7)' : 'rgba(15,23,42,0.7)'}" stroke="rgba(71,85,105,0.5)" stroke-width="0.5"/>`
+    }),
+  ).join('')
+
+  const xAxisLabels = AXIS_SIZES.map((key, col) =>
+    `<text x="${MATRIX_PADDING + col * MATRIX_CELL_SIZE + MATRIX_CELL_SIZE / 2}" y="${MATRIX_PADDING + AXIS_COUNT * MATRIX_CELL_SIZE + 18}" text-anchor="middle" fill="#94a3b8" font-size="12" font-weight="600" font-family="inherit">${escapeHtml(EFFORT_SIZE_LABELS[key] ?? key.toUpperCase())}</text>`,
+  ).join('')
+
+  const xAxisTitle = `<text x="${MATRIX_PADDING + (AXIS_COUNT * MATRIX_CELL_SIZE) / 2}" y="${MATRIX_PADDING + AXIS_COUNT * MATRIX_CELL_SIZE + 36}" text-anchor="middle" fill="#64748b" font-size="11" font-family="inherit">&#x26A1; Effort &#x2192;</text>`
+
+  const yAxisLabels = AXIS_SIZES.map((key, row) => {
+    const invertedRow = AXIS_COUNT - 1 - row
+    return `<text x="${MATRIX_PADDING - 8}" y="${MATRIX_PADDING + invertedRow * MATRIX_CELL_SIZE + MATRIX_CELL_SIZE / 2 + 1}" text-anchor="end" dominant-baseline="middle" fill="#94a3b8" font-size="12" font-weight="600" font-family="inherit">${escapeHtml(BENEFIT_SIZE_LABELS[key] ?? key.toUpperCase())}</text>`
+  }).join('')
+
+  const yAxisTitle = `<text x="${MATRIX_PADDING - 36}" y="${MATRIX_PADDING + (AXIS_COUNT * MATRIX_CELL_SIZE) / 2}" text-anchor="middle" dominant-baseline="middle" fill="#64748b" font-size="11" font-family="inherit" transform="rotate(-90, ${MATRIX_PADDING - 36}, ${MATRIX_PADDING + (AXIS_COUNT * MATRIX_CELL_SIZE) / 2})">&#x2605; Benefit &#x2192;</text>`
+
+  const nodeCircles = entries.map((entry) => {
+    const { node, x, y, radius = NODE_RADIUS, statusKey } = entry
+    const style = STATUS_STYLES[statusKey] ?? STATUS_STYLES.later
+    const shortName = escapeHtml(String(node.shortName ?? node.label ?? '').slice(0, 3).toUpperCase())
+    const effortLabel = escapeHtml(EFFORT_SIZE_LABELS[getNodeDisplayEffort(node).size] ?? getNodeDisplayEffort(node).size ?? '–')
+    const benefitLabel = escapeHtml(BENEFIT_SIZE_LABELS[getNodeDisplayBenefit(node).size] ?? getNodeDisplayBenefit(node).size ?? '–')
+    const labelText = escapeHtml(String(node.label ?? ''))
+    // Always show shortnames in the static export; use data-* for JS tooltip
+    return `<g class="pm-export-node" data-pm-label="${labelText}" data-pm-effort="${effortLabel}" data-pm-benefit="${benefitLabel}" data-pm-status="${escapeHtml(statusKey)}" style="cursor:default"><circle cx="${x}" cy="${y}" r="${radius}" fill="${style.glowSegment ?? '#1e3a5f'}" stroke="${style.ringBand ?? '#3b82f6'}" stroke-width="1.5"/><text x="${x}" y="${y + 1}" text-anchor="middle" dominant-baseline="middle" fill="${style.textColor ?? '#e2e8f0'}" font-size="10" font-weight="700" font-family="inherit" style="pointer-events:none;user-select:none">${shortName}</text></g>`
+  }).join('')
+
+  const emptyState = entries.length === 0
+    ? `<text x="${MATRIX_PADDING + (AXIS_COUNT * MATRIX_CELL_SIZE) / 2}" y="${MATRIX_PADDING + (AXIS_COUNT * MATRIX_CELL_SIZE) / 2}" text-anchor="middle" dominant-baseline="middle" fill="#475569" font-size="14" font-family="inherit">No nodes with Effort &amp; Benefit set</text>`
+    : ''
+
+  return `<svg id="pm-export-svg" width="100%" viewBox="0 0 ${MATRIX_CONTENT_WIDTH} ${MATRIX_CONTENT_HEIGHT}" preserveAspectRatio="xMidYMid meet" style="display:block;max-height:520px;max-width:100%">${cellRects}${xAxisLabels}${xAxisTitle}${yAxisLabels}${yAxisTitle}${nodeCircles}${emptyState}</svg>`
+}
+
+const buildReleaseSectionsMarkup = ({ roadmapDocument, releaseIds }) => {
+  const releases = Array.isArray(roadmapDocument?.releases) ? roadmapDocument.releases : []
+  if (releases.length === 0 || releaseIds.length === 0) {
+    const releaseNoteEntries = collectReleaseNoteEntries(roadmapDocument)
+    const introduction = String(roadmapDocument?.release?.introduction ?? '')
+    return buildReleaseNotesMarkup(releaseNoteEntries, introduction)
+  }
+
+  const releaseById = new Map(releases.map((release) => [release.id, release]))
+
+  return releaseIds.map((releaseId) => {
+    const release = releaseById.get(releaseId)
+    const releaseName = String(release?.name ?? '').trim() || 'Release'
+    const releaseMotto = String(release?.motto ?? '').trim()
+    const releaseDate = String(release?.date ?? '').trim()
+    const introduction = String(release?.introduction ?? '')
+    const releaseNoteEntries = collectReleaseNoteEntries(roadmapDocument, releaseId)
+    const subtitleParts = []
+
+    if (releaseMotto) {
+      subtitleParts.push(releaseMotto)
+    }
+    if (releaseDate) {
+      subtitleParts.push(`Release Date: ${formatDisplayDate(releaseDate)}`)
+    }
+
+    return `
+      <section class="html-export__release-block">
+        <header class="html-export__release-header">
+          <h3>${escapeHtml(releaseName)}</h3>
+          ${subtitleParts.length > 0 ? `<p>${escapeHtml(subtitleParts.join(' · '))}</p>` : ''}
+        </header>
+        <div class="html-export__release-list">${buildReleaseNotesMarkup(releaseNoteEntries, introduction)}</div>
+      </section>
+    `
+  }).join('\n')
 }
 
 const buildViewerScript = () => `
@@ -1418,22 +1605,29 @@ export const buildHtmlExportDocument = ({
   svgMarkup,
   roadmapDocument,
   styleText,
+  selectedReleaseIds = null,
+  includePriorityMatrix = false,
 }) => {
-  const releaseNoteEntries = collectReleaseNoteEntries(roadmapDocument)
+  const resolvedReleaseIds = getResolvedReleaseIds(roadmapDocument, selectedReleaseIds)
+  const releaseFilteredDocument = filterDocumentByReleaseIds(roadmapDocument, resolvedReleaseIds)
+  const releases = Array.isArray(releaseFilteredDocument?.releases) ? releaseFilteredDocument.releases : []
+  const primaryRelease = releases[0] ?? null
   const exportDate = new Date().toLocaleDateString()
-  const systemName = String(roadmapDocument?.systemName ?? '').trim() || 'Roadmap'
-  const releaseData = roadmapDocument?.release ?? {}
-  const releaseTitle = String(releaseData?.name ?? '').trim()
+  const systemName = String(releaseFilteredDocument?.systemName ?? '').trim() || 'Roadmap'
+  const releaseData = primaryRelease ?? releaseFilteredDocument?.release ?? {}
+  const singleReleaseTitle = String(releaseData?.name ?? '').trim()
+  const releaseTitle = releases.length > 1
+    ? `${releases.length} Releases`
+    : singleReleaseTitle
   const releaseMotto = String(releaseData?.motto ?? '').trim()
   const releaseDate = String(releaseData?.date ?? '').trim()
-  const releaseIntroduction = String(releaseData?.introduction ?? '')
   const pageTitle = [systemName, releaseTitle].filter(Boolean).join(' · ') || systemName
   const subtitleBits = [releaseMotto, `Exportiert am ${exportDate}`]
 
   if (releaseDate) {
     subtitleBits.push(`Release Date: ${formatDisplayDate(releaseDate)}`)
   }
-  const canonicalDoc = canonicalizeDocumentForExport(roadmapDocument)
+  const canonicalDoc = canonicalizeDocumentForExport(releaseFilteredDocument)
   const canonicalPayloadJson = escapeJsonForScriptTag(JSON.stringify(buildPersistedDocumentPayload(canonicalDoc), null, 2))
 
   return `<!DOCTYPE html>
@@ -1893,6 +2087,28 @@ export const buildHtmlExportDocument = ({
       gap: 12px;
     }
 
+    .html-export__release-block {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      padding: 14px;
+      border-radius: 16px;
+      border: 1px solid rgba(71, 85, 105, 0.48);
+      background: rgba(2, 6, 23, 0.25);
+    }
+
+    .html-export__release-header h3 {
+      margin: 0;
+      font-size: 1.08rem;
+      color: #f8fafc;
+    }
+
+    .html-export__release-header p {
+      margin: 4px 0 0;
+      color: #cbd5e1;
+      font-size: 0.82rem;
+    }
+
     .html-export__release-group-label {
       margin: 0;
       color: #f8fafc;
@@ -1959,6 +2175,37 @@ export const buildHtmlExportDocument = ({
       .html-export__roadmap-actions {
         justify-content: flex-start;
       }
+    }
+
+    .html-export__priority-matrix-svg {
+      display: block;
+      width: 100%;
+      max-height: 520px;
+      border-radius: 12px;
+      background: rgba(2, 6, 23, 0.35);
+      padding: 12px 0;
+    }
+
+    .html-export__matrix-legend {
+      display: flex;
+      gap: 16px;
+      flex-wrap: wrap;
+      margin-top: 12px;
+    }
+
+    .html-export__matrix-legend-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 0.8rem;
+      color: #94a3b8;
+    }
+
+    .html-export__matrix-legend-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      flex-shrink: 0;
     }
 
     @media print {
@@ -2113,8 +2360,25 @@ export const buildHtmlExportDocument = ({
       <header class="html-export__section-header">
         <p class="html-export__eyebrow">Release Notes</p>
       </header>
-      <div class="html-export__release-list">${buildReleaseNotesMarkup(releaseNoteEntries, releaseIntroduction)}</div>
+      <div class="html-export__release-list">${buildReleaseSectionsMarkup({ roadmapDocument: canonicalDoc, releaseIds: resolvedReleaseIds })}</div>
     </section>
+
+    ${includePriorityMatrix ? `<section class="html-export__panel">
+      <header class="html-export__section-header">
+        <p class="html-export__eyebrow">Priority Matrix</p>
+      </header>
+      <div id="pm-export-container" class="html-export__priority-matrix-svg" style="position:relative">
+        ${buildPriorityMatrixSvgMarkup(canonicalDoc, resolvedReleaseIds[0] ?? null)}
+        <div id="pm-export-tooltip" style="display:none;position:absolute;pointer-events:none;z-index:50;min-width:160px;padding:10px 14px;border-radius:12px;border:1px solid rgba(71,85,105,0.55);background:rgba(2,6,23,0.97);color:#e2e8f0;font-size:0.82rem;line-height:1.5;box-shadow:0 8px 24px rgba(0,0,0,0.45)"></div>
+      </div>
+      <div class="html-export__matrix-legend">
+        ${['done', 'now', 'next', 'later'].map((s) => {
+          const style = STATUS_STYLES[s] ?? STATUS_STYLES.later
+          return `<div class="html-export__matrix-legend-item"><div class="html-export__matrix-legend-dot" style="background:${style.glowSegment === 'transparent' ? style.ringBand : style.glowSegment};border:1.5px solid ${style.ringBand}"></div><span>${s.charAt(0).toUpperCase() + s.slice(1)}</span></div>`
+        }).join('')}
+      </div>
+    </section>
+    <script>(function(){var c=document.getElementById('pm-export-container'),t=document.getElementById('pm-export-tooltip');if(!c||!t)return;c.addEventListener('mouseover',function(e){var n=e.target.closest('.pm-export-node');if(!n){t.style.display='none';return;}t.innerHTML='<strong style="color:#f8fafc;font-size:0.9rem">'+n.dataset.pmLabel+'</strong><br>&#x26A1; Effort: '+n.dataset.pmEffort+'<br>&#x2605; Benefit: '+n.dataset.pmBenefit+'<br>Status: '+n.dataset.pmStatus;t.style.display='block';});c.addEventListener('mousemove',function(e){var r=c.getBoundingClientRect(),tx=e.clientX-r.left+14,ty=e.clientY-r.top-20;if(tx+180>r.width)tx=e.clientX-r.left-180;t.style.left=tx+'px';t.style.top=ty+'px';});c.addEventListener('mouseleave',function(){t.style.display='none';});})();</script>` : ''}
   </main>
 
   <script id="${HTML_EXPORT_DATA_SCRIPT_ID}" type="application/json">${canonicalPayloadJson}</script>
@@ -2173,6 +2437,8 @@ export const readDocumentFromHtmlText = (htmlText) => {
 export const exportHtmlFromSkillTree = ({
   svgElement,
   roadmapDocument,
+  selectedReleaseIds = null,
+  includePriorityMatrix = false,
   sourceDocument = globalThis?.document,
 }) => {
   if (typeof window === 'undefined' || typeof window.document === 'undefined') {
@@ -2189,6 +2455,8 @@ export const exportHtmlFromSkillTree = ({
     svgMarkup,
     roadmapDocument,
     styleText: collectStyleText(sourceDocument),
+    selectedReleaseIds,
+    includePriorityMatrix,
   })
 
   const blob = new Blob([html], { type: 'text/html;charset=utf-8' })

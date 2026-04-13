@@ -36,8 +36,8 @@ export const STATUS_STYLES = {
     textColor: '#5a6576',
     glowSegment: 'transparent',
     linkStroke: '#94a3b8',
-    linkStrokeWidth: '2.5',
-    linkOpacity: '0.35',
+    linkStrokeWidth: '9',
+    linkOpacity: '1',
   },
   now: {
     glow: '0 0 32px rgba(239, 68, 68, 0.75)',
@@ -47,7 +47,7 @@ export const STATUS_STYLES = {
     textColor: '#ffffff',
     glowSegment: 'rgba(239, 68, 68, 0.55)',
     linkStroke: '#dc2626',
-    linkStrokeWidth: '4.5',
+    linkStrokeWidth: '9',
     linkOpacity: '1',
   },
   next: {
@@ -58,8 +58,8 @@ export const STATUS_STYLES = {
     textColor: '#ffffff',
     glowSegment: 'rgba(6, 182, 212, 0.28)',
     linkStroke: '#06b6d4',
-    linkStrokeWidth: '3',
-    linkOpacity: '0.65',
+    linkStrokeWidth: '9',
+    linkOpacity: '1',
   },
   later: {
     glow: 'none',
@@ -69,8 +69,8 @@ export const STATUS_STYLES = {
     textColor: '#4f5f75',
     glowSegment: 'transparent',
     linkStroke: '#94a3b8',
-    linkStrokeWidth: '2',
-    linkOpacity: '0.4',
+    linkStrokeWidth: '9',
+    linkOpacity: '1',
   },
   hidden: {
     glow: 'none',
@@ -80,8 +80,8 @@ export const STATUS_STYLES = {
     textColor: '#4b5563',
     glowSegment: 'transparent',
     linkStroke: '#374151',
-    linkStrokeWidth: '1.5',
-    linkOpacity: '0.15',
+    linkStrokeWidth: '9',
+    linkOpacity: '1',
   },
 }
 
