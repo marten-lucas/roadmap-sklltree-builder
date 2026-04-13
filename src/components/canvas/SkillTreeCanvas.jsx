@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { TREE_CONFIG, STATUS_STYLES } from '../config'
 import { getDisplayStatusKey } from '../utils/nodeStatus'
 import { SkillTreeNode } from '../nodes/SkillTreeNode'
@@ -100,10 +101,11 @@ function buildChevronPath(samples, armLen, halfOpen, reverseDir = false) {
 }
 // ────────────────────────────────────────────────────────────────────────────
 
-const getPortalClassName = (portal, isSelected) => [
+const getPortalClassName = (portal, isSelected, isPeerHovered) => [
   'skill-tree-portal',
   portal.isInteractive ? 'skill-tree-portal--interactive' : '',
   isSelected ? 'skill-tree-portal--selected' : '',
+  isPeerHovered ? 'skill-tree-portal--peer-hovered' : '',
 ].filter(Boolean).join(' ')
 
 function CenterIconTooltipContent({ systemName, release, draftRelease }) {
@@ -192,6 +194,8 @@ export function SkillTreeCanvas({
   storyPointMap,
   releaseId = null,
 }) {
+  const [hoveredPortalKey, setHoveredPortalKey] = useState(null)
+
   return (
     <svg
       ref={canvasRef}
@@ -392,7 +396,10 @@ export function SkillTreeCanvas({
         {/* ── Dependency portals (spokes) — rendered before nodes so spokes sit behind circles/rectangles ── */}
         {visibleDependencyPortals.map((portal) => {
           const isPortalSelected = portal.key === selectedPortalKey
-          const portalClassName = getPortalClassName(portal, isPortalSelected)
+          const portalBaseKey = portal.key.replace(/:(?:source|target)$/, '')
+          const hoveredBaseKey = hoveredPortalKey ? hoveredPortalKey.replace(/:(?:source|target)$/, '') : null
+          const isPeerHovered = !isPortalSelected && hoveredBaseKey === portalBaseKey && hoveredPortalKey !== portal.key
+          const portalClassName = getPortalClassName(portal, isPortalSelected, isPeerHovered)
           const isSource = portal.type === 'source'
           const dotIdx = portal.otherLabel ? portal.otherLabel.indexOf('\u00B7') : -1
           const labelName = dotIdx >= 0 ? portal.otherLabel.slice(0, dotIdx) : (portal.otherLabel ?? '')
@@ -465,6 +472,8 @@ export function SkillTreeCanvas({
                     onSelectPortal(portal)
                   }
                 }}
+                onMouseEnter={() => setHoveredPortalKey(portal.key)}
+                onMouseLeave={() => setHoveredPortalKey(null)}
               >
                 {/* base spoke line */}
                 <path

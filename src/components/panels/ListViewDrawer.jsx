@@ -3,12 +3,53 @@ import { STATUS_LABELS, STATUS_STYLES, normalizeStatusKey } from '../config'
 import { BENEFIT_SIZE_LABELS, EFFORT_SIZE_LABELS } from '../utils/effortBenefit'
 import { getDisplayStatusKey, getLevelStatus } from '../utils/nodeStatus'
 
+// ── Icons ─────────────────────────────────────────────────────────────────────
+
 const EyeOffIcon = () => (
-  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ flexShrink: 0 }}>
+  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ flexShrink: 0 }}>
     <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" />
     <line x1="1" y1="1" x2="23" y2="23" />
   </svg>
 )
+
+const IconTree = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M21 3H3" /><path d="M9 3v18" /><path d="M9 9h12" /><path d="M9 15h8" />
+  </svg>
+)
+
+const IconList = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <line x1="8" y1="6" x2="21" y2="6" />
+    <line x1="8" y1="12" x2="21" y2="12" />
+    <line x1="8" y1="18" x2="21" y2="18" />
+    <circle cx="3" cy="6" r="1" fill="currentColor" stroke="none" />
+    <circle cx="3" cy="12" r="1" fill="currentColor" stroke="none" />
+    <circle cx="3" cy="18" r="1" fill="currentColor" stroke="none" />
+  </svg>
+)
+
+const IconLayers = () => (
+  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <polygon points="12 2 2 7 12 12 22 7 12 2" />
+    <polyline points="2 17 12 22 22 17" />
+    <polyline points="2 12 12 17 22 12" />
+  </svg>
+)
+
+const IconBolt = () => (
+  <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true">
+    <polygon points="13 2 3 14 12 14 11 22 21 10 12 10" />
+  </svg>
+)
+
+const IconStar = () => (
+  <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true">
+    <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+  </svg>
+)
+
+// ── helpers ───────────────────────────────────────────────────────────────────
 
 const ScopeChip = ({ label, color }) => (
   <span
@@ -32,8 +73,52 @@ const getNodeScopeIds = (node) => {
   return ids
 }
 
+const EFFORT_OPTIONS = Object.entries(EFFORT_SIZE_LABELS)
+const BENEFIT_OPTIONS = Object.entries(BENEFIT_SIZE_LABELS)
+
+// ── Metric cell ───────────────────────────────────────────────────────────────
+
+const MetricCell = ({ options, activeValue, onChange, kind, customPoints, onCustomChange }) => (
+  <div
+    className={`list-view-drawer__metric-cell list-view-drawer__metric-cell--${kind}`}
+    role="group"
+    aria-label={kind}
+  >
+    <div className="list-view-drawer__metric-btns">
+      {options.map(([value, label]) => (
+        <button
+          key={value}
+          type="button"
+          className={`list-view-drawer__metric-btn${activeValue === value ? ' list-view-drawer__metric-btn--active' : ''}`}
+          onClick={(e) => { e.stopPropagation(); onChange(value) }}
+          aria-pressed={activeValue === value}
+        >
+          {label}
+        </button>
+      ))}
+    </div>
+    {kind === 'effort' && activeValue === 'custom' && (
+      <input
+        type="number"
+        className="list-view-drawer__metric-custom-input"
+        value={customPoints ?? ''}
+        min={0}
+        placeholder="pts"
+        onClick={(e) => e.stopPropagation()}
+        onChange={(e) => {
+          e.stopPropagation()
+          onCustomChange?.(e.target.value === '' ? null : Number(e.target.value))
+        }}
+      />
+    )}
+  </div>
+)
+
+// ── LevelRow ──────────────────────────────────────────────────────────────────
+
 const LevelRow = ({
   level,
+  nodeLabel,
   depth,
   scopeMap,
   selectedReleaseId,
@@ -41,6 +126,7 @@ const LevelRow = ({
   showEstimateColumns,
   onSetEffort,
   onSetBenefit,
+  listMode,
 }) => {
   const statusKey = normalizeStatusKey(getLevelStatus(level, selectedReleaseId))
   const isHidden = statusKey === 'hidden'
@@ -51,12 +137,16 @@ const LevelRow = ({
 
   return (
     <li
-      className={`list-view-drawer__item list-view-drawer__item--level ${showEstimateColumns ? 'list-view-drawer__item--with-metrics' : ''}`}
-      style={{ paddingLeft: `${0.5 + depth * 1}rem`, opacity: isHidden ? 0.55 : undefined }}
+      className="list-view-drawer__item list-view-drawer__item--level"
+      style={{
+        paddingLeft: listMode ? '0.5rem' : `${0.5 + depth * 1}rem`,
+        opacity: isHidden ? 0.55 : undefined,
+      }}
     >
       <div className="list-view-drawer__item-row" style={{ borderRight: `3px solid ${borderColor}` }}>
-        {/* indent spacer to align with node toggle */}
-        <span className="list-view-drawer__toggle list-view-drawer__toggle--leaf" aria-hidden="true" />
+        {!listMode && (
+          <span className="list-view-drawer__toggle list-view-drawer__toggle--leaf" aria-hidden="true" />
+        )}
         <div
           className="list-view-drawer__item-body list-view-drawer__item-body--level"
           role="button"
@@ -65,9 +155,12 @@ const LevelRow = ({
           onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') onSelectLevel() }}
         >
           <div className="list-view-drawer__item-mainline">
-            <span className="list-view-drawer__item-label list-view-drawer__item-label--level" style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+            <span className="list-view-drawer__item-label list-view-drawer__item-label--level">
               {isHidden && <EyeOffIcon />}
-              {level.label || 'Level'}
+              {listMode && nodeLabel && (
+                <span className="list-view-drawer__node-prefix">{nodeLabel}&nbsp;·&nbsp;</span>
+              )}
+              <span className="list-view-drawer__level-name">{level.label || 'Level'}</span>
               {isHidden && <span style={{ fontSize: '0.7em', color: '#6b7280', marginLeft: 2 }}>(hidden)</span>}
             </span>
             {scopeEntries.length > 0 && (
@@ -78,56 +171,32 @@ const LevelRow = ({
               </span>
             )}
           </div>
-
-          {showEstimateColumns && (
-            <div className="list-view-drawer__metrics">
-              <div className="list-view-drawer__metric-column">
-                <span className="list-view-drawer__metric-label">Effort</span>
-                <SizeButtonGroup
-                  options={EFFORT_OPTIONS}
-                  activeValue={effortValue}
-                  kind="effort"
-                  onChange={(size) => onSetEffort({ size, customPoints: size === 'custom' ? (level.effort?.customPoints ?? null) : null })}
-                />
-              </div>
-              <div className="list-view-drawer__metric-column">
-                <span className="list-view-drawer__metric-label">Value</span>
-                <SizeButtonGroup
-                  options={BENEFIT_OPTIONS}
-                  activeValue={benefitValue}
-                  kind="value"
-                  onChange={(size) => onSetBenefit({ size })}
-                />
-              </div>
-            </div>
-          )}
         </div>
+
+        {showEstimateColumns && (
+          <>
+            <MetricCell
+              options={EFFORT_OPTIONS}
+              activeValue={effortValue}
+              kind="effort"
+              customPoints={level.effort?.customPoints ?? null}
+              onCustomChange={(pts) => onSetEffort({ size: 'custom', customPoints: pts })}
+              onChange={(size) => onSetEffort({ size, customPoints: size === 'custom' ? (level.effort?.customPoints ?? null) : null })}
+            />
+            <MetricCell
+              options={BENEFIT_OPTIONS}
+              activeValue={benefitValue}
+              kind="value"
+              onChange={(size) => onSetBenefit({ size })}
+            />
+          </>
+        )}
       </div>
     </li>
   )
 }
 
-const EFFORT_OPTIONS = Object.entries(EFFORT_SIZE_LABELS)
-const BENEFIT_OPTIONS = Object.entries(BENEFIT_SIZE_LABELS)
-
-const SizeButtonGroup = ({ options, activeValue, onChange, kind }) => (
-  <div className="list-view-drawer__metric-buttons" role="group" aria-label={`${kind} selector`}>
-    {options.map(([value, label]) => (
-      <button
-        key={value}
-        type="button"
-        className={`list-view-drawer__metric-btn ${activeValue === value ? 'list-view-drawer__metric-btn--active' : ''}`}
-        onClick={(event) => {
-          event.stopPropagation()
-          onChange(value)
-        }}
-        aria-pressed={activeValue === value}
-      >
-        {label}
-      </button>
-    ))}
-  </div>
-)
+// ── TreeNode ──────────────────────────────────────────────────────────────────
 
 const TreeNode = ({
   node,
@@ -167,7 +236,7 @@ const TreeNode = ({
       >
         <div className="list-view-drawer__item-row" style={{ borderRight: `3px solid ${borderColor}` }}>
           <button
-            className={`list-view-drawer__toggle ${hasExpandable ? '' : 'list-view-drawer__toggle--leaf'}`}
+            className={`list-view-drawer__toggle${hasExpandable ? '' : ' list-view-drawer__toggle--leaf'}`}
             onClick={(e) => { e.stopPropagation(); if (hasExpandable) onToggle(node.id) }}
             aria-label={isCollapsed ? 'Expand' : 'Collapse'}
             tabIndex={hasExpandable ? 0 : -1}
@@ -185,7 +254,7 @@ const TreeNode = ({
             <div className="list-view-drawer__item-mainline">
               <span className="list-view-drawer__item-label" style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                 {isNodeFullyHidden && <EyeOffIcon />}
-                {node.label || node.shortName || '–'}
+                {node.label || node.shortName || '\u2013'}
                 {isNodeFullyHidden && <span style={{ fontSize: '0.7em', color: '#6b7280', marginLeft: 2 }}>(hidden)</span>}
               </span>
               {scopeEntries.length > 0 && (
@@ -200,23 +269,20 @@ const TreeNode = ({
         </div>
       </li>
 
-      {isExpanded && hasLevels && (
-        <>
-          {filteredLevels.map((level) => (
-            <LevelRow
-              key={level.id}
-              level={level}
-              depth={depth + 2}
-              scopeMap={scopeMap}
-              selectedReleaseId={selectedReleaseId}
-              onSelectLevel={() => onSelectLevel(node.id, level.id)}
-              showEstimateColumns={showEstimateColumns}
-              onSetEffort={(effort) => onSetLevelEffort(node.id, level.id, effort)}
-              onSetBenefit={(benefit) => onSetLevelBenefit(node.id, level.id, benefit)}
-            />
-          ))}
-        </>
-      )}
+      {isExpanded && hasLevels && filteredLevels.map((level) => (
+        <LevelRow
+          key={level.id}
+          level={level}
+          depth={depth + 2}
+          scopeMap={scopeMap}
+          selectedReleaseId={selectedReleaseId}
+          onSelectLevel={() => onSelectLevel(node.id, level.id)}
+          showEstimateColumns={showEstimateColumns}
+          onSetEffort={(effort) => onSetLevelEffort(node.id, level.id, effort)}
+          onSetBenefit={(benefit) => onSetLevelBenefit(node.id, level.id, benefit)}
+          listMode={false}
+        />
+      ))}
 
       {isExpanded && hasChildren && (node.children ?? []).map((child) => (
         <TreeNode
@@ -240,6 +306,36 @@ const TreeNode = ({
   )
 }
 
+// ── flat collection helpers ───────────────────────────────────────────────────
+
+const collectFlatLevels = (nodes, matchesLevelFilters) => {
+  const result = []
+  const walk = (nodeList) => {
+    for (const node of nodeList) {
+      for (const level of (node.levels ?? []).filter(matchesLevelFilters)) {
+        result.push({ node, level })
+      }
+      walk(node.children ?? [])
+    }
+  }
+  walk(nodes)
+  return result
+}
+
+const collectFlatNodes = (nodes, matchesNodeFilters) => {
+  const result = []
+  const walk = (nodeList) => {
+    for (const node of nodeList) {
+      if (matchesNodeFilters(node)) result.push(node)
+      walk(node.children ?? [])
+    }
+  }
+  walk(nodes)
+  return result
+}
+
+// ── main component ────────────────────────────────────────────────────────────
+
 export function ListViewDrawer({
   opened,
   onClose,
@@ -252,16 +348,34 @@ export function ListViewDrawer({
 }) {
   const drawerRef = useRef(null)
 
+  // ── state (all declared before any callback that might reference them) ──────
+  const [drawerWidth, setDrawerWidth] = useState(null) // null = use CSS default
   const [collapsedIds, setCollapsedIds] = useState(new Set())
   const [showLevels, setShowLevels] = useState(true)
   const [showEstimateColumns, setShowEstimateColumns] = useState(false)
   const [statusFilter, setStatusFilter] = useState('all')
   const [scopeFilter, setScopeFilter] = useState('all')
+  const [viewMode, setViewMode] = useState('tree') // 'tree' | 'list'
+
+  const handleResizePointerDown = useCallback((e) => {
+    e.preventDefault()
+    const startX = e.clientX
+    // Use live DOM width; fall back to 420 if element not yet measured
+    const startWidth = drawerRef.current?.getBoundingClientRect().width ?? 420
+    const onMove = (mv) => {
+      const newWidth = Math.max(280, Math.min(1400, startWidth + (mv.clientX - startX)))
+      setDrawerWidth(newWidth)
+    }
+    const onUp = () => {
+      window.removeEventListener('pointermove', onMove)
+      window.removeEventListener('pointerup', onUp)
+    }
+    window.addEventListener('pointermove', onMove)
+    window.addEventListener('pointerup', onUp)
+  }, [])
 
   useEffect(() => {
-    if (!showLevels && showEstimateColumns) {
-      setShowEstimateColumns(false)
-    }
+    if (!showLevels && showEstimateColumns) setShowEstimateColumns(false)
   }, [showEstimateColumns, showLevels])
 
   const handleToggle = useCallback((nodeId) => {
@@ -278,102 +392,130 @@ export function ListViewDrawer({
   const scopeFilterOptions = document?.scopes ?? []
 
   const matchesScopeFilter = useCallback((scopeIds = []) => {
-    if (scopeFilter === 'all') {
-      return true
-    }
-
+    if (scopeFilter === 'all') return true
     return scopeIds.includes(scopeFilter)
   }, [scopeFilter])
 
   const matchesLevelFilters = useCallback((level) => {
     const statusKey = normalizeStatusKey(getLevelStatus(level, selectedReleaseId))
-    if (statusFilter !== 'all' && statusKey !== statusFilter) {
-      return false
-    }
-
+    if (statusFilter !== 'all' && statusKey !== statusFilter) return false
     return matchesScopeFilter(level.scopeIds ?? [])
   }, [matchesScopeFilter, selectedReleaseId, statusFilter])
 
   const matchesNodeFilters = useCallback((node) => {
     const levels = node.levels ?? []
-    if (levels.length > 0) {
-      return levels.some(matchesLevelFilters)
-    }
-
+    if (levels.length > 0) return levels.some(matchesLevelFilters)
     const statusKey = normalizeStatusKey(getDisplayStatusKey(node, selectedReleaseId))
-    if (statusFilter !== 'all' && statusKey !== statusFilter) {
-      return false
-    }
-
+    if (statusFilter !== 'all' && statusKey !== statusFilter) return false
     return matchesScopeFilter([...getNodeScopeIds(node)])
   }, [matchesLevelFilters, matchesScopeFilter, selectedReleaseId, statusFilter])
 
   const filteredRootNodes = useMemo(() => {
     const filterTree = (nodes) => {
       const next = []
-
       for (const node of nodes) {
         const filteredChildren = filterTree(node.children ?? [])
         const includeSelf = matchesNodeFilters(node)
-
         if (includeSelf || filteredChildren.length > 0) {
-          next.push({
-            ...node,
-            children: filteredChildren,
-          })
+          next.push({ ...node, children: filteredChildren })
         }
       }
-
       return next
     }
-
     return filterTree(allRootNodes)
   }, [allRootNodes, matchesNodeFilters])
 
+  const flatLevelEntries = useMemo(
+    () => (viewMode === 'list' && showLevels ? collectFlatLevels(allRootNodes, matchesLevelFilters) : []),
+    [viewMode, showLevels, allRootNodes, matchesLevelFilters],
+  )
+
+  const flatNodes = useMemo(
+    () => (viewMode === 'list' && !showLevels ? collectFlatNodes(allRootNodes, matchesNodeFilters) : []),
+    [viewMode, showLevels, allRootNodes, matchesNodeFilters],
+  )
+
   if (!opened) return null
+
+  const isEmpty = allRootNodes.length === 0
+  const isListMode = viewMode === 'list'
+  const isFilteredEmpty = !isEmpty && (
+    isListMode
+      ? (showLevels ? flatLevelEntries.length === 0 : flatNodes.length === 0)
+      : filteredRootNodes.length === 0
+  )
 
   return (
     <div
       ref={drawerRef}
-      className={`list-view-drawer ${showEstimateColumns ? 'list-view-drawer--wide' : ''}`}
+      className={`list-view-drawer${showEstimateColumns && drawerWidth === null ? ' list-view-drawer--wide' : ''}`}
+      style={drawerWidth !== null ? { width: `${drawerWidth}px` } : undefined}
     >
+      <div
+        className="list-view-drawer__resize-handle"
+        role="separator"
+        aria-label="Resize list view"
+        onPointerDown={handleResizePointerDown}
+      />
       <div className="list-view-drawer__header">
         <div className="list-view-drawer__header-top">
           <span className="list-view-drawer__title">Node List</span>
-          <button
-            className="list-view-drawer__close"
-            onClick={onClose}
-            aria-label="Close list view"
-          >
-            ×
-          </button>
+          <button className="list-view-drawer__close" onClick={onClose} aria-label="Close list view">x</button>
         </div>
 
         <div className="list-view-drawer__header-controls">
-          <label className="list-view-drawer__levels-toggle">
-            <input
-              type="checkbox"
-              checked={showLevels}
-              onChange={(e) => setShowLevels(e.target.checked)}
-            />
-            Levels
-          </label>
+          {/* Tree / List mode */}
+          <div className="list-view-drawer__toggle-group" role="group" aria-label="View mode">
+            <button
+              type="button"
+              className={`list-view-drawer__icon-toggle${viewMode === 'tree' ? ' list-view-drawer__icon-toggle--active' : ''}`}
+              onClick={() => setViewMode('tree')}
+              aria-label="Tree view"
+              title="Tree view"
+            >
+              <IconTree />
+            </button>
+            <button
+              type="button"
+              className={`list-view-drawer__icon-toggle${viewMode === 'list' ? ' list-view-drawer__icon-toggle--active' : ''}`}
+              onClick={() => setViewMode('list')}
+              aria-label="List view"
+              title="List view"
+            >
+              <IconList />
+            </button>
+          </div>
 
+          {/* Levels icon toggle */}
+          <button
+            type="button"
+            className={`list-view-drawer__icon-toggle${showLevels ? ' list-view-drawer__icon-toggle--active' : ''}`}
+            onClick={() => setShowLevels((v) => !v)}
+            aria-label={showLevels ? 'Hide levels' : 'Show levels'}
+            title="Levels"
+          >
+            <IconLayers />
+          </button>
+
+          {/* Effort/Value icon toggle */}
           {showLevels && (
-            <label className="list-view-drawer__levels-toggle list-view-drawer__levels-toggle--metrics">
-              <input
-                type="checkbox"
-                checked={showEstimateColumns}
-                onChange={(e) => setShowEstimateColumns(e.target.checked)}
-              />
-              Effort/Value
-            </label>
+            <button
+              type="button"
+              className={`list-view-drawer__icon-toggle list-view-drawer__icon-toggle--dual${showEstimateColumns ? ' list-view-drawer__icon-toggle--active' : ''}`}
+              onClick={() => setShowEstimateColumns((v) => !v)}
+              aria-label={showEstimateColumns ? 'Hide effort/value' : 'Show effort/value'}
+              title="Effort / Value"
+            >
+              <IconBolt /><IconStar />
+            </button>
           )}
+
+          <span className="list-view-drawer__header-sep" aria-hidden="true" />
 
           <select
             className="list-view-drawer__filter-select"
             value={statusFilter}
-            onChange={(event) => setStatusFilter(event.target.value)}
+            onChange={(e) => setStatusFilter(e.target.value)}
             aria-label="Filter by status"
           >
             <option value="all">All Statuses</option>
@@ -385,7 +527,7 @@ export function ListViewDrawer({
           <select
             className="list-view-drawer__filter-select"
             value={scopeFilter}
-            onChange={(event) => setScopeFilter(event.target.value)}
+            onChange={(e) => setScopeFilter(e.target.value)}
             aria-label="Filter by scope"
           >
             <option value="all">All Scopes</option>
@@ -397,11 +539,72 @@ export function ListViewDrawer({
       </div>
 
       <div className="list-view-drawer__content">
-        {allRootNodes.length === 0 ? (
+        {showEstimateColumns && showLevels && (
+          <div className="list-view-drawer__metrics-header" aria-hidden="true">
+            <span className="list-view-drawer__metrics-header-spacer" />
+            <span className="list-view-drawer__metrics-header-col list-view-drawer__metrics-header-col--effort">Effort</span>
+            <span className="list-view-drawer__metrics-header-col list-view-drawer__metrics-header-col--value">Value</span>
+          </div>
+        )}
+
+        {isEmpty ? (
           <div className="list-view-drawer__empty">No nodes yet.</div>
-        ) : filteredRootNodes.length === 0 ? (
+        ) : isFilteredEmpty ? (
           <div className="list-view-drawer__empty">No nodes match the selected filters.</div>
+        ) : isListMode && showLevels ? (
+          /* flat level list */
+          <ul className="list-view-drawer__list">
+            {flatLevelEntries.map(({ node, level }) => (
+              <LevelRow
+                key={`${node.id}::${level.id}`}
+                level={level}
+                nodeLabel={node.label || node.shortName}
+                depth={0}
+                scopeMap={scopeMap}
+                selectedReleaseId={selectedReleaseId}
+                onSelectLevel={() => onSelectLevel(node.id, level.id)}
+                showEstimateColumns={showEstimateColumns}
+                onSetEffort={(effort) => onSetLevelEffort(node.id, level.id, effort)}
+                onSetBenefit={(benefit) => onSetLevelBenefit(node.id, level.id, benefit)}
+                listMode
+              />
+            ))}
+          </ul>
+        ) : isListMode ? (
+          /* flat node list */
+          <ul className="list-view-drawer__list">
+            {flatNodes.map((node) => {
+              const borderColor = getStatusBorderColor(getDisplayStatusKey(node, selectedReleaseId))
+              const scopeIds = getNodeScopeIds(node)
+              const scopeEntries = [...scopeIds].map((id) => scopeMap.get(id)).filter(Boolean)
+              return (
+                <li key={node.id} className="list-view-drawer__item" style={{ paddingLeft: '0.5rem' }}>
+                  <div className="list-view-drawer__item-row" style={{ borderRight: `3px solid ${borderColor}` }}>
+                    <div
+                      className="list-view-drawer__item-body"
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => onSelectNode(node.id)}
+                      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') onSelectNode(node.id) }}
+                    >
+                      <div className="list-view-drawer__item-mainline">
+                        <span className="list-view-drawer__item-label">{node.label || node.shortName || '\u2013'}</span>
+                        {scopeEntries.length > 0 && (
+                          <span className="list-view-drawer__item-chips">
+                            {scopeEntries.map((scope) => (
+                              <ScopeChip key={scope.id} label={scope.label} color={scope.color} />
+                            ))}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </li>
+              )
+            })}
+          </ul>
         ) : (
+          /* tree view */
           <ul className="list-view-drawer__list">
             {filteredRootNodes.map((node) => (
               <TreeNode

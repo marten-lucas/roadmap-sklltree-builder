@@ -103,6 +103,7 @@ const computeTrunkAngle = (angles) => {
 
 const toTrunkGroup = ({
   parentId,
+  parentSegmentId,
   targetLevel,
   cluster,
   groupIndex,
@@ -113,7 +114,11 @@ const toTrunkGroup = ({
   const childIds = cluster.children.map((child) => child.data.id)
   const targetRadius = getRadiusForLevel(targetLevel)
   const childAngles = cluster.children.map((child) => getAngleForNode(child))
-  const trunkAngle = computeTrunkAngle(childAngles)
+  const sameSegmentChildren = cluster.children.filter(
+    (child) => getGroupedSegmentId(child.data.segmentId ?? null) === parentSegmentId,
+  )
+  const primaryChild = sameSegmentChildren.length === 1 ? sameSegmentChildren[0] : null
+  const trunkAngle = primaryChild ? getAngleForNode(primaryChild) : computeTrunkAngle(childAngles)
   const segmentIndexes = cluster.children.map((child) => getSegmentOrderIndex(child.data.segmentId ?? null))
 
   return {
@@ -124,6 +129,7 @@ const toTrunkGroup = ({
     targetRadius,
     trunkAngle,
     childIds,
+    primaryChildId: primaryChild?.data.id ?? null,
     minAngle: Math.min(...childAngles),
     maxAngle: Math.max(...childAngles),
     minSegmentIndex: Math.min(...segmentIndexes),
@@ -205,6 +211,7 @@ export const buildEdgeRoutingModel = ({
     const groups = clusters.map((cluster, index) =>
       toTrunkGroup({
         parentId,
+        parentSegmentId,
         targetLevel: entry.targetLevel,
         cluster,
         groupIndex: index,
@@ -238,6 +245,7 @@ export const buildEdgeRoutingModel = ({
           segmentDistance: Math.abs(parentSegmentIndex - childSegmentIndex),
           childAngle: getAngleForNode(child),
           trunkAngle: group.trunkAngle,
+          isPrimaryGroupChild: group.primaryChildId === childId,
           minGroupAngle: group.minAngle,
           maxGroupAngle: group.maxAngle,
         })
@@ -318,6 +326,7 @@ export const buildRoutedEdgeLinks = ({ edgeRouting, nodesById, origin, nodeSize 
     }
 
     let path
+    let linkKind = shared ? 'routed' : 'direct'
 
     const levelGap = targetRadius - sourceRadius
     const minCorridorGap = nodeSize // corridor at gap/2 needs one node-diameter clearance from each ring
@@ -339,8 +348,11 @@ export const buildRoutedEdgeLinks = ({ edgeRouting, nodesById, origin, nodeSize 
         const targetNode = nodesById.get(child.id)
         const getSegIdx = (id) => (getSegmentOrderIndex ? getSegmentOrderIndex(id) : 0)
         const segmentDistance = (sourceNode && targetNode) ? Math.abs(getSegIdx(sourceNode.segmentId) - getSegIdx(targetNode.segmentId)) : 0
+        const useOuterBlockedSingletonCorridor = hasSourceRingBlocker && !hasPeerChildrenAtTargetLevel && segmentDistance > 0
 
-        const corridorBias = segmentDistance > 1 ? 0.62 : (segmentDistance > 0 ? 0.54 : 0.48)
+        const corridorBias = useOuterBlockedSingletonCorridor
+          ? (segmentDistance > 1 ? 0.74 : 0.68)
+          : segmentDistance > 1 ? 0.62 : (segmentDistance > 0 ? 0.54 : 0.48)
         const corridorRadius = sourceRadius + levelGap * corridorBias
         const corridorParentPoint = toCartesian(parent.angle, corridorRadius, origin)
         const corridorChildPoint = toCartesian(childAngle, corridorRadius, origin)
@@ -360,6 +372,7 @@ export const buildRoutedEdgeLinks = ({ edgeRouting, nodesById, origin, nodeSize 
       }
     } else if (Math.abs(childAngle - trunkAngle) < 0.5) {
       path = buildRadialArcPath(parent.angle, sourceRadius, childAngle, targetRadius, origin)
+      linkKind = 'direct'
     } else {
       // Shared trunk with corridor routing:
       // source-ring arc → radial to mid-corridor → corridor arc (free space) → spoke to child.
@@ -422,7 +435,7 @@ export const buildRoutedEdgeLinks = ({ edgeRouting, nodesById, origin, nodeSize 
 
     links.push({
       id: plan.id,
-      linkKind: shared ? 'routed' : 'direct',
+      linkKind,
       sourceDepth: parent.depth,
       sourceId: plan.parentId,
       targetId: plan.childId,

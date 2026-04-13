@@ -214,15 +214,15 @@ test.describe('ListViewDrawer with status and scope filters', () => {
     await page.locator('button[aria-label="List View"]').click()
     await expect(page.locator('.list-view-drawer')).toBeVisible({ timeout: 5000 })
 
-    await page.getByLabel('Effort/Value').check()
+    await page.locator('button[title="Effort / Value"]').click()
     await expect(page.locator('.list-view-drawer')).toHaveClass(/list-view-drawer--wide/)
-    await expect(page.locator('.list-view-drawer__metrics').first()).toBeVisible()
+    await expect(page.locator('.list-view-drawer__metric-cell').first()).toBeVisible()
 
-    const firstEffortButton = page.locator('.list-view-drawer__metric-column').first().locator('.list-view-drawer__metric-btn', { hasText: 'XS' }).first()
+    const firstEffortButton = page.locator('.list-view-drawer__metric-cell--effort').first().locator('.list-view-drawer__metric-btn', { hasText: 'XS' }).first()
     await firstEffortButton.click()
     await expect(firstEffortButton).toHaveAttribute('aria-pressed', 'true')
 
-    const firstValueButton = page.locator('.list-view-drawer__metric-column').nth(1).locator('.list-view-drawer__metric-btn', { hasText: 'L' }).first()
+    const firstValueButton = page.locator('.list-view-drawer__metric-cell--value').first().locator('.list-view-drawer__metric-btn', { hasText: 'L' }).first()
     await firstValueButton.click()
     await expect(firstValueButton).toHaveAttribute('aria-pressed', 'true')
 

@@ -323,20 +323,26 @@ describe('layoutSolver', () => {
       })
     })
 
-    it('should keep segment label text foot oriented toward center', () => {
+    it('should keep segment labels radial and upright', () => {
       const trees = [createSimpleTree(), createCrossSegmentTree(), createDenseTree()]
 
       trees.forEach((tree) => {
         const result = solveSkillTreeLayout(tree, TREE_CONFIG)
 
         result.layout.segments.labels.forEach((label) => {
-          const expectedRotation = label.anchorAngle - 90
-          const delta = ((label.rotation - expectedRotation + 540) % 360) - 180
+          const radialRotation = label.anchorAngle - 90
+          const radialDelta = ((label.rotation - radialRotation + 540) % 360) - 180
+          const uprightRotation = ((label.rotation + 540) % 360) - 180
 
           expect(
-            Math.abs(delta),
-            `segment label "${label.text}" at anchorAngle=${label.anchorAngle.toFixed(1)}° has rotation ${label.rotation.toFixed(1)}°; expected inward-foot radial rotation ${expectedRotation.toFixed(1)}°`,
-          ).toBeLessThan(1e-6)
+            Math.abs(Math.abs(radialDelta) - 180) < 1e-6 || Math.abs(radialDelta) < 1e-6,
+            `segment label "${label.text}" at anchorAngle=${label.anchorAngle.toFixed(1)}° has rotation ${label.rotation.toFixed(1)}°; expected a radial orientation (optionally flipped by 180°) from ${radialRotation.toFixed(1)}°`,
+          ).toBe(true)
+          expect(
+            uprightRotation,
+            `segment label "${label.text}" at anchorAngle=${label.anchorAngle.toFixed(1)}° is upside down with rotation ${label.rotation.toFixed(1)}°`,
+          ).toBeGreaterThanOrEqual(-90)
+          expect(uprightRotation).toBeLessThanOrEqual(90)
         })
       })
     })
@@ -1270,6 +1276,66 @@ describe('layoutSolver', () => {
         (edge) => edge.sourceId === clt.id && edge.targetId === lke.id,
       )
       expect(line).toBeTruthy()
+    })
+
+    it('full import keeps NAH→SA as a line when the segment order can absorb it', () => {
+      const csvPath = resolve(process.cwd(), 'tests/e2e/datasets/myKyana.csv')
+      const csvText = readFileSync(csvPath, 'utf-8')
+      const doc = readDocumentFromCsvText(csvText, { ignoreSegments: false, ignoreManualLevels: true })
+      const result = solveSkillTreeLayout(doc, TREE_CONFIG)
+
+      const nodeByShortName = new Map(result.layout.nodes.map((node) => [node.shortName, node]))
+      const nah = nodeByShortName.get('NAH')
+      const sa = nodeByShortName.get('SA')
+
+      expect(nah).toBeTruthy()
+      expect(sa).toBeTruthy()
+      expect(
+        result.layout.crossingEdges.find((edge) => edge.parentId === nah.id && edge.childId === sa.id),
+      ).toBeFalsy()
+      expect(
+        result.layout.links.find((edge) => edge.sourceId === nah.id && edge.targetId === sa.id),
+      ).toBeTruthy()
+    })
+
+    it('full import keeps PLC→BMD as a line once the geometry no longer crosses', () => {
+      const csvPath = resolve(process.cwd(), 'tests/e2e/datasets/myKyana.csv')
+      const csvText = readFileSync(csvPath, 'utf-8')
+      const doc = readDocumentFromCsvText(csvText, { ignoreSegments: false, ignoreManualLevels: true })
+      const result = solveSkillTreeLayout(doc, TREE_CONFIG)
+
+      const nodeByShortName = new Map(result.layout.nodes.map((node) => [node.shortName, node]))
+      const plc = nodeByShortName.get('PLC')
+      const bmd = nodeByShortName.get('BMD')
+
+      expect(plc).toBeTruthy()
+      expect(bmd).toBeTruthy()
+      expect(
+        result.layout.crossingEdges.find((edge) => edge.parentId === plc.id && edge.childId === bmd.id),
+      ).toBeFalsy()
+      expect(
+        result.layout.links.find((edge) => edge.sourceId === plc.id && edge.targetId === bmd.id),
+      ).toBeTruthy()
+    })
+
+    it('full import keeps COD→COK on the primary same-segment axis', () => {
+      const csvPath = resolve(process.cwd(), 'tests/e2e/datasets/myKyana.csv')
+      const csvText = readFileSync(csvPath, 'utf-8')
+      const doc = readDocumentFromCsvText(csvText, { ignoreSegments: false, ignoreManualLevels: true })
+      const result = solveSkillTreeLayout(doc, TREE_CONFIG)
+
+      const nodeByShortName = new Map(result.layout.nodes.map((node) => [node.shortName, node]))
+      const cod = nodeByShortName.get('COD')
+      const cok = nodeByShortName.get('COK')
+
+      expect(cod).toBeTruthy()
+      expect(cok).toBeTruthy()
+
+      const line = result.layout.links.find(
+        (edge) => edge.sourceId === cod.id && edge.targetId === cok.id,
+      )
+      expect(line).toBeTruthy()
+      expect(line.linkKind).toBe('direct')
     })
 
   })

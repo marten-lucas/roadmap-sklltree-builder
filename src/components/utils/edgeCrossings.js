@@ -13,7 +13,7 @@
  * Handles both sweep directions (0 = CCW, 1 = CW in SVG coordinates).
  * Returns an array of {x,y} points including the endpoint.
  */
-function svgArcPoints(x1, y1, r, sweep, x2, y2, n = 5) {
+function svgArcPoints(x1, y1, r, sweep, x2, y2, minSamples = 8) {
   const dx = x2 - x1
   const dy = y2 - y1
   const d2 = dx * dx + dy * dy
@@ -44,9 +44,11 @@ function svgArcPoints(x1, y1, r, sweep, x2, y2, n = 5) {
     if (endAngle > startAngle) endAngle -= 2 * Math.PI
   }
 
+  const arcSpan = Math.abs(endAngle - startAngle)
+  const sampleCount = Math.max(minSamples, Math.ceil(arcSpan / (Math.PI / 18)))
   const points = []
-  for (let i = 1; i <= n; i++) {
-    const t = i / n
+  for (let i = 1; i <= sampleCount; i++) {
+    const t = i / sampleCount
     const angle = startAngle + t * (endAngle - startAngle)
     points.push({ x: cx + r * Math.cos(angle), y: cy + r * Math.sin(angle) })
   }

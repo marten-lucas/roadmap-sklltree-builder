@@ -56,19 +56,22 @@ const normalizeAngleDeg = (angle) => {
   return Number.isFinite(normalized) ? normalized : 0
 }
 
+const getAbsAngularDelta = (leftAngle, rightAngle) => {
+  const left = normalizeAngleDeg(leftAngle)
+  const right = normalizeAngleDeg(rightAngle)
+  const delta = Math.abs(left - right)
+  return Math.min(delta, 360 - delta)
+}
+
 const getReadableRadialLabelRotation = (anchorAngleDeg) => {
   const normalized = normalizeAngleDeg(anchorAngleDeg)
-  // Base rotation aligns text perpendicular to the radius (pointing out)
-  // normalized - 90 means the text baseline follows the radial arc.
+  // Keep the label baseline radial, but flip any upside-down orientation so
+  // multi-line segment labels stay readable on the top and right-hand wedges.
   let rotation = normalized - 90
-  
-  // If the angle is in the left half of the circle (90 to 270 degrees),
-  // flip the text by 180 degrees so it's not upside down.
-  // We use slightly wider bounds to avoid jitter at exactly 90/270.
-  if (normalized > 91 && normalized < 269) {
+  const normalizedRotation = normalizeAngleDeg(rotation)
+  if (normalizedRotation > 90 && normalizedRotation < 270) {
     rotation += 180
   }
-  
   return rotation
 }
 
@@ -998,6 +1001,7 @@ export const solveSkillTreeLayout = (data, config) => {
             )
 
             const edges = []
+            let barycenterPenalty = 0
             for (const node of orderedNodes) {
               const geometry = rootGeometryById.get(node.data.id)
               if (!geometry) {
@@ -1012,6 +1016,9 @@ export const solveSkillTreeLayout = (data, config) => {
                 edges.push({ rootId: node.data.id, parentAngle, childAngle: parentAngle })
                 continue
               }
+
+              const barycenter = children.reduce((sum, angle) => sum + angle, 0) / children.length
+              barycenterPenalty += getAbsAngularDelta(parentAngle, barycenter)
 
               for (const childAngle of children) {
                 edges.push({ rootId: node.data.id, parentAngle, childAngle: childAngle + delta })
@@ -1034,14 +1041,15 @@ export const solveSkillTreeLayout = (data, config) => {
               }
             }
 
-            // Soft tie-breaker to preserve stable ordering when crossing score is equal.
+            // Prefer orders that keep roots close to their child barycentres.
+            // Stable placement is still kept as the last tie-breaker.
             let displacementPenalty = 0
             for (let index = 0; index < orderedNodes.length; index += 1) {
               const currentIndex = group.nodes.indexOf(orderedNodes[index])
               displacementPenalty += Math.abs(currentIndex - index)
             }
 
-            return inversionCount * 1000 + displacementPenalty
+            return inversionCount * 1000 + barycenterPenalty * 10 + displacementPenalty
           }
 
           const candidateOrders = []
@@ -1429,42 +1437,65 @@ export const solveSkillTreeLayout = (data, config) => {
 
       const { leftCenter, rightCenter, centerGap } = feasibilityEntry
 
-      const getPreferredPlacementAngle = (node) => {
+      const getExternalAnchorAngles = (node) => {
+        const externalAngles = []
+
         if (node.parent && node.parent.depth > 0) {
-          const parentAngle = getAngleForNode(node.parent)
-          
-          // Cross-segment connection bias:
-          // If a node has an additional dependency that is currently assigned to a 
-          // different segment, pull its preferred angle towards that segment border.
-          const deps = data.additionalDependencies?.filter(d => d.sourceId === node.data.id || d.targetId === node.data.id) ?? []
-          if (deps.length > 0) {
-            let externalPullTotal = 0
-            let externalCount = 0
-            
-            for (const dep of deps) {
-              const otherId = dep.sourceId === node.data.id ? dep.targetId : dep.sourceId
-              const otherNode = allHierarchyNodes.find(n => n.data.id === otherId)
-              if (otherNode) {
-                const otherSegmentId = getGroupedSegmentId(otherNode.data.segmentId ?? null)
-                if (otherSegmentId !== segmentId) {
-                  const otherAngle = getAngleForNode(otherNode)
-                  externalPullTotal += otherAngle
-                  externalCount += 1
-                }
-              }
-            }
-            
-            if (externalCount > 0) {
-              const meanExternal = externalPullTotal / externalCount
-              // Strong bias to resolve portals, but staying in-segment
-              return parentAngle * 0.1 + meanExternal * 0.9
-            }
+          const parentSegmentId = getGroupedSegmentId(node.parent.data.segmentId ?? null)
+          if (parentSegmentId !== segmentId) {
+            externalAngles.push(getAngleForNode(node.parent))
           }
-          
-          return parentAngle
         }
 
-        return getAngleForNode(node)
+        const sameSegmentChildren = []
+        const crossSegmentChildren = []
+        for (const childNode of node.children ?? []) {
+          const childSegmentId = getGroupedSegmentId(childNode.data.segmentId ?? null)
+          if (childSegmentId === segmentId) {
+            sameSegmentChildren.push(childNode)
+          } else {
+            crossSegmentChildren.push(childNode)
+          }
+        }
+
+        if (crossSegmentChildren.length === 1 && sameSegmentChildren.length === 0) {
+          externalAngles.push(getAngleForNode(crossSegmentChildren[0]))
+        }
+
+        const deps = data.additionalDependencies?.filter((dependency) =>
+          dependency.sourceId === node.data.id || dependency.targetId === node.data.id,
+        ) ?? []
+
+        for (const dep of deps) {
+          const otherId = dep.sourceId === node.data.id ? dep.targetId : dep.sourceId
+          const otherNode = allHierarchyNodes.find((candidate) => candidate.data.id === otherId)
+          if (!otherNode) {
+            continue
+          }
+
+          const otherSegmentId = getGroupedSegmentId(otherNode.data.segmentId ?? null)
+          if (otherSegmentId !== segmentId) {
+            externalAngles.push(getAngleForNode(otherNode))
+          }
+        }
+
+        return externalAngles
+      }
+
+      const getPreferredPlacementAngle = (node) => {
+        const baseAngle = node.parent && node.parent.depth > 0
+          ? getAngleForNode(node.parent)
+          : getAngleForNode(node)
+        const externalAngles = getExternalAnchorAngles(node)
+
+        if (externalAngles.length === 0) {
+          return baseAngle
+        }
+
+        const meanExternal = externalAngles.reduce((sum, angle) => sum + angle, 0) / externalAngles.length
+        // Strong bias to close cross-segment hierarchy and dependency gaps while
+        // still keeping the node inside its local pack constraints.
+        return baseAngle * 0.15 + meanExternal * 0.85
       }
 
       const buildPreferredCenters = (orderedNodes) => {
@@ -1529,30 +1560,14 @@ export const solveSkillTreeLayout = (data, config) => {
         // Check if one node has an external dependency pull that wasn't strong enough
         // to change the preferred angle significantly but should affect relative order.
         const getOrderBias = (node) => {
-          const deps = data.additionalDependencies?.filter(d => d.sourceId === node.data.id || d.targetId === node.data.id) ?? []
-          if (deps.length === 0) return 0
-          
+          const externalAngles = getExternalAnchorAngles(node)
+          if (externalAngles.length === 0) return 0
+
           let bias = 0
-          for (const dep of deps) {
-            const otherId = dep.sourceId === node.data.id ? dep.targetId : dep.sourceId
-            const otherNode = allHierarchyNodes.find(n => n.data.id === otherId)
-            if (otherNode) {
-              const otherSegmentId = getGroupedSegmentId(otherNode.data.segmentId ?? null)
-              if (otherSegmentId !== segmentId) {
-                const otherAngle = getAngleForNode(otherNode)
-                const nodeAngle = getAngleForNode(node)
-                
-                // We use circular distance to decide which "side" the other segment is on.
-                // If otherAngle is CCW from nodeAngle (relative to segment center), 
-                // we want a negative bias.
-                const diff = normalizeAngleDeg(otherAngle - nodeAngle)
-                if (diff > 0 && diff < 180) {
-                  bias += 1000 // CW pull
-                } else if (diff > 180 && diff < 360) {
-                  bias -= 1000 // CCW pull
-                }
-              }
-            }
+          for (const externalAngle of externalAngles) {
+            // Smaller external angles should move the node toward the segment start,
+            // larger angles toward the segment end.
+            bias += externalAngle < getAngleForNode(node) ? -1000 : 1000
           }
           return bias
         }
