@@ -1,5 +1,5 @@
 import { ActionIcon, Alert, Button, NumberInput, Paper, Stack, Tabs, Text, TextInput } from '@mantine/core'
-import { useState, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { MarkdownField } from './MarkdownField'
 import { DEFAULT_STORY_POINT_MAP, computeBudgetSummary } from '../utils/effortBenefit'
 import { addRelease, deleteRelease, updateRelease } from '../utils/releases'
@@ -31,12 +31,34 @@ export function SystemPanel({
   const fileInputRef = useRef(null)
   const [newReleaseName, setNewReleaseName] = useState('')
   const [newReleaseDialogOpen, setNewReleaseDialogOpen] = useState(false)
+  const [activeTabValue, setActiveTabValue] = useState(selectedReleaseId ?? 'system')
+
+  const releases = roadmapData.releases ?? []
+
+  useEffect(() => {
+    const releaseTabIds = new Set(releases.map((release) => release.id))
+
+    setActiveTabValue((currentValue) => {
+      if (currentValue === 'system' || currentValue === 'icon' || currentValue === '__add__') {
+        return currentValue === '__add__' ? 'system' : currentValue
+      }
+
+      if (selectedReleaseId && releaseTabIds.has(selectedReleaseId)) {
+        return selectedReleaseId
+      }
+
+      if (currentValue && releaseTabIds.has(currentValue)) {
+        return currentValue
+      }
+
+      return releases[0]?.id ?? 'system'
+    })
+  }, [releases, selectedReleaseId])
 
   if (!isOpen) {
     return null
   }
 
-  const releases = roadmapData.releases ?? []
   const activeRelease = releases.find((r) => r.id === selectedReleaseId) ?? releases[0] ?? null
   const allNodes = collectAllNodes(roadmapData)
 
@@ -52,6 +74,7 @@ export function SystemPanel({
     const name = newReleaseName.trim() || `Release ${releases.length + 1}`
     const { releases: nextReleases, newReleaseId } = addRelease(releases, name)
     commitDocument({ ...roadmapData, releases: nextReleases })
+    setActiveTabValue(newReleaseId)
     onReleaseChange?.(newReleaseId)
     setNewReleaseName('')
     setNewReleaseDialogOpen(false)
@@ -61,18 +84,15 @@ export function SystemPanel({
     if (!activeRelease || releases.length <= 1) return
     const nextReleases = deleteRelease(releases, activeRelease.id)
     commitDocument({ ...roadmapData, releases: nextReleases })
-    onReleaseChange?.(nextReleases[0]?.id ?? null)
+    const nextReleaseId = nextReleases[0]?.id ?? null
+    setActiveTabValue(nextReleaseId ?? 'system')
+    onReleaseChange?.(nextReleaseId)
   }
 
   const activeBudget = activeRelease?.storyPointBudget ?? null
   const summary = activeRelease
     ? computeBudgetSummary(allNodes, roadmapData.storyPointMap ?? DEFAULT_STORY_POINT_MAP, activeBudget)
     : { total: 0, budget: null, isOverBudget: false }
-
-  // Release tab value: either the active release id or 'sp-skala' or 'icon'
-  const activeTabValue = releases.some((r) => r.id === selectedReleaseId)
-    ? (selectedReleaseId ?? releases[0]?.id)
-    : releases[0]?.id
 
   return (
     <Paper className="skill-panel skill-panel--icon" radius={0} shadow="none">
@@ -109,7 +129,15 @@ export function SystemPanel({
         <Tabs
           value={activeTabValue}
           onChange={(val) => {
-            if (val && val !== '__add__') onReleaseChange?.(val)
+            if (!val || val === '__add__') {
+              return
+            }
+
+            setActiveTabValue(val)
+
+            if (releases.some((release) => release.id === val)) {
+              onReleaseChange?.(val)
+            }
           }}
           classNames={{
             root: 'skill-panel__tabs-root',
@@ -126,7 +154,7 @@ export function SystemPanel({
             <Tabs.Tab value="__add__" onClick={(e) => { e.preventDefault(); setNewReleaseDialogOpen(true) }}>
               +
             </Tabs.Tab>
-            <Tabs.Tab value="sp-skala">SP Scale</Tabs.Tab>
+            <Tabs.Tab value="system">System</Tabs.Tab>
             <Tabs.Tab value="icon">Icon</Tabs.Tab>
           </Tabs.List>
 
@@ -135,13 +163,6 @@ export function SystemPanel({
             <Tabs.Panel key={release.id} value={release.id}>
               <div className="skill-panel__tab-scroll skill-panel__tab-scroll--fill">
                 <Stack gap="md" style={{ flexShrink: 0 }}>
-                  <TextInput
-                    label="System name"
-                    value={roadmapData?.systemName ?? ''}
-                    onChange={(e) => commitDocument({ ...roadmapData, systemName: e.currentTarget.value })}
-                    classNames={{ input: 'mantine-dark-input', label: 'mantine-dark-label' }}
-                  />
-
                   <TextInput
                     label="Release name"
                     value={release.name ?? ''}
@@ -247,10 +268,17 @@ export function SystemPanel({
           )}
 
           {/* ── SP-Skala Tab ── */}
-          <Tabs.Panel value="sp-skala">
+          <Tabs.Panel value="system">
             <div className="skill-panel__tab-scroll">
               <Stack gap="md">
-                <Text size="xs" fw={600} tt="uppercase" c="dimmed" lts="0.1em">Story Points Configuration</Text>
+                <TextInput
+                  label="Systemname"
+                  value={roadmapData?.systemName ?? ''}
+                  onChange={(e) => commitDocument({ ...roadmapData, systemName: e.currentTarget.value })}
+                  classNames={{ input: 'mantine-dark-input', label: 'mantine-dark-label' }}
+                />
+
+                <Text size="xs" fw={600} tt="uppercase" c="dimmed" lts="0.1em">Story Point Scale</Text>
                 <Stack gap={6}>
                   {T_SHIRT_KEYS.map((key) => (
                     <NumberInput

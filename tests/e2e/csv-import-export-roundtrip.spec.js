@@ -63,8 +63,10 @@ const fillCenterMetadata = async (page) => {
   await page.waitForSelector('.skill-panel--icon', { timeout: 10_000 })
 
   const panel = page.locator('.skill-panel--icon')
+  await panel.getByRole('tab', { name: 'System', exact: true }).click()
   await panel.getByLabel('Systemname', { exact: true }).fill('Kyana Visual Roundtrip')
-  await panel.getByLabel('Release-Name', { exact: true }).fill('Final Integration Release')
+  await panel.getByRole('tab', { name: 'Release 1', exact: true }).click()
+  await panel.getByLabel(/Release(?:-| )name/i).fill('Final Integration Release')
   await panel.getByLabel('Motto', { exact: true }).fill('Stabil, klar und exportierbar')
   await panel.getByLabel('Release Date', { exact: true }).fill(ONE_YEAR_FROM_TODAY())
 

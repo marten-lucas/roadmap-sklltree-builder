@@ -1630,17 +1630,19 @@ export const importCsvViaToolbar = async (page, csvText, options = {}) => {
     buffer: Buffer.from(String(csvText), 'utf-8'),
   })
 
-  const dialog = page.getByRole('dialog', { name: 'CSV-Import Optionen' })
+  const dialog = page.getByRole('dialog').filter({
+    has: page.getByRole('heading', { name: /CSV Import Options|CSV-Import Optionen/i }),
+  })
   await dialog.waitFor({ state: 'visible', timeout: 10_000 })
 
   const { processSegments, processManualLevels } = options
 
   if (typeof processSegments === 'boolean') {
-    await dialog.getByRole('checkbox', { name: 'Segmente verarbeiten' }).setChecked(processSegments)
+    await dialog.getByRole('checkbox', { name: /Process segments|Segmente verarbeiten/i }).setChecked(processSegments)
   }
 
   if (typeof processManualLevels === 'boolean') {
-    await dialog.getByRole('checkbox', { name: 'Manuelle Ebenen verarbeiten' }).setChecked(processManualLevels)
+    await dialog.getByRole('checkbox', { name: /Process manual levels|Manuelle Ebenen verarbeiten/i }).setChecked(processManualLevels)
   }
 
   // Click the last button in the dialog (the confirm / Importieren button)
