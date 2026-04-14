@@ -83,12 +83,41 @@ export const resolveStoryPoints = (node, storyPointMap) => {
 }
 
 /**
- * Computes total story points and budget status.
- * Now accepts storyPointMap and budget (number|null) directly instead of a full document.
+ * Resolves story points directly from an effort object (without a full node).
  */
-export const computeBudgetSummary = (allNodes, storyPointMapOrDocument, budgetOrUndefined) => {
+const resolveStoryPointsFromEffort = (effort, storyPointMap) => {
+  if (!effort || effort.size === 'unclear') return null
+  if (effort.size === 'custom') {
+    if (effort.customPoints == null) return null
+    const pts = Number(effort.customPoints)
+    return Number.isFinite(pts) && pts >= 0 ? pts : null
+  }
+  const map = normalizeStoryPointMap(storyPointMap)
+  const val = map[effort.size]
+  return val != null ? val : null
+}
+
+/**
+ * Returns true when a level has 'now' status for the given release.
+ * Falls back to the legacy level.status field.
+ */
+const levelIsNow = (level, releaseId) => {
+  if (releaseId && level?.statuses && typeof level.statuses === 'object') {
+    const s = level.statuses[releaseId]
+    if (s !== undefined) return s === 'now'
+  }
+  return (level?.status ?? 'later') === 'now'
+}
+
+/**
+ * Computes total story points and budget status.
+ * Accepts storyPointMap and budget (number|null) directly instead of a full document.
+ * When releaseId is provided, only sums story points for levels with status 'now'
+ * in that release (across all nodes).
+ */
+export const computeBudgetSummary = (allNodes, storyPointMapOrDocument, budgetOrUndefined, releaseId = null) => {
   // Support both old call: computeBudgetSummary(nodes, document)
-  // and new call: computeBudgetSummary(nodes, storyPointMap, budget)
+  // and new call: computeBudgetSummary(nodes, storyPointMap, budget[, releaseId])
   let storyPointMap, budget
   if (budgetOrUndefined === undefined && storyPointMapOrDocument && typeof storyPointMapOrDocument === 'object' && ('children' in storyPointMapOrDocument || 'storyPointBudget' in storyPointMapOrDocument || 'releases' in storyPointMapOrDocument)) {
     // Legacy: second arg is the full document
@@ -101,9 +130,21 @@ export const computeBudgetSummary = (allNodes, storyPointMapOrDocument, budgetOr
 
   let total = 0
 
-  for (const node of allNodes) {
-    const pts = resolveStoryPoints(node, storyPointMap)
-    if (pts != null) total += pts
+  if (releaseId) {
+    // Only count levels with status 'now' for this release
+    for (const node of allNodes) {
+      const levels = Array.isArray(node?.levels) ? node.levels : []
+      for (const level of levels) {
+        if (!levelIsNow(level, releaseId)) continue
+        const pts = resolveStoryPointsFromEffort(level.effort, storyPointMap)
+        if (pts != null) total += pts
+      }
+    }
+  } else {
+    for (const node of allNodes) {
+      const pts = resolveStoryPoints(node, storyPointMap)
+      if (pts != null) total += pts
+    }
   }
 
   return {

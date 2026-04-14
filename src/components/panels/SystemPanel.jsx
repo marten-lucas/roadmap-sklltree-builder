@@ -180,7 +180,7 @@ export const SystemPanel = forwardRef(function SystemPanel(
 
   const activeBudget = activeRelease?.storyPointBudget ?? null
   const summary = activeRelease
-    ? computeBudgetSummary(allNodes, roadmapData.storyPointMap ?? DEFAULT_STORY_POINT_MAP, activeBudget)
+    ? computeBudgetSummary(allNodes, roadmapData.storyPointMap ?? DEFAULT_STORY_POINT_MAP, activeBudget, activeRelease.id)
     : { total: 0, budget: null, isOverBudget: false }
 
   return (

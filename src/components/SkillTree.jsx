@@ -369,7 +369,7 @@ export function SkillTree() {
     const summariesByReleaseId = new Map()
 
     for (const release of roadmapData.releases ?? []) {
-      const summary = computeBudgetSummary(allNodes, storyPointMap, release.storyPointBudget ?? null)
+      const summary = computeBudgetSummary(allNodes, storyPointMap, release.storyPointBudget ?? null, release.id)
       summariesByReleaseId.set(release.id, summary)
     }
 

@@ -335,7 +335,7 @@ const _SkillNode = ({ node, nodeSize, isSelected, isPortalPeerHovered = false, o
                   const vcBenefit = levels[vcActiveLevel]?.benefit ?? node.benefit
                   const hasChips = vcScopeLabels.length > 0 || (vcEffort?.size && vcEffort.size !== 'unclear') || (vcBenefit?.size && vcBenefit.size !== 'unclear')
                   return hasChips ? (
-                    <div className="skill-node-inner-chips skill-node-vc__chips" style={{ fontSize: `${26 / zoomScale}px`, '--chip-bw': `${1 / zoomScale}px`, '--chip-pad-v': `${1 / zoomScale}px`, '--chip-pad-h': `${4 / zoomScale}px`, '--chip-gap': `${3 / zoomScale}px`, '--chip-radius': `${10 / zoomScale}px` }}>
+                    <div className="skill-node-inner-chips skill-node-vc__chips" style={{ fontSize: `${26 / zoomScale}px`, '--chip-bw': `${0.5 / zoomScale}px`, '--chip-pad-v': `${0.5 / zoomScale}px`, '--chip-pad-h': `${2.5 / zoomScale}px`, '--chip-gap': `${2 / zoomScale}px`, '--chip-radius': `${8 / zoomScale}px` }}>
                       {vcScopeLabels.slice(0, 4).map((s, i) => (
                         <span
                           key={i}
@@ -373,7 +373,7 @@ const _SkillNode = ({ node, nodeSize, isSelected, isPortalPeerHovered = false, o
                   </Text>
                 )}
                 {showChips && (tooltipScopeLabels.length > 0 || tooltipEffort?.size || tooltipBenefit?.size) && (
-                  <div className="skill-node-inner-chips" style={{ '--chip-bw': `${1 / zoomScale}px`, '--chip-pad-v': `${1 / zoomScale}px`, '--chip-pad-h': `${4 / zoomScale}px`, '--chip-gap': `${3 / zoomScale}px`, '--chip-radius': `${10 / zoomScale}px` }}>
+                  <div className="skill-node-inner-chips" style={{ '--chip-bw': `${0.5 / zoomScale}px`, '--chip-pad-v': `${0.5 / zoomScale}px`, '--chip-pad-h': `${2.5 / zoomScale}px`, '--chip-gap': `${2 / zoomScale}px`, '--chip-radius': `${8 / zoomScale}px` }}>
                     {tooltipScopeLabels.slice(0, 4).map((s, i) => (
                       <span
                         key={i}

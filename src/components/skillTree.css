@@ -603,6 +603,8 @@
     flex-shrink: 0;
     padding: 0 1rem;
     gap: 0.15rem;
+    flex-wrap: wrap;
+    overflow-x: hidden;
 }
 
 .skill-panel__tab-panel {
@@ -1314,7 +1316,7 @@
 .skill-node-inner-chips {
     display: flex;
     flex-wrap: wrap;
-    gap: var(--chip-gap, 3px);
+    gap: var(--chip-gap, 2px);
     justify-content: center;
     margin-top: 2px;
     pointer-events: none;
@@ -1325,25 +1327,25 @@
     align-items: center;
     gap: var(--chip-gap, 2px);
     border-radius: var(--chip-radius, 10px);
-    border-width: var(--chip-bw, 1px);
+    border-width: var(--chip-bw, 0.5px);
     border-style: solid;
     flex-shrink: 0;
 }
 
 .skill-node-inner-chip--scope {
-    font-size: 7px;
+    font-size: 5.5px;
     line-height: 1.3;
-    padding: var(--chip-pad-v, 1px) var(--chip-pad-h, 4px);
+    padding: var(--chip-pad-v, 0px) var(--chip-pad-h, 2px);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    max-width: 64px;
+    max-width: 50px;
 }
 
 .skill-node-inner-chip--effort {
-    font-size: 7px;
+    font-size: 5.5px;
     line-height: 1.3;
-    padding: var(--chip-pad-v, 1px) var(--chip-pad-h, 4px);
+    padding: var(--chip-pad-v, 0px) var(--chip-pad-h, 2px);
     white-space: nowrap;
     background: rgba(249, 115, 22, 0.15);
     border-color: rgba(249, 115, 22, 0.6);
@@ -1351,9 +1353,9 @@
 }
 
 .skill-node-inner-chip--benefit {
-    font-size: 7px;
+    font-size: 5.5px;
     line-height: 1.3;
-    padding: var(--chip-pad-v, 1px) var(--chip-pad-h, 4px);
+    padding: var(--chip-pad-v, 0px) var(--chip-pad-h, 2px);
     white-space: nowrap;
     background: rgba(20, 184, 166, 0.15);
     border-color: rgba(20, 184, 166, 0.6);
