@@ -11,6 +11,17 @@ const CHEVRON_SPACING = 7
 // when arm length = line-width (verified: sin(25°) * lineW ≤ lineW/2 for all widths).
 const CHEVRON_HALF_OPEN = 25 * (Math.PI / 180)
 const LATER_SOURCE_LINK_STROKE = '#4c5458'
+
+// Lower value = rendered first (below); higher = rendered last (on top).
+const LINK_Z_ORDER = { later: 0, done: 0, hidden: 0, next: 1, now: 2 }
+const getLinkZOrder = (link, nodesById, releaseId) => {
+  const sourceNode = link.sourceId ? nodesById.get(link.sourceId) : null
+  const sourceStatus = sourceNode ? getDisplayStatusKey(sourceNode, releaseId) : 'later'
+  const childNode = link.targetId ? nodesById.get(link.targetId) : null
+  const targetStatus = childNode ? getDisplayStatusKey(childNode, releaseId) : 'later'
+  return Math.max(LINK_Z_ORDER[sourceStatus] ?? 0, LINK_Z_ORDER[targetStatus] ?? 0)
+}
+
 // Compute arm length so chevron tips stay strictly inside a line of `lineWidth`.
 // Formula: armLen * sin(halfOpen) = lineWidth/2 * 0.88  (88% of half-width)
 const chevronArm = (lineWidth) => (lineWidth * 0.44) / Math.sin(CHEVRON_HALF_OPEN)
@@ -429,7 +440,9 @@ export function SkillTreeCanvas({
           />
         ))}
 
-        {filteredLinks.filter((link) => link.sourceDepth > 0 && link.linkKind !== 'ring').map((link) => {
+        {[...filteredLinks.filter((link) => link.sourceDepth > 0 && link.linkKind !== 'ring')]
+          .sort((a, b) => getLinkZOrder(a, layoutNodesById, releaseId) - getLinkZOrder(b, layoutNodesById, releaseId))
+          .map((link) => {
           const statusStyle = getLinkStatusStyle(link)
 
           return (
@@ -450,8 +463,8 @@ export function SkillTreeCanvas({
 
         {/* ── Connection line direction chevrons — only at close/very-close, only later+next ── */}
         {(labelMode === 'close' || labelMode === 'very-close') &&
-          filteredLinks
-            .filter((link) => link.sourceDepth > 0 && link.linkKind !== 'ring')
+          [...filteredLinks.filter((link) => link.sourceDepth > 0 && link.linkKind !== 'ring')]
+            .sort((a, b) => getLinkZOrder(a, layoutNodesById, releaseId) - getLinkZOrder(b, layoutNodesById, releaseId))
             .map((link) => {
               const statusStyle = getLinkStatusStyle(link)
               const lineWidth = parseFloat(statusStyle.linkStrokeWidth)
@@ -549,12 +562,6 @@ export function SkillTreeCanvas({
           const baseHoverStrokeWidth = 16
           const portalHitRadius = Math.max(16, Math.min(56, baseHitRadius / zoomSafe))
           const portalHoverStrokeWidth = Math.max(12, Math.min(44, baseHoverStrokeWidth / zoomSafe))
-          const handlePortalClick = (event) => {
-            event.stopPropagation()
-            if (portal.isInteractive) {
-              onSelectPortal(portal)
-            }
-          }
 
           return (
             <Tooltip
@@ -574,7 +581,12 @@ export function SkillTreeCanvas({
                 data-portal-target-id={portal.targetId}
                 transform={`translate(${portal.x} ${portal.y})`}
                 onMouseDown={(event) => event.stopPropagation()}
-                onClick={handlePortalClick}
+                onClick={(event) => {
+                  event.stopPropagation()
+                  if (portal.isInteractive) {
+                    onSelectPortal(portal)
+                  }
+                }}
                 onPointerEnter={() => setHoveredPortalKey(portal.key)}
                 onPointerMove={() => setHoveredPortalKey(portal.key)}
                 onPointerLeave={() => setHoveredPortalKey((prev) => (prev === portal.key ? null : prev))}
@@ -586,15 +598,11 @@ export function SkillTreeCanvas({
                   style={{ strokeWidth: portalHoverStrokeWidth }}
                   onPointerEnter={() => setHoveredPortalKey(portal.key)}
                   onPointerMove={() => setHoveredPortalKey(portal.key)}
-                  onClick={handlePortalClick}
                 />
                 {/* base spoke line */}
                 <path
                   d={spokeLinePath}
                   className={`skill-tree-portal__spoke skill-tree-portal__spoke--${portal.type}`}
-                  onPointerEnter={() => setHoveredPortalKey(portal.key)}
-                  onPointerMove={() => setHoveredPortalKey(portal.key)}
-                  onClick={handlePortalClick}
                 />
                 {/* directional chevrons overlay (Method 2: compound path) */}
                 {spokeChevronD && (
@@ -627,7 +635,6 @@ export function SkillTreeCanvas({
                   cy={extTipY}
                   onPointerEnter={() => setHoveredPortalKey(portal.key)}
                   onPointerMove={() => setHoveredPortalKey(portal.key)}
-                  onClick={handlePortalClick}
                 />
                 {/* label inside the portal symbol at spoke tip */}
                 {!portal.isMinimal && (
