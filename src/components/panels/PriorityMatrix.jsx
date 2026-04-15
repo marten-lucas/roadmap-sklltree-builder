@@ -206,7 +206,7 @@ const OverflowTooltip = ({ hoveredOverflow }) => {
  * PriorityMatrix — an effort/benefit scatter chart of nodes by Effort (X) vs Benefit (Y).
  * Supports tooltips, node selection, and collision-free node placement.
  */
-export function PriorityMatrix({ opened, onClose, document, onSelectNode, onMoveNode, selectedReleaseId = null }) {
+export function PriorityMatrix({ opened, onClose, document, onSelectNode, onMoveNode, selectedReleaseId = null, embedded = false }) {
   const containerRef = useRef(null)
   const svgRef = useRef(null)
   const drawerRef = useRef(null)
@@ -441,8 +441,8 @@ export function PriorityMatrix({ opened, onClose, document, onSelectNode, onMove
   return (
     <div
       ref={drawerRef}
-      className="priority-matrix-drawer"
-      style={{ width: drawerWidth != null ? `${drawerWidth}px` : MATRIX_DRAWER_DEFAULT_WIDTH }}
+      className={`priority-matrix-drawer${embedded ? ' priority-matrix-drawer--embedded' : ''}`}
+      style={{ width: embedded ? '100%' : drawerWidth != null ? `${drawerWidth}px` : MATRIX_DRAWER_DEFAULT_WIDTH }}
     >
       <div className="priority-matrix-drawer__header">
         <span className="priority-matrix-drawer__title">Effort vs Benefit – Priority Matrix</span>
@@ -688,12 +688,14 @@ export function PriorityMatrix({ opened, onClose, document, onSelectNode, onMove
           </g>
         </svg>
       </div>
-      <div
-        className="priority-matrix-drawer__resize-handle"
-        onMouseDown={handleResizeStart}
-      >
-        <div className="priority-matrix-drawer__resize-grip" />
-      </div>
+      {!embedded && (
+        <div
+          className="priority-matrix-drawer__resize-handle"
+          onMouseDown={handleResizeStart}
+        >
+          <div className="priority-matrix-drawer__resize-grip" />
+        </div>
+      )}
     </div>
   )
 }

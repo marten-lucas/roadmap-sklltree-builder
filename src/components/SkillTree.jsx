@@ -2,7 +2,12 @@ import { Alert, Button, Checkbox, Group, Modal, Radio, Stack, Text } from '@mant
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react'
 import { flushSync } from 'react-dom'
 import { TransformComponent, TransformWrapper } from 'react-zoom-pan-pinch'
-import './skillTree.css'
+import './styles/skillTree.base.css'
+import './styles/skillTree.nodes.css'
+import './styles/skillTree.list-view.css'
+import './styles/skillTree.priority-matrix.css'
+import './styles/skillTree.layout.css'
+import './styles/skillTree.legend.css'
 import { DEFAULT_STATUS_DESCRIPTIONS, TREE_CONFIG, STATUS_LABELS, STATUS_STYLES, NODE_LABEL_ZOOM } from './config'
 import {
   saveDocumentToLocalStorage,
@@ -15,7 +20,7 @@ import {
   DEFAULT_CENTER_ICON_SRC,
   documentHistoryReducer,
 } from './utils/documentState'
-import { SystemPanel, InspectorPanel, SegmentPanel, ToolbarScopeManager, ToolbarSegmentManager } from './panels'
+import { SystemPanel, InspectorPanel, SegmentPanel, ToolbarScopeManager } from './panels'
 import { PriorityMatrix } from './panels/PriorityMatrix'
 import { ListViewDrawer } from './panels/ListViewDrawer'
 import { solveSkillTreeLayout } from './utils/layoutSolver'
@@ -91,6 +96,11 @@ import { resolveInspectorSelectedNode } from './utils/selection'
 const AUTOSAVE_DEBOUNCE_MS = 450
 const MINIMAL_NODE_SIZE = 36
 const MATRIX_SELECTION_ZOOM_SCALE = 4
+const LEFT_SIDEBAR_MIN_WIDTH = 320
+const LEFT_SIDEBAR_DEFAULT_WIDTH = 460
+const RIGHT_SIDEBAR_MIN_WIDTH = 340
+const RIGHT_SIDEBAR_DEFAULT_WIDTH = 420
+const MIN_STAGE_WIDTH = 360
 
 const getPortalCounterpartNodeId = (portal) => {
   if (!portal) return null
@@ -189,6 +199,7 @@ export function SkillTree() {
   const canvasSvgRef = useRef(null)
   const transformApiRef = useRef(null)
   const canvasAreaRef = useRef(null)
+  const shellRef = useRef(null)
   const systemPanelRef = useRef(null)
   const [isPanModeActive, setIsPanModeActive] = useState(false)
   const [currentZoomScale, setCurrentZoomScale] = useState(1)
@@ -203,6 +214,12 @@ export function SkillTree() {
   const [priorityMatrixOpen, setPriorityMatrixOpen] = useState(false)
   const [listViewOpen, setListViewOpen] = useState(false)
   const [draftRelease, setDraftRelease] = useState(null)
+  const [leftSidebarWidth, setLeftSidebarWidth] = useState(LEFT_SIDEBAR_DEFAULT_WIDTH)
+  const [rightSidebarWidth, setRightSidebarWidth] = useState(RIGHT_SIDEBAR_DEFAULT_WIDTH)
+  const [canvasViewport, setCanvasViewport] = useState(() => ({
+    width: typeof window !== 'undefined' ? window.innerWidth : 0,
+    height: typeof window !== 'undefined' ? window.innerHeight : 0,
+  }))
 
   const {
     selectedNodeId,
@@ -234,6 +251,51 @@ export function SkillTree() {
     setSelectedReleaseId,
   } = useSkillTreeUiState()
 
+  const getCanvasViewportMetrics = useCallback(() => {
+    const rect = canvasAreaRef.current?.getBoundingClientRect()
+    if (rect && rect.width > 0 && rect.height > 0) {
+      return { width: rect.width, height: rect.height }
+    }
+
+    if (typeof window !== 'undefined') {
+      return { width: window.innerWidth, height: window.innerHeight }
+    }
+
+    return { width: 0, height: 0 }
+  }, [])
+
+  const handleSidebarResizeStart = useCallback((side) => (event) => {
+    event.preventDefault()
+    const startX = event.clientX
+    const startWidth = side === 'left' ? leftSidebarWidth : rightSidebarWidth
+
+    const onMove = (moveEvent) => {
+      const delta = moveEvent.clientX - startX
+      const totalWidth = shellRef.current?.getBoundingClientRect().width ?? (typeof window !== 'undefined' ? window.innerWidth : 0)
+      const otherWidth = side === 'left'
+        ? (rightPanel != null || selectedSegmentId ? rightSidebarWidth : 0)
+        : (listViewOpen || priorityMatrixOpen ? leftSidebarWidth : 0)
+      const minWidth = side === 'left' ? LEFT_SIDEBAR_MIN_WIDTH : RIGHT_SIDEBAR_MIN_WIDTH
+      const signedDelta = side === 'left' ? delta : -delta
+      const maxWidth = Math.max(minWidth, totalWidth - otherWidth - MIN_STAGE_WIDTH)
+      const nextWidth = Math.max(minWidth, Math.min(maxWidth, startWidth + signedDelta))
+
+      if (side === 'left') {
+        setLeftSidebarWidth(nextWidth)
+      } else {
+        setRightSidebarWidth(nextWidth)
+      }
+    }
+
+    const onUp = () => {
+      window.removeEventListener('pointermove', onMove)
+      window.removeEventListener('pointerup', onUp)
+    }
+
+    window.addEventListener('pointermove', onMove)
+    window.addEventListener('pointerup', onUp)
+  }, [leftSidebarWidth, listViewOpen, priorityMatrixOpen, rightPanel, rightSidebarWidth, selectedSegmentId])
+
   const addControlOffset = TREE_CONFIG.nodeSize * 0.82
 
   const { layout, diagnostics } = useMemo(
@@ -241,8 +303,8 @@ export function SkillTree() {
     [roadmapData],
   )
   const { nodes, links, crossingEdges = [], segments, canvas } = layout
-  const viewportWidth = typeof window !== 'undefined' ? window.innerWidth : canvas.width
-  const viewportHeight = typeof window !== 'undefined' ? window.innerHeight : canvas.height
+  const viewportWidth = canvasViewport.width || (typeof window !== 'undefined' ? window.innerWidth : canvas.width)
+  const viewportHeight = canvasViewport.height || (typeof window !== 'undefined' ? window.innerHeight : canvas.height)
   const initialViewScale = useMemo(() => {
     if (!canvas.width || !canvas.height || !viewportWidth || !viewportHeight) {
       return 0.7
@@ -313,8 +375,64 @@ export function SkillTree() {
 
   const selectedSegment = useMemo(
     () => (roadmapData.segments ?? []).find((segment) => segment.id === selectedSegmentId) ?? null,
-    [roadmapData, selectedSegmentId],
+    [roadmapData.segments, selectedSegmentId],
   )
+
+  const isLeftSidebarVisible = listViewOpen || priorityMatrixOpen
+  const isRightSidebarVisible = Boolean(selectedSegment)
+    || rightPanel === PANEL_INSPECTOR
+    || rightPanel === PANEL_CENTER
+    || rightPanel === PANEL_SCOPES
+    || rightPanel === PANEL_SEGMENTS
+
+  useEffect(() => {
+    const updateViewport = () => {
+      const nextViewport = getCanvasViewportMetrics()
+      setCanvasViewport((current) => (
+        current.width === nextViewport.width && current.height === nextViewport.height
+          ? current
+          : nextViewport
+      ))
+    }
+
+    updateViewport()
+    window.addEventListener('resize', updateViewport)
+
+    let observer = null
+    if (typeof ResizeObserver !== 'undefined' && canvasAreaRef.current) {
+      observer = new ResizeObserver(updateViewport)
+      observer.observe(canvasAreaRef.current)
+    }
+
+    return () => {
+      window.removeEventListener('resize', updateViewport)
+      observer?.disconnect?.()
+    }
+  }, [getCanvasViewportMetrics, isLeftSidebarVisible, isRightSidebarVisible, leftSidebarWidth, rightSidebarWidth])
+
+  useEffect(() => {
+    const totalWidth = shellRef.current?.getBoundingClientRect().width ?? (typeof window !== 'undefined' ? window.innerWidth : 0)
+
+    if (isLeftSidebarVisible) {
+      const maxLeftWidth = Math.max(
+        LEFT_SIDEBAR_MIN_WIDTH,
+        totalWidth - (isRightSidebarVisible ? rightSidebarWidth : 0) - MIN_STAGE_WIDTH,
+      )
+      if (leftSidebarWidth > maxLeftWidth) {
+        setLeftSidebarWidth(maxLeftWidth)
+      }
+    }
+
+    if (isRightSidebarVisible) {
+      const maxRightWidth = Math.max(
+        RIGHT_SIDEBAR_MIN_WIDTH,
+        totalWidth - (isLeftSidebarVisible ? leftSidebarWidth : 0) - MIN_STAGE_WIDTH,
+      )
+      if (rightSidebarWidth > maxRightWidth) {
+        setRightSidebarWidth(maxRightWidth)
+      }
+    }
+  }, [isLeftSidebarVisible, isRightSidebarVisible, leftSidebarWidth, rightSidebarWidth])
 
   const selectedNodeLevels = useMemo(() => {
     if (!selectedNode) {
@@ -1789,8 +1907,7 @@ export function SkillTree() {
 
   const handleFitToScreen = () => {
     if (!transformApiRef.current) return
-    const vw = window.innerWidth
-    const vh = window.innerHeight
+    const { width: vw, height: vh } = getCanvasViewportMetrics()
     const { positionX, positionY, scale } = computeFitTransform({
       contentBounds: fitContentBounds,
       viewportWidth: vw,
@@ -1830,8 +1947,9 @@ export function SkillTree() {
   const handleZoomToScale = (scale) => {
     if (!transformApiRef.current) return
     const { positionX, positionY, scale: currentScale } = transformApiRef.current.state
-    const cx = window.innerWidth / 2
-    const cy = window.innerHeight / 2
+    const { width: viewportWidthPx, height: viewportHeightPx } = getCanvasViewportMetrics()
+    const cx = viewportWidthPx / 2
+    const cy = viewportHeightPx / 2
     transformApiRef.current.setTransform(
       cx - (cx - positionX) * (scale / currentScale),
       cy - (cy - positionY) * (scale / currentScale),
@@ -1894,8 +2012,7 @@ export function SkillTree() {
   useEffect(() => {
     const fitToScreen = () => {
       if (!transformApiRef.current) return
-      const vw = window.innerWidth
-      const vh = window.innerHeight
+      const { width: vw, height: vh } = getCanvasViewportMetrics()
       const { positionX, positionY, scale } = computeFitTransform({
         contentBounds: fitContentBounds,
         viewportWidth: vw,
@@ -1911,8 +2028,9 @@ export function SkillTree() {
       if (!transformApiRef.current) return
       const { positionX, positionY, scale: currentScale } = transformApiRef.current.state
       const targetScale = getNextZoomStep(currentScale, direction)
-      const cx = window.innerWidth / 2
-      const cy = window.innerHeight / 2
+      const { width: viewportWidthPx, height: viewportHeightPx } = getCanvasViewportMetrics()
+      const cx = viewportWidthPx / 2
+      const cy = viewportHeightPx / 2
       transformApiRef.current.setTransform(
         cx - (cx - positionX) * (targetScale / currentScale),
         cy - (cy - positionY) * (targetScale / currentScale),
@@ -2203,9 +2321,7 @@ export function SkillTree() {
     if (layoutNode && transformApiRef.current && canvasAreaRef.current) {
       const TARGET_SCALE = 4 // 400% zoom
       const rect = canvasAreaRef.current.getBoundingClientRect()
-      // Keep selected node in the right third so it is not hidden by the left drawer.
-      const targetX = rect.width * (2 / 3)
-      const positionX = targetX - layoutNode.x * TARGET_SCALE
+      const positionX = rect.width / 2 - layoutNode.x * TARGET_SCALE
       const positionY = rect.height / 2 - layoutNode.y * TARGET_SCALE
       transformApiRef.current.setTransform(positionX, positionY, TARGET_SCALE, 500, 'easeOut')
     }
@@ -2224,8 +2340,7 @@ export function SkillTree() {
         return
       }
 
-      const vw = window.innerWidth
-      const vh = window.innerHeight
+      const { width: vw, height: vh } = getCanvasViewportMetrics()
       const positionX = vw / 2 - layoutNode.x * MATRIX_SELECTION_ZOOM_SCALE
       const positionY = vh / 2 - layoutNode.y * MATRIX_SELECTION_ZOOM_SCALE
       transformApiRef.current.setTransform(positionX, positionY, MATRIX_SELECTION_ZOOM_SCALE, 500, 'easeOut')
@@ -2286,9 +2401,7 @@ export function SkillTree() {
     if (layoutNode && transformApiRef.current && canvasAreaRef.current) {
       const TARGET_SCALE = 4 // 400% zoom
       const rect = canvasAreaRef.current.getBoundingClientRect()
-      // Keep selected node in the right third so it is not hidden by the left drawer.
-      const targetX = rect.width * (2 / 3)
-      const positionX = targetX - layoutNode.x * TARGET_SCALE
+      const positionX = rect.width / 2 - layoutNode.x * TARGET_SCALE
       const positionY = rect.height / 2 - layoutNode.y * TARGET_SCALE
       transformApiRef.current.setTransform(positionX, positionY, TARGET_SCALE, 500, 'easeOut')
     }
@@ -2625,30 +2738,26 @@ export function SkillTree() {
     return () => window.removeEventListener('roadmap-skilltree.toast', handler)
   }, [])
 
-  useEffect(() => {
-    const el = canvasAreaRef.current
-    if (!el) return
-    const onWheel = (e) => {
-      if (!transformApiRef.current) return
-      e.preventDefault()
-      const { positionX, positionY, scale } = transformApiRef.current.state
-      const { minScale, maxScale } = VIEWPORT_DEFAULTS
-      // Step grows with sqrt(scale): slow when zoomed out, fast when zoomed in
-      const adaptiveStep = 0.0018 * Math.sqrt(scale)
-      const delta = Math.min(Math.abs(e.deltaY), 200)
-      const direction = e.deltaY < 0 ? 1 : -1
-      const ratio = Math.exp(adaptiveStep * delta * direction)
-      const newScale = Math.max(minScale, Math.min(maxScale, scale * ratio))
-      if (newScale === scale) return
-      const rect = el.getBoundingClientRect()
-      const cx = e.clientX - rect.left
-      const cy = e.clientY - rect.top
-      const newPositionX = cx - (cx - positionX) * (newScale / scale)
-      const newPositionY = cy - (cy - positionY) * (newScale / scale)
-      transformApiRef.current.setTransform(newPositionX, newPositionY, newScale, 80)
-    }
-    el.addEventListener('wheel', onWheel, { passive: false })
-    return () => el.removeEventListener('wheel', onWheel)
+  const handleCanvasWheel = useCallback((e) => {
+    if (!transformApiRef.current || !canvasAreaRef.current) return
+
+    e.preventDefault()
+    const { positionX, positionY, scale } = transformApiRef.current.state
+    const { minScale, maxScale } = VIEWPORT_DEFAULTS
+    const adaptiveStep = 0.0018 * Math.sqrt(scale)
+    const delta = Math.min(Math.abs(e.deltaY), 200)
+    const direction = e.deltaY < 0 ? 1 : -1
+    const ratio = Math.exp(adaptiveStep * delta * direction)
+    const newScale = Math.max(minScale, Math.min(maxScale, scale * ratio))
+
+    if (newScale === scale) return
+
+    const rect = canvasAreaRef.current.getBoundingClientRect()
+    const cx = e.clientX - rect.left
+    const cy = e.clientY - rect.top
+    const newPositionX = cx - (cx - positionX) * (newScale / scale)
+    const newPositionY = cy - (cy - positionY) * (newScale / scale)
+    transformApiRef.current.setTransform(newPositionX, newPositionY, newScale, 80)
   }, [])
 
   useEffect(() => {
@@ -2669,8 +2778,144 @@ export function SkillTree() {
     return () => el.removeEventListener('contextmenu', onContextMenu)
   }, [handleFitToScreen])
 
+  const leftSidebarContent = priorityMatrixOpen ? (
+    <PriorityMatrix
+      embedded
+      opened={priorityMatrixOpen}
+      onClose={() => setPriorityMatrixOpen(false)}
+      document={roadmapData}
+      onSelectNode={handleSelectNodeFromMatrix}
+      onMoveNode={handleMoveNodeFromMatrix}
+      selectedReleaseId={activeReleaseId}
+    />
+  ) : listViewOpen ? (
+    <ListViewDrawer
+      embedded
+      opened={listViewOpen}
+      onClose={() => setListViewOpen(false)}
+      document={roadmapData}
+      onSelectNode={handleSelectNodeFromListView}
+      onSelectLevel={handleSelectLevelFromListView}
+      onSetLevelEffort={handleListViewLevelEffortChange}
+      onSetLevelBenefit={handleListViewLevelBenefitChange}
+      onSetLevelStatus={handleListViewLevelStatusChange}
+      onSetLevelScopeIds={handleListViewLevelScopesChange}
+      selectedReleaseId={activeReleaseId}
+      selectedNodeId={selectedNodeId}
+      selectedProgressLevelId={selectedProgressLevelId}
+      onWidthChange={(nextWidth) => {
+        setLeftSidebarWidth((current) => Math.max(current, Math.min(nextWidth, 900)))
+      }}
+    />
+  ) : null
+
+  const rightSidebarContent = rightPanel === PANEL_INSPECTOR ? (
+    <InspectorPanel
+      selectedNode={resolveInspectorSelectedNode(selectedNode, selectedNodeIds)}
+      selectedNodeIds={selectedNodeIds}
+      roadmapData={roadmapData}
+      currentLevel={levelInfo.nodeLevel}
+      selectedProgressLevelId={activeSelectedProgressLevelId}
+      onClose={() => {
+        selectNodeId(null)
+      }}
+      onFocusNode={selectNodeId}
+      onLabelChange={handleLabelChange}
+      onShortNameChange={handleShortNameChange}
+      onStatusChange={handleStatusChange}
+      onReleaseNoteChange={handleReleaseNoteChange}
+      onLevelLabelChange={handleLevelLabelChange}
+      onScopeIdsChange={handleLevelScopesChange}
+      scopeOptions={scopeOptions}
+      onCreateScope={handleCreateScope}
+      onRenameScope={handleRenameScope}
+      onDeleteScope={handleDeleteScope}
+      onSetScopeColor={handleSetScopeColor}
+      onCreateSegment={handleCreateSegmentForInspector}
+      onRenameSegment={handleRenameSegmentForManager}
+      onDeleteSegment={handleDeleteSegmentForManager}
+      onSelectProgressLevel={setSelectedProgressLevelId}
+      onAddProgressLevel={handleAddProgressLevel}
+      onDeleteProgressLevel={handleDeleteProgressLevel}
+      onLevelChange={handleLevelChange}
+      levelOptions={selectedNodeLevelOptions}
+      segmentOptions={selectedNodeSegmentOptions}
+      parentOptions={selectedNodeParentOptions}
+      selectedParentId={selectedNodeParentId}
+      levelDependencyOptions={selectedNodeLevelDependencyOptions}
+      incomingDependencyLabels={selectedNodeIncomingDependencyLabels}
+      dependencyRequires={selectedNodeDependencySummary.requires}
+      dependencyEnables={selectedNodeDependencySummary.enables}
+      validationMessage={selectedNodeValidationMessage}
+      onParentChange={(nextParentKey) => {
+        if (!selectedNodeId && !(Array.isArray(selectedNodeIds) && selectedNodeIds.length > 0)) {
+          return
+        }
+
+        const nextParentId = nextParentKey === '__root__' ? null : nextParentKey
+        applyToSelectedNodes((tree, id) => moveNodeToParent(tree, id, nextParentId))
+      }}
+      onSegmentChange={(nextSegmentKey) => {
+        if (!selectedNodeId && !(Array.isArray(selectedNodeIds) && selectedNodeIds.length > 0)) {
+          return
+        }
+
+        const nextSegmentId = nextSegmentKey === UNASSIGNED_SEGMENT_ID ? null : nextSegmentKey
+
+        applyToSelectedNodes((tree, id) => {
+          const validation = validateNodeSegmentChange(tree, id, nextSegmentId, TREE_CONFIG)
+          return validation.tree
+        })
+      }}
+      onLevelAdditionalDependenciesChange={handleLevelAdditionalDependenciesChange}
+      onDeleteNodeOnly={handleDeleteNodeOnly}
+      onDeleteNodeBranch={handleDeleteNodeBranch}
+      onEffortChange={handleEffortChange}
+      onBenefitChange={handleBenefitChange}
+      selectedReleaseId={activeReleaseId}
+    />
+  ) : rightPanel === PANEL_SCOPES ? (
+    <ToolbarScopeManager
+      scopeOptions={scopeOptions}
+      onCreateScope={handleCreateScope}
+      onRenameScope={handleRenameScope}
+      onDeleteScope={handleDeleteScope}
+      onSetScopeColor={handleSetScopeColor}
+      onClose={handleCloseScopeManager}
+    />
+  ) : rightPanel === PANEL_CENTER ? (
+    <SystemPanel
+      ref={systemPanelRef}
+      isOpen={rightPanel === PANEL_CENTER}
+      iconSource={centerIconSource}
+      onClose={() => { if (rightPanel === PANEL_CENTER) setRightPanel(null) }}
+      onUpload={handleCenterIconUpload}
+      onResetDefault={handleResetCenterIcon}
+      roadmapData={roadmapData}
+      commitDocument={commitDocument}
+      selectedReleaseId={activeReleaseId}
+      onReleaseChange={setSelectedReleaseId}
+      onDraftChange={handleDraftChange}
+    />
+  ) : isRightSidebarVisible ? (
+    <SegmentPanel
+      selectedSegment={selectedSegment}
+      segmentOptions={roadmapData.segments ?? []}
+      isOpen={rightPanel === PANEL_SEGMENTS}
+      onClose={() => {
+        selectSegmentId(null)
+        if (rightPanel === PANEL_SEGMENTS) setRightPanel(null)
+      }}
+      onLabelChange={handleSegmentLabelChange}
+      onDelete={handleDeleteSegment}
+      onCreateSegment={handleCreateSegmentForManager}
+      onRenameSegment={handleRenameSegmentForManager}
+      onDeleteSegment={handleDeleteSegmentForManager}
+    />
+  ) : null
+
   return (
-    <main className="skill-tree-shell">
+    <main ref={shellRef} className="skill-tree-shell">
       <input
         ref={documentFileInputRef}
         type="file"
@@ -2848,286 +3093,187 @@ export function SkillTree() {
         releaseBudgetSummaries={releaseBudgetSummaries}
       />
 
-      {isLegendVisible && (
-        <aside className="skill-tree-legend" aria-label="Status legend">
-          <div className="skill-tree-legend__header">
-            <div className="skill-tree-legend__title">Legend</div>
-          </div>
+      <div className="skill-tree-workspace">
+        <div className="skill-tree-main-row">
+          {isLeftSidebarVisible && (
+            <>
+              <aside className="skill-tree-sidebar skill-tree-sidebar--left" style={{ width: `${leftSidebarWidth}px` }}>
+                {leftSidebarContent}
+              </aside>
+              <div
+                className="skill-tree-column-resizer skill-tree-column-resizer--left"
+                role="separator"
+                aria-label="Resize left sidebar"
+                onPointerDown={handleSidebarResizeStart('left')}
+              />
+            </>
+          )}
 
-          <div className="skill-tree-legend__section">
-            <div className="skill-tree-legend__symbol-grid">
-              {LEGEND_STATUS_ORDER.map((statusKey) => (
-                <div key={statusKey} className="skill-tree-legend__symbol-item">
-                  <span
-                    className="skill-tree-legend__node-preview"
-                    style={getLegendNodePreviewStyle(statusKey)}
-                    aria-hidden="true"
+          <div className="skill-tree-center-column">
+            <section className="skill-tree-stage">
+              <div ref={canvasAreaRef} className="skill-tree-canvas-area" onWheelCapture={handleCanvasWheel}>
+                <TransformWrapper
+                  key={transformKey}
+                  minScale={VIEWPORT_DEFAULTS.minScale}
+                  maxScale={VIEWPORT_DEFAULTS.maxScale}
+                  initialScale={initialViewScale}
+                  initialPositionX={initialPositionX}
+                  initialPositionY={initialPositionY}
+                  wheel={{ disabled: true }}
+                  limitToBounds={false}
+                  centerOnInit={false}
+                  onInit={(api) => {
+                    transformApiRef.current = api
+                    setCurrentZoomScale(api.state.scale)
+                  }}
+                  onTransformed={(_ref, state) => {
+                    setCurrentZoomScale(state.scale)
+                  }}
+                >
+                  <TransformComponent
+                    wrapperClass="skill-tree-transform-wrapper"
+                    wrapperStyle={{ cursor: isPanModeActive ? 'grabbing' : 'grab' }}
+                    contentClass="skill-tree-transform-content"
                   >
-                    <span className="skill-tree-legend__node-ring" />
-                    <span className="skill-tree-legend__node-core" />
-                  </span>
-                  <span>
-                    <strong>{STATUS_LABELS[statusKey]}</strong>
-                    <span className="skill-tree-legend__symbol-copy">{legendStatusDescriptions[statusKey]}</span>
-                  </span>
-                </div>
-              ))}
-
-              <div className="skill-tree-legend__symbol-item">
-                <span className="skill-tree-legend__portal-symbol" aria-hidden="true">
-                  <svg viewBox="-12 -12 24 24" className="skill-tree-legend__portal-svg">
-                    <path
-                      className="skill-tree-portal__ring skill-tree-portal__ring--source"
-                      d={LEGEND_PORTAL_SOCKET_PATH}
-                      transform="rotate(180)"
+                    <SkillTreeCanvas
+                      canvasRef={canvasSvgRef}
+                      canvas={canvas}
+                      centerIconSource={centerIconSource}
+                      centerIconSize={centerIconSize}
+                      systemName={roadmapData?.systemName ?? ''}
+                      activeRelease={activeRelease}
+                      draftRelease={draftRelease}
+                      filteredSegmentSeparators={filteredSegmentSeparators}
+                      filteredSegmentLabels={filteredSegmentLabels}
+                      filteredLinks={filteredLinks}
+                      layoutNodesById={layoutNodesById}
+                      renderedNodes={renderedNodes}
+                      nodeVisibilityModeById={nodeVisibilityModeById}
+                      selectedNodeId={selectedNodeId}
+                      selectedNodeIds={selectedNodeIds}
+                      selectedSegmentId={selectedSegmentId}
+                      selectedPortalKey={selectedPortalKey}
+                      visibleDependencyPortals={visibleDependencyPortals}
+                      visibleDependencyLines={visibleDependencyLines}
+                      depSummaryByNodeId={depSummaryByNodeId}
+                      selectedLayoutNode={selectedLayoutNode}
+                      selectedControlGeometry={selectedControlGeometry}
+                      selectedSegmentLabel={selectedSegmentLabel}
+                      selectedSegmentControlGeometry={selectedSegmentControlGeometry}
+                      emptyStateAddControl={emptyStateAddControl}
+                      emptySegmentAddControl={emptySegmentAddControl}
+                      nodeSize={TREE_CONFIG.nodeSize}
+                      minimalNodeSize={MINIMAL_NODE_SIZE}
+                      labelMode={activeLabelMode}
+                      currentZoomScale={currentZoomScale}
+                      scopeOptions={scopeOptions}
+                      onCanvasClick={() => {
+                        selectNodeId(null)
+                        selectSegmentId(null)
+                        setSelectedPortalKey(null)
+                      }}
+                      onOpenCenterIconPanel={handleOpenCenterIconPanel}
+                      onSelectSegment={handleSelectSegment}
+                      onSelectPortal={handleSelectPortal}
+                      onAddInitialRoot={handleAddInitialRoot}
+                      onAddInitialSegment={handleAddInitialSegment}
+                      onAddRootNear={handleAddRootNear}
+                      onAddSegmentNear={handleAddSegmentNear}
+                      onAddChild={handleAddChild}
+                      onSelectNode={handleSelectNode}
+                      onZoomToNode={handleZoomToNode}
+                      storyPointMap={roadmapData.storyPointMap}
+                      releaseId={activeReleaseId}
                     />
-                  </svg>
-                </span>
-                <span>
-                  <strong>Incoming portal</strong>
-                  <span className="skill-tree-legend__symbol-copy">This node depends on another skill.</span>
-                </span>
+                  </TransformComponent>
+                </TransformWrapper>
               </div>
+            </section>
 
-              <div className="skill-tree-legend__symbol-item">
-                <span className="skill-tree-legend__portal-symbol" aria-hidden="true">
-                  <svg viewBox="-16 -10 32 20" className="skill-tree-legend__portal-svg">
-                    <path
-                      className="skill-tree-portal__ring skill-tree-portal__ring--target"
-                      d={LEGEND_PORTAL_PLUG_PATH}
-                    />
-                  </svg>
-                </span>
-                <span>
-                  <strong>Outgoing portal</strong>
-                  <span className="skill-tree-legend__symbol-copy">This node enables or links to another skill.</span>
-                </span>
+            {isLegendVisible && (
+              <div className="skill-tree-legend-footer">
+                <aside className="skill-tree-legend" aria-label="Status legend">
+                  <div className="skill-tree-legend__header">
+                    <div className="skill-tree-legend__title">Legend</div>
+                  </div>
+
+                  <div className="skill-tree-legend__section">
+                    <div className="skill-tree-legend__symbol-grid">
+                      {LEGEND_STATUS_ORDER.map((statusKey) => (
+                        <div key={statusKey} className="skill-tree-legend__symbol-item">
+                          <span
+                            className="skill-tree-legend__node-preview"
+                            style={getLegendNodePreviewStyle(statusKey)}
+                            aria-hidden="true"
+                          >
+                            <span className="skill-tree-legend__node-ring" />
+                            <span className="skill-tree-legend__node-core" />
+                          </span>
+                          <span>
+                            <strong>{STATUS_LABELS[statusKey]}</strong>
+                            <span className="skill-tree-legend__symbol-copy">{legendStatusDescriptions[statusKey]}</span>
+                          </span>
+                        </div>
+                      ))}
+
+                      <div className="skill-tree-legend__symbol-item">
+                        <span className="skill-tree-legend__portal-symbol" aria-hidden="true">
+                          <svg viewBox="-12 -12 24 24" className="skill-tree-legend__portal-svg">
+                            <path
+                              className="skill-tree-portal__ring skill-tree-portal__ring--source"
+                              d={LEGEND_PORTAL_SOCKET_PATH}
+                              transform="rotate(180)"
+                            />
+                          </svg>
+                        </span>
+                        <span>
+                          <strong>Incoming portal</strong>
+                          <span className="skill-tree-legend__symbol-copy">This node depends on another skill.</span>
+                        </span>
+                      </div>
+
+                      <div className="skill-tree-legend__symbol-item">
+                        <span className="skill-tree-legend__portal-symbol" aria-hidden="true">
+                          <svg viewBox="-16 -10 32 20" className="skill-tree-legend__portal-svg">
+                            <path
+                              className="skill-tree-portal__ring skill-tree-portal__ring--target"
+                              d={LEGEND_PORTAL_PLUG_PATH}
+                            />
+                          </svg>
+                        </span>
+                        <span>
+                          <strong>Outgoing portal</strong>
+                          <span className="skill-tree-legend__symbol-copy">This node enables or links to another skill.</span>
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="skill-tree-legend__tip skill-tree-legend__tip--footer">
+                    <span className="skill-tree-legend__tip-icon" aria-hidden="true">ⓘ</span>
+                    <span>Tip: Zooming in or hovering reveals more node details.</span>
+                  </div>
+                </aside>
               </div>
-            </div>
+            )}
           </div>
 
-          <div className="skill-tree-legend__tip skill-tree-legend__tip--footer">
-            <span className="skill-tree-legend__tip-icon" aria-hidden="true">ⓘ</span>
-            <span>Tip: Zooming in or hovering reveals more node details.</span>
-          </div>
-        </aside>
-      )}
+          {isRightSidebarVisible && (
+          <>
+            <div
+              className="skill-tree-column-resizer skill-tree-column-resizer--right"
+              role="separator"
+              aria-label="Resize right sidebar"
+              onPointerDown={handleSidebarResizeStart('right')}
+            />
+            <aside className="skill-tree-sidebar skill-tree-sidebar--right" style={{ width: `${rightSidebarWidth}px` }}>
+              {rightSidebarContent}
+            </aside>
+          </>
+        )}
+        </div>
 
-      <div ref={canvasAreaRef} style={{ position: 'absolute', inset: 0, overflow: 'hidden' }}>
-      <TransformWrapper
-        key={transformKey}
-        minScale={VIEWPORT_DEFAULTS.minScale}
-        maxScale={VIEWPORT_DEFAULTS.maxScale}
-        initialScale={initialViewScale}
-        initialPositionX={initialPositionX}
-        initialPositionY={initialPositionY}
-        wheel={{ disabled: true }}
-        limitToBounds={false}
-        centerOnInit={false}
-        onInit={(api) => {
-          transformApiRef.current = api
-          setCurrentZoomScale(api.state.scale)
-        }}
-        onTransformed={(_ref, state) => {
-          setCurrentZoomScale(state.scale)
-        }}
-      >
-        <TransformComponent
-          wrapperClass="skill-tree-transform-wrapper"
-          wrapperStyle={{ cursor: isPanModeActive ? 'grabbing' : 'grab' }}
-          contentClass="skill-tree-transform-content"
-        >
-          <SkillTreeCanvas
-            canvasRef={canvasSvgRef}
-            canvas={canvas}
-            centerIconSource={centerIconSource}
-            centerIconSize={centerIconSize}
-            systemName={roadmapData?.systemName ?? ''}
-            activeRelease={activeRelease}
-            draftRelease={draftRelease}
-            filteredSegmentSeparators={filteredSegmentSeparators}
-            filteredSegmentLabels={filteredSegmentLabels}
-            filteredLinks={filteredLinks}
-            layoutNodesById={layoutNodesById}
-            renderedNodes={renderedNodes}
-            nodeVisibilityModeById={nodeVisibilityModeById}
-            selectedNodeId={selectedNodeId}
-            selectedNodeIds={selectedNodeIds}
-            selectedSegmentId={selectedSegmentId}
-            selectedPortalKey={selectedPortalKey}
-            visibleDependencyPortals={visibleDependencyPortals}
-            visibleDependencyLines={visibleDependencyLines}
-            depSummaryByNodeId={depSummaryByNodeId}
-            selectedLayoutNode={selectedLayoutNode}
-            selectedControlGeometry={selectedControlGeometry}
-            selectedSegmentLabel={selectedSegmentLabel}
-            selectedSegmentControlGeometry={selectedSegmentControlGeometry}
-            emptyStateAddControl={emptyStateAddControl}
-            emptySegmentAddControl={emptySegmentAddControl}
-            nodeSize={TREE_CONFIG.nodeSize}
-            minimalNodeSize={MINIMAL_NODE_SIZE}
-            labelMode={activeLabelMode}
-            currentZoomScale={currentZoomScale}
-            scopeOptions={scopeOptions}
-            onCanvasClick={() => {
-              selectNodeId(null)
-              selectSegmentId(null)
-              setSelectedPortalKey(null)
-            }}
-            onOpenCenterIconPanel={handleOpenCenterIconPanel}
-            onSelectSegment={handleSelectSegment}
-            onSelectPortal={handleSelectPortal}
-            onAddInitialRoot={handleAddInitialRoot}
-            onAddInitialSegment={handleAddInitialSegment}
-            onAddRootNear={handleAddRootNear}
-            onAddSegmentNear={handleAddSegmentNear}
-            onAddChild={handleAddChild}
-            onSelectNode={handleSelectNode}
-            onZoomToNode={handleZoomToNode}
-            storyPointMap={roadmapData.storyPointMap}
-            releaseId={activeReleaseId}
-          />
-        </TransformComponent>
-      </TransformWrapper>
       </div>
-
-      {rightPanel === PANEL_INSPECTOR && (
-        <InspectorPanel
-        selectedNode={resolveInspectorSelectedNode(selectedNode, selectedNodeIds)}
-        selectedNodeIds={selectedNodeIds}
-        roadmapData={roadmapData}
-        currentLevel={levelInfo.nodeLevel}
-        selectedProgressLevelId={activeSelectedProgressLevelId}
-        onClose={() => {
-          selectNodeId(null)
-        }}
-        onFocusNode={selectNodeId}
-        onLabelChange={handleLabelChange}
-        onShortNameChange={handleShortNameChange}
-        onStatusChange={handleStatusChange}
-        onReleaseNoteChange={handleReleaseNoteChange}
-        onLevelLabelChange={handleLevelLabelChange}
-        onScopeIdsChange={handleLevelScopesChange}
-        scopeOptions={scopeOptions}
-        onCreateScope={handleCreateScope}
-        onRenameScope={handleRenameScope}
-        onDeleteScope={handleDeleteScope}
-        onSetScopeColor={handleSetScopeColor}
-        onCreateSegment={handleCreateSegmentForInspector}
-        onRenameSegment={handleRenameSegmentForManager}
-        onDeleteSegment={handleDeleteSegmentForManager}
-        onSelectProgressLevel={setSelectedProgressLevelId}
-        onAddProgressLevel={handleAddProgressLevel}
-        onDeleteProgressLevel={handleDeleteProgressLevel}
-        onLevelChange={handleLevelChange}
-        levelOptions={selectedNodeLevelOptions}
-        segmentOptions={selectedNodeSegmentOptions}
-        parentOptions={selectedNodeParentOptions}
-        selectedParentId={selectedNodeParentId}
-        levelDependencyOptions={selectedNodeLevelDependencyOptions}
-        incomingDependencyLabels={selectedNodeIncomingDependencyLabels}
-        dependencyRequires={selectedNodeDependencySummary.requires}
-        dependencyEnables={selectedNodeDependencySummary.enables}
-        validationMessage={selectedNodeValidationMessage}
-        onParentChange={(nextParentKey) => {
-          if (!selectedNodeId && !(Array.isArray(selectedNodeIds) && selectedNodeIds.length > 0)) {
-            return
-          }
-
-          const nextParentId = nextParentKey === '__root__' ? null : nextParentKey
-          applyToSelectedNodes((tree, id) => moveNodeToParent(tree, id, nextParentId))
-        }}
-        onSegmentChange={(nextSegmentKey) => {
-          if (!selectedNodeId && !(Array.isArray(selectedNodeIds) && selectedNodeIds.length > 0)) {
-            return
-          }
-
-          const nextSegmentId = nextSegmentKey === UNASSIGNED_SEGMENT_ID ? null : nextSegmentKey
-
-          applyToSelectedNodes((tree, id) => {
-            const validation = validateNodeSegmentChange(tree, id, nextSegmentId, TREE_CONFIG)
-            return validation.tree
-          })
-        }}
-        onLevelAdditionalDependenciesChange={handleLevelAdditionalDependenciesChange}
-        onDeleteNodeOnly={handleDeleteNodeOnly}
-        onDeleteNodeBranch={handleDeleteNodeBranch}
-        onEffortChange={handleEffortChange}
-        onBenefitChange={handleBenefitChange}
-        selectedReleaseId={activeReleaseId}
-        />
-      )}
-
-      {rightPanel === PANEL_SCOPES && (
-        <ToolbarScopeManager
-          scopeOptions={scopeOptions}
-          onCreateScope={handleCreateScope}
-          onRenameScope={handleRenameScope}
-          onDeleteScope={handleDeleteScope}
-          onSetScopeColor={handleSetScopeColor}
-          onClose={handleCloseScopeManager}
-        />
-      )}
-
-      {rightPanel === PANEL_SEGMENTS && (
-        <ToolbarSegmentManager
-          segmentOptions={roadmapData.segments ?? []}
-          onCreateSegment={handleCreateSegmentForManager}
-          onRenameSegment={handleRenameSegmentForManager}
-          onDeleteSegment={handleDeleteSegmentForManager}
-          onClose={handleCloseSegmentManager}
-        />
-      )}
-
-      <SegmentPanel
-        selectedSegment={selectedSegment}
-        segmentOptions={roadmapData.segments ?? []}
-        isOpen={rightPanel === PANEL_SEGMENTS}
-        onClose={() => selectSegmentId(null)}
-        onLabelChange={handleSegmentLabelChange}
-        onDelete={handleDeleteSegment}
-        onCreateSegment={handleCreateSegmentForManager}
-        onRenameSegment={handleRenameSegmentForManager}
-        onDeleteSegment={handleDeleteSegmentForManager}
-      />
-
-      <SystemPanel
-        ref={systemPanelRef}
-        isOpen={rightPanel === PANEL_CENTER}
-        iconSource={centerIconSource}
-        onClose={() => { if (rightPanel === PANEL_CENTER) setRightPanel(null) }}
-        onUpload={handleCenterIconUpload}
-        onResetDefault={handleResetCenterIcon}
-        roadmapData={roadmapData}
-        commitDocument={commitDocument}
-        selectedReleaseId={activeReleaseId}
-        onReleaseChange={setSelectedReleaseId}
-        onDraftChange={handleDraftChange}
-      />
-
-      <PriorityMatrix
-        opened={priorityMatrixOpen}
-        onClose={() => setPriorityMatrixOpen(false)}
-        document={roadmapData}
-        onSelectNode={handleSelectNodeFromMatrix}
-        onMoveNode={handleMoveNodeFromMatrix}
-        selectedReleaseId={activeReleaseId}
-      />
-
-      <ListViewDrawer
-        opened={listViewOpen}
-        onClose={() => setListViewOpen(false)}
-        document={roadmapData}
-        onSelectNode={handleSelectNodeFromListView}
-        onSelectLevel={handleSelectLevelFromListView}
-        onSetLevelEffort={handleListViewLevelEffortChange}
-        onSetLevelBenefit={handleListViewLevelBenefitChange}
-        onSetLevelStatus={handleListViewLevelStatusChange}
-        onSetLevelScopeIds={handleListViewLevelScopesChange}
-        selectedReleaseId={activeReleaseId}
-        selectedNodeId={selectedNodeId}
-        selectedProgressLevelId={selectedProgressLevelId}
-      />
     </main>
   )
 }

@@ -1,3 +1,4 @@
+import { MultiSelect } from '@mantine/core'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { STATUS_LABELS, STATUS_STYLES, normalizeStatusKey } from '../config'
 import { BENEFIT_SIZE_LABELS, BENEFIT_SIZES, EFFORT_SIZE_LABELS, EFFORT_SIZES } from '../utils/effortBenefit'
@@ -91,6 +92,35 @@ const getNodeScopeIds = (node) => {
   return ids
 }
 
+const withAlpha = (color, alpha) => {
+  if (!color || typeof color !== 'string') return `rgba(148, 163, 184, ${alpha})`
+
+  if (color.startsWith('#')) {
+    const hex = color.slice(1)
+    const normalized = hex.length === 3 ? hex.split('').map((c) => c + c).join('') : hex
+    if (/^[0-9a-fA-F]{6}$/.test(normalized)) {
+      const r = parseInt(normalized.slice(0, 2), 16)
+      const g = parseInt(normalized.slice(2, 4), 16)
+      const b = parseInt(normalized.slice(4, 6), 16)
+      return `rgba(${r}, ${g}, ${b}, ${alpha})`
+    }
+  }
+
+  const rgbMatch = color.match(/^rgba?\(([^)]+)\)$/i)
+  if (rgbMatch) {
+    const [r = '148', g = '163', b = '184'] = rgbMatch[1].split(',').map((part) => part.trim())
+    return `rgba(${r}, ${g}, ${b}, ${alpha})`
+  }
+
+  return color
+}
+
+const getStatusTextColor = (statusKey, statusStyle) => {
+  if (statusKey === 'done') return '#0f172a'
+  if (statusKey === 'hidden' || statusKey === 'later' || statusKey === 'someday') return '#e2e8f0'
+  return statusStyle?.textColor ?? '#ffffff'
+}
+
 const EFFORT_LABELS = { ...EFFORT_SIZE_LABELS }
 const BENEFIT_LABELS = { ...BENEFIT_SIZE_LABELS }
 const STATUS_RADIO_OPTIONS = [
@@ -99,7 +129,18 @@ const STATUS_RADIO_OPTIONS = [
   { value: 'next', label: 'Next' },
   { value: 'later', label: 'Later' },
   { value: 'hidden', label: 'Hide' },
-]
+].map((option) => {
+  const style = STATUS_STYLES[option.value] ?? STATUS_STYLES.later
+  return {
+    ...option,
+    pillStyle: {
+      '--status-band': style.ringBand,
+      '--status-soft': withAlpha(style.ringBand, 0.18),
+      '--status-border': withAlpha(style.ringBand, 0.55),
+      '--status-text': getStatusTextColor(option.value, style),
+    },
+  }
+})
 
 // ── Metric slider ─────────────────────────────────────────────────────────────
 
@@ -280,7 +321,7 @@ const StatusRadioGroup = ({ value, onChange, groupName, isSelected = false }) =>
     {STATUS_RADIO_OPTIONS.map((option) => (
       <label
         key={option.value}
-        className="list-view-drawer__status-option"
+        className={`list-view-drawer__status-option${value === option.value ? ' list-view-drawer__status-option--active' : ''}`}
         title={option.label}
         onClick={(e) => e.stopPropagation()}
       >
@@ -294,14 +335,23 @@ const StatusRadioGroup = ({ value, onChange, groupName, isSelected = false }) =>
             if (e.currentTarget.checked) onChange(option.value)
           }}
         />
-        <span className="list-view-drawer__status-option-label">{option.label}</span>
+        <span
+          className={`list-view-drawer__status-pill list-view-drawer__status-pill--${option.value}`}
+          style={option.pillStyle}
+        >
+          {option.label}
+        </span>
       </label>
     ))}
   </div>
 )
 
 const ScopeAssignGroup = ({ scopeOptions, selectedScopeIds = [], onChange, isSelected = false }) => {
-  const selectedIds = new Set(selectedScopeIds)
+  const scopeSelectData = scopeOptions.map((scope) => ({
+    value: scope.id,
+    label: scope.label,
+    color: scope.color ?? null,
+  }))
 
   return (
     <div
@@ -311,27 +361,25 @@ const ScopeAssignGroup = ({ scopeOptions, selectedScopeIds = [], onChange, isSel
     >
       {scopeOptions.length === 0 ? (
         <span className="list-view-drawer__scope-empty">No scopes</span>
-      ) : scopeOptions.map((scope) => {
-        const isActive = selectedIds.has(scope.id)
-        return (
-          <button
-            key={scope.id}
-            type="button"
-            className={`list-view-drawer__scope-chip-button${isActive ? ' list-view-drawer__scope-chip-button--active' : ''}`}
-            style={scope.color ? { borderColor: scope.color, color: scope.color } : undefined}
-            aria-pressed={isActive}
-            onClick={(e) => {
-              e.stopPropagation()
-              const next = selectedIds.has(scope.id)
-                ? selectedScopeIds.filter((id) => id !== scope.id)
-                : [...selectedScopeIds, scope.id]
-              onChange(next)
-            }}
-          >
-            {scope.label}
-          </button>
-        )
-      })}
+      ) : (
+        <MultiSelect
+          data={scopeSelectData}
+          value={selectedScopeIds}
+          onChange={(values) => onChange(values)}
+          searchable
+          clearable
+          placeholder="Scopes"
+          nothingFoundMessage="No scopes"
+          className="list-view-drawer__scope-select"
+          classNames={{
+            input: 'mantine-dark-input',
+            dropdown: 'mantine-dark-dropdown',
+            option: 'mantine-dark-option',
+            pill: 'mantine-dark-pill',
+          }}
+          comboboxProps={{ withinPortal: true, zIndex: 450 }}
+        />
+      )}
     </div>
   )
 }
@@ -616,6 +664,8 @@ export function ListViewDrawer({
   selectedReleaseId = null,
   selectedNodeId = null,
   selectedProgressLevelId = null,
+  embedded = false,
+  onWidthChange = null,
 }) {
   const drawerRef = useRef(null)
 
@@ -670,6 +720,12 @@ export function ListViewDrawer({
       setDrawerWidth(columnMinWidth)
     }
   }, [columnMinWidth, drawerWidth])
+
+  useEffect(() => {
+    if (embedded && typeof onWidthChange === 'function') {
+      onWidthChange(columnMinWidth)
+    }
+  }, [columnMinWidth, embedded, onWidthChange])
 
   const handleToggle = useCallback((nodeId) => {
     setCollapsedIds((prev) => {
@@ -755,20 +811,22 @@ export function ListViewDrawer({
       : filteredRootNodes.length === 0
   )
   const effectiveDrawerWidth = drawerWidth ?? columnMinWidth
-  const drawerStyle = { width: `${effectiveDrawerWidth}px` }
+  const drawerStyle = embedded ? { width: '100%' } : { width: `${effectiveDrawerWidth}px` }
 
   return (
     <div
       ref={drawerRef}
-      className={`list-view-drawer${effectiveDrawerWidth > 420 ? ' list-view-drawer--wide' : ''}`}
+      className={`list-view-drawer${effectiveDrawerWidth > 420 ? ' list-view-drawer--wide' : ''}${embedded ? ' list-view-drawer--embedded' : ''}`}
       style={drawerStyle}
     >
-      <div
-        className="list-view-drawer__resize-handle"
-        role="separator"
-        aria-label="Resize list view"
-        onPointerDown={handleResizePointerDown}
-      />
+      {!embedded && (
+        <div
+          className="list-view-drawer__resize-handle"
+          role="separator"
+          aria-label="Resize list view"
+          onPointerDown={handleResizePointerDown}
+        />
+      )}
       <div className="list-view-drawer__header">
         <div className="list-view-drawer__header-top">
           <span className="list-view-drawer__title">Node List</span>

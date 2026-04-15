@@ -1,7 +1,7 @@
 import { ActionIcon, Alert, Badge, Button, Divider, Group, MultiSelect, NumberInput, Paper, SegmentedControl, Select, Slider, Stack, Tabs, Text, TextInput, Textarea } from '@mantine/core'
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { IconPercentage20 } from '@tabler/icons-react'
-import { normalizeStatusKey, STATUS_LABELS, SCOPE_COLORS } from '../config'
+import { normalizeStatusKey, STATUS_LABELS, STATUS_STYLES, SCOPE_COLORS } from '../config'
 import { getLevelStatus } from '../utils/nodeStatus'
 import { UNASSIGNED_SEGMENT_ID } from '../utils/layoutShared'
 import { commitInspectorDrafts } from '../utils/inspectorCommit'
@@ -85,6 +85,35 @@ const TablerPercentIcon = ({ size = 16 }) => (
   </svg>
 )
 
+const withAlpha = (color, alpha) => {
+  if (!color || typeof color !== 'string') return `rgba(148, 163, 184, ${alpha})`
+
+  if (color.startsWith('#')) {
+    const hex = color.slice(1)
+    const normalized = hex.length === 3 ? hex.split('').map((c) => c + c).join('') : hex
+    if (/^[0-9a-fA-F]{6}$/.test(normalized)) {
+      const r = parseInt(normalized.slice(0, 2), 16)
+      const g = parseInt(normalized.slice(2, 4), 16)
+      const b = parseInt(normalized.slice(4, 6), 16)
+      return `rgba(${r}, ${g}, ${b}, ${alpha})`
+    }
+  }
+
+  const rgbMatch = color.match(/^rgba?\(([^)]+)\)$/i)
+  if (rgbMatch) {
+    const [r = '148', g = '163', b = '184'] = rgbMatch[1].split(',').map((part) => part.trim())
+    return `rgba(${r}, ${g}, ${b}, ${alpha})`
+  }
+
+  return color
+}
+
+const getStatusTextColor = (statusKey, statusStyle) => {
+  if (statusKey === 'done') return '#0f172a'
+  if (statusKey === 'hidden' || statusKey === 'later' || statusKey === 'someday') return '#e2e8f0'
+  return statusStyle?.textColor ?? '#ffffff'
+}
+
 const STATUS_OPTIONS = [
   { value: 'done', label: STATUS_LABELS.done },
   { value: 'now', label: STATUS_LABELS.now },
@@ -92,7 +121,25 @@ const STATUS_OPTIONS = [
   { value: 'later', label: STATUS_LABELS.later },
   { value: 'someday', label: STATUS_LABELS.someday },
   { value: 'hidden', label: STATUS_LABELS.hidden },
-]
+].map((option) => {
+  const statusStyle = STATUS_STYLES[option.value] ?? STATUS_STYLES.later
+  return {
+    ...option,
+    label: (
+      <span
+        className={`skill-panel__status-badge skill-panel__status-badge--${option.value}`}
+        style={{
+          '--status-band': statusStyle.ringBand,
+          '--status-soft': withAlpha(statusStyle.ringBand, 0.22),
+          '--status-border': withAlpha(statusStyle.ringBand, 0.58),
+          '--status-text': getStatusTextColor(option.value, statusStyle),
+        }}
+      >
+        {option.label}
+      </span>
+    ),
+  }
+})
 
 const dependencyScopeChipStyle = {
   borderRadius: 999,
@@ -106,8 +153,10 @@ const dependencyScopeChipStyle = {
 
 const MAX_SCOPE_CHIPS_PER_ENTRY = 4
 
-const EFFORT_MARKS = EFFORT_SIZES.map((s, i) => ({ value: i, label: EFFORT_SIZE_LABELS[s] }))
-const BENEFIT_MARKS = BENEFIT_SIZES.map((s, i) => ({ value: i, label: BENEFIT_SIZE_LABELS[s] }))
+const formatInspectorSizeLabel = (label) => (label === 'Unclear' ? '?' : label)
+
+const EFFORT_MARKS = EFFORT_SIZES.map((s, i) => ({ value: i, label: formatInspectorSizeLabel(EFFORT_SIZE_LABELS[s]) }))
+const BENEFIT_MARKS = BENEFIT_SIZES.map((s, i) => ({ value: i, label: formatInspectorSizeLabel(BENEFIT_SIZE_LABELS[s]) }))
 
 const DiscreteInspectorSlider = ({ sizes, labels, value, marks, onCommit }) => {
   const [draftIndex, setDraftIndex] = useState(Math.max(0, sizes.indexOf(value ?? sizes[0])))
@@ -125,7 +174,7 @@ const DiscreteInspectorSlider = ({ sizes, labels, value, marks, onCommit }) => {
       onChange={setDraftIndex}
       onChangeEnd={(idx) => onCommit?.(sizes[idx])}
       marks={marks}
-      label={(idx) => labels[sizes[idx]]}
+      label={(idx) => formatInspectorSizeLabel(labels[sizes[idx]])}
       size="xs"
       mb={28}
       classNames={{ markLabel: 'mantine-dark-label' }}
@@ -204,6 +253,8 @@ export function InspectorPanel({
   const [editingSegmentId, setEditingSegmentId] = useState(null)
   const [editingSegmentLabel, setEditingSegmentLabel] = useState('')
   const [levelLabelDrafts, setLevelLabelDrafts] = useState({})
+  const [isTitleEditing, setIsTitleEditing] = useState(false)
+  const headerNameInputRef = useRef(null)
 
   useEffect(() => {
     const nextName = selectedNode?.label ?? ''
@@ -224,8 +275,18 @@ export function InspectorPanel({
     setLevelLabelDrafts(Object.fromEntries(
       (selectedNode?.levels ?? []).map((level, index) => [level.id, level.label ?? `Level ${index + 1}`]),
     ))
+    setIsTitleEditing(false)
     /* eslint-enable react-hooks/set-state-in-effect */
   }, [selectedNode])
+
+  useEffect(() => {
+    if (!isTitleEditing) {
+      return
+    }
+
+    headerNameInputRef.current?.focus()
+    headerNameInputRef.current?.select?.()
+  }, [isTitleEditing])
 
   const commitCurrentDrafts = useCallback((showToast = false, commitSource = 'explicit') => {
     if (!selectedNode) {
@@ -311,6 +372,40 @@ export function InspectorPanel({
     window.addEventListener('roadmap-skilltree.commit-text-drafts', handleCommitTextDrafts)
     return () => window.removeEventListener('roadmap-skilltree.commit-text-drafts', handleCommitTextDrafts)
   }, [commitCurrentDrafts])
+
+  const handleStartTitleEdit = useCallback(() => {
+    if (!selectedNode) return
+    setIsTitleEditing(true)
+  }, [selectedNode])
+
+  const handleCancelTitleEdit = useCallback(() => {
+    const resetName = committedNameRef.current ?? ''
+    const resetShortName = committedShortNameRef.current ?? ''
+
+    nameDraftRef.current = resetName
+    shortNameDraftRef.current = resetShortName
+    setNameDraft(resetName)
+    setShortNameDraft(resetShortName)
+    setIsTitleEditing(false)
+  }, [])
+
+  const handleSaveTitleEdit = useCallback(() => {
+    commitCurrentDrafts(true, 'explicit')
+    setIsTitleEditing(false)
+  }, [commitCurrentDrafts])
+
+  const handleTitleEditKeyDown = useCallback((event) => {
+    if (event.key === 'Enter') {
+      event.preventDefault()
+      handleSaveTitleEdit()
+      return
+    }
+
+    if (event.key === 'Escape') {
+      event.preventDefault()
+      handleCancelTitleEdit()
+    }
+  }, [handleCancelTitleEdit, handleSaveTitleEdit])
 
   const handleScopeIdsChange = useCallback((nextScopeIds) => {
     const levels = Array.isArray(selectedNode?.levels) ? selectedNode.levels : []
@@ -757,11 +852,61 @@ export function InspectorPanel({
       <div className="skill-panel__header">
         <div style={{ flex: 1, minWidth: 0 }}>
           <Text className="skill-panel__eyebrow">Inspector</Text>
-          <Text className="skill-panel__title skill-panel__title--node">
-            {selectedNode.shortName
-              ? `${selectedNode.label} (${selectedNode.shortName})`
-              : selectedNode.label}
-          </Text>
+
+          {isTitleEditing ? (
+            <div className="skill-panel__title-editor">
+              <div className="skill-panel__title-editor-fields">
+                <TextInput
+                  ref={headerNameInputRef}
+                  aria-label="Node name"
+                  placeholder="Node name"
+                  value={nameDraft}
+                  onChange={(event) => {
+                    const nextValue = event.currentTarget.value
+                    nameDraftRef.current = nextValue
+                    setNameDraft(nextValue)
+                  }}
+                  onKeyDown={handleTitleEditKeyDown}
+                  classNames={{ input: 'mantine-dark-input' }}
+                />
+                <TextInput
+                  aria-label="Node shortname"
+                  placeholder="Shortname"
+                  value={shortNameDraft}
+                  onChange={(event) => {
+                    const nextValue = event.currentTarget.value
+                    shortNameDraftRef.current = nextValue
+                    setShortNameDraft(nextValue)
+                  }}
+                  onKeyDown={handleTitleEditKeyDown}
+                  error={shortNameDuplicateWarning ?? undefined}
+                  classNames={{ input: 'mantine-dark-input' }}
+                />
+              </div>
+              <div className="skill-panel__title-editor-actions">
+                <ActionIcon variant="light" color="teal" onClick={handleSaveTitleEdit} aria-label="Save node title">
+                  ✓
+                </ActionIcon>
+                <ActionIcon variant="light" color="gray" onClick={handleCancelTitleEdit} aria-label="Cancel node title edit">
+                  ✕
+                </ActionIcon>
+              </div>
+            </div>
+          ) : (
+            <button
+              type="button"
+              className="skill-panel__title-trigger"
+              onDoubleClick={handleStartTitleEdit}
+              aria-label="Double-click to rename node title"
+              title="Double-click to rename node title"
+            >
+              <Text className="skill-panel__title skill-panel__title--node">
+                {selectedNode.shortName
+                  ? `${selectedNode.label} (${selectedNode.shortName})`
+                  : selectedNode.label}
+              </Text>
+            </button>
+          )}
         </div>
         <div className="skill-panel__header-actions">
           <ActionIcon variant="subtle" color="gray" onClick={() => { commitCurrentDrafts(false, 'explicit'); onClose?.() }} aria-label="Close inspector">
@@ -1014,6 +1159,12 @@ export function InspectorPanel({
                       value={level.status}
                       onChange={(value) => value && onStatusChange(value)}
                       data={STATUS_OPTIONS}
+                      classNames={{
+                        root: 'skill-panel__status-segmented',
+                        control: 'skill-panel__status-segmented-control',
+                        label: 'skill-panel__status-segmented-label',
+                        indicator: 'skill-panel__status-segmented-indicator',
+                      }}
                     />
                   </div>
 

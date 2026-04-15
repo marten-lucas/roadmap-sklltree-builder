@@ -77,6 +77,11 @@ describe('InspectorPanel render', () => {
 
     expect(html).toContain('Inspector')
     expect(html).toContain('Node 1')
+    expect(html).toContain('N1')
+    expect(html).toContain('Double-click to rename node title')
+    expect(html).toContain('skill-panel__status-badge--now')
+    expect(html).toContain('>?</div>')
+    expect(html).not.toContain('Unclear')
     expect(html).toContain('Level Name')
   })
 })

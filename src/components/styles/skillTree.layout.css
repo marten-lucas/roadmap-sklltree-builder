@@ -1,0 +1,170 @@
+.skill-tree-shell {
+    --skill-tree-toolbar-offset: 5rem;
+}
+
+.skill-tree-workspace {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    grid-template-rows: minmax(0, 1fr) auto;
+    min-width: 0;
+    min-height: 0;
+    padding-top: var(--skill-tree-toolbar-offset);
+}
+
+.skill-tree-main-row {
+    display: flex;
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+}
+
+.skill-tree-center-column {
+    display: grid;
+    grid-template-rows: minmax(0, 1fr) auto;
+    flex: 1 1 auto;
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+}
+
+.skill-tree-stage {
+    position: relative;
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+}
+
+.skill-tree-canvas-area {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+    overflow: hidden;
+}
+
+
+.skill-tree-canvas-area .skill-tree-transform-wrapper {
+    width: 100%;
+    height: 100%;
+}
+
+.skill-tree-sidebar {
+    position: relative;
+    display: flex;
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+    background: rgba(2, 6, 23, 0.86);
+    backdrop-filter: blur(18px);
+    z-index: 60;
+}
+
+.skill-tree-sidebar--left {
+    flex: 0 0 auto;
+    border-right: 1px solid rgba(51, 65, 85, 0.7);
+}
+
+.skill-tree-sidebar--right {
+    flex: 0 0 auto;
+    border-left: 1px solid rgba(51, 65, 85, 0.7);
+}
+
+.skill-tree-sidebar>.skill-panel,
+.skill-tree-sidebar>.list-view-drawer,
+.skill-tree-sidebar>.priority-matrix-drawer {
+    position: relative !important;
+    inset: auto !important;
+    top: auto !important;
+    right: auto !important;
+    bottom: auto !important;
+    left: auto !important;
+    width: 100% !important;
+    height: 100% !important;
+    max-width: none !important;
+    border: 0;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+}
+
+.skill-tree-sidebar>.skill-panel {
+    overflow: hidden;
+}
+
+.skill-tree-sidebar>.list-view-drawer,
+.skill-tree-sidebar>.priority-matrix-drawer {
+    border-right: 0;
+}
+
+.skill-tree-sidebar .skill-panel__body,
+.skill-tree-sidebar .skill-panel__body--scrollable,
+.skill-tree-sidebar .skill-panel__tab-container,
+.skill-tree-sidebar .skill-panel__tab-panel,
+.skill-tree-sidebar .skill-panel__tab-scroll,
+.skill-tree-sidebar .list-view-drawer__content,
+.skill-tree-sidebar .priority-matrix-drawer__content {
+    min-height: 0;
+}
+
+.skill-tree-column-resizer {
+    position: relative;
+    flex: 0 0 8px;
+    cursor: col-resize;
+    z-index: 65;
+    background: rgba(2, 6, 23, 0.4);
+    transition: background 140ms ease;
+}
+
+.skill-tree-column-resizer::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 3px;
+    width: 2px;
+    border-radius: 999px;
+    background: rgba(71, 85, 105, 0.65);
+    transition: background 140ms ease, box-shadow 140ms ease;
+}
+
+.skill-tree-column-resizer:hover,
+.skill-tree-column-resizer:active {
+    background: rgba(15, 23, 42, 0.65);
+}
+
+.skill-tree-column-resizer:hover::after,
+.skill-tree-column-resizer:active::after {
+    background: rgba(96, 165, 250, 0.95);
+    box-shadow: 0 0 8px rgba(59, 130, 246, 0.45);
+}
+
+
+@media (max-width: 1100px) {
+    .skill-tree-main-row {
+        position: relative;
+    }
+
+    .skill-tree-stage {
+        height: 100%;
+    }
+
+    .skill-tree-sidebar {
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        width: min(82vw, 480px) !important;
+        z-index: 75;
+    }
+
+    .skill-tree-sidebar--left {
+        left: 0;
+    }
+
+    .skill-tree-sidebar--right {
+        right: 0;
+    }
+
+    .skill-tree-column-resizer {
+        display: none;
+    }
+}

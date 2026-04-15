@@ -12,9 +12,27 @@
  */
 import { renderToString } from 'react-dom/server'
 import React from 'react'
+import { MantineProvider } from '@mantine/core'
 import { ListViewDrawer } from '../panels/ListViewDrawer'
 
 const MINIMAL_DOCUMENT = { children: [], scopes: [] }
+const DOCUMENT_WITH_LEVEL = {
+  children: [
+    {
+      id: 'node-1',
+      label: 'Node 1',
+      shortName: 'N1',
+      children: [],
+      levels: [
+        { id: 'level-1', label: 'Level 1', status: 'now', scopeIds: ['scope-1'] },
+      ],
+    },
+  ],
+  scopes: [
+    { id: 'scope-1', label: 'Series A', color: '#6366f1' },
+    { id: 'scope-2', label: 'Platform', color: '#16a34a' },
+  ],
+}
 
 const defaultProps = {
   opened: true,
@@ -26,19 +44,20 @@ const defaultProps = {
 
 test('ListViewDrawer renders without crashing (guards against TDZ regressions)', () => {
   expect(() =>
-    renderToString(React.createElement(ListViewDrawer, defaultProps))
+    renderToString(React.createElement(MantineProvider, null,
+      React.createElement(ListViewDrawer, defaultProps)))
   ).not.toThrow()
 })
 
-test('ListViewDrawer renders with showEstimateColumns active', () => {
-  // Exercises the wide-drawer code path that previously caused a TDZ crash
-  // in handleResizePointerDown when showEstimateColumns was referenced before
-  // its useState declaration.
-  expect(() =>
-    renderToString(React.createElement(ListViewDrawer, {
+test('ListViewDrawer renders compact colored status pills for list mode', () => {
+  const html = renderToString(React.createElement(MantineProvider, null,
+    React.createElement(ListViewDrawer, {
       ...defaultProps,
-      // showEstimateColumns is internal state; we just need to ensure the
-      // component mounts without error on both narrow and wide paths.
-    }))
-  ).not.toThrow()
+      document: DOCUMENT_WITH_LEVEL,
+    })))
+
+  expect(html).toContain('list-view-drawer__status-pill--now')
+  expect(html).toContain('Now')
+  expect(html).toContain('list-view-drawer__scope-select')
+  expect(html).toContain('Series A')
 })
