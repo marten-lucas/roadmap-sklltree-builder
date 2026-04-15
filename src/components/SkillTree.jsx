@@ -105,9 +105,28 @@ const DEFAULT_CSV_IMPORT_PROCESS_OPTIONS = {
   processSegments: true,
   processManualLevels: true,
 }
-const LEGEND_STATUS_ORDER = ['now', 'next', 'later', 'someday', 'done']
+const LEGEND_STATUS_ORDER = ['done', 'now', 'next', 'later', 'someday']
 const LEGEND_PORTAL_SOCKET_PATH = 'M 0 -9 A 9 9 0 0 1 0 9'
 const LEGEND_PORTAL_PLUG_PATH = 'M -14 -7 L 7 -7 L 14 0 L 7 7 L -14 7 Z'
+
+const getLegendNodePreviewStyle = (statusKey) => {
+  const style = STATUS_STYLES[statusKey] ?? STATUS_STYLES.later
+  const isLowPriority = statusKey === 'later' || statusKey === 'someday'
+  const fill = isLowPriority
+    ? 'linear-gradient(180deg, rgb(7, 14, 30) 0%, rgb(2, 6, 23) 100%)'
+    : statusKey === 'done'
+      ? 'radial-gradient(circle at 32% 28%, rgb(83, 96, 117), rgb(29, 40, 60) 58%, rgb(10, 16, 31) 100%)'
+      : 'radial-gradient(circle at 32% 28%, rgb(21, 45, 94), rgb(15, 23, 42) 58%, rgb(2, 6, 23) 100%)'
+  const ring = statusKey === 'someday'
+    ? `repeating-conic-gradient(from 0deg, ${style.ringBand} 0deg 16deg, transparent 16deg 25deg)`
+    : `conic-gradient(${style.ringBand} 0deg 360deg)`
+
+  return {
+    '--legend-node-fill': fill,
+    '--legend-node-ring': ring,
+    '--legend-node-glow': style.glow === 'none' ? 'none' : style.glow,
+  }
+}
 
 const collectAllNodes = (document) => {
   const all = []
@@ -2833,33 +2852,26 @@ export function SkillTree() {
         <aside className="skill-tree-legend" aria-label="Status legend">
           <div className="skill-tree-legend__header">
             <div className="skill-tree-legend__title">Legend</div>
-            <div className="skill-tree-legend__tip"><span className="skill-tree-legend__tip-icon" aria-hidden="true">ⓘ</span><span>Zooming in reveals more node details.</span></div>
           </div>
 
           <div className="skill-tree-legend__section">
             <div className="skill-tree-legend__symbol-grid">
-              {LEGEND_STATUS_ORDER.map((statusKey) => {
-                const style = STATUS_STYLES[statusKey]
-                return (
-                  <div key={statusKey} className="skill-tree-legend__symbol-item">
-                    <span
-                      className="skill-tree-legend__swatch"
-                      style={{
-                        background: style.badge,
-                        borderColor: style.ringBand,
-                        borderStyle: statusKey === 'someday' ? 'dashed' : 'solid',
-                        boxShadow: style.glow === 'none'
-                          ? `0 0 0 1.5px ${style.ringBand}, 0 0 0 3px rgba(15, 23, 42, 0.35)`
-                          : `0 0 0 1.5px ${style.ringBand}, ${style.glow}`,
-                      }}
-                    />
-                    <span>
-                      <strong>{STATUS_LABELS[statusKey]}</strong>
-                      <span className="skill-tree-legend__symbol-copy">{legendStatusDescriptions[statusKey]}</span>
-                    </span>
-                  </div>
-                )
-              })}
+              {LEGEND_STATUS_ORDER.map((statusKey) => (
+                <div key={statusKey} className="skill-tree-legend__symbol-item">
+                  <span
+                    className="skill-tree-legend__node-preview"
+                    style={getLegendNodePreviewStyle(statusKey)}
+                    aria-hidden="true"
+                  >
+                    <span className="skill-tree-legend__node-ring" />
+                    <span className="skill-tree-legend__node-core" />
+                  </span>
+                  <span>
+                    <strong>{STATUS_LABELS[statusKey]}</strong>
+                    <span className="skill-tree-legend__symbol-copy">{legendStatusDescriptions[statusKey]}</span>
+                  </span>
+                </div>
+              ))}
 
               <div className="skill-tree-legend__symbol-item">
                 <span className="skill-tree-legend__portal-symbol" aria-hidden="true">
@@ -2894,6 +2906,10 @@ export function SkillTree() {
             </div>
           </div>
 
+          <div className="skill-tree-legend__tip skill-tree-legend__tip--footer">
+            <span className="skill-tree-legend__tip-icon" aria-hidden="true">ⓘ</span>
+            <span>Tip: Zooming in or hovering reveals more node details.</span>
+          </div>
         </aside>
       )}
 
