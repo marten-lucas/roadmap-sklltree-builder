@@ -46,7 +46,33 @@ const getTooltipReleaseNote = (node, releaseId = null) => {
   return releaseNote || 'Keine Release Note hinterlegt.'
 }
 
-const buildSegmentConicStyle = (statusKeys, colorGetter) => {
+const pushConicSegmentRange = (gradientParts, color, start, end, { dashed = false } = {}) => {
+  if (!dashed || color === 'transparent') {
+    gradientParts.push(`${color} ${start}deg ${end}deg`)
+    return
+  }
+
+  const span = end - start
+  const dashSize = Math.max(3.2, Math.min(7, span * 0.22))
+  const dashGap = Math.max(2.4, Math.min(6.5, span * 0.16))
+  let cursor = start
+
+  while (cursor < end - 0.15) {
+    const dashEnd = Math.min(cursor + dashSize, end)
+    gradientParts.push(`${color} ${cursor}deg ${dashEnd}deg`)
+
+    if (dashEnd < end) {
+      const gapEnd = Math.min(dashEnd + dashGap, end)
+      gradientParts.push(`transparent ${dashEnd}deg ${gapEnd}deg`)
+      cursor = gapEnd
+    } else {
+      cursor = end
+    }
+  }
+}
+
+const buildSegmentConicStyle = (statusKeys, colorGetter, options = {}) => {
+  const { dashedStatuses = new Set() } = options
   const segmentCount = Math.max(1, statusKeys.length)
   const slice = 360 / segmentCount
   const gapDegrees = segmentCount > 1 ? Math.min(3.2, slice * 0.16) : 0
@@ -57,15 +83,16 @@ const buildSegmentConicStyle = (statusKeys, colorGetter) => {
     const color = colorGetter(key)
     const start = index * slice
     const end = (index + 1) * slice
+    const isDashed = dashedStatuses.has(key)
 
     if (gapDegrees > 0) {
       const colorStart = start + gapDegrees / 2
       const colorEnd = end - gapDegrees / 2
       gradientParts.push(`transparent ${start}deg ${colorStart}deg`)
-      gradientParts.push(`${color} ${colorStart}deg ${colorEnd}deg`)
+      pushConicSegmentRange(gradientParts, color, colorStart, colorEnd, { dashed: isDashed })
       gradientParts.push(`transparent ${colorEnd}deg ${end}deg`)
     } else {
-      gradientParts.push(`${color} ${start}deg ${end}deg`)
+      pushConicSegmentRange(gradientParts, color, start, end, { dashed: isDashed })
     }
   }
 
@@ -99,6 +126,9 @@ const _SkillNode = ({ node, nodeSize, isSelected, isPortalPeerHovered = false, o
   const statusKey = getDisplayStatusKey(node, releaseId)
   const isGhost = displayMode === 'ghost'
   const statusStyles = STATUS_STYLES[statusKey] ?? STATUS_STYLES.later
+  const labelTextColor = statusKey === 'later' || statusKey === 'someday'
+    ? statusStyles.textColor
+    : '#f8fafc'
   const shortName = getShortName(node)
   const tooltipReleaseNote = getTooltipReleaseNote(node, releaseId)
   const tooltipScopeLabels = resolveScopeEntries(tooltipLevel?.scopeIds, scopeOptions)
@@ -116,13 +146,17 @@ const _SkillNode = ({ node, nodeSize, isSelected, isPortalPeerHovered = false, o
   const activeTooltipBenefit = hoveredLevelIndex !== null
     ? (levels[hoveredLevelIndex]?.benefit ?? node.benefit)
     : tooltipBenefit
+  const activeLevelLabel = hoveredLevelIndex !== null
+    ? (String(levels[hoveredLevelIndex]?.label ?? `Level ${hoveredLevelIndex + 1}`).trim() || `Level ${hoveredLevelIndex + 1}`)
+    : ''
   const activeTooltipTitle = hoveredLevelIndex !== null && levels.length > 1
-    ? `${node.label} – L${hoveredLevelIndex + 1}`
+    ? `${node.label} – ${activeLevelLabel}`
     : node.label
   const levelStatusKeys = getLevelStatusKeys(node, releaseId)
   const levelRingStyle = buildSegmentConicStyle(
     levelStatusKeys,
     (key) => STATUS_STYLES[key]?.ringBand ?? STATUS_STYLES.later.ringBand,
+    { dashedStatuses: new Set(['someday']) },
   )
   const exportLevelEntries = Array.isArray(node?.levels)
     ? node.levels.map((level, index) => ({
@@ -165,15 +199,18 @@ const _SkillNode = ({ node, nodeSize, isSelected, isPortalPeerHovered = false, o
       : (0.36 + zoomGlowProgress * 0.18).toFixed(2),
     filter: `blur(${(isVeryClose ? 14 + zoomGlowProgress * 10 : 24 + zoomGlowProgress * 6).toFixed(2)}px)`,
   }
+  const isLowPriorityStatus = statusKey === 'later' || statusKey === 'someday'
   const nodeBackground = isVeryClose
     ? 'transparent'
-    : isSelected
-      ? statusKey === 'done'
-        ? 'radial-gradient(circle at 32% 28%, rgb(100, 118, 140), rgb(45, 62, 85) 58%, rgb(15, 22, 40) 100%)'
-        : 'radial-gradient(circle at 35% 30%, rgb(28, 88, 195), rgb(14, 28, 84) 56%, rgb(2, 6, 26) 100%)'
-      : statusKey === 'done'
-        ? 'radial-gradient(circle at 32% 28%, rgb(83, 96, 117), rgb(29, 40, 60) 58%, rgb(10, 16, 31) 100%)'
-        : 'radial-gradient(circle at 32% 28%, rgb(21, 45, 94), rgb(15, 23, 42) 58%, rgb(2, 6, 23) 100%)'
+    : isLowPriorityStatus
+      ? 'linear-gradient(180deg, rgb(7, 14, 30) 0%, rgb(2, 6, 23) 100%)'
+      : isSelected
+        ? statusKey === 'done'
+          ? 'radial-gradient(circle at 32% 28%, rgb(100, 118, 140), rgb(45, 62, 85) 58%, rgb(15, 22, 40) 100%)'
+          : 'radial-gradient(circle at 35% 30%, rgb(28, 88, 195), rgb(14, 28, 84) 56%, rgb(2, 6, 26) 100%)'
+        : statusKey === 'done'
+          ? 'radial-gradient(circle at 32% 28%, rgb(83, 96, 117), rgb(29, 40, 60) 58%, rgb(10, 16, 31) 100%)'
+          : 'radial-gradient(circle at 32% 28%, rgb(21, 45, 94), rgb(15, 23, 42) 58%, rgb(2, 6, 23) 100%)'
 
   const handleRingMouseMove = (event) => {
     if (levels.length <= 1) return
@@ -227,13 +264,14 @@ const _SkillNode = ({ node, nodeSize, isSelected, isPortalPeerHovered = false, o
 
   const showLabel = !isMinimal && (labelMode === 'mid' || labelMode === 'close' || labelMode === 'very-close')
   const fwX = node.x - fwWidth / 2
-  const peerPulseStrength = clamp(0.85 + (1 / Math.max(zoomScale, 0.35) - 1) * 0.75, 0.85, 1.7)
-  const peerPulseScale = (1.015 + peerPulseStrength * 0.018).toFixed(3)
-  const peerPulseFar = (12 + peerPulseStrength * 8).toFixed(1)
-  const peerPulseNear = (22 + peerPulseStrength * 9).toFixed(1)
-  const peerPulseSlowdown = (0.92 + (2 - peerPulseStrength) * 0.16).toFixed(2)
+  const peerPulseStrength = clamp(0.95 + (1 / Math.max(zoomScale, 0.32) - 1) * 1.25, 0.95, 2.8)
+  const peerPulseScale = (1.02 + peerPulseStrength * 0.03).toFixed(3)
+  const peerPulseFar = (14 + peerPulseStrength * 10).toFixed(1)
+  const peerPulseNear = (26 + peerPulseStrength * 14).toFixed(1)
+  const peerPulseSlowdown = (0.96 + (2.8 - peerPulseStrength) * 0.08).toFixed(2)
   const nodeButtonClassName = [
     'skill-node-button',
+    `skill-node-button--status-${statusKey}`,
     isMinimal ? 'skill-node-button--minimal' : '',
     isPortalPeerHovered ? 'skill-node-button--portal-peer-hovered' : '',
   ].filter(Boolean).join(' ')
@@ -359,7 +397,7 @@ const _SkillNode = ({ node, nodeSize, isSelected, isPortalPeerHovered = false, o
                 {showLabel && (
                   <p
                     className="skill-node-button__label"
-                    style={{ color: '#f8fafc' }}
+                    style={{ color: labelTextColor }}
                   >
                     {node.label}
                   </p>
@@ -367,7 +405,7 @@ const _SkillNode = ({ node, nodeSize, isSelected, isPortalPeerHovered = false, o
                 {!isMinimal && (
                   <Text
                     className="skill-node-button__shortname"
-                    style={{ color: statusStyles.textColor, fontWeight: statusKey === 'now' ? 900 : 800 }}
+                    style={{ color: statusStyles.textColor, fontWeight: statusKey === 'now' ? 900 : statusKey === 'next' ? 820 : 700 }}
                   >
                     {shortName}
                   </Text>

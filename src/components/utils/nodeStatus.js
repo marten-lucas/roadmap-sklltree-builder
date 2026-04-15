@@ -41,6 +41,7 @@ export const getDisplayStatusKey = (node, releaseId = null) => {
   if (visibleKeys.includes('now')) return 'now'
   if (visibleKeys.includes('next')) return 'next'
   if (visibleKeys.includes('later')) return 'later'
+  if (visibleKeys.includes('someday')) return 'someday'
 
   return visibleKeys[0] ?? 'later'
 }

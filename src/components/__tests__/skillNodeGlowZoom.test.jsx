@@ -48,7 +48,7 @@ const renderNode = (zoomScale) => renderToString(
   ),
 )
 
-const renderNodeWithLabelMode = (zoomScale, labelMode) => renderToString(
+const renderNodeWithLabelMode = (zoomScale, labelMode, isPortalPeerHovered = false) => renderToString(
   React.createElement(MantineProvider, null,
     React.createElement(
       'svg',
@@ -57,7 +57,7 @@ const renderNodeWithLabelMode = (zoomScale, labelMode) => renderToString(
         node: baseNode,
         nodeSize: 120,
         isSelected: false,
-        isPortalPeerHovered: false,
+        isPortalPeerHovered,
         onSelect: vi.fn(),
         onSelectLevel: vi.fn(),
         onZoomToNode: vi.fn(),
@@ -73,6 +73,26 @@ const renderNodeWithLabelMode = (zoomScale, labelMode) => renderToString(
 )
 
 describe('SkillNode glow intensity', () => {
+  it('adds the portal peer hover pulse class when the opposite side is hovered', () => {
+    const html = renderNodeWithLabelMode(2, 'close', true)
+
+    expect(html).toContain('skill-node-button--portal-peer-hovered')
+    expect(html).toContain('--portal-peer-pulse-duration')
+  })
+
+  it('makes the peer pulse stronger when zoomed farther out', () => {
+    const farZoomHtml = renderNodeWithLabelMode(0.5, 'close', true)
+    const nearZoomHtml = renderNodeWithLabelMode(2, 'close', true)
+
+    const farPulseNear = Number(farZoomHtml.match(/--portal-peer-pulse-near:([\d.]+)px/)?.[1] ?? 0)
+    const nearPulseNear = Number(nearZoomHtml.match(/--portal-peer-pulse-near:([\d.]+)px/)?.[1] ?? 0)
+    const farPulseScale = Number(farZoomHtml.match(/--portal-peer-pulse-scale:([\d.]+)/)?.[1] ?? 0)
+    const nearPulseScale = Number(nearZoomHtml.match(/--portal-peer-pulse-scale:([\d.]+)/)?.[1] ?? 0)
+
+    expect(farPulseNear).toBeGreaterThan(nearPulseNear)
+    expect(farPulseScale).toBeGreaterThan(nearPulseScale)
+  })
+
   it('increases glow opacity and blur at higher zoom levels', () => {
     const lowZoomHtml = renderNode(4)
     const highZoomHtml = renderNode(5)

@@ -46,6 +46,37 @@ test.describe('ListView effort/value refinements', () => {
 
     await page.locator('.list-view-drawer button[title="Effort / Value"]').click()
 
+    const statusColumnToggle = page.locator('.list-view-drawer button[title="Status column"]')
+    const scopeColumnToggle = page.locator('.list-view-drawer button[title="Scopes column"]')
+    await expect(statusColumnToggle).toBeVisible()
+    await expect(scopeColumnToggle).toBeVisible()
+
+    const firstStatusGroup = page.locator('.list-view-drawer__status-group').first()
+    await expect(firstStatusGroup).toBeVisible()
+
+    const firstScopeGroup = page.locator('.list-view-drawer__scope-group').first()
+    await expect(firstScopeGroup).toBeVisible()
+
+    const firstScopeButton = firstScopeGroup.locator('button').first()
+    await expect(firstScopeButton).toBeVisible()
+    const pressedBefore = await firstScopeButton.getAttribute('aria-pressed')
+    await firstScopeButton.click()
+    await expect(firstScopeButton).toHaveAttribute('aria-pressed', pressedBefore === 'true' ? 'false' : 'true')
+
+    await statusColumnToggle.click()
+    await expect(page.locator('.list-view-drawer__status-group')).toHaveCount(0)
+    await statusColumnToggle.click()
+    await expect(firstStatusGroup).toBeVisible()
+
+    await scopeColumnToggle.click()
+    await expect(page.locator('.list-view-drawer__scope-group')).toHaveCount(0)
+    await scopeColumnToggle.click()
+    await expect(firstScopeGroup).toBeVisible()
+
+    const firstDoneRadio = firstStatusGroup.locator('input[value="done"]')
+    await firstDoneRadio.check({ force: true })
+    await expect(firstDoneRadio).toBeChecked()
+
     const firstEffortMetric = page.locator('.list-view-drawer__metric-slider--effort').first()
     await expect(firstEffortMetric).toBeVisible()
 
@@ -123,11 +154,24 @@ test.describe('ListView effort/value refinements', () => {
     })
     expect.soft(Math.abs(valueWidthAtUnclear - valueWidthAtHigh)).toBeLessThan(1.5)
 
+    const inspectorToggle = page.locator('.list-view-drawer__inspector-toggle input[type="checkbox"]')
+    await expect(inspectorToggle).toBeVisible()
+    await expect(inspectorToggle).not.toBeChecked()
+
     await expect.soft(page.locator('.skill-panel--inspector')).toHaveCount(0)
 
     await page.locator('.list-view-drawer__item-body--level').first().click()
 
     await expect.soft(page.locator('.skill-panel--inspector')).toHaveCount(0)
+
+    await inspectorToggle.check({ force: true })
+    await expect(inspectorToggle).toBeChecked()
+
+    const secondLevelName = String(await page.locator('.list-view-drawer__level-name').nth(1).textContent() ?? '').trim()
+    await page.locator('.list-view-drawer__item-body--level').nth(1).click()
+
+    await expect(page.locator('.skill-panel--inspector')).toBeVisible()
+    await expect(page.locator('.skill-panel--inspector [role="tab"][aria-selected="true"]').first()).toContainText(secondLevelName)
 
     await expect
       .poll(async () => readCanvasScale(page))

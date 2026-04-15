@@ -3,11 +3,13 @@ const STATUS_ALIAS_MAP = {
   now: 'now',
   next: 'next',
   later: 'later',
+  someday: 'someday',
   hidden: 'hidden',
   fertig: 'done',
   jetzt: 'now',
   spaeter: 'later',
   später: 'later',
+  irgendwann: 'someday',
 }
 
 export const normalizeStatusKey = (status) => {
@@ -24,7 +26,17 @@ export const STATUS_LABELS = {
   now: 'Now',
   next: 'Next',
   later: 'Later',
+  someday: 'Someday',
   hidden: 'Hidden',
+}
+
+export const DEFAULT_STATUS_DESCRIPTIONS = {
+  now: 'Current focus or in progress.',
+  next: 'Planned for the next step.',
+  done: 'Already completed.',
+  later: 'Relevant, but scheduled later.',
+  someday: 'A possible future idea, not committed yet.',
+  hidden: 'Currently filtered or deprioritized.',
 }
 
 export const STATUS_STYLES = {
@@ -62,15 +74,28 @@ export const STATUS_STYLES = {
     linkOpacity: '1',
   },
   later: {
-    glow: 'none',
-    ring: '#3f4b5c',
-    ringBand: '#4f5f75',
-    badge: '#4f5f75',
-    textColor: '#4f5f75',
-    glowSegment: 'transparent',
-    linkStroke: '#94a3b8',
-    linkStrokeWidth: '9',
-    linkOpacity: '1',
+    glow: '0 0 5px rgba(116, 132, 156, 0.06)',
+    ring: 'rgba(116, 132, 156, 0.56)',
+    ringBand: 'rgba(116, 132, 156, 0.56)',
+    badge: '#5c697b',
+    textColor: '#94a0af',
+    glowSegment: 'rgba(116, 132, 156, 0.04)',
+    linkStroke: '#74849c',
+    linkStrokeWidth: '6',
+    linkOpacity: '0.56',
+    linkStrokeDasharray: 'none',
+  },
+  someday: {
+    glow: '0 0 5px rgba(116, 132, 156, 0.05)',
+    ring: 'rgba(116, 132, 156, 0.40)',
+    ringBand: 'rgba(116, 132, 156, 0.40)',
+    badge: '#5c697b',
+    textColor: '#8d98a8',
+    glowSegment: 'rgba(116, 132, 156, 0.035)',
+    linkStroke: '#74849c',
+    linkStrokeWidth: '5',
+    linkOpacity: '0.40',
+    linkStrokeDasharray: '2 10',
   },
   hidden: {
     glow: 'none',

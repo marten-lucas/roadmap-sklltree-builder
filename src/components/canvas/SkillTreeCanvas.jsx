@@ -10,10 +10,10 @@ const CHEVRON_SPACING = 7
 // Half-opening angle of the V. 25° keeps arm tips within the line's half-width
 // when arm length = line-width (verified: sin(25°) * lineW ≤ lineW/2 for all widths).
 const CHEVRON_HALF_OPEN = 25 * (Math.PI / 180)
-const LATER_SOURCE_LINK_STROKE = '#4c5458'
+const LATER_SOURCE_LINK_STROKE = '#74849c'
 
 // Lower value = rendered first (below); higher = rendered last (on top).
-const LINK_Z_ORDER = { later: 0, done: 0, hidden: 0, next: 1, now: 2 }
+const LINK_Z_ORDER = { someday: 0, later: 0, done: 0, hidden: 0, next: 1, now: 2 }
 const getLinkZOrder = (link, nodesById, releaseId) => {
   const sourceNode = link.sourceId ? nodesById.get(link.sourceId) : null
   const sourceStatus = sourceNode ? getDisplayStatusKey(sourceNode, releaseId) : 'later'
@@ -279,6 +279,12 @@ export function SkillTreeCanvas({
   const hoveredPeerNodeId = hoveredPortal
     ? (hoveredPortal.type === 'source' ? hoveredPortal.targetId : hoveredPortal.sourceId)
     : null
+  const setPortalHover = (portalKey) => {
+    setHoveredPortalKey((prev) => (prev === portalKey ? prev : portalKey))
+  }
+  const clearPortalHover = (portalKey) => {
+    setHoveredPortalKey((prev) => (prev === portalKey ? null : prev))
+  }
   // Dynamic fade radius based on occupied rings (+buffer), rendered across full canvas
   // so the transition reaches black without a hard circle edge.
   const backgroundRadius = canvas.maxRadius + TREE_CONFIG.levelSpacing * 2
@@ -558,10 +564,17 @@ export function SkillTreeCanvas({
           }
           const spokeChevronD = buildChevronPath(spokeSamples, chevronArm(3), CHEVRON_HALF_OPEN, portal.type === 'target')
           const zoomSafe = Math.max(0.35, currentZoomScale)
-          const baseHitRadius = portal.isMinimal ? 20 : 24
-          const baseHoverStrokeWidth = 16
-          const portalHitRadius = Math.max(16, Math.min(56, baseHitRadius / zoomSafe))
-          const portalHoverStrokeWidth = Math.max(12, Math.min(44, baseHoverStrokeWidth / zoomSafe))
+          const hitScale = Math.max(1, Math.min(2.4, 1 / zoomSafe))
+          const baseHitRadius = portal.isMinimal ? 24 : 28
+          const baseHoverStrokeWidth = portal.isMinimal ? 20 : 24
+          const portalHitRadius = Math.max(18, Math.min(72, baseHitRadius * hitScale))
+          const portalHoverStrokeWidth = Math.max(14, Math.min(64, baseHoverStrokeWidth * hitScale))
+          const portalHitWidth = Math.max(portalHitRadius, Math.min(88, (Math.max(labelName.length, 2) * 6 + 10) * hitScale))
+          const portalHitHeight = Math.max(portalHitRadius * 0.72, Math.min(42, (portal.isMinimal ? 16 : 20) * hitScale))
+          const portalHoverHandlers = {
+            onPointerEnter: () => setPortalHover(portal.key),
+            onPointerMove: () => setPortalHover(portal.key),
+          }
 
           return (
             <Tooltip
@@ -576,6 +589,7 @@ export function SkillTreeCanvas({
             >
               <g
                 className={portalClassName}
+                data-portal-key={portal.key}
                 data-portal-node-id={portal.nodeId}
                 data-portal-source-id={portal.sourceId}
                 data-portal-target-id={portal.targetId}
@@ -587,22 +601,21 @@ export function SkillTreeCanvas({
                     onSelectPortal(portal)
                   }
                 }}
-                onPointerEnter={() => setHoveredPortalKey(portal.key)}
-                onPointerMove={() => setHoveredPortalKey(portal.key)}
-                onPointerLeave={() => setHoveredPortalKey((prev) => (prev === portal.key ? null : prev))}
+                {...portalHoverHandlers}
+                onPointerLeave={() => clearPortalHover(portal.key)}
               >
                 {/* wide, invisible spoke hit-path for forgiving hover */}
                 <path
                   d={spokeLinePath}
                   className="skill-tree-portal__hoverline"
                   style={{ strokeWidth: portalHoverStrokeWidth }}
-                  onPointerEnter={() => setHoveredPortalKey(portal.key)}
-                  onPointerMove={() => setHoveredPortalKey(portal.key)}
+                  {...portalHoverHandlers}
                 />
                 {/* base spoke line */}
                 <path
                   d={spokeLinePath}
                   className={`skill-tree-portal__spoke skill-tree-portal__spoke--${portal.type}`}
+                  {...portalHoverHandlers}
                 />
                 {/* directional chevrons overlay (Method 2: compound path) */}
                 {spokeChevronD && (
@@ -619,22 +632,24 @@ export function SkillTreeCanvas({
                     className={`skill-tree-portal__ring skill-tree-portal__ring--${portal.type}`}
                     d={buildPortalSocketPath(portal.isMinimal ? 10 : 18)}
                     transform={`translate(${extTipX} ${extTipY}) rotate(${(spokeTangent * 180) / Math.PI + 180})`}
+                    {...portalHoverHandlers}
                   />
                 ) : (
                   <path
                     className={`skill-tree-portal__ring skill-tree-portal__ring--${portal.type}`}
                     d={buildPortalPlugPath(portal.isMinimal ? 14 : 28, portal.isMinimal ? 8 : 14, portal.isMinimal ? 4 : 7)}
                     transform={`translate(${extTipX} ${extTipY}) rotate(${(spokeTangent * 180) / Math.PI})`}
+                    {...portalHoverHandlers}
                   />
                 )}
                 {/* invisible hit area (larger than ring for easy clicking) */}
-                <circle
+                <ellipse
                   className="skill-tree-portal__hit"
-                  r={portalHitRadius}
+                  rx={portalHitWidth}
+                  ry={portalHitHeight}
                   cx={extTipX}
                   cy={extTipY}
-                  onPointerEnter={() => setHoveredPortalKey(portal.key)}
-                  onPointerMove={() => setHoveredPortalKey(portal.key)}
+                  {...portalHoverHandlers}
                 />
                 {/* label inside the portal symbol at spoke tip */}
                 {!portal.isMinimal && (
@@ -644,6 +659,7 @@ export function SkillTreeCanvas({
                     y={extTipY}
                     textAnchor="middle"
                     dominantBaseline="middle"
+                    {...portalHoverHandlers}
                   >
                     {labelName}
                   </text>

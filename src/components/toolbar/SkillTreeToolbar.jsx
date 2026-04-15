@@ -11,6 +11,7 @@ import {
   IconEyeOff,
   IconFilter,
   IconFilters,
+  IconInfoCircle,
   IconList,
   IconPercentage20,
   IconRefresh,
@@ -87,6 +88,8 @@ export function SkillTreeToolbar({
   selectedReleaseId = null,
   onReleaseChange,
   releaseBudgetSummaries = new Map(),
+  isLegendVisible = false,
+  onToggleLegend,
 }) {
   const [toolbarSearch, setToolbarSearch] = useState('')
   const [isZoomMenuOpen, setIsZoomMenuOpen] = useState(false)
@@ -371,6 +374,18 @@ export function SkillTreeToolbar({
                 onClick={onOpenListView}
               >
                 <IconList {...TOOLBAR_ICON_PROPS} />
+              </ActionIcon>
+            </Tooltip>
+
+            <Tooltip label={isLegendVisible ? 'Hide legend' : 'Show legend'} position="top" middlewares={TOOLBAR_TOOLTIP_MIDDLEWARES}>
+              <ActionIcon
+                size="md"
+                variant={isLegendVisible ? 'filled' : 'default'}
+                color={isLegendVisible ? 'cyan' : undefined}
+                aria-label={isLegendVisible ? 'Hide legend' : 'Show legend'}
+                onClick={onToggleLegend}
+              >
+                <IconInfoCircle {...TOOLBAR_ICON_PROPS} />
               </ActionIcon>
             </Tooltip>
 

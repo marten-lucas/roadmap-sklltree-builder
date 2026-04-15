@@ -244,7 +244,7 @@ export function PriorityMatrix({ opened, onClose, document, onSelectNode, onMove
   const scopeOptions = document?.scopes ?? []
   const filteredNodes = useMemo(
     () => allNodes.filter((node) => {
-      if (!nodeMatchesScopeFilter(node, scopeFilter)) {
+      if (!nodeMatchesScopeFilter(node, scopeFilter, scopeOptions)) {
         return false
       }
 

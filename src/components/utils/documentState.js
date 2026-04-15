@@ -1,5 +1,6 @@
 import { DEFAULT_STORY_POINT_MAP, normalizeStoryPointMap } from './effortBenefit'
 import { createRelease, normalizeRelease } from './releases'
+import { DEFAULT_STATUS_DESCRIPTIONS } from '../config'
 
 const HISTORY_LIMIT = 100
 const DEFAULT_CENTER_ICON_SVG = `<svg width="256" height="256" viewBox="0 0 256 256" xmlns="http://www.w3.org/2000/svg">
@@ -37,6 +38,7 @@ const ensureDocumentDefaults = (document) => {
   const hasSPMap = isObject(document.storyPointMap)
   const hasShowHiddenNodes = 'showHiddenNodes' in document
   const hasReleases = Array.isArray(document.releases) && document.releases.length > 0
+  const hasStatusDescriptions = isObject(document.statusDescriptions)
 
   if (
     normalizeCenterIconSrc(document.centerIconSrc) === document.centerIconSrc
@@ -44,6 +46,7 @@ const ensureDocumentDefaults = (document) => {
     && hasReleases
     && hasSPMap
     && hasShowHiddenNodes
+    && hasStatusDescriptions
   ) {
     return document
   }
@@ -55,6 +58,10 @@ const ensureDocumentDefaults = (document) => {
     releases: normalizeReleases(document.releases),
     storyPointMap: hasSPMap ? normalizeStoryPointMap(document.storyPointMap) : { ...DEFAULT_STORY_POINT_MAP },
     showHiddenNodes: hasShowHiddenNodes ? document.showHiddenNodes : false,
+    statusDescriptions: {
+      ...DEFAULT_STATUS_DESCRIPTIONS,
+      ...(hasStatusDescriptions ? document.statusDescriptions : {}),
+    },
   }
 }
 
@@ -74,6 +81,7 @@ export const createEmptyDocument = () => ({
   releases: [createRelease('Release 1')],
   storyPointMap: { ...DEFAULT_STORY_POINT_MAP },
   showHiddenNodes: false,
+  statusDescriptions: { ...DEFAULT_STATUS_DESCRIPTIONS },
 })
 
 export const cloneDocument = (document) => {

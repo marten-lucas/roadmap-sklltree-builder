@@ -53,6 +53,10 @@ test.describe('ListViewDrawer with status and scope filters', () => {
     await expect(page.locator('.list-view-drawer__header')).toBeVisible()
     await expect(page.locator('.list-view-drawer__title')).toContainText('Node List')
 
+    // Default mode should open in list view with levels shown.
+    await expect(page.locator('.list-view-drawer button[title="List view"]')).toHaveClass(/list-view-drawer__icon-toggle--active/)
+    await expect(page.locator('.list-view-drawer__search-input')).toBeVisible()
+
     // Verify filter selects are present (Status and Scope)
     const filterSelects = page.locator('.list-view-drawer__filter-select')
     await expect(filterSelects).toHaveCount(2)
@@ -137,6 +141,29 @@ test.describe('ListViewDrawer with status and scope filters', () => {
     await expect(scopeOptions.filter({ hasText: 'All Scopes' })).toHaveCount(1)
 
     expect(pageErrors).toHaveLength(0)
+  })
+
+  test('filters visible list entries by search text', async ({ page }) => {
+    await expect(page.locator('.skill-tree-toolbar')).toBeVisible()
+    await page.locator('button[aria-label="List View"]').click()
+    await expect(page.locator('.list-view-drawer')).toBeVisible({ timeout: 5000 })
+
+    const searchInput = page.locator('.list-view-drawer__search-input')
+    await expect(searchInput).toBeVisible()
+
+    const listItems = page.locator('.list-view-drawer__item--level')
+    const countBefore = await listItems.count()
+    expect(countBefore).toBeGreaterThan(1)
+
+    const firstNodePrefixText = await page.locator('.list-view-drawer__node-prefix').first().textContent()
+    const searchTerm = String(firstNodePrefixText ?? '').replace(/·/g, '').trim()
+    expect(searchTerm.length).toBeGreaterThan(0)
+
+    await searchInput.fill(searchTerm)
+
+    await expect.poll(async () => await listItems.count()).toBeGreaterThan(0)
+    const countAfter = await listItems.count()
+    expect(countAfter).toBeLessThan(countBefore)
   })
 
   test('closes and reopens list view with filters intact', async ({ page }) => {

@@ -3,8 +3,10 @@ import { useCallback, useEffect, useImperativeHandle, useRef, useState, forwardR
 import { MarkdownField } from './MarkdownField'
 import { DEFAULT_STORY_POINT_MAP, computeBudgetSummary } from '../utils/effortBenefit'
 import { addRelease, deleteRelease, updateRelease } from '../utils/releases'
+import { DEFAULT_STATUS_DESCRIPTIONS, STATUS_LABELS } from '../config'
 
 const T_SHIRT_KEYS = ['xs', 's', 'm', 'l', 'xl']
+const STATUS_DESCRIPTION_KEYS = ['now', 'next', 'later', 'someday', 'done', 'hidden']
 
 const collectAllNodes = (document) => {
   const all = []
@@ -35,6 +37,7 @@ export const SystemPanel = forwardRef(function SystemPanel(
   const fileInputRef = useRef(null)
   const [activeTabValue, setActiveTabValue] = useState(selectedReleaseId ?? 'system')
   const [systemNameDraft, setSystemNameDraft] = useState('')
+  const [statusDescriptionsDraft, setStatusDescriptionsDraft] = useState({ ...DEFAULT_STATUS_DESCRIPTIONS })
   const [releaseDraftId, setReleaseDraftId] = useState(null)
   const [releaseNameDraft, setReleaseNameDraft] = useState('')
   const [releaseMottoDraft, setReleaseMottoDraft] = useState('')
@@ -68,6 +71,13 @@ export const SystemPanel = forwardRef(function SystemPanel(
   useEffect(() => {
     setSystemNameDraft(roadmapData?.systemName ?? '')
   }, [roadmapData?.systemName])
+
+  useEffect(() => {
+    setStatusDescriptionsDraft({
+      ...DEFAULT_STATUS_DESCRIPTIONS,
+      ...(roadmapData?.statusDescriptions ?? {}),
+    })
+  }, [roadmapData?.statusDescriptions])
 
   useEffect(() => {
     const nextReleaseId = activeRelease?.id ?? null
@@ -110,6 +120,25 @@ export const SystemPanel = forwardRef(function SystemPanel(
       nextRoadmapData = {
         ...nextRoadmapData,
         systemName: systemNameDraft,
+      }
+      hasChanges = true
+    }
+
+    const currentStatusDescriptions = {
+      ...DEFAULT_STATUS_DESCRIPTIONS,
+      ...(roadmapData?.statusDescriptions ?? {}),
+    }
+    const hasStatusDescriptionChanges = STATUS_DESCRIPTION_KEYS.some(
+      (key) => (statusDescriptionsDraft[key] ?? '') !== (currentStatusDescriptions[key] ?? ''),
+    )
+
+    if (hasStatusDescriptionChanges) {
+      nextRoadmapData = {
+        ...nextRoadmapData,
+        statusDescriptions: {
+          ...currentStatusDescriptions,
+          ...statusDescriptionsDraft,
+        },
       }
       hasChanges = true
     }
@@ -367,6 +396,27 @@ export const SystemPanel = forwardRef(function SystemPanel(
                   onBlur={() => commitTextDrafts()}
                   classNames={{ input: 'mantine-dark-input', label: 'mantine-dark-label' }}
                 />
+
+                <Text size="xs" fw={600} tt="uppercase" c="dimmed" lts="0.1em">Status descriptions</Text>
+                <Stack gap={6}>
+                  {STATUS_DESCRIPTION_KEYS.map((key) => (
+                    <TextInput
+                      key={key}
+                      label={`${STATUS_LABELS[key]} description`}
+                      value={statusDescriptionsDraft[key] ?? ''}
+                      placeholder={DEFAULT_STATUS_DESCRIPTIONS[key]}
+                      onChange={(e) => {
+                        const nextValue = e.currentTarget.value
+                        setStatusDescriptionsDraft((current) => ({
+                          ...current,
+                          [key]: nextValue,
+                        }))
+                      }}
+                      onBlur={() => commitTextDrafts()}
+                      classNames={{ input: 'mantine-dark-input', label: 'mantine-dark-label' }}
+                    />
+                  ))}
+                </Stack>
 
                 <Text size="xs" fw={600} tt="uppercase" c="dimmed" lts="0.1em">Story Point Scale</Text>
                 <Stack gap={6}>

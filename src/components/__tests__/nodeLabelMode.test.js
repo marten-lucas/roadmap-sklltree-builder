@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { isValidElement, Children } from 'react'
+import { isValidElement, Children, createElement } from 'react'
+import { renderToStaticMarkup } from 'react-dom/server'
+import { MantineProvider } from '@mantine/core'
 import { NODE_LABEL_ZOOM } from '../config'
 import { MarkdownTooltipContent } from '../tooltip'
 
@@ -138,5 +140,29 @@ describe('MarkdownTooltipContent – scope chips below note', () => {
 
     const classes = collectClassNames(element)
     expect(classes.some((c) => c.includes('tooltip__scopes'))).toBe(false)
+  })
+
+  it('shows the configured level names instead of generic L1 tabs', () => {
+    const html = renderToStaticMarkup(
+      createElement(
+        MantineProvider,
+        null,
+        MarkdownTooltipContent({
+          title: 'Roadmap Node',
+          markdown: 'Foundation note',
+          levels: [
+            { id: 'lvl-1', label: 'Foundation', status: 'now', releaseNote: 'Foundation note', scopeLabels: [] },
+            { id: 'lvl-2', label: 'Rollout', status: 'next', releaseNote: 'Rollout note', scopeLabels: [] },
+          ],
+          activeLevelIndex: 0,
+          onTabChange: () => {},
+        }),
+      ),
+    )
+
+    expect(html).toContain('>Foundation<')
+    expect(html).toContain('>Rollout<')
+    expect(html).not.toContain('>L1<')
+    expect(html).not.toContain('>L2<')
   })
 })

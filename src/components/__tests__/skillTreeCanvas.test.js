@@ -3,10 +3,12 @@ import { renderToString } from 'react-dom/server'
 import { MantineProvider } from '@mantine/core'
 import { describe, expect, it, vi } from 'vitest'
 import { SkillTreeCanvas } from '../canvas/SkillTreeCanvas'
+import { getPreferredPortalCenterAngle } from '../utils/portalPlacement'
 
 const createBaseProps = () => ({
   canvasRef: { current: null },
   canvas: { width: 800, height: 600, origin: { x: 400, y: 300 }, maxRadius: 250 },
+  currentZoomScale: 1,
   centerIconSource: '/icon.svg',
   centerIconSize: 120,
   systemName: 'System A',
@@ -49,6 +51,16 @@ const createBaseProps = () => ({
   onZoomToNode: vi.fn(),
 })
 
+const extractPortalMetric = (html, className, attribute) => {
+  const match = html.match(new RegExp(`${className}[^>]*${attribute}="([\\d.]+)"`))
+  return match ? Number(match[1]) : null
+}
+
+const extractPortalStrokeWidth = (html) => {
+  const match = html.match(/skill-tree-portal__hoverline[^>]*stroke-width:([\d.]+)/)
+  return match ? Number(match[1]) : null
+}
+
 describe('SkillTreeCanvas', () => {
   it('renders to string without runtime reference errors', () => {
     const html = renderToString(
@@ -82,5 +94,80 @@ describe('SkillTreeCanvas', () => {
 
     expect(html).toContain('data-add-control="root-near"')
     expect(html).toContain('data-node-id="root-a"')
+  })
+
+  it('prefers the peer-facing direction for first-ring source portals', () => {
+    const angle = getPreferredPortalCenterAngle({
+      layoutNode: { x: 100, y: 0 },
+      peerNode: { x: 220, y: 0 },
+      canvasOrigin: { x: 0, y: 0 },
+      type: 'source',
+    })
+
+    expect(angle).toBeCloseTo(0, 5)
+  })
+
+  it('renders the same hover hitbox primitives for sockets and plugs', () => {
+    const props = createBaseProps()
+    props.layoutNodesById = new Map([
+      ['node-a', { id: 'node-a', x: 100, y: 100 }],
+      ['node-b', { id: 'node-b', x: 260, y: 100 }],
+    ])
+    props.renderedNodes = [
+      { id: 'node-a', x: 100, y: 100, label: 'Alpha' },
+      { id: 'node-b', x: 260, y: 100, label: 'Beta' },
+    ]
+    props.visibleDependencyPortals = [
+      { key: 'dep-a:source', nodeId: 'node-a', sourceId: 'node-a', targetId: 'node-b', type: 'source', otherLabel: 'BET·Rollout', tooltip: 'Requires Beta', x: 180, y: 100, angle: 0, isMinimal: false, isInteractive: true },
+      { key: 'dep-a:target', nodeId: 'node-b', sourceId: 'node-a', targetId: 'node-b', type: 'target', otherLabel: 'ALP·Foundation', tooltip: 'Enables Alpha', x: 180, y: 100, angle: 180, isMinimal: false, isInteractive: true },
+    ]
+
+    const html = renderToString(
+      createElement(
+        MantineProvider,
+        null,
+        createElement(SkillTreeCanvas, props),
+      ),
+    )
+
+    expect((html.match(/skill-tree-portal__hoverline/g) ?? []).length).toBe(2)
+    expect((html.match(/skill-tree-portal__hit/g) ?? []).length).toBe(2)
+    expect(html).toContain('skill-tree-portal__ring--source')
+    expect(html).toContain('skill-tree-portal__ring--target')
+    expect(html).toContain('data-portal-key="dep-a:source"')
+    expect(html).toContain('data-portal-key="dep-a:target"')
+  })
+
+  it('enlarges the portal hitbox when zoomed farther out', () => {
+    const baseProps = createBaseProps()
+    baseProps.layoutNodesById = new Map([
+      ['node-a', { id: 'node-a', x: 100, y: 100 }],
+      ['node-b', { id: 'node-b', x: 260, y: 100 }],
+    ])
+    baseProps.renderedNodes = [
+      { id: 'node-a', x: 100, y: 100, label: 'Alpha' },
+      { id: 'node-b', x: 260, y: 100, label: 'Beta' },
+    ]
+    baseProps.visibleDependencyPortals = [
+      { key: 'dep-a:source', nodeId: 'node-a', sourceId: 'node-a', targetId: 'node-b', type: 'source', otherLabel: 'BET·Rollout', tooltip: 'Requires Beta', x: 180, y: 100, angle: 0, isMinimal: false, isInteractive: true },
+    ]
+
+    const zoomedOutHtml = renderToString(
+      createElement(
+        MantineProvider,
+        null,
+        createElement(SkillTreeCanvas, { ...baseProps, currentZoomScale: 0.5 }),
+      ),
+    )
+    const zoomedInHtml = renderToString(
+      createElement(
+        MantineProvider,
+        null,
+        createElement(SkillTreeCanvas, { ...baseProps, currentZoomScale: 2 }),
+      ),
+    )
+
+    expect(extractPortalMetric(zoomedOutHtml, 'skill-tree-portal__hit', 'rx')).toBeGreaterThan(extractPortalMetric(zoomedInHtml, 'skill-tree-portal__hit', 'rx'))
+    expect(extractPortalStrokeWidth(zoomedOutHtml)).toBeGreaterThan(extractPortalStrokeWidth(zoomedInHtml))
   })
 })

@@ -723,9 +723,16 @@ export const selectInspectorLevel = async (page, level = 1) => {
   const inspector = page.locator('.skill-panel--inspector').first()
   await inspector.waitFor({ state: 'attached', timeout: 10_000 })
 
-  const tab = inspector.getByRole('tab', { name: `L${level}` })
-  if (await tab.count() > 0) {
-    await tab.first().click({ timeout: 5_000 })
+  const candidates = [
+    inspector.getByRole('tab', { name: `Level ${level}` }),
+    inspector.getByRole('tab', { name: `L${level}` }),
+  ]
+
+  for (const tab of candidates) {
+    if (await tab.count() > 0) {
+      await tab.first().click({ timeout: 5_000 })
+      return
+    }
   }
 }
 

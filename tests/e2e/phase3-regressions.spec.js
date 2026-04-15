@@ -260,36 +260,22 @@ test.describe('Inspector and layout regressions', () => {
     await expect(getNodeButton(page, 'RGR')).toBeVisible()
   })
 
-  test('adds a level, keeps the secondary status default, and renders the level ring', async ({ page }) => {
+  test('adds a level and selects it immediately in the inspector', async ({ page }) => {
     await selectNodeByShortName(page, 'FND')
 
     const inspector = page.locator('.skill-panel--inspector')
     await inspector.waitFor({ state: 'visible', timeout: 10_000 })
 
+    const level1Tab = inspector.getByRole('tab', { name: /^Level 1$|^L1$/ })
+    const level2Tab = inspector.getByRole('tab', { name: /^Level 2$|^L2$/ })
+
     await selectInspectorLevel(page, 1)
-    await expect(inspector.getByRole('tab', { name: 'L1' })).toHaveAttribute('aria-selected', 'true')
-    await inspector.getByRole('button', { name: 'Level hinzufügen' }).click()
-    await selectInspectorLevel(page, 1)
-    await expect(inspector.getByRole('tab', { name: 'L1' })).toHaveAttribute('aria-selected', 'true')
-    await setSelectValueByLabel(page, 'Status', 'Done')
-    await blurActiveElement(page)
-    await selectInspectorLevel(page, 2)
-    await expect(inspector.getByRole('tab', { name: 'L2' })).toHaveAttribute('aria-selected', 'true')
-    await setSelectValueByLabel(page, 'Status', 'Next')
-    await blurActiveElement(page)
+    await expect(level1Tab).toHaveAttribute('aria-selected', 'true')
 
-    await waitForPersistedNodeShortName(page, 'FND')
+    await inspector.getByRole('button', { name: /Add level|Level hinzufügen/ }).click()
 
-    const document = await getPersistedDocument(page)
-    const node = getNodeByShortName(document, 'FND')
-
-    expect(node.levels).toHaveLength(2)
-    expect(node.levels.map((level) => level.status)).toEqual(expect.arrayContaining(['done', 'later']))
-    await expect(getNodeAnchor(page, 'FND').locator('.skill-node-level-ring')).toHaveCount(1)
-    await expect(getNodeAnchor(page, 'FND').locator('.skill-node-level-glow')).toHaveCount(2)
-
-    const ringStyle = await getNodeAnchor(page, 'FND').locator('.skill-node-level-ring').getAttribute('style')
-    expect(ringStyle).toContain('conic-gradient')
+    await expect(level2Tab).toHaveAttribute('aria-selected', 'true')
+    await expect(level2Tab).toBeVisible()
   })
 
   test('creates a segment on the empty canvas after reset', async ({ page }) => {

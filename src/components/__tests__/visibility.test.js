@@ -12,6 +12,19 @@ describe('visibility', () => {
     expect(nodeMatchesScopeFilter({ levels: [] }, 'scope-a')).toBe(true)
   })
 
+  it('applies the no-scope rule within the selected color group only', () => {
+    const scopes = [
+      { id: 'module-a', label: 'Module A', color: '#ff0000' },
+      { id: 'module-b', label: 'Module B', color: '#ff0000' },
+      { id: 'machine-x', label: 'Machine X', color: '#0000ff' },
+    ]
+
+    expect(nodeMatchesScopeFilter({ levels: [{ id: 'l1', scopeIds: ['machine-x'] }] }, 'module-a', scopes)).toBe(true)
+    expect(nodeMatchesScopeFilter({ levels: [{ id: 'l1', scopeIds: [] }] }, 'module-a', scopes)).toBe(true)
+    expect(nodeMatchesScopeFilter({ levels: [{ id: 'l1', scopeIds: ['module-a', 'machine-x'] }] }, 'module-a', scopes)).toBe(true)
+    expect(nodeMatchesScopeFilter({ levels: [{ id: 'l1', scopeIds: ['module-b'] }] }, 'module-a', scopes)).toBe(false)
+  })
+
   it('maps release filters to full and minimal visibility as expected', () => {
     expect(getReleaseVisibilityMode('now', RELEASE_FILTER_OPTIONS.now)).toBe('full')
     expect(getReleaseVisibilityMode('next', RELEASE_FILTER_OPTIONS.now)).toBe('minimal')

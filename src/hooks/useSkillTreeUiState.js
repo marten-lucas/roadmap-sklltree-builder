@@ -10,6 +10,7 @@ export function useSkillTreeUiState() {
   const [selectedPortalKey, setSelectedPortalKey] = useState(null)
   const [rightPanel, setRightPanel] = useState(null)
   const [isToolbarCollapsed, setIsToolbarCollapsed] = useState(false)
+  const [isLegendVisible, setIsLegendVisible] = useState(true)
   const [selectedScopeFilterId, setSelectedScopeFilterId] = useState(SCOPE_FILTER_ALL)
   const [releaseFilter, setReleaseFilter] = useState(RELEASE_FILTER_OPTIONS.all)
   const [selectedReleaseId, setSelectedReleaseId] = useState(null)
@@ -68,6 +69,8 @@ export function useSkillTreeUiState() {
     setRightPanel,
     isToolbarCollapsed,
     setIsToolbarCollapsed,
+    isLegendVisible,
+    setIsLegendVisible,
     selectedScopeFilterId,
     setSelectedScopeFilterId,
     releaseFilter,

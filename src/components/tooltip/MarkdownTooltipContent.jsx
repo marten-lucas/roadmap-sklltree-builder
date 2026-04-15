@@ -30,21 +30,28 @@ const EffortBenefitChips = ({ effort, benefit, storyPointMap }) => {
   )
 }
 
+const getLevelDisplayLabel = (level, index) => {
+  const trimmed = String(level?.label ?? '').trim()
+  return trimmed || `Level ${index + 1}`
+}
+
 const LevelTabBar = ({ levels, activeIndex, onTabChange }) => (
   <div className="skill-node-level-tab-bar">
     {levels.map((level, i) => {
       const statusKey = level.status ?? 'later'
       const dotColor = STATUS_STYLES[statusKey]?.ringBand ?? STATUS_STYLES.later.ringBand
+      const levelLabel = getLevelDisplayLabel(level, i)
       return (
         <button
           key={level.id ?? i}
           type="button"
           className={i === activeIndex ? 'skill-node-level-tab skill-node-level-tab--active' : 'skill-node-level-tab'}
           onClick={(e) => { e.stopPropagation(); onTabChange(i) }}
-          title={level.label}
+          title={levelLabel}
+          aria-label={levelLabel}
         >
           <span className="skill-node-level-tab__dot" style={{ background: dotColor }} />
-          {`L${i + 1}`}
+          {levelLabel}
         </button>
       )
     })}

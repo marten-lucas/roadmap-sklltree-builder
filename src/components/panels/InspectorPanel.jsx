@@ -90,6 +90,7 @@ const STATUS_OPTIONS = [
   { value: 'now', label: STATUS_LABELS.now },
   { value: 'next', label: STATUS_LABELS.next },
   { value: 'later', label: STATUS_LABELS.later },
+  { value: 'someday', label: STATUS_LABELS.someday },
   { value: 'hidden', label: STATUS_LABELS.hidden },
 ]
 
@@ -700,10 +701,31 @@ export function InspectorPanel({
   )
 
   const [activeTab, setActiveTab] = useState('properties')
+  const lastSyncedProgressLevelIdRef = useRef(null)
 
   useEffect(() => {
     setActiveTab('properties')
+    lastSyncedProgressLevelIdRef.current = null
   }, [selectedNode?.id])
+
+  useEffect(() => {
+    if (!selectedProgressLevelId || selectedProgressLevelId === lastSyncedProgressLevelIdRef.current) {
+      return
+    }
+
+    const levelForTab = nodeLevels.find((level) => level.id === selectedProgressLevelId)
+    if (!levelForTab) {
+      return
+    }
+
+    lastSyncedProgressLevelIdRef.current = selectedProgressLevelId
+    setActiveTab(selectedProgressLevelId)
+
+    const nextReleaseNote = levelForTab.releaseNote ?? ''
+    releaseNoteDraftRef.current = nextReleaseNote
+    committedReleaseNoteRef.current = nextReleaseNote
+    setReleaseNoteDraft(nextReleaseNote)
+  }, [nodeLevels, selectedProgressLevelId])
 
   const handleTabChange = useCallback((newValue) => {
     if (!newValue) return
@@ -715,6 +737,7 @@ export function InspectorPanel({
       releaseNoteDraftRef.current = nextReleaseNote
       committedReleaseNoteRef.current = nextReleaseNote
       setReleaseNoteDraft(nextReleaseNote)
+      lastSyncedProgressLevelIdRef.current = newValue
       onSelectProgressLevel?.(newValue)
     }
   }, [commitCurrentDrafts, nodeLevels, onSelectProgressLevel])

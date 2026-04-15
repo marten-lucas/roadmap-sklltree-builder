@@ -1,9 +1,9 @@
-import { Alert, Button, Checkbox, Divider, Group, Modal, Radio, Stack, Text } from '@mantine/core'
+import { Alert, Button, Checkbox, Group, Modal, Radio, Stack, Text } from '@mantine/core'
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react'
 import { flushSync } from 'react-dom'
 import { TransformComponent, TransformWrapper } from 'react-zoom-pan-pinch'
 import './skillTree.css'
-import { TREE_CONFIG, STATUS_STYLES, NODE_LABEL_ZOOM } from './config'
+import { DEFAULT_STATUS_DESCRIPTIONS, TREE_CONFIG, STATUS_LABELS, STATUS_STYLES, NODE_LABEL_ZOOM } from './config'
 import {
   saveDocumentToLocalStorage,
   downloadDocumentJson,
@@ -105,6 +105,9 @@ const DEFAULT_CSV_IMPORT_PROCESS_OPTIONS = {
   processSegments: true,
   processManualLevels: true,
 }
+const LEGEND_STATUS_ORDER = ['now', 'next', 'later', 'someday', 'done']
+const LEGEND_PORTAL_SOCKET_PATH = 'M 0 -9 A 9 9 0 0 1 0 9'
+const LEGEND_PORTAL_PLUG_PATH = 'M -14 -7 L 7 -7 L 14 0 L 7 7 L -14 7 Z'
 
 const collectAllNodes = (document) => {
   const all = []
@@ -174,10 +177,6 @@ export function SkillTree() {
   const [exportLabelDialogOpen, setExportLabelDialogOpen] = useState(false)
   const [exportLabelDialogMode, setExportLabelDialogMode] = useState('mid')
   const exportLabelDialogResolveRef = useRef(null)
-  const [htmlExportDialogOpen, setHtmlExportDialogOpen] = useState(false)
-  const [htmlExportReleaseIds, setHtmlExportReleaseIds] = useState([])
-  const [htmlExportIncludePriorityMatrix, setHtmlExportIncludePriorityMatrix] = useState(false)
-  const htmlExportDialogResolveRef = useRef(null)
   const [lastSavedAt, setLastSavedAt] = useState(null)
   const [csvImportDialogOpen, setCsvImportDialogOpen] = useState(false)
   const [csvImportOptions, setCsvImportOptions] = useState(DEFAULT_CSV_IMPORT_PROCESS_OPTIONS)
@@ -201,6 +200,8 @@ export function SkillTree() {
     setRightPanel,
     isToolbarCollapsed,
     setIsToolbarCollapsed,
+    isLegendVisible,
+    setIsLegendVisible,
     selectedScopeFilterId,
     setSelectedScopeFilterId,
     releaseFilter,
@@ -391,6 +392,14 @@ export function SkillTree() {
     [roadmapData, activeReleaseId],
   )
 
+  const legendStatusDescriptions = useMemo(
+    () => ({
+      ...DEFAULT_STATUS_DESCRIPTIONS,
+      ...(roadmapData?.statusDescriptions ?? {}),
+    }),
+    [roadmapData?.statusDescriptions],
+  )
+
   const nodeVisibilityModeById = useMemo(() => {
     const byId = new Map()
     const showHiddenNodes = roadmapData.showHiddenNodes ?? false
@@ -401,7 +410,7 @@ export function SkillTree() {
         continue
       }
 
-      const matchesScope = nodeMatchesScopeFilter(node, selectedScopeFilterId)
+      const matchesScope = nodeMatchesScopeFilter(node, selectedScopeFilterId, scopeOptions)
 
       if (!matchesScope) {
         byId.set(node.id, 'hidden')
@@ -413,7 +422,7 @@ export function SkillTree() {
     }
 
     return byId
-  }, [nodes, hiddenNodeIdSet, selectedScopeFilterId, releaseFilter, roadmapData.showHiddenNodes, activeReleaseId])
+  }, [nodes, hiddenNodeIdSet, selectedScopeFilterId, scopeOptions, releaseFilter, roadmapData.showHiddenNodes, activeReleaseId])
 
   const renderedNodes = useMemo(
     () => nodes.filter((node) => (nodeVisibilityModeById.get(node.id) ?? 'full') !== 'hidden'),
@@ -1422,40 +1431,6 @@ export function SkillTree() {
     exportLabelDialogResolveRef.current = null
   }
 
-  const openHtmlExportDialog = () => new Promise((resolve) => {
-    const releaseIds = (roadmapData.releases ?? []).map((release) => release.id).filter(Boolean)
-    htmlExportDialogResolveRef.current = resolve
-    setHtmlExportReleaseIds(releaseIds)
-    setHtmlExportIncludePriorityMatrix(false)
-    setHtmlExportDialogOpen(true)
-  })
-
-  const confirmHtmlExportDialog = () => {
-    setHtmlExportDialogOpen(false)
-    htmlExportDialogResolveRef.current?.({ releaseIds: htmlExportReleaseIds, includePriorityMatrix: htmlExportIncludePriorityMatrix })
-    htmlExportDialogResolveRef.current = null
-  }
-
-  const cancelHtmlExportDialog = () => {
-    setHtmlExportDialogOpen(false)
-    htmlExportDialogResolveRef.current?.(null)
-    htmlExportDialogResolveRef.current = null
-  }
-
-  const toggleHtmlExportReleaseId = (releaseId, checked) => {
-    setHtmlExportReleaseIds((current) => {
-      if (!releaseId) {
-        return current
-      }
-
-      if (checked) {
-        return current.includes(releaseId) ? current : [...current, releaseId]
-      }
-
-      return current.filter((id) => id !== releaseId)
-    })
-  }
-
   const handleExportSvg = async () => {
     if (!canvasSvgRef.current) {
       window.alert('SVG export not available.')
@@ -1554,13 +1529,6 @@ export function SkillTree() {
 
     try {
       flushSync(() => resetSelections())
-      const dialogResult = await openHtmlExportDialog()
-      if (dialogResult === null) return
-      const { releaseIds: selectedReleaseIds, includePriorityMatrix } = dialogResult
-      if (!Array.isArray(selectedReleaseIds) || selectedReleaseIds.length === 0) {
-        window.alert('Please select at least one release for HTML export.')
-        return
-      }
       // Render in 'far' mode so the HTML viewer script has the base dimensions
       // and can apply responsive label modes dynamically.
       flushSync(() => setExportLabelModeOverride('far'))
@@ -1568,8 +1536,6 @@ export function SkillTree() {
       const exported = exportHtmlFromSkillTree({
         svgElement: canvasSvgRef.current,
         roadmapDocument: roadmapData,
-        selectedReleaseIds,
-        includePriorityMatrix,
       })
 
       if (!exported) {
@@ -1750,7 +1716,28 @@ export function SkillTree() {
 
       if (action === 'export-html') {
         event.preventDefault()
-        void handleExportHtml()
+        void (async () => {
+          try {
+            if (!canvasSvgRef.current) {
+              window.alert('HTML export not available.')
+              return
+            }
+
+            flushSync(() => resetSelections())
+            const { exportHtmlFromSkillTree } = await import('./utils/htmlExport')
+            const exported = exportHtmlFromSkillTree({
+              svgElement: canvasSvgRef.current,
+              roadmapDocument: roadmapData,
+            })
+
+            if (!exported) {
+              window.alert('HTML export failed.')
+            }
+          } catch (error) {
+            console.error('HTML export shortcut failed', error)
+            window.alert('HTML export failed.')
+          }
+        })()
         return
       }
 
@@ -2178,14 +2165,22 @@ export function SkillTree() {
     setSelectedPortalKey(null)
   }
 
-  const handleSelectNodeFromListView = (nodeId) => {
+  const handleSelectNodeFromListView = (nodeId, options = {}) => {
+    const { openInspector = false } = options
     const layoutNode = layoutNodesById.get(nodeId)
-    // Only set selection for zoom focus, don't open inspector
+
     flushSync(() => {
-      setSelectedNodeId(nodeId)
-      setSelectedNodeIds([nodeId])
+      if (openInspector) {
+        selectNodeId(nodeId)
+        setRightPanel(PANEL_INSPECTOR)
+      } else {
+        setSelectedNodeId(nodeId)
+        setSelectedNodeIds([nodeId])
+      }
+      setSelectedProgressLevelId(null)
       setSelectedPortalKey(null)
     })
+
     if (layoutNode && transformApiRef.current && canvasAreaRef.current) {
       const TARGET_SCALE = 4 // 400% zoom
       const rect = canvasAreaRef.current.getBoundingClientRect()
@@ -2206,15 +2201,14 @@ export function SkillTree() {
 
     const applyMatrixZoom = () => {
       const layoutNode = layoutNodesById.get(nodeId) ?? nodes.find((node) => node.id === nodeId)
-      if (!layoutNode || !transformApiRef.current || !canvasAreaRef.current) {
+      if (!layoutNode || !transformApiRef.current) {
         return
       }
 
-      const rect = canvasAreaRef.current.getBoundingClientRect()
-      // Keep matrix-selected node in the right third so the left matrix drawer does not cover it.
-      const targetX = rect.width * (2 / 3)
-      const positionX = targetX - layoutNode.x * MATRIX_SELECTION_ZOOM_SCALE
-      const positionY = rect.height / 2 - layoutNode.y * MATRIX_SELECTION_ZOOM_SCALE
+      const vw = window.innerWidth
+      const vh = window.innerHeight
+      const positionX = vw / 2 - layoutNode.x * MATRIX_SELECTION_ZOOM_SCALE
+      const positionY = vh / 2 - layoutNode.y * MATRIX_SELECTION_ZOOM_SCALE
       transformApiRef.current.setTransform(positionX, positionY, MATRIX_SELECTION_ZOOM_SCALE, 500, 'easeOut')
     }
 
@@ -2254,14 +2248,22 @@ export function SkillTree() {
     commitDocument(nextTree)
   }
 
-  const handleSelectLevelFromListView = (nodeId, levelId) => {
+  const handleSelectLevelFromListView = (nodeId, levelId, options = {}) => {
+    const { openInspector = false } = options
     const layoutNode = layoutNodesById.get(nodeId)
-    // Only set selection for zoom focus, don't open inspector
+
     flushSync(() => {
-      setSelectedNodeId(nodeId)
+      if (openInspector) {
+        selectNodeId(nodeId)
+        setRightPanel(PANEL_INSPECTOR)
+      } else {
+        setSelectedNodeId(nodeId)
+        setSelectedNodeIds([nodeId])
+      }
       setSelectedProgressLevelId(levelId)
       setSelectedPortalKey(null)
     })
+
     if (layoutNode && transformApiRef.current && canvasAreaRef.current) {
       const TARGET_SCALE = 4 // 400% zoom
       const rect = canvasAreaRef.current.getBoundingClientRect()
@@ -2522,6 +2524,22 @@ export function SkillTree() {
     commitDocument(updateNodeProgressLevel(roadmapData, nodeId, levelId, { benefit: normalizeBenefit(benefit) }))
   }, [commitDocument, roadmapData])
 
+  const handleListViewLevelStatusChange = useCallback((nodeId, levelId, status) => {
+    if (!nodeId || !levelId || !status) {
+      return
+    }
+
+    commitDocument(updateNodeProgressLevel(roadmapData, nodeId, levelId, { status }, activeReleaseId))
+  }, [activeReleaseId, commitDocument, roadmapData])
+
+  const handleListViewLevelScopesChange = useCallback((nodeId, levelId, scopeIds) => {
+    if (!nodeId || !levelId) {
+      return
+    }
+
+    commitDocument(updateNodeProgressLevel(roadmapData, nodeId, levelId, { scopeIds }))
+  }, [commitDocument, roadmapData])
+
   const handleLevelChange = (newLevel) => {
     if (!selectedNodeId) {
       return
@@ -2745,67 +2763,6 @@ export function SkillTree() {
         </Stack>
       </Modal>
 
-      <Modal
-        opened={htmlExportDialogOpen}
-        onClose={cancelHtmlExportDialog}
-        title="HTML export releases"
-        size="sm"
-      >
-        <Stack gap="md">
-          <Text size="sm" c="dimmed">
-            Select which releases should be included in the exported HTML.
-          </Text>
-
-          <Group justify="space-between">
-            <Text size="sm" fw={600}>Releases</Text>
-            <Button
-              variant="subtle"
-              size="compact-sm"
-              onClick={() => {
-                const allReleaseIds = (roadmapData.releases ?? []).map((release) => release.id).filter(Boolean)
-                const allSelected = allReleaseIds.length > 0 && htmlExportReleaseIds.length === allReleaseIds.length
-                setHtmlExportReleaseIds(allSelected ? [] : allReleaseIds)
-              }}
-            >
-              {(() => {
-                const allReleaseIds = (roadmapData.releases ?? []).map((release) => release.id).filter(Boolean)
-                const allSelected = allReleaseIds.length > 0 && htmlExportReleaseIds.length === allReleaseIds.length
-                return allSelected ? 'Deselect all' : 'Select all'
-              })()}
-            </Button>
-          </Group>
-
-          <Stack gap="xs">
-            {(roadmapData.releases ?? []).map((release) => (
-              <Checkbox
-                key={release.id}
-                checked={htmlExportReleaseIds.includes(release.id)}
-                onChange={(event) => toggleHtmlExportReleaseId(release.id, event.currentTarget.checked)}
-                label={String(release.name ?? '').trim() || 'Untitled release'}
-              />
-            ))}
-          </Stack>
-
-          <Divider />
-
-          <Text size="sm" fw={600}>Options</Text>
-          <Checkbox
-            checked={htmlExportIncludePriorityMatrix}
-            onChange={(event) => setHtmlExportIncludePriorityMatrix(event.currentTarget.checked)}
-            label="Include Priority Matrix"
-          />
-
-          <Group justify="flex-end">
-            <Button variant="default" onClick={cancelHtmlExportDialog}>
-              Cancel
-            </Button>
-            <Button onClick={confirmHtmlExportDialog} disabled={htmlExportReleaseIds.length === 0}>
-              Export
-            </Button>
-          </Group>
-        </Stack>
-      </Modal>
-
       {globalToast.visible && (
         <div style={{ position: 'fixed', top: 12, left: '50%', transform: 'translateX(-50%)', zIndex: 9999 }}>
           <Alert color={globalToast.type === 'warning' ? 'yellow' : globalToast.type === 'success' ? 'teal' : 'blue'}>
@@ -2818,6 +2775,10 @@ export function SkillTree() {
         isCollapsed={isToolbarCollapsed}
         onToggleCollapsed={() => {
           setIsToolbarCollapsed((prev) => !prev)
+        }}
+        isLegendVisible={isLegendVisible}
+        onToggleLegend={() => {
+          setIsLegendVisible((prev) => !prev)
         }}
         onOpenDocumentPicker={handleOpenDocumentPicker}
         onOpenCsvDocumentPicker={handleOpenCsvDocumentPicker}
@@ -2867,6 +2828,74 @@ export function SkillTree() {
         onReleaseChange={setSelectedReleaseId}
         releaseBudgetSummaries={releaseBudgetSummaries}
       />
+
+      {isLegendVisible && (
+        <aside className="skill-tree-legend" aria-label="Status legend">
+          <div className="skill-tree-legend__header">
+            <div className="skill-tree-legend__title">Legend</div>
+            <div className="skill-tree-legend__tip"><span className="skill-tree-legend__tip-icon" aria-hidden="true">ⓘ</span><span>Zooming in reveals more node details.</span></div>
+          </div>
+
+          <div className="skill-tree-legend__section">
+            <div className="skill-tree-legend__symbol-grid">
+              {LEGEND_STATUS_ORDER.map((statusKey) => {
+                const style = STATUS_STYLES[statusKey]
+                return (
+                  <div key={statusKey} className="skill-tree-legend__symbol-item">
+                    <span
+                      className="skill-tree-legend__swatch"
+                      style={{
+                        background: style.badge,
+                        borderColor: style.ringBand,
+                        borderStyle: statusKey === 'someday' ? 'dashed' : 'solid',
+                        boxShadow: style.glow === 'none'
+                          ? `0 0 0 1.5px ${style.ringBand}, 0 0 0 3px rgba(15, 23, 42, 0.35)`
+                          : `0 0 0 1.5px ${style.ringBand}, ${style.glow}`,
+                      }}
+                    />
+                    <span>
+                      <strong>{STATUS_LABELS[statusKey]}</strong>
+                      <span className="skill-tree-legend__symbol-copy">{legendStatusDescriptions[statusKey]}</span>
+                    </span>
+                  </div>
+                )
+              })}
+
+              <div className="skill-tree-legend__symbol-item">
+                <span className="skill-tree-legend__portal-symbol" aria-hidden="true">
+                  <svg viewBox="-12 -12 24 24" className="skill-tree-legend__portal-svg">
+                    <path
+                      className="skill-tree-portal__ring skill-tree-portal__ring--source"
+                      d={LEGEND_PORTAL_SOCKET_PATH}
+                      transform="rotate(180)"
+                    />
+                  </svg>
+                </span>
+                <span>
+                  <strong>Incoming portal</strong>
+                  <span className="skill-tree-legend__symbol-copy">This node depends on another skill.</span>
+                </span>
+              </div>
+
+              <div className="skill-tree-legend__symbol-item">
+                <span className="skill-tree-legend__portal-symbol" aria-hidden="true">
+                  <svg viewBox="-16 -10 32 20" className="skill-tree-legend__portal-svg">
+                    <path
+                      className="skill-tree-portal__ring skill-tree-portal__ring--target"
+                      d={LEGEND_PORTAL_PLUG_PATH}
+                    />
+                  </svg>
+                </span>
+                <span>
+                  <strong>Outgoing portal</strong>
+                  <span className="skill-tree-legend__symbol-copy">This node enables or links to another skill.</span>
+                </span>
+              </div>
+            </div>
+          </div>
+
+        </aside>
+      )}
 
       <div ref={canvasAreaRef} style={{ position: 'absolute', inset: 0, overflow: 'hidden' }}>
       <TransformWrapper
@@ -3077,6 +3106,8 @@ export function SkillTree() {
         onSelectLevel={handleSelectLevelFromListView}
         onSetLevelEffort={handleListViewLevelEffortChange}
         onSetLevelBenefit={handleListViewLevelBenefitChange}
+        onSetLevelStatus={handleListViewLevelStatusChange}
+        onSetLevelScopeIds={handleListViewLevelScopesChange}
         selectedReleaseId={activeReleaseId}
         selectedNodeId={selectedNodeId}
         selectedProgressLevelId={selectedProgressLevelId}

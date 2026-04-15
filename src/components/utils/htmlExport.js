@@ -450,6 +450,33 @@ const buildViewerScript = () => `
 
       const nodeInfoById = new Map()
       const allScopeIds = new Set()
+      const scopeColorById = new Map()
+
+      const scopeIdsMatchFilter = (scopeIds, selectedScopeId) => {
+        if (!selectedScopeId || selectedScopeId === SCOPE_FILTER_ALL || selectedScopeId === 'all') {
+          return true
+        }
+
+        const selectedColor = scopeColorById.get(selectedScopeId) ?? null
+        const selectedGroupScopeIds = new Set([selectedScopeId])
+
+        if (selectedColor) {
+          scopeColorById.forEach((color, scopeId) => {
+            if (color === selectedColor) {
+              selectedGroupScopeIds.add(scopeId)
+            }
+          })
+        }
+
+        const assignedScopeIds = Array.isArray(scopeIds) ? scopeIds.filter(Boolean) : []
+        const hasAssignmentInSelectedGroup = assignedScopeIds.some((scopeId) => selectedGroupScopeIds.has(scopeId))
+
+        if (!hasAssignmentInSelectedGroup) {
+          return true
+        }
+
+        return assignedScopeIds.includes(selectedScopeId)
+      }
 
       if (exportDataScript?.textContent) {
         try {
@@ -460,6 +487,10 @@ const buildViewerScript = () => `
           scopes.forEach((scope) => {
             if (scope?.id) {
               allScopeIds.add(scope.id)
+              scopeColorById.set(
+                scope.id,
+                typeof scope.color === 'string' && scope.color.trim() ? scope.color.trim().toLowerCase() : null,
+              )
             }
           })
 
@@ -485,6 +516,7 @@ const buildViewerScript = () => `
               status: getDisplayStatusKey(node),
               segmentId: node.segmentId ?? null,
               scopeIds,
+              levelScopeIds: levels.map((level) => Array.isArray(level?.scopeIds) ? level.scopeIds.filter(Boolean) : []),
             })
           })
         } catch {
@@ -1304,8 +1336,10 @@ const buildViewerScript = () => `
           }
 
           const scopeVisible = selectedScopeId === SCOPE_FILTER_ALL
-            || nodeInfo.scopeIds.size === 0
-            || nodeInfo.scopeIds.has(selectedScopeId)
+            || (Array.isArray(nodeInfo.levelScopeIds) && nodeInfo.levelScopeIds.length === 0)
+            || (Array.isArray(nodeInfo.levelScopeIds)
+              ? nodeInfo.levelScopeIds.some((scopeIds) => scopeIdsMatchFilter(scopeIds, selectedScopeId))
+              : scopeIdsMatchFilter(Array.from(nodeInfo.scopeIds ?? []), selectedScopeId))
 
           if (!scopeVisible) {
             setNodeMode(anchor, 'hidden')
