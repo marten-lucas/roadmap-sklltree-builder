@@ -85,14 +85,15 @@ test.describe('ListViewDrawer with status and scope filters', () => {
     const statusFilter = page.locator('.list-view-drawer__filter-select').nth(0)
     const statusOptions = statusFilter.locator('option')
 
-    // Should have 6 options: All Statuses + 5 status values
-    await expect(statusOptions).toHaveCount(6)
+    // Should include All Statuses plus the currently supported status values.
+    await expect(statusOptions).toHaveCount(7)
     await expect(statusFilter).toContainText('All Statuses')
     await expect(statusFilter).toContainText('Done')
     await expect(statusFilter).toContainText('Now')
     await expect(statusFilter).toContainText('Next')
     await expect(statusFilter).toContainText('Later')
     await expect(statusFilter).toContainText('Hidden')
+    await expect(statusFilter).toContainText('Someday')
 
     expect(pageErrors).toHaveLength(0)
   })
@@ -241,7 +242,8 @@ test.describe('ListViewDrawer with status and scope filters', () => {
     await page.locator('button[aria-label="List View"]').click()
     await expect(page.locator('.list-view-drawer')).toBeVisible({ timeout: 5000 })
 
-    await page.locator('button[title="Effort / Value"]').click()
+    await page.locator('.list-view-drawer button[title="Columns"]').click()
+    await page.locator('.list-view-drawer__columns-menu').getByLabel('Effort / Value').check({ force: true })
     await expect(page.locator('.list-view-drawer')).toHaveClass(/list-view-drawer--wide/)
     await expect(page.locator('.list-view-drawer__metric-slider').first()).toBeVisible()
 

@@ -523,8 +523,11 @@ export function SkillTreeCanvas({
           const nodeX = nodeData?.x ?? portal.x
           const nodeY = nodeData?.y ?? portal.y
           const angleRad = (portal.angle ?? 0) * Math.PI / 180
+          // Use the actual rendered node footprint here; minimized nodes are much smaller,
+          // and using the full-size radius flips the portal tangent by 180°.
+          const renderedNodeSize = portal.isMinimal ? minimalNodeSize : nodeSize
           // For rounded-rect nodes (very-close) use rectangular boundary so corners don't clip
-          const halfSize = nodeSize / 2
+          const halfSize = renderedNodeSize / 2
           const boundaryRadius = labelMode === 'very-close'
             ? halfSize / Math.max(Math.abs(Math.cos(angleRad)), Math.abs(Math.sin(angleRad)))
             : halfSize
@@ -562,7 +565,7 @@ export function SkillTreeCanvas({
               if (t < 1) spokeSamples.push({ x: bxLocal + spokeDx * t, y: byLocal + spokeDy * t, angle: spokeTangent })
             }
           }
-          const spokeChevronD = buildChevronPath(spokeSamples, chevronArm(3), CHEVRON_HALF_OPEN, portal.type === 'target')
+          const spokeChevronD = buildChevronPath(spokeSamples, chevronArm(3), CHEVRON_HALF_OPEN, portal.type === 'source')
           const zoomSafe = Math.max(0.35, currentZoomScale)
           const hitScale = Math.max(1, Math.min(2.4, 1 / zoomSafe))
           const baseHitRadius = portal.isMinimal ? 24 : 28
@@ -604,25 +607,29 @@ export function SkillTreeCanvas({
                 {...portalHoverHandlers}
                 onPointerLeave={() => clearPortalHover(portal.key)}
               >
-                {/* wide, invisible spoke hit-path for forgiving hover */}
-                <path
-                  d={spokeLinePath}
-                  className="skill-tree-portal__hoverline"
-                  style={{ strokeWidth: portalHoverStrokeWidth }}
-                  {...portalHoverHandlers}
-                />
-                {/* base spoke line */}
-                <path
-                  d={spokeLinePath}
-                  className={`skill-tree-portal__spoke skill-tree-portal__spoke--${portal.type}`}
-                  {...portalHoverHandlers}
-                />
-                {/* directional chevrons overlay (Method 2: compound path) */}
-                {spokeChevronD && (
-                  <path
-                    d={spokeChevronD}
-                    className={`skill-tree-portal__chevrons skill-tree-portal__chevrons--${portal.type}`}
-                  />
+                {!portal.isMinimal && (
+                  <>
+                    {/* wide, invisible spoke hit-path for forgiving hover */}
+                    <path
+                      d={spokeLinePath}
+                      className="skill-tree-portal__hoverline"
+                      style={{ strokeWidth: portalHoverStrokeWidth }}
+                      {...portalHoverHandlers}
+                    />
+                    {/* base spoke line */}
+                    <path
+                      d={spokeLinePath}
+                      className={`skill-tree-portal__spoke skill-tree-portal__spoke--${portal.type}`}
+                      {...portalHoverHandlers}
+                    />
+                    {/* directional chevrons overlay (Method 2: compound path) */}
+                    {spokeChevronD && (
+                      <path
+                        d={spokeChevronD}
+                        className={`skill-tree-portal__chevrons skill-tree-portal__chevrons--${portal.type}`}
+                      />
+                    )}
+                  </>
                 )}
                 {/* socket/plug icon at spoke tip:
                      source = requires (Buchse, inward-facing)
@@ -631,7 +638,7 @@ export function SkillTreeCanvas({
                   <path
                     className={`skill-tree-portal__ring skill-tree-portal__ring--${portal.type}`}
                     d={buildPortalSocketPath(portal.isMinimal ? 10 : 18)}
-                    transform={`translate(${extTipX} ${extTipY}) rotate(${(spokeTangent * 180) / Math.PI + 180})`}
+                    transform={`translate(${extTipX} ${extTipY}) rotate(${(spokeTangent * 180) / Math.PI})`}
                     {...portalHoverHandlers}
                   />
                 ) : (
@@ -680,7 +687,7 @@ export function SkillTreeCanvas({
               node={node}
               nodeSize={renderNodeSize}
               displayMode={visibilityMode}
-              labelMode={visibilityMode === 'minimal' ? 'far' : labelMode}
+              labelMode={labelMode}
               zoomScale={currentZoomScale}
               isSelected={isNodeSelected}
               isPortalPeerHovered={hoveredPeerNodeId === node.id}

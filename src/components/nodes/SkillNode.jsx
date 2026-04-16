@@ -6,6 +6,7 @@ import { resolveScopeEntries } from '../utils/scopeDisplay'
 import { MarkdownTooltipContent, Tooltip } from '../tooltip'
 import { EFFORT_SIZE_LABELS, BENEFIT_SIZE_LABELS } from '../utils/effortBenefit'
 import { renderMarkdownToHtml } from '../utils/markdown'
+import { getLevelDisplayLabel } from '../utils/treeData'
 import { IconBolt, IconStar } from '@tabler/icons-react'
 
 const CHIP_ICON_STYLE = { display: 'block', flexShrink: 0 }
@@ -147,7 +148,7 @@ const _SkillNode = ({ node, nodeSize, isSelected, isPortalPeerHovered = false, o
     ? (levels[hoveredLevelIndex]?.benefit ?? node.benefit)
     : tooltipBenefit
   const activeLevelLabel = hoveredLevelIndex !== null
-    ? (String(levels[hoveredLevelIndex]?.label ?? `Level ${hoveredLevelIndex + 1}`).trim() || `Level ${hoveredLevelIndex + 1}`)
+    ? getLevelDisplayLabel(levels[hoveredLevelIndex]?.label, hoveredLevelIndex)
     : ''
   const activeTooltipTitle = hoveredLevelIndex !== null && levels.length > 1
     ? `${node.label} – ${activeLevelLabel}`
@@ -161,7 +162,7 @@ const _SkillNode = ({ node, nodeSize, isSelected, isPortalPeerHovered = false, o
   const exportLevelEntries = Array.isArray(node?.levels)
     ? node.levels.map((level, index) => ({
       id: level?.id ?? `level-${index + 1}`,
-      label: String(level?.label ?? `Level ${index + 1}`),
+      label: getLevelDisplayLabel(level?.label, index),
       status: String(level?.status ?? 'later').trim().toLowerCase(),
       statusLabel: STATUS_STYLES[String(level?.status ?? 'later').trim().toLowerCase()]?.label ?? String(level?.status ?? 'Later'),
       releaseNote: String(level?.releaseNote ?? ''),
@@ -262,7 +263,23 @@ const _SkillNode = ({ node, nodeSize, isSelected, isPortalPeerHovered = false, o
   }
 
 
-  const showLabel = !isMinimal && (labelMode === 'mid' || labelMode === 'close' || labelMode === 'very-close')
+  const showShortName = !isMinimal || labelMode === 'mid' || labelMode === 'close' || labelMode === 'very-close'
+  const showLabel = isMinimal
+    ? labelMode === 'very-close'
+    : (labelMode === 'mid' || labelMode === 'close' || labelMode === 'very-close')
+  const minimalShortNameStyle = isMinimal
+    ? {
+        fontSize: showLabel ? '0.56rem' : '0.72rem',
+        letterSpacing: showLabel ? '0.08em' : '0.06em',
+      }
+    : null
+  const minimalLabelStyle = isMinimal
+    ? {
+        fontSize: '3px',
+        lineHeight: 1,
+        maxWidth: '82%',
+      }
+    : null
   const fwX = node.x - fwWidth / 2
   const peerPulseStrength = clamp(0.95 + (1 / Math.max(zoomScale, 0.32) - 1) * 1.25, 0.95, 2.8)
   const peerPulseScale = (1.02 + peerPulseStrength * 0.03).toFixed(3)
@@ -397,15 +414,19 @@ const _SkillNode = ({ node, nodeSize, isSelected, isPortalPeerHovered = false, o
                 {showLabel && (
                   <p
                     className="skill-node-button__label"
-                    style={{ color: labelTextColor }}
+                    style={{ color: labelTextColor, ...minimalLabelStyle }}
                   >
                     {node.label}
                   </p>
                 )}
-                {!isMinimal && (
+                {showShortName && (
                   <Text
                     className="skill-node-button__shortname"
-                    style={{ color: statusStyles.textColor, fontWeight: statusKey === 'now' ? 900 : statusKey === 'next' ? 820 : 700 }}
+                    style={{
+                      color: statusStyles.textColor,
+                      fontWeight: statusKey === 'now' ? 900 : statusKey === 'next' ? 820 : 700,
+                      ...minimalShortNameStyle,
+                    }}
                   >
                     {shortName}
                   </Text>

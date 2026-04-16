@@ -48,20 +48,20 @@ const renderNode = (zoomScale) => renderToString(
   ),
 )
 
-const renderNodeWithLabelMode = (zoomScale, labelMode, isPortalPeerHovered = false) => renderToString(
+const renderNodeWithLabelMode = (zoomScale, labelMode, isPortalPeerHovered = false, displayMode = 'full', nodeSize = 120) => renderToString(
   React.createElement(MantineProvider, null,
     React.createElement(
       'svg',
       null,
       React.createElement(SkillNode, {
         node: baseNode,
-        nodeSize: 120,
+        nodeSize,
         isSelected: false,
         isPortalPeerHovered,
         onSelect: vi.fn(),
         onSelectLevel: vi.fn(),
         onZoomToNode: vi.fn(),
-        displayMode: 'full',
+        displayMode,
         labelMode,
         zoomScale,
         scopeOptions: [],
@@ -111,5 +111,23 @@ describe('SkillNode glow intensity', () => {
     expect(farZoomHtml).toContain('inset:13px')
     expect(closerZoomHtml).toContain('padding:21px')
     expect(closerZoomHtml).toContain('inset:9.333333333333334px')
+  })
+
+  it('reveals minimal node short name first and full name only at very-close zoom', () => {
+    const midZoomHtml = renderNodeWithLabelMode(1.1, 'mid', false, 'minimal', 48)
+    const closeZoomHtml = renderNodeWithLabelMode(2, 'close', false, 'minimal', 48)
+    const veryCloseHtml = renderNodeWithLabelMode(4.2, 'very-close', false, 'minimal', 48)
+
+    expect(midZoomHtml).toContain('skill-node-button__shortname')
+    expect(midZoomHtml).toContain('>fnd<')
+    expect(midZoomHtml).toContain('font-size:0.72rem')
+    expect(midZoomHtml).not.toContain('skill-node-button__label')
+    expect(closeZoomHtml).toContain('skill-node-button__shortname')
+    expect(closeZoomHtml).toContain('>fnd<')
+    expect(closeZoomHtml).toContain('font-size:0.72rem')
+    expect(closeZoomHtml).not.toContain('skill-node-button__label')
+    expect(veryCloseHtml).toContain('skill-node-button__label')
+    expect(veryCloseHtml).toContain('>Foundation<')
+    expect(veryCloseHtml).toContain('font-size:3px')
   })
 })

@@ -44,12 +44,24 @@ test.describe('ListView effort/value refinements', () => {
     await expect(listModeButton).toHaveClass(/list-view-drawer__icon-toggle--active/)
     await expect(treeModeButton).not.toHaveClass(/list-view-drawer__icon-toggle--active/)
 
-    await page.locator('.list-view-drawer button[title="Effort / Value"]').click()
+    const columnsButton = page.locator('.list-view-drawer button[title="Columns"]')
+    await expect(columnsButton).toBeVisible()
+    await columnsButton.click()
 
-    const statusColumnToggle = page.locator('.list-view-drawer button[title="Status column"]')
-    const scopeColumnToggle = page.locator('.list-view-drawer button[title="Scopes column"]')
-    await expect(statusColumnToggle).toBeVisible()
-    await expect(scopeColumnToggle).toBeVisible()
+    const columnsMenu = page.locator('.list-view-drawer__columns-menu')
+    await expect(columnsMenu).toBeVisible()
+
+    const effortValueToggle = columnsMenu.getByLabel('Effort / Value')
+    const statusColumnToggle = columnsMenu.getByLabel('Status')
+    const scopeColumnToggle = columnsMenu.getByLabel('Scopes')
+    const releaseNotesToggle = columnsMenu.getByLabel('Release Notes')
+
+    await expect(effortValueToggle).not.toBeChecked()
+    await expect(statusColumnToggle).toBeChecked()
+    await expect(scopeColumnToggle).toBeChecked()
+    await expect(releaseNotesToggle).not.toBeChecked()
+
+    await effortValueToggle.check({ force: true })
 
     const firstStatusGroup = page.locator('.list-view-drawer__status-group').first()
     await expect(firstStatusGroup).toBeVisible()
@@ -57,11 +69,18 @@ test.describe('ListView effort/value refinements', () => {
     const firstScopeGroup = page.locator('.list-view-drawer__scope-group').first()
     await expect(firstScopeGroup).toBeVisible()
 
-    const firstScopeButton = firstScopeGroup.locator('button').first()
-    await expect(firstScopeButton).toBeVisible()
-    const pressedBefore = await firstScopeButton.getAttribute('aria-pressed')
-    await firstScopeButton.click()
-    await expect(firstScopeButton).toHaveAttribute('aria-pressed', pressedBefore === 'true' ? 'false' : 'true')
+    await releaseNotesToggle.check({ force: true })
+    const firstReleaseNoteInput = page.locator('.list-view-drawer__release-note-input').first()
+    await expect(firstReleaseNoteInput).toBeVisible()
+    await firstReleaseNoteInput.fill('List panel note update')
+    await firstReleaseNoteInput.blur()
+
+    await releaseNotesToggle.click()
+    await expect(page.locator('.list-view-drawer__release-note-input')).toHaveCount(0)
+    await releaseNotesToggle.click()
+    await expect(firstReleaseNoteInput).toHaveValue('List panel note update')
+
+    await expect(firstScopeGroup.locator('input').first()).toBeVisible()
 
     await statusColumnToggle.click()
     await expect(page.locator('.list-view-drawer__status-group')).toHaveCount(0)
@@ -167,10 +186,11 @@ test.describe('ListView effort/value refinements', () => {
     await inspectorToggle.check({ force: true })
     await expect(inspectorToggle).toBeChecked()
 
+    await page.locator('.list-view-drawer__item-body--level').first().click()
+    await expect(page.locator('.skill-panel--inspector')).toBeVisible()
+
     const secondLevelName = String(await page.locator('.list-view-drawer__level-name').nth(1).textContent() ?? '').trim()
     await page.locator('.list-view-drawer__item-body--level').nth(1).click()
-
-    await expect(page.locator('.skill-panel--inspector')).toBeVisible()
     await expect(page.locator('.skill-panel--inspector [role="tab"][aria-selected="true"]').first()).toContainText(secondLevelName)
 
     await expect

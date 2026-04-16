@@ -3,6 +3,7 @@ import { renderScopeLabelsMarkup } from '../utils/scopeDisplay'
 import { renderMarkdownToHtml } from '../utils/markdown'
 import { EFFORT_SIZE_LABELS, BENEFIT_SIZE_LABELS, resolveStoryPoints } from '../utils/effortBenefit'
 import { STATUS_STYLES } from '../config'
+import { getExplicitLevelLabel, getLevelDisplayLabel } from '../utils/treeData'
 
 const EMPTY_NOTE = 'Keine Release Note hinterlegt.'
 
@@ -30,17 +31,13 @@ const EffortBenefitChips = ({ effort, benefit, storyPointMap }) => {
   )
 }
 
-const getLevelDisplayLabel = (level, index) => {
-  const trimmed = String(level?.label ?? '').trim()
-  return trimmed || `Level ${index + 1}`
-}
-
 const LevelTabBar = ({ levels, activeIndex, onTabChange }) => (
   <div className="skill-node-level-tab-bar">
     {levels.map((level, i) => {
       const statusKey = level.status ?? 'later'
       const dotColor = STATUS_STYLES[statusKey]?.ringBand ?? STATUS_STYLES.later.ringBand
-      const levelLabel = getLevelDisplayLabel(level, i)
+      const levelLabel = getLevelDisplayLabel(level?.label, i)
+      const levelName = getExplicitLevelLabel(level?.label)
       return (
         <button
           key={level.id ?? i}
@@ -51,7 +48,8 @@ const LevelTabBar = ({ levels, activeIndex, onTabChange }) => (
           aria-label={levelLabel}
         >
           <span className="skill-node-level-tab__dot" style={{ background: dotColor }} />
-          {levelLabel}
+          <span className="skill-node-level-tab__badge">{`Level ${i + 1}`}</span>
+          {levelName ? <span className="skill-node-level-tab__name">{levelName}</span> : null}
         </button>
       )
     })}

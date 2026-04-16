@@ -58,6 +58,7 @@ import {
   moveNodeToParent,
   renameScopeWithResult,
   removeNodeProgressLevel,
+  reorderNodeProgressLevels,
   setLevelAdditionalDependencies,
   updateNodeData as updateNodeDataInTree,
   updateNodeEffort,
@@ -200,6 +201,12 @@ export function SkillTree() {
   const transformApiRef = useRef(null)
   const canvasAreaRef = useRef(null)
   const shellRef = useRef(null)
+  const leftSidebarRef = useRef(null)
+  const rightSidebarRef = useRef(null)
+  const leftSidebarWidthRef = useRef(LEFT_SIDEBAR_DEFAULT_WIDTH)
+  const rightSidebarWidthRef = useRef(RIGHT_SIDEBAR_DEFAULT_WIDTH)
+  const resizeFrameRef = useRef(null)
+  const lastCanvasViewportRef = useRef(null)
   const systemPanelRef = useRef(null)
   const [isPanModeActive, setIsPanModeActive] = useState(false)
   const [currentZoomScale, setCurrentZoomScale] = useState(1)
@@ -216,10 +223,6 @@ export function SkillTree() {
   const [draftRelease, setDraftRelease] = useState(null)
   const [leftSidebarWidth, setLeftSidebarWidth] = useState(LEFT_SIDEBAR_DEFAULT_WIDTH)
   const [rightSidebarWidth, setRightSidebarWidth] = useState(RIGHT_SIDEBAR_DEFAULT_WIDTH)
-  const [canvasViewport, setCanvasViewport] = useState(() => ({
-    width: typeof window !== 'undefined' ? window.innerWidth : 0,
-    height: typeof window !== 'undefined' ? window.innerHeight : 0,
-  }))
 
   const {
     selectedNodeId,
@@ -267,34 +270,52 @@ export function SkillTree() {
   const handleSidebarResizeStart = useCallback((side) => (event) => {
     event.preventDefault()
     const startX = event.clientX
-    const startWidth = side === 'left' ? leftSidebarWidth : rightSidebarWidth
+    const widthRef = side === 'left' ? leftSidebarWidthRef : rightSidebarWidthRef
+    const targetRef = side === 'left' ? leftSidebarRef : rightSidebarRef
+    const startWidth = widthRef.current
+
+    const applyWidth = () => {
+      resizeFrameRef.current = null
+      if (targetRef.current) {
+        targetRef.current.style.width = `${widthRef.current}px`
+      }
+    }
 
     const onMove = (moveEvent) => {
       const delta = moveEvent.clientX - startX
       const totalWidth = shellRef.current?.getBoundingClientRect().width ?? (typeof window !== 'undefined' ? window.innerWidth : 0)
       const otherWidth = side === 'left'
-        ? (rightPanel != null || selectedSegmentId ? rightSidebarWidth : 0)
-        : (listViewOpen || priorityMatrixOpen ? leftSidebarWidth : 0)
+        ? (rightPanel != null || selectedSegmentId ? rightSidebarWidthRef.current : 0)
+        : (listViewOpen || priorityMatrixOpen ? leftSidebarWidthRef.current : 0)
       const minWidth = side === 'left' ? LEFT_SIDEBAR_MIN_WIDTH : RIGHT_SIDEBAR_MIN_WIDTH
       const signedDelta = side === 'left' ? delta : -delta
       const maxWidth = Math.max(minWidth, totalWidth - otherWidth - MIN_STAGE_WIDTH)
-      const nextWidth = Math.max(minWidth, Math.min(maxWidth, startWidth + signedDelta))
+      widthRef.current = Math.max(minWidth, Math.min(maxWidth, startWidth + signedDelta))
 
-      if (side === 'left') {
-        setLeftSidebarWidth(nextWidth)
-      } else {
-        setRightSidebarWidth(nextWidth)
+      if (!resizeFrameRef.current) {
+        resizeFrameRef.current = window.requestAnimationFrame(applyWidth)
       }
     }
 
     const onUp = () => {
+      if (resizeFrameRef.current) {
+        window.cancelAnimationFrame(resizeFrameRef.current)
+        applyWidth()
+      }
+
+      if (side === 'left') {
+        setLeftSidebarWidth(widthRef.current)
+      } else {
+        setRightSidebarWidth(widthRef.current)
+      }
+
       window.removeEventListener('pointermove', onMove)
       window.removeEventListener('pointerup', onUp)
     }
 
     window.addEventListener('pointermove', onMove)
     window.addEventListener('pointerup', onUp)
-  }, [leftSidebarWidth, listViewOpen, priorityMatrixOpen, rightPanel, rightSidebarWidth, selectedSegmentId])
+  }, [listViewOpen, priorityMatrixOpen, rightPanel, selectedSegmentId])
 
   const addControlOffset = TREE_CONFIG.nodeSize * 0.82
 
@@ -303,8 +324,8 @@ export function SkillTree() {
     [roadmapData],
   )
   const { nodes, links, crossingEdges = [], segments, canvas } = layout
-  const viewportWidth = canvasViewport.width || (typeof window !== 'undefined' ? window.innerWidth : canvas.width)
-  const viewportHeight = canvasViewport.height || (typeof window !== 'undefined' ? window.innerHeight : canvas.height)
+  const viewportWidth = typeof window !== 'undefined' ? window.innerWidth : canvas.width
+  const viewportHeight = typeof window !== 'undefined' ? window.innerHeight : canvas.height
   const initialViewScale = useMemo(() => {
     if (!canvas.width || !canvas.height || !viewportWidth || !viewportHeight) {
       return 0.7
@@ -386,29 +407,66 @@ export function SkillTree() {
     || rightPanel === PANEL_SEGMENTS
 
   useEffect(() => {
-    const updateViewport = () => {
-      const nextViewport = getCanvasViewportMetrics()
-      setCanvasViewport((current) => (
-        current.width === nextViewport.width && current.height === nextViewport.height
-          ? current
-          : nextViewport
-      ))
+    leftSidebarWidthRef.current = leftSidebarWidth
+    if (leftSidebarRef.current) {
+      leftSidebarRef.current.style.width = `${leftSidebarWidth}px`
+    }
+  }, [leftSidebarWidth])
+
+  useEffect(() => {
+    rightSidebarWidthRef.current = rightSidebarWidth
+    if (rightSidebarRef.current) {
+      rightSidebarRef.current.style.width = `${rightSidebarWidth}px`
+    }
+  }, [rightSidebarWidth])
+
+  useEffect(() => {
+    if (typeof ResizeObserver === 'undefined' || !canvasAreaRef.current) {
+      return undefined
     }
 
-    updateViewport()
-    window.addEventListener('resize', updateViewport)
+    let frameId = null
 
-    let observer = null
-    if (typeof ResizeObserver !== 'undefined' && canvasAreaRef.current) {
-      observer = new ResizeObserver(updateViewport)
-      observer.observe(canvasAreaRef.current)
+    const syncViewportCenter = () => {
+      frameId = null
+      const rect = canvasAreaRef.current?.getBoundingClientRect()
+      if (!rect) {
+        return
+      }
+
+      const previous = lastCanvasViewportRef.current
+      lastCanvasViewportRef.current = { width: rect.width, height: rect.height }
+
+      if (!previous || !transformApiRef.current) {
+        return
+      }
+
+      const dx = (rect.width - previous.width) / 2
+      const dy = (rect.height - previous.height) / 2
+      if (Math.abs(dx) < 0.5 && Math.abs(dy) < 0.5) {
+        return
+      }
+
+      const { positionX, positionY, scale } = transformApiRef.current.state
+      transformApiRef.current.setTransform(positionX + dx, positionY + dy, scale, 0)
     }
+
+    syncViewportCenter()
+
+    const observer = new ResizeObserver(() => {
+      if (!frameId) {
+        frameId = window.requestAnimationFrame(syncViewportCenter)
+      }
+    })
+    observer.observe(canvasAreaRef.current)
 
     return () => {
-      window.removeEventListener('resize', updateViewport)
-      observer?.disconnect?.()
+      if (frameId) {
+        window.cancelAnimationFrame(frameId)
+      }
+      observer.disconnect()
     }
-  }, [getCanvasViewportMetrics, isLeftSidebarVisible, isRightSidebarVisible, leftSidebarWidth, rightSidebarWidth])
+  }, [transformKey])
 
   useEffect(() => {
     const totalWidth = shellRef.current?.getBoundingClientRect().width ?? (typeof window !== 'undefined' ? window.innerWidth : 0)
@@ -2624,6 +2682,33 @@ export function SkillTree() {
     commitDocument(removeNodeProgressLevel(roadmapData, selectedNodeId, levelId))
   }
 
+  const handleReorderProgressLevel = (fromLevelId, toLevelId, dropPosition = 'before') => {
+    if (!selectedNodeId || !fromLevelId || !toLevelId || fromLevelId === toLevelId) {
+      return
+    }
+
+    const selectedNodeEntry = findNodeById(roadmapData, selectedNodeId)
+    const levels = Array.isArray(selectedNodeEntry?.levels) ? selectedNodeEntry.levels : []
+    const fromIndex = levels.findIndex((level) => level.id === fromLevelId)
+    const toIndex = levels.findIndex((level) => level.id === toLevelId)
+
+    if (fromIndex < 0 || toIndex < 0 || fromIndex === toIndex) {
+      return
+    }
+
+    const normalizedPosition = dropPosition === 'after' ? 'after' : 'before'
+    const nextIndex = normalizedPosition === 'after'
+      ? (fromIndex < toIndex ? toIndex : toIndex + 1)
+      : (fromIndex < toIndex ? toIndex - 1 : toIndex)
+
+    if (nextIndex === fromIndex) {
+      return
+    }
+
+    commitDocument(reorderNodeProgressLevels(roadmapData, selectedNodeId, fromIndex, nextIndex))
+    setSelectedProgressLevelId(fromLevelId)
+  }
+
   const handleEffortChange = (effort, levelId = activeSelectedProgressLevelId) => {
     if (!selectedNodeId && !(Array.isArray(selectedNodeIds) && selectedNodeIds.length > 0)) {
       return
@@ -2670,6 +2755,14 @@ export function SkillTree() {
     }
 
     commitDocument(updateNodeProgressLevel(roadmapData, nodeId, levelId, { scopeIds }))
+  }, [commitDocument, roadmapData])
+
+  const handleListViewLevelReleaseNoteChange = useCallback((nodeId, levelId, releaseNote) => {
+    if (!nodeId || !levelId) {
+      return
+    }
+
+    commitDocument(updateNodeProgressLevel(roadmapData, nodeId, levelId, { releaseNote }))
   }, [commitDocument, roadmapData])
 
   const handleLevelChange = (newLevel) => {
@@ -2778,6 +2871,10 @@ export function SkillTree() {
     return () => el.removeEventListener('contextmenu', onContextMenu)
   }, [handleFitToScreen])
 
+  const handleListViewWidthChange = useCallback((nextWidth) => {
+    setLeftSidebarWidth((current) => Math.max(current, Math.min(nextWidth, 900)))
+  }, [])
+
   const leftSidebarContent = priorityMatrixOpen ? (
     <PriorityMatrix
       embedded
@@ -2800,12 +2897,11 @@ export function SkillTree() {
       onSetLevelBenefit={handleListViewLevelBenefitChange}
       onSetLevelStatus={handleListViewLevelStatusChange}
       onSetLevelScopeIds={handleListViewLevelScopesChange}
+      onSetLevelReleaseNote={handleListViewLevelReleaseNoteChange}
       selectedReleaseId={activeReleaseId}
       selectedNodeId={selectedNodeId}
       selectedProgressLevelId={selectedProgressLevelId}
-      onWidthChange={(nextWidth) => {
-        setLeftSidebarWidth((current) => Math.max(current, Math.min(nextWidth, 900)))
-      }}
+      onWidthChange={handleListViewWidthChange}
     />
   ) : null
 
@@ -2837,6 +2933,7 @@ export function SkillTree() {
       onSelectProgressLevel={setSelectedProgressLevelId}
       onAddProgressLevel={handleAddProgressLevel}
       onDeleteProgressLevel={handleDeleteProgressLevel}
+      onReorderProgressLevel={handleReorderProgressLevel}
       onLevelChange={handleLevelChange}
       levelOptions={selectedNodeLevelOptions}
       segmentOptions={selectedNodeSegmentOptions}
@@ -3097,7 +3194,7 @@ export function SkillTree() {
         <div className="skill-tree-main-row">
           {isLeftSidebarVisible && (
             <>
-              <aside className="skill-tree-sidebar skill-tree-sidebar--left" style={{ width: `${leftSidebarWidth}px` }}>
+              <aside ref={leftSidebarRef} className="skill-tree-sidebar skill-tree-sidebar--left" style={{ width: `${leftSidebarWidth}px` }}>
                 {leftSidebarContent}
               </aside>
               <div
@@ -3266,7 +3363,7 @@ export function SkillTree() {
               aria-label="Resize right sidebar"
               onPointerDown={handleSidebarResizeStart('right')}
             />
-            <aside className="skill-tree-sidebar skill-tree-sidebar--right" style={{ width: `${rightSidebarWidth}px` }}>
+            <aside ref={rightSidebarRef} className="skill-tree-sidebar skill-tree-sidebar--right" style={{ width: `${rightSidebarWidth}px` }}>
               {rightSidebarContent}
             </aside>
           </>

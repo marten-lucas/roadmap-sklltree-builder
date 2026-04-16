@@ -2,8 +2,10 @@ import { MultiSelect } from '@mantine/core'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { STATUS_LABELS, STATUS_STYLES, normalizeStatusKey } from '../config'
 import { BENEFIT_SIZE_LABELS, BENEFIT_SIZES, EFFORT_SIZE_LABELS, EFFORT_SIZES } from '../utils/effortBenefit'
+import { commitReleaseNoteDraft } from '../utils/releaseNoteDraft'
 import { getDisplayStatusKey, getLevelStatus } from '../utils/nodeStatus'
 import { SCOPE_FILTER_ALL, scopeIdsMatchFilter } from '../utils/visibility'
+import { getLevelDisplayLabel } from '../utils/treeData'
 
 // ── Icons ─────────────────────────────────────────────────────────────────────
 
@@ -36,6 +38,14 @@ const IconLayers = () => (
     <polygon points="12 2 2 7 12 12 22 7 12 2" />
     <polyline points="2 17 12 22 22 17" />
     <polyline points="2 12 12 17 22 12" />
+  </svg>
+)
+
+const IconColumns = () => (
+  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <rect x="3" y="4" width="5" height="16" rx="1.5" />
+    <rect x="10" y="7" width="4" height="13" rx="1.5" />
+    <rect x="16" y="10" width="5" height="10" rx="1.5" />
   </svg>
 )
 
@@ -353,6 +363,16 @@ const ScopeAssignGroup = ({ scopeOptions, selectedScopeIds = [], onChange, isSel
     color: scope.color ?? null,
   }))
 
+  const selectedLabels = selectedScopeIds
+    .map((id) => scopeOptions.find((scope) => scope.id === id)?.label)
+    .filter(Boolean)
+
+  const scopeSummary = selectedLabels.length === 0
+    ? 'Scopes'
+    : selectedLabels.length === 1
+      ? selectedLabels[0]
+      : `${selectedLabels[0]} +${selectedLabels.length - 1}`
+
   return (
     <div
       className={`list-view-drawer__scope-group${isSelected ? ' list-view-drawer__scope-group--selected' : ''}`}
@@ -368,18 +388,76 @@ const ScopeAssignGroup = ({ scopeOptions, selectedScopeIds = [], onChange, isSel
           onChange={(values) => onChange(values)}
           searchable
           clearable
-          placeholder="Scopes"
+          placeholder=""
           nothingFoundMessage="No scopes"
           className="list-view-drawer__scope-select"
+          leftSection={(
+            <span className={`list-view-drawer__scope-summary${selectedLabels.length === 0 ? ' list-view-drawer__scope-summary--empty' : ''}`} title={selectedLabels.join(', ')}>
+              {scopeSummary}
+            </span>
+          )}
+          leftSectionWidth={selectedLabels.length > 0 ? 120 : 58}
+          leftSectionPointerEvents="none"
+          checkIconPosition="right"
           classNames={{
-            input: 'mantine-dark-input',
+            input: 'mantine-dark-input list-view-drawer__scope-select-input',
             dropdown: 'mantine-dark-dropdown',
             option: 'mantine-dark-option',
-            pill: 'mantine-dark-pill',
+            pill: 'mantine-dark-pill list-view-drawer__scope-pill',
+            pillsList: 'list-view-drawer__scope-pills-list',
+            inputField: 'list-view-drawer__scope-input-field',
+            section: 'list-view-drawer__scope-section',
           }}
           comboboxProps={{ withinPortal: true, zIndex: 450 }}
         />
       )}
+    </div>
+  )
+}
+
+const ReleaseNoteEditor = ({ value, onChange, isSelected = false }) => {
+  const [draft, setDraft] = useState(value ?? '')
+
+  useEffect(() => {
+    setDraft(value ?? '')
+  }, [value])
+
+  const commitDraft = useCallback(() => {
+    commitReleaseNoteDraft({
+      draft,
+      currentValue: value,
+      onCommit: onChange,
+    })
+  }, [draft, onChange, value])
+
+  return (
+    <div
+      className={`list-view-drawer__release-note-editor${isSelected ? ' list-view-drawer__release-note-editor--selected' : ''}`}
+      onClick={(e) => e.stopPropagation()}
+    >
+      <textarea
+        className="list-view-drawer__release-note-input"
+        aria-label="Release Notes"
+        value={draft}
+        rows={2}
+        placeholder="Add release note…"
+        onClick={(e) => e.stopPropagation()}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={commitDraft}
+        onKeyDown={(e) => {
+          e.stopPropagation()
+          if (e.key === 'Escape') {
+            e.preventDefault()
+            setDraft(value ?? '')
+            e.currentTarget.blur()
+          }
+          if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault()
+            commitDraft()
+            e.currentTarget.blur()
+          }
+        }}
+      />
     </div>
   )
 }
@@ -392,6 +470,7 @@ const LevelRow = ({
   selectedNodeId,
   selectedProgressLevelId,
   nodeLabel,
+  levelIndex = 0,
   depth,
   scopeMap,
   selectedReleaseId,
@@ -401,8 +480,10 @@ const LevelRow = ({
   onSetBenefit,
   onSetStatus,
   onSetScopeIds,
+  onSetReleaseNote,
   showStatusColumn,
   showScopeColumn,
+  showReleaseNotesColumn,
   listMode,
 }) => {
   const statusKey = normalizeStatusKey(getLevelStatus(level, selectedReleaseId))
@@ -413,6 +494,7 @@ const LevelRow = ({
   const benefitValue = level.benefit?.size ?? 'unclear'
   const effortValue = level.effort?.size ?? 'unclear'
   const isSelected = selectedNodeId === nodeId && selectedProgressLevelId === level.id
+  const levelLabel = getLevelDisplayLabel(level?.label, levelIndex)
 
   return (
     <li
@@ -439,7 +521,7 @@ const LevelRow = ({
               {listMode && nodeLabel && (
                 <span className="list-view-drawer__node-prefix">{nodeLabel}&nbsp;·&nbsp;</span>
               )}
-              <span className="list-view-drawer__level-name">{level.label || 'Level'}</span>
+              <span className="list-view-drawer__level-name">{levelLabel}</span>
               {isHidden && <span style={{ fontSize: '0.7em', color: '#6b7280', marginLeft: 2 }}>(hidden)</span>}
             </span>
             {scopeEntries.length > 0 && !(listMode && showScopeColumn) && (
@@ -490,6 +572,14 @@ const LevelRow = ({
             isSelected={isSelected}
           />
         )}
+
+        {listMode && showReleaseNotesColumn && (
+          <ReleaseNoteEditor
+            value={level.releaseNote ?? ''}
+            onChange={onSetReleaseNote}
+            isSelected={isSelected}
+          />
+        )}
       </div>
     </li>
   )
@@ -513,6 +603,7 @@ const TreeNode = ({
   onSetLevelBenefit,
   onSetLevelStatus,
   onSetLevelScopeIds,
+  onSetLevelReleaseNote,
   selectedNodeId,
   selectedProgressLevelId,
 }) => {
@@ -577,6 +668,7 @@ const TreeNode = ({
         <LevelRow
           key={level.id}
           level={level}
+          levelIndex={(node.levels ?? []).findIndex((entry) => entry.id === level.id)}
           nodeId={node.id}
           selectedNodeId={selectedNodeId}
           selectedProgressLevelId={selectedProgressLevelId}
@@ -589,8 +681,10 @@ const TreeNode = ({
           onSetBenefit={(benefit) => onSetLevelBenefit(node.id, level.id, benefit)}
           onSetStatus={(status) => onSetLevelStatus(node.id, level.id, status)}
           onSetScopeIds={(scopeIds) => onSetLevelScopeIds(node.id, level.id, scopeIds)}
+          onSetReleaseNote={(releaseNote) => onSetLevelReleaseNote(node.id, level.id, releaseNote)}
           showStatusColumn={false}
           showScopeColumn={false}
+          showReleaseNotesColumn={false}
           listMode={false}
         />
       ))}
@@ -613,6 +707,7 @@ const TreeNode = ({
           onSetLevelBenefit={onSetLevelBenefit}
           onSetLevelStatus={onSetLevelStatus}
           onSetLevelScopeIds={onSetLevelScopeIds}
+          onSetLevelReleaseNote={onSetLevelReleaseNote}
           selectedNodeId={selectedNodeId}
           selectedProgressLevelId={selectedProgressLevelId}
         />
@@ -627,8 +722,11 @@ const collectFlatLevels = (nodes, matchesLevelFilters) => {
   const result = []
   const walk = (nodeList) => {
     for (const node of nodeList) {
-      for (const level of (node.levels ?? []).filter((entry) => matchesLevelFilters(entry, node))) {
-        result.push({ node, level })
+      for (const [levelIndex, level] of (node.levels ?? []).entries()) {
+        if (!matchesLevelFilters(level, node)) {
+          continue
+        }
+        result.push({ node, level, levelIndex })
       }
       walk(node.children ?? [])
     }
@@ -661,6 +759,7 @@ export function ListViewDrawer({
   onSetLevelBenefit = () => {},
   onSetLevelStatus = () => {},
   onSetLevelScopeIds = () => {},
+  onSetLevelReleaseNote = () => {},
   selectedReleaseId = null,
   selectedNodeId = null,
   selectedProgressLevelId = null,
@@ -668,6 +767,7 @@ export function ListViewDrawer({
   onWidthChange = null,
 }) {
   const drawerRef = useRef(null)
+  const columnsMenuRef = useRef(null)
 
   // ── state (all declared before any callback that might reference them) ──────
   const [drawerWidth, setDrawerWidth] = useState(null) // null = use CSS default
@@ -676,6 +776,8 @@ export function ListViewDrawer({
   const [showEstimateColumns, setShowEstimateColumns] = useState(false)
   const [showStatusColumn, setShowStatusColumn] = useState(true)
   const [showScopeColumn, setShowScopeColumn] = useState(true)
+  const [showReleaseNotesColumn, setShowReleaseNotesColumn] = useState(false)
+  const [showColumnsMenu, setShowColumnsMenu] = useState(false)
   const [statusFilter, setStatusFilter] = useState('all')
   const [scopeFilter, setScopeFilter] = useState(SCOPE_FILTER_ALL)
   const [searchQuery, setSearchQuery] = useState('')
@@ -684,14 +786,15 @@ export function ListViewDrawer({
 
   const columnMinWidth = useMemo(() => {
     const showListColumns = viewMode === 'list' && showLevels
-    return Math.min(1400, Math.max(
+    return Math.min(1760, Math.max(
       420,
       420
         + (showEstimateColumns ? 340 : 0)
         + (showListColumns && showStatusColumn ? 260 : 0)
-        + (showListColumns && showScopeColumn ? 280 : 0),
+        + (showListColumns && showScopeColumn ? 280 : 0)
+        + (showListColumns && showReleaseNotesColumn ? 320 : 0),
     ))
-  }, [showEstimateColumns, showLevels, showScopeColumn, showStatusColumn, viewMode])
+  }, [showEstimateColumns, showLevels, showReleaseNotesColumn, showScopeColumn, showStatusColumn, viewMode])
 
   const handleResizePointerDown = useCallback((e) => {
     e.preventDefault()
@@ -700,7 +803,7 @@ export function ListViewDrawer({
     // Use live DOM width; fall back to 420 if element not yet measured
     const startWidth = drawerRef.current?.getBoundingClientRect().width ?? 420
     const onMove = (mv) => {
-      const newWidth = Math.max(minWidth, Math.min(1400, startWidth + (mv.clientX - startX)))
+      const newWidth = Math.max(minWidth, Math.min(1760, startWidth + (mv.clientX - startX)))
       setDrawerWidth(newWidth)
     }
     const onUp = () => {
@@ -720,6 +823,30 @@ export function ListViewDrawer({
       setDrawerWidth(columnMinWidth)
     }
   }, [columnMinWidth, drawerWidth])
+
+  useEffect(() => {
+    if (!showColumnsMenu) return undefined
+
+    const handlePointerDown = (event) => {
+      if (!columnsMenuRef.current?.contains(event.target)) {
+        setShowColumnsMenu(false)
+      }
+    }
+
+    const handleKeyDown = (event) => {
+      if (event.key === 'Escape') {
+        setShowColumnsMenu(false)
+      }
+    }
+
+    window.addEventListener('pointerdown', handlePointerDown, true)
+    window.addEventListener('keydown', handleKeyDown)
+
+    return () => {
+      window.removeEventListener('pointerdown', handlePointerDown, true)
+      window.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [showColumnsMenu])
 
   useEffect(() => {
     if (embedded && typeof onWidthChange === 'function') {
@@ -757,8 +884,11 @@ export function ListViewDrawer({
     if (!matchesScopeFilter(level.scopeIds ?? [])) return false
 
     const scopeLabels = (level.scopeIds ?? []).map((id) => scopeMap.get(id)?.label).filter(Boolean)
+    const levelIndex = (node?.levels ?? []).findIndex((entry) => entry?.id === level?.id)
+
     return matchesSearchFilter([
       level.label,
+      getLevelDisplayLabel(level?.label, levelIndex >= 0 ? levelIndex : 0),
       node?.label,
       node?.shortName,
       ...scopeLabels,
@@ -867,40 +997,68 @@ export function ListViewDrawer({
             <IconLayers />
           </button>
 
-          {/* Effort/Value icon toggle */}
           {showLevels && (
-            <button
-              type="button"
-              className={`list-view-drawer__icon-toggle list-view-drawer__icon-toggle--dual${showEstimateColumns ? ' list-view-drawer__icon-toggle--active' : ''}`}
-              onClick={() => setShowEstimateColumns((v) => !v)}
-              aria-label={showEstimateColumns ? 'Hide effort/value' : 'Show effort/value'}
-              title="Effort / Value"
-            >
-              <IconBolt /><IconStar />
-            </button>
-          )}
+            <div className="list-view-drawer__columns-menu-wrap" ref={columnsMenuRef}>
+              <button
+                type="button"
+                className={`list-view-drawer__icon-toggle${showColumnsMenu ? ' list-view-drawer__icon-toggle--active' : ''}`}
+                onClick={() => setShowColumnsMenu((open) => !open)}
+                aria-label="Columns"
+                aria-haspopup="menu"
+                aria-expanded={showColumnsMenu}
+                title="Columns"
+              >
+                <IconColumns />
+              </button>
 
-          {showLevels && viewMode === 'list' && (
-            <>
-              <button
-                type="button"
-                className={`list-view-drawer__icon-toggle${showStatusColumn ? ' list-view-drawer__icon-toggle--active' : ''}`}
-                onClick={() => setShowStatusColumn((v) => !v)}
-                aria-label={showStatusColumn ? 'Hide status column' : 'Show status column'}
-                title="Status column"
-              >
-                <IconStatus />
-              </button>
-              <button
-                type="button"
-                className={`list-view-drawer__icon-toggle${showScopeColumn ? ' list-view-drawer__icon-toggle--active' : ''}`}
-                onClick={() => setShowScopeColumn((v) => !v)}
-                aria-label={showScopeColumn ? 'Hide scopes column' : 'Show scopes column'}
-                title="Scopes column"
-              >
-                <IconScope />
-              </button>
-            </>
+              {showColumnsMenu && (
+                <div className="list-view-drawer__columns-menu" role="menu" aria-label="Columns">
+                  <label className="list-view-drawer__columns-option">
+                    <input
+                      type="checkbox"
+                      checked={showEstimateColumns}
+                      onChange={(e) => setShowEstimateColumns(e.target.checked)}
+                    />
+                    <span className="list-view-drawer__columns-option-icon"><IconBolt /><IconStar /></span>
+                    <span>Effort / Value</span>
+                  </label>
+
+                  {viewMode === 'list' && (
+                    <>
+                      <label className="list-view-drawer__columns-option">
+                        <input
+                          type="checkbox"
+                          checked={showStatusColumn}
+                          onChange={(e) => setShowStatusColumn(e.target.checked)}
+                        />
+                        <span className="list-view-drawer__columns-option-icon"><IconStatus /></span>
+                        <span>Status</span>
+                      </label>
+
+                      <label className="list-view-drawer__columns-option">
+                        <input
+                          type="checkbox"
+                          checked={showScopeColumn}
+                          onChange={(e) => setShowScopeColumn(e.target.checked)}
+                        />
+                        <span className="list-view-drawer__columns-option-icon"><IconScope /></span>
+                        <span>Scopes</span>
+                      </label>
+
+                      <label className="list-view-drawer__columns-option">
+                        <input
+                          type="checkbox"
+                          checked={showReleaseNotesColumn}
+                          onChange={(e) => setShowReleaseNotesColumn(e.target.checked)}
+                        />
+                        <span className="list-view-drawer__columns-option-icon">📝</span>
+                        <span>Release Notes</span>
+                      </label>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
           )}
 
           <span className="list-view-drawer__header-sep" aria-hidden="true" />
@@ -951,13 +1109,14 @@ export function ListViewDrawer({
       </div>
 
       <div className="list-view-drawer__content">
-        {showLevels && (showEstimateColumns || (isListMode && (showStatusColumn || showScopeColumn))) && (
+        {showLevels && (showEstimateColumns || (isListMode && (showStatusColumn || showScopeColumn || showReleaseNotesColumn))) && (
           <div className="list-view-drawer__metrics-header" aria-hidden="true">
             <span className="list-view-drawer__metrics-header-spacer" />
             {showEstimateColumns && <span className="list-view-drawer__metrics-header-col list-view-drawer__metrics-header-col--value">Value</span>}
             {showEstimateColumns && <span className="list-view-drawer__metrics-header-col list-view-drawer__metrics-header-col--effort">Effort</span>}
             {isListMode && showStatusColumn && <span className="list-view-drawer__metrics-header-col list-view-drawer__metrics-header-col--status">Status</span>}
             {isListMode && showScopeColumn && <span className="list-view-drawer__metrics-header-col list-view-drawer__metrics-header-col--scopes">Scopes</span>}
+            {isListMode && showReleaseNotesColumn && <span className="list-view-drawer__metrics-header-col list-view-drawer__metrics-header-col--notes">Release Notes</span>}
           </div>
         )}
 
@@ -968,10 +1127,11 @@ export function ListViewDrawer({
         ) : isListMode && showLevels ? (
           /* flat level list */
           <ul className="list-view-drawer__list">
-            {flatLevelEntries.map(({ node, level }) => (
+            {flatLevelEntries.map(({ node, level, levelIndex }) => (
               <LevelRow
                 key={`${node.id}::${level.id}`}
                 level={level}
+                levelIndex={levelIndex}
                 nodeId={node.id}
                 selectedNodeId={selectedNodeId}
                 selectedProgressLevelId={selectedProgressLevelId}
@@ -985,8 +1145,10 @@ export function ListViewDrawer({
                 onSetBenefit={(benefit) => onSetLevelBenefit(node.id, level.id, benefit)}
                 onSetStatus={(status) => onSetLevelStatus(node.id, level.id, status)}
                 onSetScopeIds={(scopeIds) => onSetLevelScopeIds(node.id, level.id, scopeIds)}
+                onSetReleaseNote={(releaseNote) => onSetLevelReleaseNote(node.id, level.id, releaseNote)}
                 showStatusColumn={showStatusColumn}
                 showScopeColumn={showScopeColumn}
+                showReleaseNotesColumn={showReleaseNotesColumn}
                 listMode
               />
             ))}

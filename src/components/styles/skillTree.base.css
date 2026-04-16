@@ -560,6 +560,94 @@
     flex-shrink: 0;
     padding: 0 1rem;
     gap: 0.15rem;
+    align-items: center;
+    overflow-x: auto;
+    overflow-y: visible;
+}
+
+.skill-panel__level-tab {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    max-width: 11.5rem;
+    min-width: 0;
+    overflow: visible;
+    cursor: grab;
+    transition: transform 120ms ease, box-shadow 120ms ease, border-color 120ms ease, background 120ms ease, opacity 120ms ease;
+}
+
+.skill-panel__level-tab .mantine-Tabs-tabLabel {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    min-width: 0;
+    white-space: nowrap;
+}
+
+.skill-panel__level-tab-index {
+    flex-shrink: 0;
+    font-weight: 700;
+    color: #cbd5e1;
+}
+
+.skill-panel__level-tab:active {
+    cursor: grabbing;
+}
+
+.skill-panel__level-tab--dragging {
+    opacity: 0.55;
+}
+
+.skill-panel__level-tab--drop-target {
+    z-index: 2;
+}
+
+.skill-panel__level-tab--drop-before::before,
+.skill-panel__level-tab--drop-after::after {
+    content: '';
+    position: absolute;
+    top: 16%;
+    bottom: 16%;
+    width: 2px;
+    border-radius: 999px;
+    background: #67e8f9;
+    box-shadow: 0 0 0 1px rgba(103, 232, 249, 0.18), 0 0 10px rgba(6, 182, 212, 0.45);
+}
+
+.skill-panel__level-tab--drop-before::before {
+    left: -4px;
+}
+
+.skill-panel__level-tab--drop-after::after {
+    right: -4px;
+}
+
+.skill-panel__level-tab-grip {
+    color: #64748b;
+    font-size: 0.72rem;
+    letter-spacing: -0.08em;
+}
+
+.skill-panel__level-tab-pill {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.16rem 0.42rem;
+    border-radius: 999px;
+    background: rgba(14, 116, 144, 0.2);
+    border: 1px solid rgba(103, 232, 249, 0.28);
+    color: #a5f3fc;
+    font-size: 0.68rem;
+    font-weight: 700;
+    line-height: 1.1;
+}
+
+.skill-panel__level-tab-name {
+    min-width: 0;
+    max-width: 8rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-weight: 600;
 }
 
 .skill-panel__tab-panel {

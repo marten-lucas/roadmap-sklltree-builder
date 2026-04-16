@@ -61,6 +61,29 @@ const extractPortalStrokeWidth = (html) => {
   return match ? Number(match[1]) : null
 }
 
+const extractChevronPath = (html, type) => {
+  const classPattern = `skill-tree-portal__chevrons(?: [^"]*)? skill-tree-portal__chevrons--${type}`
+  const dBeforeClass = html.match(new RegExp(`<path[^>]*d="([^"]+)"[^>]*class="${classPattern}[^"]*"`))
+  if (dBeforeClass) return dBeforeClass[1]
+  const classBeforeD = html.match(new RegExp(`<path[^>]*class="${classPattern}[^"]*"[^>]*d="([^"]+)"`))
+  return classBeforeD ? classBeforeD[1] : null
+}
+
+const extractFirstChevronX = (pathD) => {
+  const numbers = pathD?.match(/-?\d+(?:\.\d+)?/g)?.map(Number)
+  if (!numbers || numbers.length < 6) return null
+  return {
+    arm1X: numbers[0],
+    tipX: numbers[2],
+    arm2X: numbers[4],
+  }
+}
+
+const extractRingRotation = (html, type) => {
+  const match = html.match(new RegExp(`<path[^>]*class="[^"]*skill-tree-portal__ring--${type}[^"]*"[^>]*transform="[^"]*rotate\(([-\d.]+)\)`))
+  return match ? Number(match[1]) : null
+}
+
 describe('SkillTreeCanvas', () => {
   it('renders to string without runtime reference errors', () => {
     const html = renderToString(
@@ -169,5 +192,114 @@ describe('SkillTreeCanvas', () => {
 
     expect(extractPortalMetric(zoomedOutHtml, 'skill-tree-portal__hit', 'rx')).toBeGreaterThan(extractPortalMetric(zoomedInHtml, 'skill-tree-portal__hit', 'rx'))
     expect(extractPortalStrokeWidth(zoomedOutHtml)).toBeGreaterThan(extractPortalStrokeWidth(zoomedInHtml))
+  })
+
+  it('lets minimal nodes reveal short name first and full name only at very-close zoom', () => {
+    const props = createBaseProps()
+    props.layoutNodesById = new Map([
+      ['node-a', { id: 'node-a', x: 100, y: 100, label: 'Alpha', shortName: 'ALP' }],
+    ])
+    props.renderedNodes = [
+      { id: 'node-a', x: 100, y: 100, label: 'Alpha', shortName: 'ALP' },
+    ]
+    props.nodeVisibilityModeById = new Map([
+      ['node-a', 'minimal'],
+    ])
+
+    const midHtml = renderToString(
+      createElement(
+        MantineProvider,
+        null,
+        createElement(SkillTreeCanvas, { ...props, labelMode: 'mid', currentZoomScale: 1.1 }),
+      ),
+    )
+    const closeHtml = renderToString(
+      createElement(
+        MantineProvider,
+        null,
+        createElement(SkillTreeCanvas, { ...props, labelMode: 'close', currentZoomScale: 2 }),
+      ),
+    )
+    const veryCloseHtml = renderToString(
+      createElement(
+        MantineProvider,
+        null,
+        createElement(SkillTreeCanvas, { ...props, labelMode: 'very-close', currentZoomScale: 4.2 }),
+      ),
+    )
+
+    expect(midHtml).toContain('skill-node-button__shortname')
+    expect(midHtml).toContain('>alp<')
+    expect(midHtml).not.toContain('skill-node-button__label')
+    expect(closeHtml).toContain('skill-node-button__shortname')
+    expect(closeHtml).toContain('>alp<')
+    expect(closeHtml).not.toContain('skill-node-button__label')
+    expect(veryCloseHtml).toContain('skill-node-button__label')
+    expect(veryCloseHtml).toContain('>Alpha<')
+  })
+
+  it('orients source and target spoke chevrons toward the portal semantics', () => {
+    const props = createBaseProps()
+    props.layoutNodesById = new Map([
+      ['node-a', { id: 'node-a', x: 100, y: 100 }],
+      ['node-b', { id: 'node-b', x: 260, y: 100 }],
+    ])
+    props.renderedNodes = [
+      { id: 'node-a', x: 100, y: 100, label: 'Alpha' },
+      { id: 'node-b', x: 260, y: 100, label: 'Beta' },
+    ]
+    props.visibleDependencyPortals = [
+      { key: 'dep-a:source', nodeId: 'node-a', sourceId: 'node-a', targetId: 'node-b', type: 'source', otherLabel: 'BET·Rollout', tooltip: 'Requires Beta', x: 180, y: 100, angle: 0, isMinimal: false, isInteractive: true },
+      { key: 'dep-a:target', nodeId: 'node-b', sourceId: 'node-a', targetId: 'node-b', type: 'target', otherLabel: 'ALP·Foundation', tooltip: 'Enables Alpha', x: 180, y: 100, angle: 180, isMinimal: false, isInteractive: true },
+    ]
+
+    const html = renderToString(
+      createElement(
+        MantineProvider,
+        null,
+        createElement(SkillTreeCanvas, props),
+      ),
+    )
+
+    const sourceChevron = extractFirstChevronX(extractChevronPath(html, 'source'))
+    const targetChevron = extractFirstChevronX(extractChevronPath(html, 'target'))
+
+    expect(sourceChevron).toBeTruthy()
+    expect(targetChevron).toBeTruthy()
+    expect(sourceChevron.tipX).toBeLessThan(sourceChevron.arm1X)
+    expect(sourceChevron.tipX).toBeLessThan(sourceChevron.arm2X)
+    expect(targetChevron.tipX).toBeLessThan(targetChevron.arm1X)
+    expect(targetChevron.tipX).toBeLessThan(targetChevron.arm2X)
+  })
+
+  it('hides the portal spoke and chevrons when the portal is minimized', () => {
+    const props = createBaseProps()
+    props.layoutNodesById = new Map([
+      ['node-a', { id: 'node-a', x: 100, y: 100 }],
+      ['node-b', { id: 'node-b', x: 260, y: 100 }],
+    ])
+    props.renderedNodes = [
+      { id: 'node-a', x: 100, y: 100, label: 'Alpha' },
+      { id: 'node-b', x: 260, y: 100, label: 'Beta' },
+    ]
+    props.visibleDependencyPortals = [
+      { key: 'dep-a:source', nodeId: 'node-a', sourceId: 'node-a', targetId: 'node-b', type: 'source', otherLabel: 'BET·Rollout', tooltip: 'Requires Beta', x: 180, y: 100, angle: 0, isMinimal: true, isInteractive: true },
+      { key: 'dep-a:target', nodeId: 'node-b', sourceId: 'node-a', targetId: 'node-b', type: 'target', otherLabel: 'ALP·Foundation', tooltip: 'Enables Alpha', x: 180, y: 100, angle: 180, isMinimal: true, isInteractive: true },
+    ]
+
+    const html = renderToString(
+      createElement(
+        MantineProvider,
+        null,
+        createElement(SkillTreeCanvas, props),
+      ),
+    )
+
+    expect(html).not.toContain('skill-tree-portal__hoverline')
+    expect(html).not.toContain('skill-tree-portal__spoke')
+    expect(html).not.toContain('skill-tree-portal__chevrons')
+    expect(html).toContain('skill-tree-portal__ring--source')
+    expect(html).toContain('skill-tree-portal__ring--target')
+    expect(extractRingRotation(html, 'source')).toBeCloseTo(0, 5)
   })
 })

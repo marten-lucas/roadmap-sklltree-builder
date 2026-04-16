@@ -3,6 +3,7 @@ import { renderMarkdownToHtml } from './markdown'
 import { resolveScopeEntries, renderScopeLabelsMarkup } from './scopeDisplay'
 import { getExportViewportBounds } from './svgExport'
 import { getLevelStatus } from './nodeStatus'
+import { getLevelDisplayLabel } from './treeData'
 
 const escapeHtml = (value) => String(value ?? '')
   .replace(/&/g, '&amp;')
@@ -90,7 +91,7 @@ export const collectReleaseNoteEntries = (roadmapDocument, releaseId = null) => 
         shortName: String(node.shortName ?? '').trim(),
         segmentLabel: segmentLabelById.get(node.segmentId) ?? 'Unassigned',
         levelCount: levels.length,
-        levelLabel: level.label ?? `Level ${index + 1}`,
+        levelLabel: getLevelDisplayLabel(level.label, index),
         statusLabel: STATUS_LABELS[statusKey] ?? STATUS_LABELS.now,
         releaseNote,
         scopeLabels: resolveScopeEntries(level.scopeIds, scopes),

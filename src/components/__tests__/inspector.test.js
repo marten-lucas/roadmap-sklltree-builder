@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest'
 import { createElement } from 'react'
 import { renderToString } from 'react-dom/server'
 import { MantineProvider } from '@mantine/core'
-import { InspectorPanel } from '../panels/InspectorPanel'
+import { InspectorPanel, getLevelDragInsertPosition } from '../panels/InspectorPanel'
 import { commitInspectorDrafts, shouldCenterInspectorOnCommit } from '../utils/inspectorCommit'
 import { resolveInspectorSelectedNode } from '../utils/selection'
 
@@ -79,10 +79,45 @@ describe('InspectorPanel render', () => {
     expect(html).toContain('Node 1')
     expect(html).toContain('N1')
     expect(html).toContain('Double-click to rename node title')
+    expect(html).toContain('Generate shortname')
     expect(html).toContain('skill-panel__status-badge--now')
     expect(html).toContain('>?</div>')
     expect(html).not.toContain('Unclear')
     expect(html).toContain('Level Name')
+  })
+})
+
+describe('level drag indicator helper', () => {
+  it('returns null when the drop would keep the level in the same place', () => {
+    const levels = [{ id: 'a' }, { id: 'b' }, { id: 'c' }]
+    const event = {
+      clientX: 10,
+      currentTarget: {
+        getBoundingClientRect: () => ({ left: 0, width: 100 }),
+      },
+    }
+
+    expect(getLevelDragInsertPosition('a', 'b', event, levels)).toBeNull()
+    expect(getLevelDragInsertPosition('b', 'a', { ...event, clientX: 90 }, levels)).toBeNull()
+  })
+
+  it('returns a position when the drop would change the order', () => {
+    const levels = [{ id: 'a' }, { id: 'b' }, { id: 'c' }]
+    const beforeEvent = {
+      clientX: 10,
+      currentTarget: {
+        getBoundingClientRect: () => ({ left: 0, width: 100 }),
+      },
+    }
+    const afterEvent = {
+      clientX: 90,
+      currentTarget: {
+        getBoundingClientRect: () => ({ left: 0, width: 100 }),
+      },
+    }
+
+    expect(getLevelDragInsertPosition('c', 'b', beforeEvent, levels)).toBe('before')
+    expect(getLevelDragInsertPosition('a', 'b', afterEvent, levels)).toBe('after')
   })
 })
 

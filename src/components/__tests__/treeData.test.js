@@ -8,11 +8,13 @@ import {
   moveNodeToParent,
   renameScopeWithResult,
   removeNodeProgressLevel,
+  reorderNodeProgressLevels,
   setLevelAdditionalDependencies,
   updateNodeProgressLevel,
   updateNodeData,
   updateNodeSegment,
   updateNodeLevel,
+  updateNodeShortName,
   deleteNodeOnly,
 } from '../utils/treeData'
 import { createSimpleTree, createCrossSegmentTree, SEGMENT_FRONTEND, SEGMENT_BACKEND, LEVEL_CHILD_REACT_1, LEVEL_CHILD_DB_1, LEVEL_ROOT_BACKEND_1 } from './testUtils'
@@ -70,6 +72,69 @@ describe('treeData', () => {
 
       const updatedNode = findNodeById(newTree, 'child-db')
       expect(updatedNode.label).toBe('PostgreSQL')
+    })
+
+    it('preserves special characters in an explicit short name', () => {
+      const tree = createSimpleTree()
+      const newTree = updateNodeShortName(tree, 'child-react', 'C++')
+
+      const updatedNode = findNodeById(newTree, 'child-react')
+      expect(updatedNode.shortName).toBe('C++')
+    })
+
+    it('updates the default placeholder short name when a node gets its first real name', () => {
+      const tree = {
+        segments: [],
+        children: [
+          {
+            id: 'node-1',
+            label: 'New Skill',
+            shortName: 'NSX',
+            status: 'later',
+            ebene: 1,
+            levels: [],
+            children: [],
+          },
+        ],
+      }
+
+      const nextTree = updateNodeData(tree, 'node-1', 'Smart Alerts')
+      const updatedNode = findNodeById(nextTree, 'node-1')
+
+      expect(updatedNode.shortName).not.toBe('NSX')
+      expect(updatedNode.shortName).toMatch(/^SA/i)
+    })
+
+    it('keeps generated short names unique across the tree', () => {
+      const tree = {
+        segments: [],
+        children: [
+          {
+            id: 'node-1',
+            label: 'Smart Alerts',
+            shortName: 'SAX',
+            status: 'later',
+            ebene: 1,
+            levels: [],
+            children: [],
+          },
+          {
+            id: 'node-2',
+            label: 'New Skill',
+            shortName: 'NSX',
+            status: 'later',
+            ebene: 1,
+            levels: [],
+            children: [],
+          },
+        ],
+      }
+
+      const nextTree = updateNodeData(tree, 'node-2', 'Smart Alerts')
+      const updatedNode = findNodeById(nextTree, 'node-2')
+
+      expect(updatedNode.shortName).not.toBe('SAX')
+      expect(updatedNode.shortName).toMatch(/^SA/i)
     })
   })
 
@@ -315,6 +380,33 @@ describe('treeData', () => {
       const nextLevels = findNodeById(nextTree, 'node-1').levels
 
       expect(nextLevels.map((level) => level.label)).toEqual(['Foundation', 'Level 2'])
+    })
+
+    it('should reorder levels and re-number generic labels by their new position', () => {
+      const tree = {
+        segments: [{ id: 'seg-1', label: 'Segment 1' }],
+        children: [
+          {
+            id: 'node-1',
+            label: 'Node 1',
+            status: 'later',
+            ebene: 1,
+            segmentId: 'seg-1',
+            levels: [
+              { id: 'level-1', label: 'Level 1', statuses: {}, releaseNote: '', scopeIds: [], additionalDependencyLevelIds: [] },
+              { id: 'level-2', label: 'Foundation', statuses: {}, releaseNote: '', scopeIds: [], additionalDependencyLevelIds: [] },
+              { id: 'level-3', label: 'Level 3', statuses: {}, releaseNote: '', scopeIds: [], additionalDependencyLevelIds: [] },
+            ],
+            children: [],
+          },
+        ],
+      }
+
+      const nextTree = reorderNodeProgressLevels(tree, 'node-1', 2, 0)
+      const nextLevels = findNodeById(nextTree, 'node-1').levels
+
+      expect(nextLevels.map((level) => level.id)).toEqual(['level-3', 'level-1', 'level-2'])
+      expect(nextLevels.map((level) => level.label)).toEqual(['Level 1', 'Level 2', 'Foundation'])
     })
   })
 

@@ -12,6 +12,7 @@
     --listview-value-col-width: 150px;
     --listview-status-col-width: 260px;
     --listview-scopes-col-width: 280px;
+    --listview-notes-col-width: 320px;
     background: rgba(2, 6, 23, 0.92);
     border-right: 1px solid rgba(51, 65, 85, 0.7);
     backdrop-filter: blur(18px);
@@ -148,6 +149,56 @@
     gap: 0.08rem;
 }
 
+.list-view-drawer__columns-menu-wrap {
+    position: relative;
+}
+
+.list-view-drawer__columns-menu {
+    position: absolute;
+    top: calc(100% + 0.3rem);
+    left: 0;
+    min-width: 13rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+    padding: 0.45rem;
+    background: rgba(15, 23, 42, 0.98);
+    border: 1px solid rgba(71, 85, 105, 0.7);
+    border-radius: 8px;
+    box-shadow: 0 10px 28px rgba(2, 6, 23, 0.45);
+    z-index: 30;
+}
+
+.list-view-drawer__columns-option {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    min-height: 1.8rem;
+    padding: 0.25rem 0.35rem;
+    border-radius: 6px;
+    color: #cbd5e1;
+    font-size: 0.72rem;
+    cursor: pointer;
+}
+
+.list-view-drawer__columns-option:hover {
+    background: rgba(51, 65, 85, 0.45);
+}
+
+.list-view-drawer__columns-option input[type="checkbox"] {
+    margin: 0;
+    accent-color: #60a5fa;
+}
+
+.list-view-drawer__columns-option-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.1rem;
+    min-width: 1rem;
+    color: #93c5fd;
+}
+
 .list-view-drawer__header-sep {
     width: 1px;
     height: 1.25rem;
@@ -250,6 +301,10 @@
 
 .list-view-drawer__metrics-header-col--scopes {
     width: var(--listview-scopes-col-width, 280px);
+}
+
+.list-view-drawer__metrics-header-col--notes {
+    width: var(--listview-notes-col-width, 320px);
 }
 
 .list-view-drawer__content::-webkit-scrollbar {
@@ -508,7 +563,7 @@
     z-index: 2;
 }
 
-.list-view-drawer__status-option input[type="radio"]:checked + .list-view-drawer__status-pill,
+.list-view-drawer__status-option input[type="radio"]:checked+.list-view-drawer__status-pill,
 .list-view-drawer__status-option--active .list-view-drawer__status-pill {
     background: var(--status-band, #06b6d4);
     color: var(--status-text, #ffffff);
@@ -544,9 +599,85 @@
     min-width: 0;
 }
 
-.list-view-drawer__scope-select .mantine-dark-input {
+.list-view-drawer__scope-select .mantine-dark-input,
+.list-view-drawer__scope-select-input {
     min-height: 2rem;
-    font-size: 0.72rem;
+    height: 2rem;
+    font-size: 0.68rem;
+    padding-top: 0;
+    padding-bottom: 0;
+}
+
+.list-view-drawer__scope-pills-list {
+    display: flex;
+    flex-wrap: nowrap !important;
+    align-items: center;
+    gap: 0 !important;
+    overflow: hidden;
+    min-width: 0;
+}
+
+.list-view-drawer__scope-pill {
+    display: none;
+}
+
+.list-view-drawer__scope-input-field {
+    min-width: 1.2rem;
+    flex: 1 1 auto;
+    font-size: 0.66rem;
+}
+
+.list-view-drawer__scope-section {
+    max-width: calc(100% - 2rem);
+}
+
+.list-view-drawer__scope-summary {
+    display: inline-block;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: #cbd5e1;
+    font-size: 0.64rem;
+    font-weight: 600;
+}
+
+.list-view-drawer__scope-summary--empty {
+    color: #94a3b8;
+    font-weight: 500;
+}
+
+.list-view-drawer__release-note-editor {
+    width: var(--listview-notes-col-width, 320px);
+    flex-shrink: 0;
+    display: flex;
+    align-items: stretch;
+    padding: 0.16rem 0.45rem;
+    border-left: 1px solid rgba(71, 85, 105, 0.78);
+    background: rgba(2, 6, 23, 0.4);
+}
+
+.list-view-drawer__release-note-editor--selected {
+    background: rgba(30, 58, 138, 0.34);
+}
+
+.list-view-drawer__release-note-input {
+    width: 100%;
+    min-height: 2rem;
+    resize: vertical;
+    background: rgba(15, 23, 42, 0.95);
+    border: 1px solid rgba(71, 85, 105, 0.65);
+    border-radius: 6px;
+    color: #e2e8f0;
+    font-size: 0.68rem;
+    line-height: 1.35;
+    padding: 0.3rem 0.45rem;
+}
+
+.list-view-drawer__release-note-input:focus {
+    outline: none;
+    border-color: rgba(59, 130, 246, 0.9);
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
 }
 
 .list-view-drawer__metric-slider--effort {
