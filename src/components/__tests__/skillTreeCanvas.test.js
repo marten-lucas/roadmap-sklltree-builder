@@ -3,7 +3,7 @@ import { renderToString } from 'react-dom/server'
 import { MantineProvider } from '@mantine/core'
 import { describe, expect, it, vi } from 'vitest'
 import { SkillTreeCanvas } from '../canvas/SkillTreeCanvas'
-import { getPreferredPortalCenterAngle } from '../utils/portalPlacement'
+import { getPreferredPortalCenterAngle, pickPortalSlotAngle } from '../utils/portalPlacement'
 
 const createBaseProps = () => ({
   canvasRef: { current: null },
@@ -128,6 +128,28 @@ describe('SkillTreeCanvas', () => {
     })
 
     expect(angle).toBeCloseTo(0, 5)
+  })
+
+  it('keeps requires portals on the inward centerline when that radial is also a hierarchy link', () => {
+    const angle = pickPortalSlotAngle({
+      type: 'source',
+      inwardAngle: 0,
+      blockedDirs: [0],
+      reservedAngles: [],
+    })
+
+    expect(angle).toBeCloseTo(0, 5)
+  })
+
+  it('keeps enables portals on the outward centerline when that radial is also blocked by a link', () => {
+    const angle = pickPortalSlotAngle({
+      type: 'target',
+      inwardAngle: 0,
+      blockedDirs: [180],
+      reservedAngles: [],
+    })
+
+    expect(angle).toBeCloseTo(180, 5)
   })
 
   it('renders the same hover hitbox primitives for sockets and plugs', () => {

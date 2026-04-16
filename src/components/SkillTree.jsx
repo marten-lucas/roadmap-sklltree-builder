@@ -73,8 +73,8 @@ import { SkillTreeCanvas } from './canvas'
 import { SkillTreeToolbar } from './toolbar'
 
 import { useSkillTreeUiState } from '../hooks/useSkillTreeUiState'
-import { isAngleNear } from './utils/angle'
 import { uniqueArray } from './utils/array'
+import { pickPortalSlotAngle } from './utils/portalPlacement'
 import { downloadDocumentCsv, readDocumentFromCsvText } from './utils/csv'
 import { isEditableElement } from './utils/dom'
 import { getCsvExportErrorMessage, getCsvImportErrorMessage, getHtmlImportErrorMessage, confirmResetDocument } from './utils/messages'
@@ -1112,41 +1112,9 @@ export function SkillTree() {
 
     const endpoints = []
     // ── Slot-based portal placement ──────────────────────────────────────────
-    // Each hemisphere is divided into N fixed slots (step=20°, ±80° from axis).
-    // Source portals use the outward hemisphere; target portals the inward hemisphere.
-    // Slots are tried in order of closeness to the hemisphere axis (center-first),
-    // so portals prefer the radial direction and fall back sideways only when blocked.
-    const SLOT_STEP = 20         // degrees between adjacent slots
-    const HEMI_SPAN = 80         // hemisphere spans ±80° from axis (9 slots total)
-    const LINK_BLOCK = 32        // block zone around each connection-line angle
-    const PORTAL_SEP = 20        // minimum separation between portals on same node
-
-    // Build ordered slot list for a hemisphere — center first, then alternating ±
-    const buildSlots = (center) => {
-      const slots = [center]
-      for (let o = SLOT_STEP; o <= HEMI_SPAN; o += SLOT_STEP) {
-        slots.push(center + o)
-        slots.push(center - o)
-      }
-      return slots
-    }
-
-    // Pick the first slot not blocked by link-lines or already-placed portals.
-    // Falls back to least-conflicted slot if every slot is blocked.
-    const pickSlot = (slots, blockedDirs, reservedAngles) => {
-      for (const slot of slots) {
-        const hitLink = blockedDirs.some((a) => isAngleNear(slot, a, LINK_BLOCK))
-        const hitPortal = reservedAngles.some((a) => isAngleNear(slot, a, PORTAL_SEP))
-        if (!hitLink && !hitPortal) return slot
-      }
-      let bestSlot = slots[0]; let bestScore = Infinity
-      for (const slot of slots) {
-        const s = blockedDirs.filter((a) => isAngleNear(slot, a, LINK_BLOCK)).length * 1000
-             + reservedAngles.filter((a) => isAngleNear(slot, a, PORTAL_SEP)).length * 50
-        if (s < bestScore) { bestScore = s; bestSlot = slot }
-      }
-      return bestSlot
-    }
+    // Source portals are anchored on the inward radial toward the skill-tree centre.
+    // Target portals are anchored on the outward radial away from the centre.
+    // Additional portals on the same side fan out to nearby slots as needed.
 
     for (const [nodeId, nodeEndpoints] of endpointsByNodeId.entries()) {
       const layoutNode = layoutNodeById.get(nodeId)
@@ -1181,16 +1149,16 @@ export function SkillTree() {
       const targetEndpoints = nodeEndpoints.filter((ep) => ep.type === 'target')
         .sort((a, b) => a.key.localeCompare(b.key))
 
-      // Source slots: inner hemisphere (requires socket, centered on inwardAngle).
-      // Target slots: outer hemisphere (enables plug, centered on outwardAngle).
-      // Each set is ordered center-first so portals prefer the radial axis.
-      const sourceSlots = buildSlots(inwardAngle)
-      const targetSlots = buildSlots(outwardAngle)
       const reservedAngles = []
 
       // Place source portals (requires — inner hemisphere)
       sourceEndpoints.forEach((endpoint, index) => {
-        const angle = pickSlot(sourceSlots, linkBlockedAngles, reservedAngles)
+        const angle = pickPortalSlotAngle({
+          type: endpoint.type,
+          inwardAngle,
+          blockedDirs: linkBlockedAngles,
+          reservedAngles,
+        })
         reservedAngles.push(angle)
         const orbit = portalOrbit + Math.abs(index - (sourceEndpoints.length - 1) / 2) * endpointOrbitStep
         const radians = toRadians(angle)
@@ -1208,7 +1176,12 @@ export function SkillTree() {
 
       // Place target portals (enables — outer hemisphere)
       targetEndpoints.forEach((endpoint, index) => {
-        const angle = pickSlot(targetSlots, linkBlockedAngles, reservedAngles)
+        const angle = pickPortalSlotAngle({
+          type: endpoint.type,
+          inwardAngle,
+          blockedDirs: linkBlockedAngles,
+          reservedAngles,
+        })
         reservedAngles.push(angle)
         const orbit = portalOrbit + Math.abs(index - (targetEndpoints.length - 1) / 2) * endpointOrbitStep
         const radians = toRadians(angle)
