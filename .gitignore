@@ -29,3 +29,4 @@ test-artifacts/
 tests/e2e/exports.spec.js-snapshots
 tests/results/*
 tests/e2e/datasets/myKyana.csv
+tests/e2e/datasets/skilltree-roadmap_real.json
