@@ -1,6 +1,6 @@
-import { ActionIcon, Alert, Badge, Button, Divider, Group, MultiSelect, NumberInput, Paper, SegmentedControl, Select, Slider, Stack, Tabs, Text, TextInput, Textarea } from '@mantine/core'
+import { ActionIcon, Alert, Badge, Button, Divider, Group, Menu, MultiSelect, NumberInput, Paper, SegmentedControl, Select, Slider, Stack, Tabs, Text, TextInput, Textarea } from '@mantine/core'
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
-import { IconPercentage20 } from '@tabler/icons-react'
+import { IconChecklist, IconCheck, IconPercentage20 } from '@tabler/icons-react'
 import { normalizeStatusKey, STATUS_LABELS, STATUS_STYLES, SCOPE_COLORS } from '../config'
 import { getLevelStatus } from '../utils/nodeStatus'
 import { UNASSIGNED_SEGMENT_ID } from '../utils/layoutShared'
@@ -160,6 +160,16 @@ const STATUS_OPTIONS = [
   }
 })
 
+const BULK_STATUS_OPTIONS = [
+  { value: 'done', label: STATUS_LABELS.done },
+  { value: 'now', label: STATUS_LABELS.now },
+  { value: 'next', label: STATUS_LABELS.next },
+  { value: 'later', label: STATUS_LABELS.later },
+  { value: 'someday', label: STATUS_LABELS.someday },
+  { value: 'hidden', label: STATUS_LABELS.hidden },
+]
+
+
 const dependencyScopeChipStyle = {
   borderRadius: 999,
   border: '1px solid rgba(148, 163, 184, 0.45)',
@@ -236,6 +246,10 @@ export function InspectorPanel({
   onLabelChange,
   onShortNameChange,
   onStatusChange,
+  onOpenPointsChange,
+  onOpenPointsLabelChange,
+  onOpenPointTagChange,
+  onOpenPointsDialogForLevel,
   onReleaseNoteChange,
   onLevelLabelChange,
   onScopeIdsChange,
@@ -267,6 +281,7 @@ export function InspectorPanel({
   onDeleteNodeOnly,
   onDeleteNodeBranch,
   onFocusNode,
+  onSelectAllNodes,
   onInspectorCommit,
   onEffortChange,
   onBenefitChange,
@@ -608,12 +623,16 @@ export function InspectorPanel({
 
             <Select
               label="Status (for all)"
-              data={STATUS_OPTIONS.map((option) => ({ value: option.value, label: option.label }))}
+              data={BULK_STATUS_OPTIONS}
               onChange={(value) => value && onStatusChange(value)}
               allowDeselect={false}
               classNames={{ input: 'mantine-dark-input', label: 'mantine-dark-label', dropdown: 'mantine-dark-dropdown', option: 'mantine-dark-option' }}
               comboboxProps={{ withinPortal: true, zIndex: 450 }}
             />
+
+            <Text size="sm" c="dimmed">
+              Use the list view filter bar to multi-select levels and assign named open-point tags in bulk.
+            </Text>
 
             <MultiSelect
               label="Scopes (for all)"
@@ -624,6 +643,8 @@ export function InspectorPanel({
               classNames={{ input: 'mantine-dark-input', label: 'mantine-dark-label', dropdown: 'mantine-dark-dropdown', option: 'mantine-dark-option', pill: 'mantine-dark-pill' }}
               comboboxProps={{ withinPortal: true, zIndex: 450 }}
             />
+
+            <Button variant="light" onClick={() => onSelectAllNodes?.()}>Select all skills</Button>
 
             <Divider />
 
@@ -651,13 +672,15 @@ export function InspectorPanel({
         ordinalLabel: getDefaultLevelLabel(index),
         status: getLevelStatus(level, selectedReleaseId),
         releaseNote: level.releaseNote ?? '',
+        openPointsLabel: String(level.openPointsLabel ?? ''),
         scopeIds: Array.isArray(level.scopeIds) ? level.scopeIds : [],
+        hasOpenPoints: Boolean(level.hasOpenPoints),
         additionalDependencyLevelIds: Array.isArray(level.additionalDependencyLevelIds) ? level.additionalDependencyLevelIds : [],
         effort: level.effort ?? null,
         benefit: level.benefit ?? null,
       }
     })
-    : [{ id: 'level-1', label: 'Level 1', customLabel: '', displayLabel: 'Level 1', ordinalLabel: 'Level 1', status: getLevelStatus({ statuses: {}, status: selectedNode?.status }, selectedReleaseId), releaseNote: '', scopeIds: [], additionalDependencyLevelIds: [] }]
+    : [{ id: 'level-1', label: 'Level 1', customLabel: '', displayLabel: 'Level 1', ordinalLabel: 'Level 1', status: getLevelStatus({ statuses: {}, status: selectedNode?.status }, selectedReleaseId), releaseNote: '', openPointsLabel: '', hasOpenPoints: false, scopeIds: [], additionalDependencyLevelIds: [] }]
 
   const activeProgressLevelId = selectedProgressLevelId ?? nodeLevels[0]?.id ?? 'level-1'
   const activeProgressLevel = nodeLevels.find((level) => level.id === activeProgressLevelId) ?? nodeLevels[0] ?? {
@@ -668,6 +691,8 @@ export function InspectorPanel({
     ordinalLabel: 'Level 1',
     status: getLevelStatus({ statuses: {}, status: selectedNode?.status }, selectedReleaseId),
     releaseNote: '',
+    openPointsLabel: '',
+    hasOpenPoints: false,
     scopeIds: [],
   }
   const scopeSelectData = (scopeOptions ?? []).map((scope) => ({
@@ -799,6 +824,22 @@ export function InspectorPanel({
     if (!draft) return null
     return otherShortNames.has(draft) ? 'This shortname is already used by another node.' : null
   }, [shortNameDraft, otherShortNames])
+
+  const openPointTagOptions = useMemo(() => {
+    const tags = new Set()
+    const queue = [...(roadmapData?.children ?? [])]
+    while (queue.length > 0) {
+      const node = queue.shift()
+      for (const level of node.levels ?? []) {
+        const label = String(level?.openPointsLabel ?? '').trim()
+        if (label) {
+          tags.add(label)
+        }
+      }
+      queue.push(...(node.children ?? []))
+    }
+    return Array.from(tags)
+  }, [roadmapData])
   const ringData = levelOptions.map((option) => ({
     value: String(option.value),
     label: `Ring ${option.value}`,
@@ -876,7 +917,24 @@ export function InspectorPanel({
   )
 
   const [activeTab, setActiveTab] = useState('properties')
+  const [openPointTagDraft, setOpenPointTagDraft] = useState('')
   const lastSyncedProgressLevelIdRef = useRef(null)
+
+  const applyOpenPointTag = useCallback((levelId, value) => {
+    const nextTag = String(value ?? '').trim()
+    if (!nextTag) {
+      return
+    }
+
+    if (typeof onOpenPointTagChange === 'function') {
+      onOpenPointTagChange(nextTag, levelId)
+    } else {
+      onOpenPointsChange?.(true, levelId)
+      onOpenPointsLabelChange?.(nextTag, levelId)
+    }
+
+    setOpenPointTagDraft('')
+  }, [onOpenPointTagChange, onOpenPointsChange, onOpenPointsLabelChange])
 
   const resetLevelDragState = useCallback(() => {
     setDraggedLevelId(null)
@@ -1101,6 +1159,9 @@ export function InspectorPanel({
               >
                 <span className="skill-panel__level-tab-index">{`L${index + 1}`}</span>
                 {level.customLabel ? <span className="skill-panel__level-tab-name">{truncateLevelTabName(level.customLabel)}</span> : null}
+                {level.hasOpenPoints ? (
+                  <span aria-label="Open points" title="Open points" style={{ color: '#ef4444', marginLeft: 6, fontSize: '0.8rem' }}>●</span>
+                ) : null}
               </Tabs.Tab>
             ))}
 
@@ -1308,10 +1369,13 @@ export function InspectorPanel({
 
             <div className="skill-panel__tab-bottom-bar">
               <Divider mb="sm" />
-              <Group gap="sm" grow>
-                <Button variant="default" onClick={onDeleteNodeOnly}>Delete skill</Button>
-                <Button color="red" variant="outline" onClick={onDeleteNodeBranch}>Delete branch</Button>
-              </Group>
+              <Stack gap="sm">
+                <Button variant="light" onClick={() => onSelectAllNodes?.()}>Select all skills</Button>
+                <Group gap="sm" grow>
+                  <Button variant="default" onClick={onDeleteNodeOnly}>Delete skill</Button>
+                  <Button color="red" variant="outline" onClick={onDeleteNodeBranch}>Delete branch</Button>
+                </Group>
+              </Stack>
             </div>
           </Tabs.Panel>
 
@@ -1320,10 +1384,72 @@ export function InspectorPanel({
             <Tabs.Panel key={level.id} value={level.id}>
               <div className="skill-panel__tab-scroll skill-panel__tab-scroll--level">
                 <Stack gap="md" style={{ flexShrink: 0 }}>
-                  <Group gap="xs" align="center">
-                    <Badge variant="light" color="cyan">{level.ordinalLabel}</Badge>
-                    {nodeLevels.length > 1 && (
-                      <Text size="xs" c="dimmed">Tab position defines the level number.</Text>
+                  <Group justify="space-between" align="center" wrap="nowrap">
+                    <Group gap="xs" align="center" wrap="nowrap">
+                      <Badge variant="light" color="cyan">{level.ordinalLabel}</Badge>
+                      {nodeLevels.length > 1 && (
+                        <Text size="xs" c="dimmed">Tab position defines the level number.</Text>
+                      )}
+                    </Group>
+                    {level.hasOpenPoints ? (
+                      <ActionIcon
+                        size="sm"
+                        variant="light"
+                        color="teal"
+                        aria-label="Mark open point done"
+                        title="Mark open point done"
+                        onClick={() => onOpenPointsChange?.(false, level.id)}
+                      >
+                        <IconCheck size={16} />
+                      </ActionIcon>
+                    ) : (
+                      <Menu shadow="md" width={240} position="bottom-end" closeOnItemClick={false}>
+                        <Menu.Target>
+                          <ActionIcon
+                            size="sm"
+                            variant="light"
+                            color="red"
+                            aria-label="Add open point"
+                            title="Add open point"
+                          >
+                            <IconChecklist size={16} />
+                          </ActionIcon>
+                        </Menu.Target>
+                        <Menu.Dropdown>
+                          <Menu.Label>Open point tag</Menu.Label>
+                          {openPointTagOptions.length > 0 ? openPointTagOptions.map((tag) => (
+                            <Menu.Item key={`${level.id}-${tag}`} onClick={() => applyOpenPointTag(level.id, tag)}>
+                              {tag}
+                            </Menu.Item>
+                          )) : (
+                            <Text size="xs" c="dimmed" px="sm" py={4}>No tags yet</Text>
+                          )}
+                          <Menu.Divider />
+                          <div style={{ padding: '0.45rem', display: 'grid', gap: '0.4rem' }}>
+                            <TextInput
+                              size="xs"
+                              value={openPointTagDraft}
+                              onChange={(event) => setOpenPointTagDraft(event.currentTarget.value)}
+                              placeholder="Add tag"
+                              aria-label="Add new tag"
+                              onKeyDown={(event) => {
+                                if (event.key === 'Enter') {
+                                  event.preventDefault()
+                                  applyOpenPointTag(level.id, openPointTagDraft)
+                                }
+                              }}
+                            />
+                            <Button
+                              size="xs"
+                              color="red"
+                              onClick={() => applyOpenPointTag(level.id, openPointTagDraft)}
+                              disabled={!String(openPointTagDraft ?? '').trim()}
+                            >
+                              Add tag
+                            </Button>
+                          </div>
+                        </Menu.Dropdown>
+                      </Menu>
                     )}
                   </Group>
 
@@ -1370,6 +1496,7 @@ export function InspectorPanel({
                       }}
                     />
                   </div>
+
 
                   <div>
                     <Text className="mantine-dark-label" size="sm" mb={6}>Effort</Text>

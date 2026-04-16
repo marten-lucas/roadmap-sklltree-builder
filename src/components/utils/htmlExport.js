@@ -2,6 +2,7 @@ import { buildPersistedDocumentPayload, parseDocumentPayload } from './documentP
 import { collectReleaseNoteEntries } from './pdfExport'
 import { renderMarkdownToHtml } from './markdown'
 import { renderScopeLabelsMarkup } from './scopeDisplay'
+import { buildExportFileName, sanitizeFileNamePart } from './exportFileName'
 import { serializeSvgElementForExport } from './svgExport'
 import { VIEWPORT_DEFAULTS } from './viewport'
 import { NODE_LABEL_ZOOM, STATUS_STYLES } from '../config'
@@ -336,7 +337,7 @@ const buildReleaseSectionsMarkup = ({ roadmapDocument, releaseIds }) => {
   }).join('\n')
 }
 
-const buildViewerScript = () => `
+const buildViewerScript = (exportBaseName = 'skilltree-roadmap') => `
     (() => {
   window.__skilltreeExportViewerReady = true
       const RELEASE_FILTER = {
@@ -1612,20 +1613,44 @@ const buildViewerScript = () => `
         }
       }
 
+      const buildViewerExportFileName = (extension, suffix = '') => {
+        const padPart = (value) => String(value ?? '').padStart(2, '0')
+        const normalizedSuffix = String(suffix ?? '')
+          .trim()
+          .replace(/[^a-zA-Z0-9]+/g, '-')
+          .replace(/^-+|-+$/g, '')
+        const now = new Date()
+        const datePart = [
+          now.getFullYear(),
+          padPart(now.getMonth() + 1),
+          padPart(now.getDate()),
+        ].join('-')
+        const timePart = [
+          padPart(now.getHours()),
+          padPart(now.getMinutes()),
+        ].join('-')
+        const normalizedExtension = String(extension ?? '')
+          .trim()
+          .replace(/^\.+/, '')
+          .toLowerCase() || 'txt'
+
+        return ${JSON.stringify(exportBaseName)} + '_' + datePart + '_' + timePart + (normalizedSuffix ? '_' + normalizedSuffix : '') + '.' + normalizedExtension
+      }
+
       printButton?.addEventListener('click', () => {
         window.print()
       })
 
       pngButton?.addEventListener('click', () => {
-        void downloadPng(svgRoot, 'skilltree-roadmap.png')
+        void downloadPng(svgRoot, buildViewerExportFileName('png'))
       })
 
       svgButton?.addEventListener('click', () => {
-        downloadSvg(svgRoot, 'skilltree-roadmap.svg')
+        downloadSvg(svgRoot, buildViewerExportFileName('svg'))
       })
 
       cleanSvgButton?.addEventListener('click', () => {
-        downloadSvg(svgRoot, 'skilltree-roadmap-clean.svg', { clean: true })
+        downloadSvg(svgRoot, buildViewerExportFileName('svg', 'clean'), { clean: true })
       })
 
       scopeFilterSelect?.addEventListener('change', applyTreeFilters)
@@ -1657,6 +1682,7 @@ export const buildHtmlExportDocument = ({
   const releaseDate = String(releaseData?.date ?? '').trim()
   const pageTitle = [systemName, releaseTitle].filter(Boolean).join(' · ') || systemName
   const subtitleBits = [releaseMotto, `Exportiert am ${exportDate}`]
+  const exportBaseName = sanitizeFileNamePart(releaseFilteredDocument?.systemName)
 
   if (releaseDate) {
     subtitleBits.push(`Release Date: ${formatDisplayDate(releaseDate)}`)
@@ -2417,7 +2443,7 @@ export const buildHtmlExportDocument = ({
 
   <script id="${HTML_EXPORT_DATA_SCRIPT_ID}" type="application/json">${canonicalPayloadJson}</script>
   <script>${HTML_TO_IMAGE_BUNDLE}</script>
-  <script>${buildViewerScript()}</script>
+  <script>${buildViewerScript(exportBaseName)}</script>
 </body>
 </html>`
 }
@@ -2498,7 +2524,7 @@ export const exportHtmlFromSkillTree = ({
   const anchor = window.document.createElement('a')
 
   anchor.href = objectUrl
-  anchor.download = 'skilltree-roadmap.html'
+  anchor.download = buildExportFileName(roadmapDocument, 'html')
   anchor.style.display = 'none'
 
   window.document.body.appendChild(anchor)

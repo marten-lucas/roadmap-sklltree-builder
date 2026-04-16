@@ -38,7 +38,7 @@ const ensureDocumentDefaults = (document) => {
   const hasSPMap = isObject(document.storyPointMap)
   const hasShowHiddenNodes = 'showHiddenNodes' in document
   const hasReleases = Array.isArray(document.releases) && document.releases.length > 0
-  const hasStatusDescriptions = isObject(document.statusDescriptions)
+  const hasStatusDescriptions = !('statusDescriptions' in document) || isObject(document.statusDescriptions)
 
   if (
     normalizeCenterIconSrc(document.centerIconSrc) === document.centerIconSrc

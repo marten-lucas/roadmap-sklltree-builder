@@ -1,5 +1,17 @@
 import { generateUUID } from './uuid'
 
+const normalizeNotesChecked = (value) => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return {}
+  }
+
+  return Object.fromEntries(
+    Object.entries(value)
+      .filter(([key]) => typeof key === 'string' && key)
+      .map(([key, checked]) => [key, Boolean(checked)]),
+  )
+}
+
 export const createRelease = (name = '') => ({
   id: generateUUID(),
   name,
@@ -7,6 +19,8 @@ export const createRelease = (name = '') => ({
   introduction: '',
   date: '',
   storyPointBudget: null,
+  notesMarkdown: '',
+  notesChecked: {},
 })
 
 export const getSelectedRelease = (releases, selectedReleaseId) => {
@@ -100,5 +114,7 @@ export const normalizeRelease = (raw) => {
     introduction: typeof raw.introduction === 'string' ? raw.introduction : '',
     date: typeof raw.date === 'string' ? raw.date : '',
     storyPointBudget: raw.storyPointBudget != null ? Number(raw.storyPointBudget) : null,
+    notesMarkdown: typeof raw.notesMarkdown === 'string' ? raw.notesMarkdown : '',
+    notesChecked: normalizeNotesChecked(raw.notesChecked),
   }
 }

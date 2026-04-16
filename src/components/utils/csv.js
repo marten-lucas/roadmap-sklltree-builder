@@ -1,12 +1,13 @@
 import { normalizeStatusKey } from '../config'
 import { createEmptyDocument } from './documentState'
+import { buildExportFileName, DEFAULT_EXPORT_BASE_NAME } from './exportFileName'
 import { normalizeEffort, normalizeBenefit } from './effortBenefit'
 import { ensureNodeLevels, findAdditionalDependencyCycles } from './treeData'
 import { generateUUID } from './uuid'
 import { getLevelStatus } from './nodeStatus'
 import { createRelease } from './releases'
 
-export const CSV_EXPORT_FILE_NAME = 'skilltree-roadmap.csv'
+export const CSV_EXPORT_FILE_NAME = `${DEFAULT_EXPORT_BASE_NAME}.csv`
 
 export const CSV_EXPORT_HEADERS = [
   'ShortName',
@@ -806,11 +807,12 @@ export const serializeDocumentToCsv = (document, releaseId = null) => {
   return rows.map(joinCsvRow).join('\n')
 }
 
-export const downloadDocumentCsv = (roadmapDocument, releaseId = null, fileName = CSV_EXPORT_FILE_NAME) => {
+export const downloadDocumentCsv = (roadmapDocument, releaseId = null, fileName = null) => {
   if (typeof window === 'undefined' || typeof window.document === 'undefined') {
     return false
   }
 
+  const resolvedFileName = fileName || buildExportFileName(roadmapDocument, 'csv')
   const csvText = serializeDocumentToCsv(roadmapDocument, releaseId)
   readDocumentFromCsvText(csvText)
   const blob = new Blob([csvText], { type: 'text/csv;charset=utf-8' })
@@ -818,7 +820,7 @@ export const downloadDocumentCsv = (roadmapDocument, releaseId = null, fileName 
   const link = window.document.createElement('a')
 
   link.href = url
-  link.download = fileName
+  link.download = resolvedFileName
   link.style.display = 'none'
   window.document.body.appendChild(link)
   link.click()

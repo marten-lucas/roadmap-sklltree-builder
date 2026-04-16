@@ -12,6 +12,8 @@ import { renderMarkdownToHtml } from './markdown'
 import { renderScopeLabelsMarkup } from './scopeDisplay'
 
 const SVG_XML_PREFIX = '<?xml version="1.0" encoding="UTF-8"?>\n'
+import { buildExportFileName } from './exportFileName'
+
 const SVG_NS = 'http://www.w3.org/2000/svg'
 const SVG_XLINK_NS = 'http://www.w3.org/1999/xlink'
 const EXPORT_VIEWPORT_PADDING = 96
@@ -999,7 +1001,7 @@ export const serializeSvgElementForExport = (svgElement, options = {}) => {
   return normalizeSvgMarkup(serialized)
 }
 
-export const downloadSvgMarkup = (markup, fileName = 'skilltree-roadmap.svg') => {
+export const downloadSvgMarkup = (markup, fileName = buildExportFileName(null, 'svg')) => {
   if (typeof window === 'undefined' || typeof window.document === 'undefined') {
     return false
   }
@@ -1063,7 +1065,7 @@ const getExportBackgroundColor = (svgElement, sourceDocument) => {
 
 export const exportPngFromElement = async (svgElement, options = {}) => {
   const {
-    fileName = 'skilltree-roadmap.png',
+    fileName = buildExportFileName(null, 'png'),
     includeTooltips = false,
     sourceDocument = globalThis?.document,
     styleText = '',
@@ -1124,7 +1126,7 @@ export const exportPngFromElement = async (svgElement, options = {}) => {
 
 export const exportSvgFromElement = (svgElement, options = {}) => {
   const {
-    fileName = 'skilltree-roadmap.svg',
+    fileName = buildExportFileName(null, 'svg'),
     includeTooltips = true,
     sourceDocument = globalThis?.document,
     styleText = '',

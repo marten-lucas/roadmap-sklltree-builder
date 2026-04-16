@@ -56,6 +56,20 @@
     mask: radial-gradient(farthest-side, transparent calc(100% - 5px), #000 calc(100% - 5px));
 }
 
+.skill-node-button__open-point-indicator {
+    position: absolute;
+    top: 24%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 0.62rem;
+    height: 0.62rem;
+    border-radius: 999px;
+    background: #ef4444;
+    box-shadow: 0 0 0 2px rgba(15, 23, 42, 0.85), 0 0 10px rgba(239, 68, 68, 0.45);
+    z-index: 3;
+    pointer-events: none;
+}
+
 .skill-node-button--minimal .skill-node-level-ring {
     /* Thinner ring for the smaller minimal node */
     -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 3px));

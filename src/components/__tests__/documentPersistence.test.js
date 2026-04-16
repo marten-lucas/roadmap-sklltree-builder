@@ -89,6 +89,46 @@ describe('documentPersistence', () => {
     expect(loaded).toEqual(document)
   })
 
+  it('round-trips extended UI data including icon, task tags, and internal notes', () => {
+    const document = {
+      systemName: 'Persistence Demo',
+      centerIconSrc: 'data:image/svg+xml;utf8,<svg></svg>',
+      segments: [{ id: 'segment-1', label: 'Frontend' }],
+      scopes: [{ id: 'scope-1', label: 'Platform', color: '#ff00aa' }],
+      releases: [{
+        id: 'release-1',
+        name: 'Release 1',
+        motto: 'Ship it',
+        introduction: 'Intro',
+        date: '2026-07-01',
+        storyPointBudget: 42,
+        notesMarkdown: '- Add nodes\n- Verify rollout',
+        notesChecked: { '0:Add nodes': true },
+      }],
+      children: [{
+        id: 'node-1',
+        label: 'Root',
+        segmentId: 'segment-1',
+        children: [],
+        levels: [{
+          id: 'level-1',
+          label: 'Level 1',
+          statuses: { 'release-1': 'now' },
+          releaseNote: 'Visible note',
+          hasOpenPoints: true,
+          openPointsLabel: 'Missing copy',
+          scopeIds: ['scope-1'],
+        }],
+      }],
+    }
+
+    const serialized = serializeDocumentPayload(document)
+    const parsed = parseDocumentPayload(serialized)
+
+    expect(parsed.ok).toBe(true)
+    expect(parsed.value).toEqual(document)
+  })
+
   it('returns null when local storage entry is missing or invalid', () => {
     const storage = createStorageMock()
 

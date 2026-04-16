@@ -154,6 +154,8 @@ const _SkillNode = ({ node, nodeSize, isSelected, isPortalPeerHovered = false, o
     ? `${node.label} – ${activeLevelLabel}`
     : node.label
   const levelStatusKeys = getLevelStatusKeys(node, releaseId)
+  const hasOpenPoints = levels.some((level) => Boolean(level?.hasOpenPoints))
+  const openPointsTitle = String(levels.find((level) => level?.hasOpenPoints)?.openPointsLabel ?? '').trim() || 'Open point'
   const levelRingStyle = buildSegmentConicStyle(
     levelStatusKeys,
     (key) => STATUS_STYLES[key]?.ringBand ?? STATUS_STYLES.later.ringBand,
@@ -351,6 +353,7 @@ const _SkillNode = ({ node, nodeSize, isSelected, isPortalPeerHovered = false, o
             }}
           >
             {!isMinimal && <div className="skill-node-level-ring" style={levelRingStyle} />}
+            {hasOpenPoints && <div className="skill-node-button__open-point-indicator" aria-label={openPointsTitle} title={openPointsTitle} />}
             {isVeryClose ? (
               <div className="skill-node-button__content skill-node-button__content--veryclose">
                 <p className="skill-node-vc__headline">{node.label}</p>

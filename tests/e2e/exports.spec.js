@@ -93,7 +93,7 @@ test.describe('HTML export – content matches builder', () => {
     expect(html).toContain('myKyana')
     expect(html).toContain('July 2026 Release')
     expect(html).toContain('Exportiert am')
-    expect(download.suggestedFilename()).toBe('skilltree-roadmap.html')
+    expect(download.suggestedFilename()).toMatch(/^myKyana_\d{4}-\d{2}-\d{2}_\d{2}-\d{2}\.html$/)
   })
 
   test('exported html exposes layout metrics for comparison', async ({ page }) => {
@@ -251,6 +251,12 @@ test.describe('SVG export modes', () => {
     await expect(page.getByRole('menuitem', { name: 'SVG (interactive)', exact: true })).toBeVisible()
   }
 
+  const confirmBuilderExport = async (page) => {
+    const dialog = page.getByRole('dialog', { name: 'Node label in export' })
+    await expect(dialog).toBeVisible()
+    await dialog.getByRole('button', { name: 'Export', exact: true }).click()
+  }
+
   test.beforeEach(async ({ page }) => {
     await startFresh(page)
   })
@@ -262,7 +268,10 @@ test.describe('SVG export modes', () => {
 
     const [download] = await Promise.all([
       page.waitForEvent('download'),
-      page.getByRole('menuitem', { name: 'SVG (interactive)', exact: true }).click(),
+      (async () => {
+        await page.getByRole('menuitem', { name: 'SVG (interactive)', exact: true }).click()
+        await confirmBuilderExport(page)
+      })(),
     ])
     const svgContent = await readDownload(download)
 
@@ -273,7 +282,7 @@ test.describe('SVG export modes', () => {
     expect(svgContent).toContain('skill-node-export-anchor')
     expect(svgContent).toContain('.skill-node-button {')
     expect(svgContent).toContain('.skill-tree-canvas {')
-    expect(download.suggestedFilename()).toBe('skilltree-roadmap.svg')
+    expect(download.suggestedFilename()).toMatch(/^myKyana_\d{4}-\d{2}-\d{2}_\d{2}-\d{2}\.svg$/)
   })
 
   test('png export downloads a binary png file', async ({
@@ -283,14 +292,17 @@ test.describe('SVG export modes', () => {
 
     const [download] = await Promise.all([
       page.waitForEvent('download'),
-      page.getByRole('menuitem', { name: 'PNG', exact: true }).click(),
+      (async () => {
+        await page.getByRole('menuitem', { name: 'PNG', exact: true }).click()
+        await confirmBuilderExport(page)
+      })(),
     ])
 
     const filePath = await download.path()
     const fileBuffer = readFileSync(filePath)
     const pngSignature = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
 
-    expect(download.suggestedFilename()).toBe('skilltree-roadmap.png')
+    expect(download.suggestedFilename()).toMatch(/^myKyana_\d{4}-\d{2}-\d{2}_\d{2}-\d{2}\.png$/)
     expect(fileBuffer.subarray(0, 8)).toEqual(pngSignature)
     expect(fileBuffer.length).toBeGreaterThan(8)
   })
@@ -302,7 +314,10 @@ test.describe('SVG export modes', () => {
 
     const [download] = await Promise.all([
       page.waitForEvent('download'),
-      page.getByRole('menuitem', { name: 'SVG (interactive)', exact: true }).click(),
+      (async () => {
+        await page.getByRole('menuitem', { name: 'SVG (interactive)', exact: true }).click()
+        await confirmBuilderExport(page)
+      })(),
     ])
     const svgContent = await readDownload(download)
 
@@ -325,7 +340,10 @@ test.describe('SVG export modes', () => {
 
     const [download] = await Promise.all([
       page.waitForEvent('download'),
-      page.getByRole('menuitem', { name: 'SVG (clean)' }).click(),
+      (async () => {
+        await page.getByRole('menuitem', { name: 'SVG (clean)' }).click()
+        await confirmBuilderExport(page)
+      })(),
     ])
     const svgContent = await readDownload(download)
 
@@ -333,7 +351,7 @@ test.describe('SVG export modes', () => {
     expect(svgContent).not.toContain('<animate')
     expect(svgContent).toContain('skill-node-export-anchor')
     expect(svgContent).toContain('.skill-node-button {')
-    expect(download.suggestedFilename()).toContain('clean')
+    expect(download.suggestedFilename()).toMatch(/^myKyana_\d{4}-\d{2}-\d{2}_\d{2}-\d{2}_clean\.svg$/)
   })
 
   test('clean svg and interactive svg contain the same set of node labels', async ({
@@ -344,7 +362,10 @@ test.describe('SVG export modes', () => {
 
     const [cleanDownload] = await Promise.all([
       page.waitForEvent('download'),
-      page.getByRole('menuitem', { name: 'SVG (clean)' }).click(),
+      (async () => {
+        await page.getByRole('menuitem', { name: 'SVG (clean)' }).click()
+        await confirmBuilderExport(page)
+      })(),
     ])
     const cleanSvg = await readDownload(cleanDownload)
 

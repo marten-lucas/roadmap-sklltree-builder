@@ -93,6 +93,8 @@ test.describe('ListView effort/value refinements', () => {
     await expect(firstScopeGroup).toBeVisible()
 
     const firstDoneRadio = firstStatusGroup.locator('input[value="done"]')
+    const firstSomedayRadio = firstStatusGroup.locator('input[value="someday"]')
+    await expect(firstSomedayRadio).toBeVisible()
     await firstDoneRadio.check({ force: true })
     await expect(firstDoneRadio).toBeChecked()
 
@@ -191,7 +193,7 @@ test.describe('ListView effort/value refinements', () => {
 
     const secondLevelName = String(await page.locator('.list-view-drawer__level-name').nth(1).textContent() ?? '').trim()
     await page.locator('.list-view-drawer__item-body--level').nth(1).click()
-    await expect(page.locator('.skill-panel--inspector [role="tab"][aria-selected="true"]').first()).toContainText(secondLevelName)
+    await expect(page.locator('.skill-panel--inspector [role="tab"][aria-selected="true"]').first()).toHaveAttribute('aria-label', secondLevelName)
 
     await expect
       .poll(async () => readCanvasScale(page))

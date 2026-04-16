@@ -32,7 +32,7 @@ describe('InspectorPanel render', () => {
             segmentId: null,
             status: 'now',
             levels: [
-              { id: 'level-1', label: 'Level 1', status: 'now', releaseNote: '', scopeIds: [] },
+              { id: 'level-1', label: 'Level 1', status: 'now', releaseNote: '', hasOpenPoints: true, openPointsLabel: 'Status values missing', scopeIds: [] },
             ],
             children: [],
           },
@@ -84,6 +84,67 @@ describe('InspectorPanel render', () => {
     expect(html).toContain('>?</div>')
     expect(html).not.toContain('Unclear')
     expect(html).toContain('Level Name')
+    expect(html).toContain('Open points')
+    expect(html).toContain('Mark open point done')
+    expect(html).not.toContain('Needs follow-up')
+    expect(html).not.toContain('Open todo')
+  })
+
+  it('renders bulk helpers for multi-select workflows', () => {
+    const html = renderToString(
+      createElement(MantineProvider, null,
+        createElement(InspectorPanel, {
+          selectedNode: null,
+          selectedNodeIds: ['node-1', 'node-2'],
+          roadmapData: {
+            segments: [],
+            scopes: [],
+            children: [
+              { id: 'node-1', label: 'Node 1', shortName: 'N1', levels: [{ id: 'level-1', label: 'Level 1', status: 'now', releaseNote: '', scopeIds: [] }], children: [] },
+              { id: 'node-2', label: 'Node 2', shortName: 'N2', levels: [{ id: 'level-2', label: 'Level 1', status: 'next', releaseNote: '', scopeIds: [] }], children: [] },
+            ],
+          },
+          currentLevel: 1,
+          selectedProgressLevelId: 'level-1',
+          onClose: () => {},
+          onLabelChange: () => {},
+          onShortNameChange: () => {},
+          onStatusChange: () => {},
+          onReleaseNoteChange: () => {},
+          onScopeIdsChange: () => {},
+          onOpenPointsChange: () => {},
+          onSelectAllNodes: () => {},
+          scopeOptions: [],
+          onCreateScope: () => ({ ok: true }),
+          onRenameScope: () => ({ ok: true }),
+          onDeleteScope: () => ({ ok: true }),
+          onCreateSegment: () => ({ ok: true }),
+          onRenameSegment: () => ({ ok: true }),
+          onDeleteSegment: () => ({ ok: true }),
+          onSelectProgressLevel: () => {},
+          onAddProgressLevel: () => {},
+          onDeleteProgressLevel: () => {},
+          onLevelChange: () => {},
+          levelOptions: [{ value: 1, isAllowed: true }],
+          segmentOptions: [],
+          parentOptions: [],
+          selectedParentId: null,
+          additionalDependencyOptions: [],
+          selectedAdditionalDependencyIds: [],
+          incomingDependencyLabels: [],
+          validationMessage: null,
+          onParentChange: () => {},
+          onAdditionalDependenciesChange: () => {},
+          onSegmentChange: () => {},
+          onDeleteNodeOnly: () => {},
+          onDeleteNodeBranch: () => {},
+          onFocusNode: () => {},
+        }),
+      ),
+    )
+
+    expect(html).toContain('list view filter bar')
+    expect(html).toContain('Select all skills')
   })
 })
 

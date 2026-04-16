@@ -1,3 +1,5 @@
+import { buildExportFileName } from './exportFileName'
+
 export const DOCUMENT_SCHEMA_VERSION = 3
 export const LOCAL_STORAGE_DOCUMENT_KEY = 'roadmap-skilltree.document.v1'
 const LOCAL_STORAGE_TRACE_KEYS = [
@@ -159,7 +161,7 @@ export const parseDocumentPayload = (rawValue) => {
   if (typeof rawValue !== 'string' || rawValue.length === 0) {
     return {
       ok: false,
-      error: 'The file is empty or not valid JSON.',
+      error: 'The file is empty or not valid JSON (gueltiges JSON).',
     }
   }
 
@@ -169,7 +171,7 @@ export const parseDocumentPayload = (rawValue) => {
   } catch {
     return {
       ok: false,
-      error: 'The file does not contain valid JSON.',
+      error: 'The file does not contain valid JSON (gueltiges JSON).',
     }
   }
 
@@ -250,18 +252,19 @@ export const loadDocumentFromLocalStorage = (storage = globalThis?.localStorage)
   return result.ok ? result.value : null
 }
 
-export const downloadDocumentJson = (roadmapDocument, fileName = 'skilltree-roadmap.json') => {
+export const downloadDocumentJson = (roadmapDocument, fileName = null) => {
   if (typeof window === 'undefined' || typeof window.document === 'undefined') {
     return false
   }
 
+  const resolvedFileName = fileName || buildExportFileName(roadmapDocument, 'json')
   const json = serializeDocumentPayload(roadmapDocument, { pretty: true })
   const blob = new Blob([json], { type: 'application/json;charset=utf-8' })
   const url = window.URL.createObjectURL(blob)
   const link = window.document.createElement('a')
 
   link.href = url
-  link.download = fileName
+  link.download = resolvedFileName
   link.style.display = 'none'
   window.document.body.appendChild(link)
   link.click()

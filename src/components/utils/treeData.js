@@ -59,6 +59,8 @@ const toNodeLevel = (levelLike, fallbackLabel = 'Level 1') => {
     label: levelLike?.label ?? fallbackLabel,
     statuses,
     releaseNote: levelLike?.releaseNote ?? '',
+    hasOpenPoints: Boolean(levelLike?.hasOpenPoints),
+    openPointsLabel: String(levelLike?.openPointsLabel ?? '').trim(),
     scopeIds: uniqueStringArray(levelLike?.scopeIds),
     additionalDependencyLevelIds: uniqueStringArray(levelLike?.additionalDependencyLevelIds),
     effort: normalizeEffort(levelLike?.effort),
@@ -68,10 +70,13 @@ const toNodeLevel = (levelLike, fallbackLabel = 'Level 1') => {
 
 export const generateShortNameFromLabel = (label) => {
   const text = String(label ?? '').trim()
-  const words = text.split(/\s+/).filter(Boolean)
+  const words = text
+    .split(/\s+/)
+    .map((word) => String(word ?? '').match(/[A-Za-z0-9]/)?.[0] ?? '')
+    .filter(Boolean)
 
   if (words.length > 1) {
-    return words.slice(0, 3).map((word) => word[0]).join('').toUpperCase().padEnd(3, 'X').slice(0, 3)
+    return words.slice(0, 3).join('').toUpperCase().padEnd(3, 'X').slice(0, 3)
   }
 
   const compact = text.replace(/[^A-Za-z0-9]/g, '').toUpperCase()
@@ -793,48 +798,59 @@ export const setLevelAdditionalDependencies = (treeData, sourceNodeId, levelId, 
 }
 
 export const updateNodeProgressLevel = (treeData, id, levelId, updates, releaseId = null) => {
+  const node = findNodeById(treeData, id)
+  if (!node) {
+    return treeData
+  }
+
   try {
-    const node = findNodeById(treeData, id)
-    const incoming = node ? (Array.isArray(node.levels) ? (node.levels.find((l) => l.id === levelId)?.scopeIds ?? []) : []) : []
+    const incoming = Array.isArray(node.levels) ? (node.levels.find((l) => l.id === levelId)?.scopeIds ?? []) : []
     appendModelTrace({ ts: Date.now(), fn: 'updateNodeProgressLevel.before', nodeId: id, levelId, incoming: Array.from(incoming), updates })
   } catch (e) {
     // ignore
   }
 
-  const nextTree = withNormalizedDependencies(updateNodeById(treeData, id, (node) => {
-    const levels = ensureNodeLevels(node)
-    const nextLevels = levels.map((level) => {
-      if (level.id !== levelId) {
-        return level
-      }
+  const levels = ensureNodeLevels(node)
+  const levelIndex = levels.findIndex((entry) => entry.id === levelId)
+  if (levelIndex < 0) {
+    return treeData
+  }
 
-      const levelIndex = levels.findIndex((entry) => entry.id === levelId)
+  const rawLevels = Array.isArray(node.levels) && node.levels.length > 0 ? node.levels : levels
+  const currentLevel = levels[levelIndex]
+  const persistedLevel = rawLevels[levelIndex] ?? currentLevel
+  let nextStatuses = currentLevel.statuses ?? {}
+  if (updates?.status !== undefined && releaseId) {
+    nextStatuses = { ...nextStatuses, [releaseId]: updates.status }
+  }
 
-      // If `updates.status` is provided and `releaseId` is given, update statuses map
-      // instead of a (non-existent) flat status field.
-      let nextStatuses = level.statuses ?? {}
-      if (updates?.status !== undefined && releaseId) {
-        nextStatuses = { ...nextStatuses, [releaseId]: updates.status }
-      }
+  const { status: _statusIgnored, ...updatesRest } = updates ?? {}
+  const nextLevel = {
+    ...currentLevel,
+    ...updatesRest,
+    label: updates?.label !== undefined
+      ? normalizeLevelLabel(updates.label, levelIndex)
+      : normalizeLevelLabel(currentLevel.label, levelIndex),
+    statuses: nextStatuses,
+    releaseNote: updates?.releaseNote ?? currentLevel.releaseNote ?? '',
+    hasOpenPoints: updates?.hasOpenPoints !== undefined
+      ? Boolean(updates.hasOpenPoints)
+      : Boolean(currentLevel.hasOpenPoints),
+    openPointsLabel: updates?.openPointsLabel !== undefined
+      ? String(updates.openPointsLabel ?? '').trim()
+      : String(currentLevel.openPointsLabel ?? '').trim(),
+    scopeIds: updates?.scopeIds !== undefined
+      ? uniqueStringArray(updates.scopeIds)
+      : uniqueStringArray(currentLevel.scopeIds),
+  }
 
-      const { status: _statusIgnored, ...updatesRest } = updates ?? {}
+  if (JSON.stringify(persistedLevel) === JSON.stringify(nextLevel)) {
+    return treeData
+  }
 
-      return {
-        ...level,
-        ...updatesRest,
-        label: updates?.label !== undefined
-          ? normalizeLevelLabel(updates.label, levelIndex >= 0 ? levelIndex : 0)
-          : normalizeLevelLabel(level.label, levelIndex >= 0 ? levelIndex : 0),
-        statuses: nextStatuses,
-        releaseNote: updates?.releaseNote ?? level.releaseNote ?? '',
-        scopeIds: updates?.scopeIds !== undefined
-          ? uniqueStringArray(updates.scopeIds)
-          : uniqueStringArray(level.scopeIds),
-      }
-    })
-
-    return { levels: nextLevels }
-  }))
+  const nextTree = withNormalizedDependencies(updateNodeById(treeData, id, () => ({
+    levels: levels.map((level) => (level.id === levelId ? nextLevel : level)),
+  })))
 
   try {
     const afterNode = findNodeById(nextTree, id)
@@ -845,6 +861,108 @@ export const updateNodeProgressLevel = (treeData, id, levelId, updates, releaseI
   }
 
   return nextTree
+}
+
+export const updateNodeProgressLevelsBulk = (treeData, entries = [], releaseId = null) => {
+  const updatesByNodeId = new Map()
+
+  for (const entry of entries) {
+    const nodeId = typeof entry?.nodeId === 'string' ? entry.nodeId : ''
+    const levelId = typeof entry?.levelId === 'string' ? entry.levelId : ''
+    if (!nodeId || !levelId) {
+      continue
+    }
+
+    const perNode = updatesByNodeId.get(nodeId) ?? new Map()
+    perNode.set(levelId, { ...(perNode.get(levelId) ?? {}), ...(entry.updates ?? {}) })
+    updatesByNodeId.set(nodeId, perNode)
+  }
+
+  if (updatesByNodeId.size === 0) {
+    return treeData
+  }
+
+  let didChange = false
+
+  const applyNode = (node) => {
+    const existingChildren = node.children ?? []
+    const nextChildren = existingChildren.map(applyNode)
+    const hasChildrenChange = nextChildren.some((child, index) => child !== existingChildren[index])
+    const levelUpdates = updatesByNodeId.get(node.id)
+
+    if (!levelUpdates) {
+      if (hasChildrenChange) {
+        didChange = true
+        return { ...node, children: nextChildren }
+      }
+      return node
+    }
+
+    const levels = ensureNodeLevels(node)
+    const rawLevels = Array.isArray(node.levels) && node.levels.length > 0 ? node.levels : levels
+    let levelsChanged = false
+
+    const nextLevels = levels.map((level, levelIndex) => {
+      const updates = levelUpdates.get(level.id)
+      if (!updates) {
+        return level
+      }
+
+      let nextStatuses = level.statuses ?? {}
+      if (updates?.status !== undefined && releaseId) {
+        nextStatuses = { ...nextStatuses, [releaseId]: updates.status }
+      }
+
+      const { status: _statusIgnored, ...updatesRest } = updates ?? {}
+      const nextLevel = {
+        ...level,
+        ...updatesRest,
+        label: updates?.label !== undefined
+          ? normalizeLevelLabel(updates.label, levelIndex)
+          : normalizeLevelLabel(level.label, levelIndex),
+        statuses: nextStatuses,
+        releaseNote: updates?.releaseNote ?? level.releaseNote ?? '',
+        hasOpenPoints: updates?.hasOpenPoints !== undefined
+          ? Boolean(updates.hasOpenPoints)
+          : Boolean(level.hasOpenPoints),
+        openPointsLabel: updates?.openPointsLabel !== undefined
+          ? String(updates.openPointsLabel ?? '').trim()
+          : String(level.openPointsLabel ?? '').trim(),
+        scopeIds: updates?.scopeIds !== undefined
+          ? uniqueStringArray(updates.scopeIds)
+          : uniqueStringArray(level.scopeIds),
+      }
+
+      const persistedLevel = rawLevels[levelIndex] ?? level
+      if (JSON.stringify(persistedLevel) !== JSON.stringify(nextLevel)) {
+        levelsChanged = true
+      }
+
+      return nextLevel
+    })
+
+    if (!levelsChanged) {
+      if (hasChildrenChange) {
+        didChange = true
+        return { ...node, children: nextChildren }
+      }
+      return node
+    }
+
+    didChange = true
+    return {
+      ...node,
+      levels: nextLevels,
+      children: nextChildren,
+    }
+  }
+
+  const nextTree = applyNode(treeData)
+  if (!didChange) {
+    return treeData
+  }
+
+  return withNormalizedDependencies(nextTree)
 }
 
 export const addNodeProgressLevel = (treeData, id, newLevelId) =>
@@ -858,6 +976,8 @@ export const addNodeProgressLevel = (treeData, id, newLevelId) =>
         label: nextLabel,
         statuses: {},
         releaseNote: '',
+        hasOpenPoints: false,
+        openPointsLabel: '',
         scopeIds: [],
       },
       nextLabel,

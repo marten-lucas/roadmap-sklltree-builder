@@ -133,6 +133,40 @@ describe('htmlExport', () => {
     expect(readDocumentFromHtmlText(html)).toEqual(document)
   })
 
+  it('preserves extended UI data in the embedded export payload', () => {
+    const document = {
+      ...createDocument(),
+      centerIconSrc: 'data:image/svg+xml;utf8,<svg></svg>',
+      releases: [{
+        id: 'release-a',
+        name: 'Release A',
+        motto: 'Alpha',
+        introduction: 'Intro A',
+        date: '2026-07-01',
+        storyPointBudget: 21,
+        notesMarkdown: '- Add specific nodes\n- Validate exports',
+        notesChecked: { '1:Validate exports': true },
+      }],
+    }
+    document.children[0].levels[0].hasOpenPoints = true
+    document.children[0].levels[0].openPointsLabel = 'Need rollout owner'
+
+    const html = buildHtmlExportDocument({
+      svgMarkup: '<svg viewBox="0 0 100 100"></svg>',
+      roadmapDocument: document,
+      styleText: '',
+      selectedReleaseIds: ['release-a'],
+    })
+
+    const extracted = extractDocumentPayloadFromHtml(html)
+    expect(extracted.ok).toBe(true)
+    expect(extracted.value.centerIconSrc).toBe(document.centerIconSrc)
+    expect(extracted.value.releases[0].notesMarkdown).toBe('- Add specific nodes\n- Validate exports')
+    expect(extracted.value.releases[0].notesChecked).toEqual({ '1:Validate exports': true })
+    expect(extracted.value.children[0].levels[0].hasOpenPoints).toBe(true)
+    expect(extracted.value.children[0].levels[0].openPointsLabel).toBe('Need rollout owner')
+  })
+
   it('rejects html without embedded export payload', () => {
     const result = extractDocumentPayloadFromHtml('<html><body>Missing data</body></html>')
 

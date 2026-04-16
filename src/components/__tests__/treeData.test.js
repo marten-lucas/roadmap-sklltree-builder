@@ -136,6 +136,28 @@ describe('treeData', () => {
       expect(updatedNode.shortName).not.toBe('SAX')
       expect(updatedNode.shortName).toMatch(/^SA/i)
     })
+
+    it('skips symbol-only words when auto-generating a short name', () => {
+      const tree = {
+        segments: [],
+        children: [
+          {
+            id: 'node-1',
+            label: 'New Skill',
+            shortName: 'NSX',
+            status: 'later',
+            ebene: 1,
+            levels: [],
+            children: [],
+          },
+        ],
+      }
+
+      const nextTree = updateNodeData(tree, 'node-1', 'Research & Development')
+      const updatedNode = findNodeById(nextTree, 'node-1')
+
+      expect(updatedNode.shortName).toBe('RDX')
+    })
   })
 
   describe('updateNodeSegment', () => {
@@ -341,6 +363,32 @@ describe('treeData', () => {
   })
 
   describe('progress level labels', () => {
+    it('stores open-points markers on levels', () => {
+      const tree = createSimpleTree()
+      const nextTree = updateNodeProgressLevel(tree, 'child-react', LEVEL_CHILD_REACT_1, {
+        hasOpenPoints: true,
+        openPointsLabel: 'Status values missing',
+      })
+
+      expect(findNodeById(nextTree, 'child-react').levels[0].hasOpenPoints).toBe(true)
+      expect(findNodeById(nextTree, 'child-react').levels[0].openPointsLabel).toBe('Status values missing')
+      expect(findNodeById(tree, 'child-react').levels[0].hasOpenPoints).toBeUndefined()
+    })
+
+    it('returns the same tree for no-op open-points updates', () => {
+      const tree = updateNodeProgressLevel(createSimpleTree(), 'child-react', LEVEL_CHILD_REACT_1, {
+        hasOpenPoints: true,
+        openPointsLabel: 'Status values missing',
+      })
+
+      const nextTree = updateNodeProgressLevel(tree, 'child-react', LEVEL_CHILD_REACT_1, {
+        hasOpenPoints: true,
+        openPointsLabel: 'Status values missing',
+      })
+
+      expect(nextTree).toBe(tree)
+    })
+
     it('should update a level label without mutating the original tree', () => {
       const tree = createSimpleTree()
       const nextTree = updateNodeProgressLevel(tree, 'child-react', LEVEL_CHILD_REACT_1, { label: 'Foundation' })

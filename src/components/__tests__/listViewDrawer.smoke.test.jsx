@@ -24,7 +24,7 @@ const DOCUMENT_WITH_LEVEL = {
       shortName: 'N1',
       children: [],
       levels: [
-        { id: 'level-1', label: 'Level 1', status: 'now', scopeIds: ['scope-1'] },
+        { id: 'level-1', label: 'Level 1', status: 'now', scopeIds: ['scope-1'], hasOpenPoints: true, openPointsLabel: 'Status values missing' },
       ],
     },
   ],
@@ -54,10 +54,22 @@ test('ListViewDrawer renders compact colored status pills for list mode', () => 
     React.createElement(ListViewDrawer, {
       ...defaultProps,
       document: DOCUMENT_WITH_LEVEL,
+      selectedLevelKeys: ['node-1::level-1'],
     })))
 
   expect(html).toContain('list-view-drawer__status-pill--now')
   expect(html).toContain('Now')
   expect(html).toContain('list-view-drawer__scope-select')
   expect(html).toContain('Series A')
+  expect(html).toContain('Open points')
+  expect(html).toContain('Status values missing')
+  expect(html).toContain('1/1')
+  expect(html).toContain('Selected 1')
+  expect(html).toContain('Multi-select levels')
+  expect(html).toContain('Tag selected levels')
+  expect(html).toContain('Tasks')
+  expect(html).toContain('list-view-drawer__metrics-header-col--tasks')
+  expect(html.indexOf('list-view-drawer__metrics-header-col--tasks')).toBeLessThan(html.indexOf('list-view-drawer__metrics-header-col--status'))
+  expect(html).not.toContain('Select levels first')
+  expect(html).not.toContain('Open point managed from toolbar')
 })

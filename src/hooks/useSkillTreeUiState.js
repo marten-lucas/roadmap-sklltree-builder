@@ -17,6 +17,15 @@ export function useSkillTreeUiState() {
   const [transformKey, setTransformKey] = useState(0)
 
   const selectNodeId = (nodeId) => {
+    const alreadySelected = nodeId === selectedNodeId
+      && (nodeId
+        ? selectedNodeIds.length === 1 && selectedNodeIds[0] === nodeId && rightPanel === PANEL_INSPECTOR
+        : selectedNodeIds.length === 0 && selectedProgressLevelId == null && selectedPortalKey == null)
+
+    if (alreadySelected) {
+      return
+    }
+
     setSelectedNodeId(nodeId)
     setSelectedNodeIds(nodeId ? [nodeId] : [])
 

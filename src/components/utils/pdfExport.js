@@ -1,5 +1,6 @@
 import { STATUS_LABELS, normalizeStatusKey } from '../config'
 import { renderMarkdownToHtml } from './markdown'
+import { buildExportFileName } from './exportFileName'
 import { resolveScopeEntries, renderScopeLabelsMarkup } from './scopeDisplay'
 import { getExportViewportBounds } from './svgExport'
 import { getLevelStatus } from './nodeStatus'
@@ -163,7 +164,7 @@ export const buildPdfExportHtml = ({
   const releaseTitle = String(releaseData?.name ?? '').trim()
   const releaseMotto = String(releaseData?.motto ?? '').trim()
   const releaseDate = String(releaseData?.date ?? '').trim()
-  const pageTitle = [systemName, releaseTitle].filter(Boolean).join(' · ') || systemName
+  const pageTitle = buildExportFileName(roadmapDocument, 'pdf').replace(/\.pdf$/i, '')
   const subtitleBits = [`Exportiert am ${exportDate}`]
 
   if (releaseMotto) {

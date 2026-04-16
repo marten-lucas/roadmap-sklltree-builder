@@ -13,6 +13,7 @@ import {
   IconFilters,
   IconInfoCircle,
   IconList,
+  IconNotes,
   IconPercentage20,
   IconRefresh,
   IconSearch,
@@ -66,6 +67,7 @@ export function SkillTreeToolbar({
   onOpenScopeManager,
   onOpenPriorityMatrix,
   onOpenListView,
+  onOpenReleaseNotes,
   releaseFilter,
   setReleaseFilter,
   selectedReleaseFilterLabel,
@@ -374,6 +376,17 @@ export function SkillTreeToolbar({
                 onClick={onOpenListView}
               >
                 <IconList {...TOOLBAR_ICON_PROPS} />
+              </ActionIcon>
+            </Tooltip>
+
+            <Tooltip label="Internal notes" position="top" middlewares={TOOLBAR_TOOLTIP_MIDDLEWARES}>
+              <ActionIcon
+                size="md"
+                variant="default"
+                aria-label="Internal notes"
+                onClick={onOpenReleaseNotes}
+              >
+                <IconNotes {...TOOLBAR_ICON_PROPS} />
               </ActionIcon>
             </Tooltip>
 
