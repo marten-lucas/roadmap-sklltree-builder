@@ -729,6 +729,8 @@ const injectExportTooltipStyles = (svgRoot) => {
     .skill-node-tooltip__note--markdown ul {
       padding-left: 1rem;
       margin-left: 0;
+      list-style-type: disc;
+      list-style-position: inside;
     }
 
     .skill-node-tooltip__note--markdown li {

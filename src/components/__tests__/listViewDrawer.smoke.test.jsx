@@ -58,6 +58,26 @@ const DOCUMENT_WITH_LONG_CONTENT = {
   ],
 }
 
+const DOCUMENT_WITH_SEGMENTED_NODE = {
+  children: [
+    {
+      id: 'node-segmented',
+      label: 'Segmented Node',
+      shortName: 'SEG',
+      segmentId: 'segment-frontend',
+      children: [],
+      levels: [
+        { id: 'level-1', label: 'Level 1', status: 'now', scopeIds: [] },
+      ],
+    },
+  ],
+  scopes: [],
+  segments: [
+    { id: 'segment-frontend', label: 'Frontend' },
+    { id: 'segment-platform', label: 'Platform' },
+  ],
+}
+
 const defaultProps = {
   opened: true,
   document: MINIMAL_DOCUMENT,
@@ -111,6 +131,31 @@ test('ListViewDrawer exposes shared CSS column widths for aligned table layout',
   expect(html).toContain('--listview-label-col-width:')
   expect(html).toContain('--listview-status-col-width:')
   expect(html).toContain('--listview-scopes-col-width:')
+  expect(html).toContain('list-view-drawer__table')
+})
+
+test('ListViewDrawer renders a segment assignment column for node list mode', () => {
+  const html = renderToString(React.createElement(MantineProvider, null,
+    React.createElement(ListViewDrawer, {
+      ...defaultProps,
+      document: DOCUMENT_WITH_SEGMENTED_NODE,
+      initialShowLevels: false,
+    })))
+
+  expect(html).toContain('Segments')
+  expect(html).toContain('Frontend')
+  expect(html).toContain('list-view-drawer__segment-select')
+})
+
+test('ListViewDrawer exposes drawer autosize reset affordance', () => {
+  const html = renderToString(React.createElement(MantineProvider, null,
+    React.createElement(ListViewDrawer, {
+      ...defaultProps,
+      document: DOCUMENT_WITH_LONG_CONTENT,
+    })))
+
+  expect(html).toContain('Resize list view')
+  expect(html).toContain('Drag to resize list view. Double-click to reset to autosize.')
 })
 
 test('sort helpers support roadmap order and alphabetical ordering for list view columns', () => {

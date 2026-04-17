@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
+  addNodeProgressLevel,
   addScopeWithResult,
   deleteScopeWithResult,
   findNodeById,
@@ -457,6 +458,37 @@ describe('treeData', () => {
 
       expect(nextLevels.map((level) => level.id)).toEqual(['level-3', 'level-1', 'level-2'])
       expect(nextLevels.map((level) => level.label)).toEqual(['Level 1', 'Level 2', 'Foundation'])
+    })
+
+    it('should copy scopes into a new level when requested', () => {
+      const tree = {
+        segments: [{ id: 'seg-1', label: 'Segment 1' }],
+        scopes: [
+          { id: 'scope-a', label: 'Series A' },
+          { id: 'scope-b', label: 'Series B' },
+        ],
+        children: [
+          {
+            id: 'node-1',
+            label: 'Node 1',
+            status: 'later',
+            ebene: 1,
+            segmentId: 'seg-1',
+            levels: [
+              { id: 'level-1', label: 'Level 1', statuses: {}, releaseNote: '', scopeIds: ['scope-a', 'scope-b'], additionalDependencyLevelIds: [] },
+            ],
+            children: [],
+          },
+        ],
+      }
+
+      const nextTree = addNodeProgressLevel(tree, 'node-1', 'level-2', { scopeIds: ['scope-a', 'scope-b'] })
+      const nextLevels = findNodeById(nextTree, 'node-1').levels
+
+      expect(nextLevels).toHaveLength(2)
+      expect(nextLevels[1].label).toBe('Level 2')
+      expect(nextLevels[1].scopeIds).toEqual(['scope-a', 'scope-b'])
+      expect(findNodeById(tree, 'node-1').levels).toHaveLength(1)
     })
   })
 

@@ -1,7 +1,7 @@
 import { ActionIcon, Group, Modal, Stack, Text, Textarea } from '@mantine/core'
 import { useRef, useState } from 'react'
 import { IconArrowsMaximize, IconArrowsMinimize, IconBold, IconHeading, IconLink, IconList, IconItalic } from '@tabler/icons-react'
-import { applyMarkdownFormatting } from '../utils/markdown'
+import { applyMarkdownFormatting, convertRichTextHtmlToMarkdown, insertMarkdownText } from '../utils/markdown'
 import { Tooltip } from '../tooltip'
 
 const toolbarActions = [
@@ -77,6 +77,39 @@ export function MarkdownField({
     onBlur?.()
   }
 
+  const handlePaste = (event, targetRef = textareaRef) => {
+    const html = event.clipboardData?.getData('text/html') ?? ''
+    if (!html) {
+      return
+    }
+
+    const markdown = convertRichTextHtmlToMarkdown(html)
+    if (!markdown) {
+      return
+    }
+
+    event.preventDefault()
+
+    const result = insertMarkdownText(
+      event.currentTarget.value,
+      event.currentTarget.selectionStart,
+      event.currentTarget.selectionEnd,
+      markdown,
+    )
+
+    onChange?.(result.value)
+
+    window.requestAnimationFrame(() => {
+      const activeTextarea = targetRef.current ?? event.currentTarget
+      if (!activeTextarea) {
+        return
+      }
+
+      activeTextarea.focus()
+      activeTextarea.setSelectionRange(result.selectionStart, result.selectionEnd)
+    })
+  }
+
   const renderToolbar = (targetRef, showExpandButton = false, iconSize = 'sm', glyphSize = 14) => (
     <Group gap={4} wrap="nowrap">
       {toolbarActions.map((entry) => {
@@ -131,6 +164,7 @@ export function MarkdownField({
           value={value}
           onChange={(event) => onChange?.(event.currentTarget.value)}
           onBlur={onBlur}
+          onPaste={(event) => handlePaste(event, textareaRef)}
           minRows={minRows}
           autosize={fill ? false : autosize}
           styles={fill ? fillTextareaStyles : undefined}
@@ -191,6 +225,7 @@ export function MarkdownField({
             value={value}
             onChange={(event) => onChange?.(event.currentTarget.value)}
             onBlur={onBlur}
+            onPaste={(event) => handlePaste(event, fullscreenTextareaRef)}
             minRows={Math.max(minRows, 18)}
             autosize={false}
             styles={fullscreenTextareaStyles}

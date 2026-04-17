@@ -246,6 +246,8 @@
 .skill-node-tooltip__note--markdown ul {
     padding-left: 1rem;
     margin-left: 0;
+    list-style-type: disc;
+    list-style-position: inside;
 }
 
 .skill-node-tooltip__note--markdown li {
@@ -459,6 +461,8 @@
 .skill-node-vc__body--markdown ul {
     padding-left: 1em;
     margin: 0;
+    list-style-type: disc;
+    list-style-position: inside;
 }
 
 .skill-node-vc__body--markdown li {

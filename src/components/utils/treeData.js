@@ -1012,7 +1012,7 @@ export const updateNodeProgressLevelsBulk = (treeData, entries = [], releaseId =
   return withNormalizedDependencies(nextTree)
 }
 
-export const addNodeProgressLevel = (treeData, id, newLevelId) =>
+export const addNodeProgressLevel = (treeData, id, newLevelId, initialValues = {}) =>
   withNormalizedDependencies(updateNodeById(treeData, id, (node) => {
     const levels = ensureNodeLevels(node)
     const nextIndex = levels.length + 1
@@ -1020,12 +1020,17 @@ export const addNodeProgressLevel = (treeData, id, newLevelId) =>
     const nextLevel = toNodeLevel(
       {
         id: newLevelId ?? generateUUID(),
-        label: nextLabel,
-        statuses: {},
-        releaseNote: '',
-        hasOpenPoints: false,
-        openPointsLabel: '',
-        scopeIds: [],
+        label: initialValues.label ?? nextLabel,
+        statuses: initialValues.statuses ?? {},
+        releaseNote: initialValues.releaseNote ?? '',
+        hasOpenPoints: initialValues.hasOpenPoints ?? false,
+        openPointsLabel: initialValues.openPointsLabel ?? '',
+        scopeIds: Array.isArray(initialValues.scopeIds) ? initialValues.scopeIds : [],
+        additionalDependencyLevelIds: Array.isArray(initialValues.additionalDependencyLevelIds)
+          ? initialValues.additionalDependencyLevelIds
+          : [],
+        effort: initialValues.effort ?? null,
+        benefit: initialValues.benefit ?? null,
       },
       nextLabel,
     )

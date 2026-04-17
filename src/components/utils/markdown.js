@@ -23,6 +23,176 @@ const sanitizeUrl = (value) => {
   return ''
 }
 
+const decodeHtmlEntities = (value) => String(value ?? '')
+  .replace(/&nbsp;/gi, ' ')
+  .replace(/&amp;/gi, '&')
+  .replace(/&lt;/gi, '<')
+  .replace(/&gt;/gi, '>')
+  .replace(/&quot;/gi, '"')
+  .replace(/&#39;/gi, "'")
+
+const normalizeInlineWhitespace = (value) => String(value ?? '')
+  .replace(/\u00a0/g, ' ')
+  .replace(/[\t\f\r ]+/g, ' ')
+  .replace(/ *\n */g, '\n')
+  .replace(/\s+([,.;!?])/g, '$1')
+
+const normalizeMarkdownOutput = (value) => String(value ?? '')
+  .replace(/\r\n?/g, '\n')
+  .replace(/[\t ]+\n/g, '\n')
+  .replace(/\n{3,}/g, '\n\n')
+  .trim()
+
+const wrapMarkdown = (value, before, after = before) => {
+  const text = normalizeInlineWhitespace(value).trim()
+  return text ? `${before}${text}${after}` : ''
+}
+
+const fallbackConvertHtmlToMarkdown = (html) => {
+  let text = String(html ?? '')
+  if (!text.trim()) {
+    return ''
+  }
+
+  text = text.replace(/<\s*br\s*\/?>/gi, '\n')
+  text = text.replace(/<span[^>]*style=["'][^"']*font-weight\s*:\s*(?:bold|[5-9]00)[^"']*["'][^>]*>([\s\S]*?)<\/span>/gi, (_, content) => wrapMarkdown(fallbackConvertHtmlToMarkdown(content), '**'))
+  text = text.replace(/<span[^>]*style=["'][^"']*font-style\s*:\s*italic[^"']*["'][^>]*>([\s\S]*?)<\/span>/gi, (_, content) => wrapMarkdown(fallbackConvertHtmlToMarkdown(content), '*'))
+  text = text.replace(/<(strong|b)[^>]*>([\s\S]*?)<\/\1>/gi, (_, _tag, content) => wrapMarkdown(fallbackConvertHtmlToMarkdown(content), '**'))
+  text = text.replace(/<(em|i)[^>]*>([\s\S]*?)<\/\1>/gi, (_, _tag, content) => wrapMarkdown(fallbackConvertHtmlToMarkdown(content), '*'))
+  text = text.replace(/<a[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi, (_, url, content) => {
+    const safeUrl = sanitizeUrl(url)
+    const label = normalizeInlineWhitespace(fallbackConvertHtmlToMarkdown(content)).trim()
+    return safeUrl && label ? `[${label}](${safeUrl})` : label
+  })
+  text = text.replace(/<h([1-6])[^>]*>([\s\S]*?)<\/h\1>/gi, (_, level, content) => `${'#'.repeat(Number(level))} ${normalizeInlineWhitespace(fallbackConvertHtmlToMarkdown(content)).trim()}\n\n`)
+  text = text.replace(/<li[^>]*>([\s\S]*?)<\/li>/gi, (_, content) => `- ${normalizeInlineWhitespace(fallbackConvertHtmlToMarkdown(content)).trim()}\n`)
+  text = text.replace(/<\/?(?:ul|ol)[^>]*>/gi, '\n')
+  text = text.replace(/<(p|div|blockquote)[^>]*>([\s\S]*?)<\/\1>/gi, (_, _tag, content) => `${normalizeInlineWhitespace(fallbackConvertHtmlToMarkdown(content)).trim()}\n\n`)
+  text = text.replace(/<pre[^>]*>([\s\S]*?)<\/pre>/gi, (_, content) => `\n\n\`\`\`\n${decodeHtmlEntities(content).trim()}\n\`\`\`\n\n`)
+  text = text.replace(/<code[^>]*>([\s\S]*?)<\/code>/gi, (_, content) => `\`${decodeHtmlEntities(content).trim()}\``)
+  text = text.replace(/<[^>]+>/g, '')
+
+  return normalizeMarkdownOutput(decodeHtmlEntities(text))
+}
+
+const convertHtmlNodeToMarkdown = (node) => {
+  if (!node) {
+    return ''
+  }
+
+  if (node.nodeType === 3) {
+    return decodeHtmlEntities(node.textContent)
+  }
+
+  if (node.nodeType !== 1) {
+    return ''
+  }
+
+  const tag = node.tagName.toLowerCase()
+  const style = String(node.getAttribute('style') ?? '').toLowerCase()
+  const childText = Array.from(node.childNodes ?? []).map(convertHtmlNodeToMarkdown).join('')
+
+  if (tag === 'br') {
+    return '\n'
+  }
+
+  if (/^h[1-6]$/.test(tag)) {
+    const level = Number(tag[1])
+    const text = normalizeInlineWhitespace(childText).trim()
+    return text ? `${'#'.repeat(level)} ${text}\n\n` : ''
+  }
+
+  if (tag === 'a') {
+    const safeUrl = sanitizeUrl(node.getAttribute('href'))
+    const label = normalizeInlineWhitespace(childText).trim()
+    return safeUrl && label ? `[${label}](${safeUrl})` : label
+  }
+
+  if (tag === 'code') {
+    const text = normalizeInlineWhitespace(childText).trim()
+    return text ? `\`${text}\`` : ''
+  }
+
+  if (tag === 'pre') {
+    const text = decodeHtmlEntities(node.textContent ?? '').trim()
+    return text ? `\n\n\`\`\`\n${text}\n\`\`\`\n\n` : ''
+  }
+
+  if (tag === 'ul' || tag === 'ol') {
+    const items = Array.from(node.children ?? [])
+      .filter((child) => child.tagName?.toLowerCase() === 'li')
+      .map((child, index) => {
+        const prefix = tag === 'ol' ? `${index + 1}. ` : '- '
+        const itemText = normalizeInlineWhitespace(Array.from(child.childNodes ?? []).map(convertHtmlNodeToMarkdown).join(''))
+          .replace(/\n{2,}/g, '\n')
+          .trim()
+
+        if (!itemText) {
+          return ''
+        }
+
+        const lines = itemText.split('\n')
+        return lines.map((line, lineIndex) => `${lineIndex === 0 ? prefix : '  '}${line}`).join('\n')
+      })
+      .filter(Boolean)
+      .join('\n')
+
+    return items ? `${items}\n\n` : ''
+  }
+
+  if (tag === 'p' || tag === 'div' || tag === 'blockquote') {
+    const text = normalizeInlineWhitespace(childText).trim()
+    return text ? `${text}\n\n` : ''
+  }
+
+  let result = childText
+
+  if ((tag === 'strong' || tag === 'b' || /font-weight\s*:\s*(bold|[5-9]00)/i.test(style)) && result.trim()) {
+    result = wrapMarkdown(result, '**')
+  }
+
+  if ((tag === 'em' || tag === 'i' || /font-style\s*:\s*italic/i.test(style)) && result.trim()) {
+    result = wrapMarkdown(result, '*')
+  }
+
+  return result
+}
+
+export const convertRichTextHtmlToMarkdown = (html) => {
+  const rawHtml = String(html ?? '').trim()
+  if (!rawHtml) {
+    return ''
+  }
+
+  if (typeof DOMParser !== 'undefined') {
+    try {
+      const parser = new DOMParser()
+      const doc = parser.parseFromString(rawHtml, 'text/html')
+      const markdown = Array.from(doc.body?.childNodes ?? []).map(convertHtmlNodeToMarkdown).join('')
+      return normalizeMarkdownOutput(markdown)
+    } catch {
+      // fall back to regex-based conversion
+    }
+  }
+
+  return fallbackConvertHtmlToMarkdown(rawHtml)
+}
+
+export const insertMarkdownText = (value, selectionStart, selectionEnd, insertedText) => {
+  const text = String(value ?? '')
+  const insertValue = String(insertedText ?? '')
+  const start = Math.max(0, selectionStart ?? 0)
+  const end = Math.max(start, selectionEnd ?? start)
+  const nextValue = `${text.slice(0, start)}${insertValue}${text.slice(end)}`
+  const cursor = start + insertValue.length
+
+  return {
+    value: nextValue,
+    selectionStart: cursor,
+    selectionEnd: cursor,
+  }
+}
+
 const renderInlineMarkdown = (value) => {
   const escaped = escapeHtml(value)
 

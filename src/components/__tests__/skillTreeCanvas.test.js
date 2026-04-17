@@ -1,3 +1,4 @@
+import fs from 'node:fs'
 import { createElement } from 'react'
 import { renderToString } from 'react-dom/server'
 import { MantineProvider } from '@mantine/core'
@@ -214,6 +215,14 @@ describe('SkillTreeCanvas', () => {
 
     expect(extractPortalMetric(zoomedOutHtml, 'skill-tree-portal__hit', 'rx')).toBeGreaterThan(extractPortalMetric(zoomedInHtml, 'skill-tree-portal__hit', 'rx'))
     expect(extractPortalStrokeWidth(zoomedOutHtml)).toBeGreaterThan(extractPortalStrokeWidth(zoomedInHtml))
+  })
+
+  it('keeps markdown list bullets visible inside canvas note cards', () => {
+    const css = fs.readFileSync(new URL('../styles/skillTree.nodes.css', import.meta.url), 'utf8')
+
+    expect(css).toContain('.skill-node-vc__body--markdown ul')
+    expect(css).toContain('list-style-position: inside')
+    expect(css).toContain('list-style-type: disc')
   })
 
   it('lets minimal nodes reveal short name first and full name only at very-close zoom', () => {

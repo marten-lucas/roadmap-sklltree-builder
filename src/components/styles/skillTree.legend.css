@@ -48,7 +48,7 @@
     flex: 1 1 auto;
 }
 
-.skill-tree-legend__section + .skill-tree-legend__section {
+.skill-tree-legend__section+.skill-tree-legend__section {
     margin-top: 0;
     padding-top: 0;
     padding-left: 0.9rem;

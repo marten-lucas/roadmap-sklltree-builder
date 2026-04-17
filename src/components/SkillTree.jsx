@@ -80,7 +80,7 @@ import { pickPortalSlotAngle } from './utils/portalPlacement'
 import { downloadDocumentCsv, readDocumentFromCsvText } from './utils/csv'
 import { isEditableElement } from './utils/dom'
 import { buildExportFileName } from './utils/exportFileName'
-import { getCsvExportErrorMessage, getCsvImportErrorMessage, getHtmlImportErrorMessage, confirmResetDocument } from './utils/messages'
+import { getCsvExportErrorMessage, getCsvImportErrorMessage, getHtmlImportErrorMessage, confirmCopyScopesToNewLevel, confirmResetDocument } from './utils/messages'
 import { readFileAsText, readFileAsDataUrl, isValidSvgMarkup } from './utils/file'
 import {
   RELEASE_FILTER_LABELS,
@@ -2990,7 +2990,20 @@ export function SkillTree() {
       return
     }
 
-    const nextDocument = addNodeProgressLevel(roadmapData, selectedNodeId)
+    const currentScopeIds = Array.isArray(activeSelectedProgressLevel?.scopeIds)
+      ? uniqueArray(activeSelectedProgressLevel.scopeIds)
+      : []
+
+    const shouldCopyScopes = currentScopeIds.length > 0
+      ? confirmCopyScopesToNewLevel(currentScopeIds.length)
+      : false
+
+    const nextDocument = addNodeProgressLevel(
+      roadmapData,
+      selectedNodeId,
+      undefined,
+      shouldCopyScopes ? { scopeIds: currentScopeIds } : undefined,
+    )
     const nextNode = findNodeById(nextDocument, selectedNodeId)
     const nextLevelId = nextNode?.levels?.[nextNode.levels.length - 1]?.id ?? null
 
@@ -3137,6 +3150,16 @@ export function SkillTree() {
     commitDocument(updateNodeProgressLevel(roadmapData, nodeId, levelId, { releaseNote }))
   }, [commitDocument, roadmapData])
 
+  const handleListViewNodeSegmentChange = useCallback((nodeId, nextSegmentKey) => {
+    if (!nodeId) {
+      return
+    }
+
+    const nextSegmentId = !nextSegmentKey || nextSegmentKey === UNASSIGNED_SEGMENT_ID ? null : nextSegmentKey
+    const validation = validateNodeSegmentChange(roadmapData, nodeId, nextSegmentId, TREE_CONFIG)
+    commitDocument(validation.tree)
+  }, [commitDocument, roadmapData])
+
   const handleLevelChange = (newLevel) => {
     if (!selectedNodeId) {
       return
@@ -3271,6 +3294,7 @@ export function SkillTree() {
       onSetLevelScopeIds={handleListViewLevelScopesChange}
       onSetLevelOpenPoints={handleListViewLevelOpenPointsChange}
       onSetLevelReleaseNote={handleListViewLevelReleaseNoteChange}
+      onSetNodeSegment={handleListViewNodeSegmentChange}
       selectedReleaseId={activeReleaseId}
       selectedNodeId={selectedNodeId}
       selectedNodeIds={selectedNodeIds}

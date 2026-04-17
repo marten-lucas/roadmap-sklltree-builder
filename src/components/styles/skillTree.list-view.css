@@ -13,6 +13,7 @@
     --listview-value-col-width: 150px;
     --listview-status-col-width: 260px;
     --listview-scopes-col-width: 280px;
+    --listview-segments-col-width: 220px;
     --listview-notes-col-width: 320px;
     background: rgba(2, 6, 23, 0.92);
     border-right: 1px solid rgba(51, 65, 85, 0.7);
@@ -342,10 +343,21 @@
     padding: 0.1rem 0;
 }
 
+.list-view-drawer__table {
+    display: flex;
+    flex-direction: column;
+    width: max-content;
+    min-width: 100%;
+    padding-left: 0.35rem;
+    box-sizing: border-box;
+}
+
 .list-view-drawer__metrics-header {
     display: flex;
     align-items: stretch;
-    margin-left: 0.35rem;
+    width: 100%;
+    min-width: 100%;
+    margin-left: 0;
     border-bottom: 1px solid rgba(51, 65, 85, 0.55);
     background: rgba(15, 23, 42, 0.96);
     position: sticky;
@@ -438,6 +450,10 @@
     width: var(--listview-scopes-col-width, 280px);
 }
 
+.list-view-drawer__metrics-header-col--segments {
+    width: var(--listview-segments-col-width, 220px);
+}
+
 .list-view-drawer__metrics-header-col--notes {
     width: var(--listview-notes-col-width, 320px);
 }
@@ -465,6 +481,8 @@
     list-style: none;
     margin: 0;
     padding: 0;
+    width: 100%;
+    min-width: 100%;
 }
 
 .list-view-drawer__item {
@@ -477,11 +495,11 @@
 .list-view-drawer__item-row {
     display: flex;
     align-items: stretch;
-    width: max-content;
-    min-width: calc(100% - 0.35rem);
+    width: 100%;
+    min-width: 100%;
     height: 100%;
     gap: 0;
-    margin-left: 0.35rem;
+    margin-left: 0;
     margin-right: 0;
 }
 
@@ -797,12 +815,18 @@
     color: #94a3b8;
 }
 
-.list-view-drawer__scope-select {
+.list-view-drawer__segment-group {
+    width: var(--listview-segments-col-width, 220px);
+}
+
+.list-view-drawer__scope-select,
+.list-view-drawer__segment-select {
     width: 100%;
     min-width: 0;
 }
 
 .list-view-drawer__scope-select .mantine-dark-input,
+.list-view-drawer__segment-select .mantine-dark-input,
 .list-view-drawer__scope-select-input {
     min-height: 2rem;
     height: 2rem;

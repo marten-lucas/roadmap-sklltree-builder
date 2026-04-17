@@ -25,3 +25,9 @@ export const getCsvExportErrorMessage = (error) => {
 export const confirmResetDocument = () => window.confirm(
   'Really reset the roadmap? This action can be undone with Undo.',
 )
+
+export const confirmCopyScopesToNewLevel = (scopeCount = 0) => window.confirm(
+  scopeCount === 1
+    ? 'Copy the scope from the currently open level into the new level?'
+    : `Copy the ${scopeCount} scopes from the currently open level into the new level?`,
+)
