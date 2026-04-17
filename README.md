@@ -2,14 +2,22 @@
 
 A browser-based radial skill-tree / roadmap visualizer. Build, annotate, and export interactive skill trees from scratch or from a CSV file. The production artifact is a **single self-contained HTML file** that can be opened offline or shared without a server.
 
+## 🚀 DEMO
+
+**Try the live demo here:** https://marten-lucas.github.io/roadmap-sklltree-builder/
+
+The published demo is deployed from the latest GitHub release and can be used directly in the browser.
+
 ---
 
 ## Table of Contents
 
+- [Live Demo](#-demo)
 - [Features](#features)
 - [Quick Start](#quick-start)
 - [Project Structure](#project-structure)
 - [Build](#build)
+- [GitHub Pages Release Deploy](#github-pages-release-deploy)
 - [Testing](#testing)
 - [E2E Dataset & Phase Selection](#e2e-dataset--phase-selection)
 - [Environment Variables](#environment-variables)
