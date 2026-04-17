@@ -119,6 +119,22 @@ describe('htmlExport', () => {
     expect(multiLevelHtml).toContain('Level 2 · Now')
   })
 
+  it('keeps the export viewer crisp by resizing the svg instead of scaling the entire canvas layer', () => {
+    const document = createDocument()
+    const html = buildHtmlExportDocument({
+      svgMarkup: '<svg viewBox="0 0 100 100"></svg>',
+      roadmapDocument: document,
+      styleText: '',
+    })
+
+    expect(html).not.toContain('will-change: transform;')
+    expect(html).not.toContain("scale(' + panZoomState.scale + ')")
+    expect(html).toContain("const snappedTranslateX = snapToDevicePixel(panZoomState.translateX)")
+    expect(html).toContain("treeCanvas.style.transform = 'translate(' + snappedTranslateX + 'px, ' + snappedTranslateY + 'px)'")
+    expect(html).toContain("svgRoot.style.width = String(baseWidth * panZoomState.scale) + 'px'")
+    expect(html).toContain("svgRoot.style.height = String(baseHeight * panZoomState.scale) + 'px'")
+  })
+
   it('extracts and reads embedded document payload from exported html', () => {
     const document = createDocument()
     const html = buildHtmlExportDocument({

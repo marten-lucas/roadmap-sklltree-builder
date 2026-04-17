@@ -726,6 +726,15 @@ const buildViewerScript = (exportBaseName = 'skilltree-roadmap') => `
 
       const clamp = (value, min, max) => Math.max(min, Math.min(max, value))
 
+      const snapToDevicePixel = (value) => {
+        if (!Number.isFinite(value)) {
+          return 0
+        }
+
+        const ratio = Math.max(1, window.devicePixelRatio || 1)
+        return Math.round(value * ratio) / ratio
+      }
+
       const snapScaleToStep = (value, steps = VIEWPORT_ZOOM_STEPS) => {
         if (!Number.isFinite(value)) {
           return steps[0]
@@ -904,11 +913,23 @@ const buildViewerScript = (exportBaseName = 'skilltree-roadmap') => `
         ensureFinitePanZoomState()
 
         const { baseWidth, baseHeight } = getSvgMetrics()
-        treeCanvas.style.width = String(baseWidth) + 'px'
-        treeCanvas.style.height = String(baseHeight) + 'px'
+        const scaledWidth = Math.max(1, baseWidth * panZoomState.scale)
+        const scaledHeight = Math.max(1, baseHeight * panZoomState.scale)
+        const snappedTranslateX = snapToDevicePixel(panZoomState.translateX)
+        const snappedTranslateY = snapToDevicePixel(panZoomState.translateY)
+
+        treeCanvas.style.width = String(scaledWidth) + 'px'
+        treeCanvas.style.height = String(scaledHeight) + 'px'
         treeCanvas.style.transformOrigin = '0 0'
-        treeCanvas.style.transform = 'translate(' + panZoomState.translateX + 'px, ' + panZoomState.translateY + 'px) scale(' + panZoomState.scale + ')'
+        treeCanvas.style.transform = 'translate(' + snappedTranslateX + 'px, ' + snappedTranslateY + 'px)'
         treeCanvas.style.visibility = 'visible'
+
+        if (svgRoot) {
+          svgRoot.style.width = String(baseWidth * panZoomState.scale) + 'px'
+          svgRoot.style.height = String(baseHeight * panZoomState.scale) + 'px'
+          svgRoot.style.maxWidth = 'none'
+          svgRoot.style.maxHeight = 'none'
+        }
 
         if (zoomSlider) {
           zoomSlider.value = String(Math.round(panZoomState.scale * 100))
@@ -2049,14 +2070,15 @@ export const buildHtmlExportDocument = ({
       top: 0;
       left: 0;
       transform-origin: 0 0;
-      will-change: transform;
       overflow: visible;
     }
 
     .html-export__tree-canvas svg {
       display: block;
-      max-width: 100%;
-      height: auto;
+      width: 100%;
+      height: 100%;
+      max-width: none;
+      max-height: none;
       overflow: visible;
     }
 

@@ -219,6 +219,14 @@ const readCanvasTransform = async (page) => page.locator('#html-export-tree-canv
   return `${inlineTransform}|${computedTransform}`
 })
 
+const readSvgViewportMetrics = async (page) => page.locator('#html-export-tree-canvas svg').evaluate((element) => {
+  const rect = element.getBoundingClientRect()
+  return {
+    width: rect.width,
+    height: rect.height,
+  }
+})
+
 const importCsvFile = async (page, csvPath) => {
   await page.getByRole('button', { name: 'HTML importieren', exact: true }).hover()
   await expect(page.getByRole('menuitem', { name: 'CSV', exact: true })).toBeVisible()
@@ -455,6 +463,13 @@ test.describe('Rendered export viewer', () => {
 
       await expect(exportPage.locator('#html-export-zoom-value')).toHaveText('150%')
       await expect.poll(async () => readCanvasTransform(exportPage)).not.toBe('|none')
+
+      const zoomedTransform = await readCanvasTransform(exportPage)
+      expect(zoomedTransform).not.toContain('scale(')
+
+      const svgMetricsBeforeWheel = await readSvgViewportMetrics(exportPage)
+      expect(svgMetricsBeforeWheel.width).toBeGreaterThan(0)
+      expect(svgMetricsBeforeWheel.height).toBeGreaterThan(0)
 
       const transformBeforeWheel = await readCanvasTransform(exportPage)
       const shellBox = await shell.boundingBox()
