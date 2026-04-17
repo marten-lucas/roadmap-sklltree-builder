@@ -98,14 +98,28 @@ const canonicalizeDocumentForExport = (doc) => {
     const key = normalizeScopeKey(label)
     if (!key) continue
 
+    const scopeEntry = {
+      ...scope,
+      id: scope?.id,
+      label,
+    }
+
     if (!seen.has(key)) {
-      seen.set(key, { id: scope.id, label })
+      seen.set(key, scopeEntry)
+    } else {
+      const existing = seen.get(key)
+      if (!existing?.color && scopeEntry.color) {
+        seen.set(key, {
+          ...existing,
+          color: scopeEntry.color,
+        })
+      }
     }
     idMap.set(scope.id, seen.get(key).id)
   }
 
-  for (const { id, label } of Array.from(seen.values()).sort((a, b) => a.label.localeCompare(b.label))) {
-    scopes.push({ id, label })
+  for (const scope of Array.from(seen.values()).sort((a, b) => a.label.localeCompare(b.label))) {
+    scopes.push(scope)
   }
 
   const canonicalDoc = JSON.parse(JSON.stringify(doc))

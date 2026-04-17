@@ -5,6 +5,7 @@ import { RELEASE_FILTER_OPTIONS, SCOPE_FILTER_ALL } from '../components/utils/vi
 export function useSkillTreeUiState() {
   const [selectedNodeId, setSelectedNodeId] = useState(null)
   const [selectedNodeIds, setSelectedNodeIds] = useState([])
+  const [selectedLevelKeys, setSelectedLevelKeys] = useState([])
   const [selectedProgressLevelId, setSelectedProgressLevelId] = useState(null)
   const [selectedSegmentId, setSelectedSegmentId] = useState(null)
   const [selectedPortalKey, setSelectedPortalKey] = useState(null)
@@ -28,6 +29,7 @@ export function useSkillTreeUiState() {
 
     setSelectedNodeId(nodeId)
     setSelectedNodeIds(nodeId ? [nodeId] : [])
+    setSelectedLevelKeys([])
 
     if (nodeId) {
       selectSegmentId(null)
@@ -49,6 +51,7 @@ export function useSkillTreeUiState() {
     if (segmentId) {
       setSelectedNodeId(null)
       setSelectedNodeIds([])
+      setSelectedLevelKeys([])
       setRightPanel(null)
       setSelectedProgressLevelId(null)
       setSelectedPortalKey(null)
@@ -58,6 +61,7 @@ export function useSkillTreeUiState() {
   const resetSelections = () => {
     setSelectedNodeId(null)
     setSelectedNodeIds([])
+    setSelectedLevelKeys([])
     setSelectedProgressLevelId(null)
     setSelectedSegmentId(null)
     setSelectedPortalKey(null)
@@ -68,6 +72,8 @@ export function useSkillTreeUiState() {
     setSelectedNodeId,
     selectedNodeIds,
     setSelectedNodeIds,
+    selectedLevelKeys,
+    setSelectedLevelKeys,
     selectedProgressLevelId,
     setSelectedProgressLevelId,
     selectedSegmentId,

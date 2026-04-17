@@ -1,4 +1,4 @@
-import { MultiSelect } from '@mantine/core'
+import { ActionIcon, Modal, MultiSelect, Text } from '@mantine/core'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { STATUS_LABELS, STATUS_STYLES, normalizeStatusKey } from '../config'
 import { BENEFIT_SIZE_LABELS, BENEFIT_SIZES, EFFORT_SIZE_LABELS, EFFORT_SIZES } from '../utils/effortBenefit'
@@ -75,6 +75,32 @@ const IconScope = () => (
   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
     <path d="M20.59 13.41 11 3H4v7l9.59 9.59a2 2 0 0 0 2.82 0l4.18-4.18a2 2 0 0 0 0-2.82Z" />
     <path d="M7 7h.01" />
+  </svg>
+)
+
+const IconExpand = () => (
+  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M8 3H3v5" />
+    <path d="M3 3l7 7" />
+    <path d="M16 3h5v5" />
+    <path d="M21 3l-7 7" />
+    <path d="M8 21H3v-5" />
+    <path d="M3 21l7-7" />
+    <path d="M16 21h5v-5" />
+    <path d="M21 21l-7-7" />
+  </svg>
+)
+
+const IconCompress = () => (
+  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M15 3h6v6" />
+    <path d="M21 3l-7 7" />
+    <path d="M9 21H3v-6" />
+    <path d="M3 21l7-7" />
+    <path d="M21 15v6h-6" />
+    <path d="M21 21l-7-7" />
+    <path d="M3 9V3h6" />
+    <path d="M3 3l7 7" />
   </svg>
 )
 
@@ -191,6 +217,46 @@ const MIN_COLUMN_WIDTHS = {
   status: 280,
   scopes: 160,
   notes: 260,
+}
+const SORT_FIELD_LABELS = {
+  name: 'Name',
+  value: 'Value',
+  effort: 'Effort',
+  status: 'Status',
+  scopes: 'Scopes',
+  notes: 'Release Notes',
+}
+const SORT_FIELD_OPTIONS = Object.entries(SORT_FIELD_LABELS).map(([value, label]) => ({ value, label }))
+const DEFAULT_SORT_SELECTION = {
+  field: 'name',
+  direction: 'roadmap',
+}
+const LABEL_COLUMN_MIN_WIDTH = 260
+const LABEL_COLUMN_MAX_WIDTH = 680
+const SELECTION_COLUMN_WIDTH = 32
+
+const getLongestLineLength = (value) => {
+  return String(value ?? '')
+    .split(/\r?\n/)
+    .reduce((maxLength, line) => Math.max(maxLength, line.trim().length), 0)
+}
+
+const estimateTextWidth = (value, { charWidth = 7, padding = 0 } = {}) => {
+  return Math.ceil(getLongestLineLength(value) * charWidth + padding)
+}
+
+const clampLabelColumnWidth = (width) => {
+  return Math.max(LABEL_COLUMN_MIN_WIDTH, Math.min(LABEL_COLUMN_MAX_WIDTH, Number(width) || LABEL_COLUMN_MIN_WIDTH))
+}
+
+const getScopeSummaryLabel = (scopeIds = [], scopeMap = new Map()) => {
+  const labels = scopeIds
+    .map((id) => scopeMap.get(id)?.label)
+    .filter(Boolean)
+
+  if (labels.length === 0) return 'Scopes'
+  if (labels.length === 1) return labels[0]
+  return `${labels[0]} +${labels.length - 1}`
 }
 
 const clampColumnWidth = (key, width) => {
@@ -467,6 +533,7 @@ const ScopeAssignGroup = ({ scopeOptions, selectedScopeIds = [], onChange, isSel
 
 const ReleaseNoteEditor = ({ value, onChange, isSelected = false, width = null }) => {
   const [draft, setDraft] = useState(value ?? '')
+  const [isFullscreenOpen, setIsFullscreenOpen] = useState(false)
 
   useEffect(() => {
     setDraft(value ?? '')
@@ -480,36 +547,126 @@ const ReleaseNoteEditor = ({ value, onChange, isSelected = false, width = null }
     })
   }, [draft, onChange, value])
 
+  const closeFullscreenEditor = useCallback(() => {
+    commitDraft()
+    setIsFullscreenOpen(false)
+  }, [commitDraft])
+
+  const handleInlineKeyDown = useCallback((e) => {
+    e.stopPropagation()
+    if (e.key === 'Escape') {
+      e.preventDefault()
+      setDraft(value ?? '')
+      e.currentTarget.blur()
+    }
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault()
+      commitDraft()
+      e.currentTarget.blur()
+    }
+  }, [commitDraft, value])
+
+  const handleFullscreenKeyDown = useCallback((e) => {
+    e.stopPropagation()
+    if (e.key === 'Escape') {
+      e.preventDefault()
+      closeFullscreenEditor()
+    }
+  }, [closeFullscreenEditor])
+
   return (
-    <div
-      className={`list-view-drawer__release-note-editor${isSelected ? ' list-view-drawer__release-note-editor--selected' : ''}`}
-      style={width ? { width: `${width}px` } : undefined}
-      onClick={(e) => e.stopPropagation()}
-    >
-      <textarea
-        className="list-view-drawer__release-note-input"
-        aria-label="Release Notes"
-        value={draft}
-        rows={2}
-        placeholder="Add release note…"
+    <>
+      <div
+        className={`list-view-drawer__release-note-editor${isSelected ? ' list-view-drawer__release-note-editor--selected' : ''}`}
+        style={{ ...(width ? { width: `${width}px` } : {}), position: 'relative' }}
         onClick={(e) => e.stopPropagation()}
-        onChange={(e) => setDraft(e.target.value)}
-        onBlur={commitDraft}
-        onKeyDown={(e) => {
-          e.stopPropagation()
-          if (e.key === 'Escape') {
-            e.preventDefault()
-            setDraft(value ?? '')
-            e.currentTarget.blur()
-          }
-          if (e.key === 'Enter' && !e.shiftKey) {
-            e.preventDefault()
-            commitDraft()
-            e.currentTarget.blur()
-          }
+      >
+        <ActionIcon
+          size="sm"
+          variant="subtle"
+          color="gray"
+          aria-label="Open large markdown editor"
+          title="Open large markdown editor"
+          style={{ position: 'absolute', top: 6, right: 8, zIndex: 1 }}
+          onClick={(e) => {
+            e.stopPropagation()
+            setIsFullscreenOpen(true)
+          }}
+        >
+          <IconExpand />
+        </ActionIcon>
+
+        <textarea
+          className="list-view-drawer__release-note-input"
+          aria-label="Release Notes"
+          value={draft}
+          rows={2}
+          placeholder="Add release note…"
+          style={{ paddingRight: '2rem' }}
+          onClick={(e) => e.stopPropagation()}
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={commitDraft}
+          onKeyDown={handleInlineKeyDown}
+        />
+      </div>
+
+      <Modal
+        opened={isFullscreenOpen}
+        onClose={closeFullscreenEditor}
+        centered
+        size="60vw"
+        withCloseButton={false}
+        padding="md"
+        styles={{
+          content: {
+            background: '#0f172a',
+            width: '60vw',
+            maxWidth: '60vw',
+          },
+          body: { height: '60vh', display: 'flex', flexDirection: 'column', padding: '16px' },
         }}
-      />
-    </div>
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', flex: 1, minHeight: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
+            <div>
+              <Text fw={700} style={{ color: '#e2e8f0' }}>Release Notes</Text>
+              <Text size="sm" c="dimmed">Markdown editor</Text>
+            </div>
+            <ActionIcon
+              size="sm"
+              variant="light"
+              color="gray"
+              aria-label="Close large markdown editor"
+              onClick={closeFullscreenEditor}
+            >
+              <IconCompress />
+            </ActionIcon>
+          </div>
+
+          <textarea
+            className="list-view-drawer__release-note-input"
+            aria-label="Release Notes fullscreen"
+            value={draft}
+            rows={20}
+            placeholder="Add release note…"
+            style={{
+              flex: 1,
+              minHeight: 0,
+              height: '100%',
+              resize: 'none',
+              padding: '0.9rem 1rem',
+              fontSize: '0.95rem',
+              lineHeight: 1.6,
+              fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
+            }}
+            onClick={(e) => e.stopPropagation()}
+            onChange={(e) => setDraft(e.target.value)}
+            onBlur={commitDraft}
+            onKeyDown={handleFullscreenKeyDown}
+          />
+        </div>
+      </Modal>
+    </>
   )
 }
 
@@ -519,6 +676,8 @@ const LevelRow = ({
   level,
   nodeId,
   selectedNodeId,
+  selectedNodeIds = [],
+  selectedLevelKeys = [],
   selectedProgressLevelId,
   nodeLabel,
   levelIndex = 0,
@@ -539,6 +698,7 @@ const LevelRow = ({
   visibleListColumns = [],
   resolvedColumnWidths = {},
   listMode,
+  selectionMode = false,
 }) => {
   const statusKey = normalizeStatusKey(getLevelStatus(level, selectedReleaseId))
   const isHidden = statusKey === 'hidden'
@@ -547,7 +707,10 @@ const LevelRow = ({
   const allScopeOptions = [...scopeMap.values()].filter(Boolean)
   const benefitValue = level.benefit?.size ?? 'unclear'
   const effortValue = level.effort?.size ?? 'unclear'
-  const isSelected = selectedNodeId === nodeId && selectedProgressLevelId === level.id
+  const levelSelectionKey = `${nodeId}::${level.id}`
+  const isMultiSelected = selectedLevelKeys.includes(levelSelectionKey)
+  const isSelected = isMultiSelected || (selectedNodeId === nodeId && selectedProgressLevelId === level.id) || selectedNodeIds.includes(nodeId)
+  const shouldApplyToSelection = selectionMode && isMultiSelected && selectedLevelKeys.length > 1
   const levelLabel = getLevelDisplayLabel(level?.label, levelIndex)
   const hasOpenPoints = Boolean(level?.hasOpenPoints)
 
@@ -564,7 +727,7 @@ const LevelRow = ({
             kind="value"
             width={width}
             isSelected={isSelected}
-            onChange={(size) => onSetBenefit({ size })}
+            onChange={(size) => onSetBenefit({ size }, { applyToSelection: shouldApplyToSelection })}
           />
         )
       case 'effort':
@@ -577,8 +740,8 @@ const LevelRow = ({
             width={width}
             isSelected={isSelected}
             customPoints={level.effort?.customPoints ?? null}
-            onCustomChange={(pts) => onSetEffort({ size: 'custom', customPoints: pts })}
-            onChange={(size) => onSetEffort({ size, customPoints: size === 'custom' ? (level.effort?.customPoints ?? null) : null })}
+            onCustomChange={(pts) => onSetEffort({ size: 'custom', customPoints: pts }, { applyToSelection: shouldApplyToSelection })}
+            onChange={(size) => onSetEffort({ size, customPoints: size === 'custom' ? (level.effort?.customPoints ?? null) : null }, { applyToSelection: shouldApplyToSelection })}
           />
         )
       case 'status':
@@ -587,7 +750,7 @@ const LevelRow = ({
             key="status"
             value={statusKey}
             width={width}
-            onChange={onSetStatus}
+            onChange={(status) => onSetStatus(status, { applyToSelection: shouldApplyToSelection })}
             groupName={`status-${nodeId}-${level.id}`}
             isSelected={isSelected}
           />
@@ -599,7 +762,7 @@ const LevelRow = ({
             scopeOptions={allScopeOptions}
             selectedScopeIds={level.scopeIds ?? []}
             width={width}
-            onChange={onSetScopeIds}
+            onChange={(scopeIds) => onSetScopeIds(scopeIds, { applyToSelection: shouldApplyToSelection })}
             isSelected={isSelected}
           />
         )
@@ -630,6 +793,22 @@ const LevelRow = ({
         {!listMode && (
           <span className="list-view-drawer__toggle list-view-drawer__toggle--leaf" aria-hidden="true" />
         )}
+        {selectionMode && (
+          <label
+            className="list-view-drawer__level-select-toggle"
+            onClick={(event) => {
+              event.stopPropagation()
+              onSelectLevel()
+            }}
+          >
+            <input
+              type="checkbox"
+              checked={isMultiSelected}
+              readOnly
+              aria-label={`Select ${levelLabel}`}
+            />
+          </label>
+        )}
         <div
           className={`list-view-drawer__item-body list-view-drawer__item-body--level${isSelected ? ' list-view-drawer__item-body--selected' : ''}`}
           role="button"
@@ -652,7 +831,7 @@ const LevelRow = ({
               <span className="list-view-drawer__level-name">{levelLabel}</span>
               {isHidden && <span style={{ fontSize: '0.7em', color: '#6b7280', marginLeft: 2 }}>(hidden)</span>}
             </span>
-            <OpenPointsToggle checked={hasOpenPoints} onChange={onSetOpenPoints} />
+            <OpenPointsToggle checked={hasOpenPoints} onChange={(value) => onSetOpenPoints(value, { applyToSelection: shouldApplyToSelection })} />
             {scopeEntries.length > 0 && !(listMode && showScopeColumn) && (
               <span className="list-view-drawer__item-chips">
                 {scopeEntries.map((scope) => (
@@ -883,6 +1062,129 @@ const collectFlatNodes = (nodes, matchesNodeFilters) => {
   return result
 }
 
+const getMetricSortText = (metric = {}, labels = {}) => {
+  const size = metric?.size ?? 'unclear'
+  if (size === 'custom') {
+    return metric?.customPoints != null ? `${metric.customPoints} pts` : 'Custom'
+  }
+  return labels[size] ?? String(size ?? '')
+}
+
+const getScopeSortText = (scopeIds = [], scopeMap = new Map()) => {
+  return [...scopeIds]
+    .map((id) => scopeMap.get(id)?.label)
+    .filter(Boolean)
+    .sort((left, right) => left.localeCompare(right, undefined, { sensitivity: 'base', numeric: true }))
+    .join(', ')
+}
+
+const compareSortText = (left, right) => {
+  return String(left ?? '').localeCompare(String(right ?? ''), undefined, {
+    sensitivity: 'base',
+    numeric: true,
+  })
+}
+
+const getLevelSortText = ({ node, level, levelIndex }, field, scopeMap, selectedReleaseId = null) => {
+  switch (field) {
+    case 'value':
+      return getMetricSortText(level?.benefit, BENEFIT_LABELS)
+    case 'effort':
+      return getMetricSortText(level?.effort, EFFORT_LABELS)
+    case 'status': {
+      const statusKey = normalizeStatusKey(getLevelStatus(level, selectedReleaseId))
+      return STATUS_LABELS[statusKey] ?? statusKey
+    }
+    case 'scopes':
+      return getScopeSortText(level?.scopeIds ?? [], scopeMap)
+    case 'notes':
+      return level?.releaseNote ?? ''
+    case 'roadmap':
+      return ''
+    case 'name':
+    default:
+      return `${node?.label || node?.shortName || ''} ${getLevelDisplayLabel(level?.label, levelIndex ?? 0)}`.trim()
+  }
+}
+
+const getNodeSortText = (node, field, scopeMap, selectedReleaseId = null) => {
+  switch (field) {
+    case 'status': {
+      const statusKey = normalizeStatusKey(getDisplayStatusKey(node, selectedReleaseId))
+      return STATUS_LABELS[statusKey] ?? statusKey
+    }
+    case 'scopes':
+      return getScopeSortText(getNodeScopeIds(node), scopeMap)
+    case 'roadmap':
+      return ''
+    case 'name':
+    default:
+      return node?.label || node?.shortName || ''
+  }
+}
+
+export const sortFlatLevelEntries = (entries = [], selection = {}) => {
+  const {
+    field = DEFAULT_SORT_SELECTION.field,
+    direction = DEFAULT_SORT_SELECTION.direction,
+    scopeMap = new Map(),
+    selectedReleaseId = null,
+  } = selection
+
+  if (field === 'roadmap' || direction === 'roadmap') {
+    return [...entries]
+  }
+
+  const directionFactor = direction === 'desc' ? -1 : 1
+
+  return entries
+    .map((entry, index) => ({ entry, index }))
+    .sort((left, right) => {
+      const valueCompare = compareSortText(
+        getLevelSortText(left.entry, field, scopeMap, selectedReleaseId),
+        getLevelSortText(right.entry, field, scopeMap, selectedReleaseId),
+      )
+
+      if (valueCompare !== 0) {
+        return valueCompare * directionFactor
+      }
+
+      return left.index - right.index
+    })
+    .map(({ entry }) => entry)
+}
+
+export const sortFlatNodesBySelection = (nodes = [], selection = {}) => {
+  const {
+    field = DEFAULT_SORT_SELECTION.field,
+    direction = DEFAULT_SORT_SELECTION.direction,
+    scopeMap = new Map(),
+    selectedReleaseId = null,
+  } = selection
+
+  if (field === 'roadmap' || direction === 'roadmap') {
+    return [...nodes]
+  }
+
+  const directionFactor = direction === 'desc' ? -1 : 1
+
+  return nodes
+    .map((node, index) => ({ node, index }))
+    .sort((left, right) => {
+      const valueCompare = compareSortText(
+        getNodeSortText(left.node, field, scopeMap, selectedReleaseId),
+        getNodeSortText(right.node, field, scopeMap, selectedReleaseId),
+      )
+
+      if (valueCompare !== 0) {
+        return valueCompare * directionFactor
+      }
+
+      return left.index - right.index
+    })
+    .map(({ node }) => node)
+}
+
 // ── main component ────────────────────────────────────────────────────────────
 
 export function ListViewDrawer({
@@ -899,12 +1201,17 @@ export function ListViewDrawer({
   onSetLevelReleaseNote = () => {},
   selectedReleaseId = null,
   selectedNodeId = null,
+  selectedNodeIds = [],
+  selectedLevelKeys = [],
+  selectionMode: selectionModeProp = false,
   selectedProgressLevelId = null,
   embedded = false,
+  onClearLevelSelection = () => {},
   onWidthChange = null,
 }) {
   const drawerRef = useRef(null)
   const columnsMenuRef = useRef(null)
+  const sortMenuRef = useRef(null)
   const previousOpenInspectorOnSelectRef = useRef(false)
 
   // ── state (all declared before any callback that might reference them) ──────
@@ -916,6 +1223,7 @@ export function ListViewDrawer({
   const [showScopeColumn, setShowScopeColumn] = useState(true)
   const [showReleaseNotesColumn, setShowReleaseNotesColumn] = useState(false)
   const [showColumnsMenu, setShowColumnsMenu] = useState(false)
+  const [showSortMenu, setShowSortMenu] = useState(false)
   const [columnOrder, setColumnOrder] = useState(DEFAULT_COLUMN_ORDER)
   const [columnWidths, setColumnWidths] = useState({})
   const [draggingColumnKey, setDraggingColumnKey] = useState(null)
@@ -923,28 +1231,63 @@ export function ListViewDrawer({
   const [scopeFilter, setScopeFilter] = useState(SCOPE_FILTER_ALL)
   const [openPointsFilter, setOpenPointsFilter] = useState('all')
   const [searchQuery, setSearchQuery] = useState('')
+  const [sortSelection, setSortSelection] = useState(DEFAULT_SORT_SELECTION)
   const [openInspectorOnSelect, setOpenInspectorOnSelect] = useState(false)
+  const [selectionMode, setSelectionMode] = useState(selectionModeProp)
   const [viewMode, setViewMode] = useState('list') // 'tree' | 'list'
 
   const isListMode = viewMode === 'list'
+  const selectedLevelCount = selectedLevelKeys.length
 
-  const autoColumnWidths = useMemo(() => {
-    const scopeOptions = document?.scopes ?? []
-    const longestScopeLabel = scopeOptions.reduce((maxLength, scope) => {
-      return Math.max(maxLength, String(scope?.label ?? '').trim().length)
-    }, 6)
+  const { autoColumnWidths, autoLabelColumnWidth } = useMemo(() => {
+    const allRootNodesForSizing = document?.children ?? []
+    const levelEntriesForSizing = collectFlatLevels(allRootNodesForSizing, () => true)
+    const nodeEntriesForSizing = collectFlatNodes(allRootNodesForSizing, () => true)
+    const localScopeMap = new Map((document?.scopes ?? []).map((scope) => [scope.id, scope]))
 
+    const labelWidth = clampLabelColumnWidth(Math.max(
+      estimateTextWidth('Name', { charWidth: 7.2, padding: 42 }),
+      ...levelEntriesForSizing.map(({ node, level, levelIndex }) => estimateTextWidth(
+        `${node?.label || node?.shortName || ''} · ${getLevelDisplayLabel(level?.label, levelIndex ?? 0)}`.trim(),
+        { charWidth: 7.1, padding: 132 },
+      )),
+      ...nodeEntriesForSizing.map((node) => estimateTextWidth(node?.label || node?.shortName || '', { charWidth: 7.1, padding: 42 })),
+    ))
+
+    const longestScopeWidth = Math.max(
+      estimateTextWidth(COLUMN_LABELS.scopes, { charWidth: 7.2, padding: 44 }),
+      ...levelEntriesForSizing.map(({ level }) => estimateTextWidth(getScopeSummaryLabel(level?.scopeIds ?? [], localScopeMap), { charWidth: 6.7, padding: 96 })),
+      ...Array.from(localScopeMap.values()).map((scope) => estimateTextWidth(scope?.label ?? '', { charWidth: 6.7, padding: 96 })),
+    )
+
+    const longestNoteWidth = Math.max(
+      DEFAULT_COLUMN_WIDTHS.notes,
+      estimateTextWidth(COLUMN_LABELS.notes, { charWidth: 7.2, padding: 48 }),
+      ...levelEntriesForSizing.map(({ level }) => estimateTextWidth(level?.releaseNote ?? '', { charWidth: 6.4, padding: 58 })),
+    )
+
+    const hasCustomEffort = levelEntriesForSizing.some(({ level }) => level?.effort?.size === 'custom')
     const statusWidth = 26 + STATUS_RADIO_OPTIONS.reduce((sum, option) => {
       return sum + Math.max(42, option.label.length * 6 + 18)
     }, 0)
 
     return {
-      ...DEFAULT_COLUMN_WIDTHS,
-      status: clampColumnWidth('status', statusWidth),
-      scopes: clampColumnWidth('scopes', 120 + Math.min(140, longestScopeLabel * 7)),
-      notes: DEFAULT_COLUMN_WIDTHS.notes,
+      autoLabelColumnWidth: labelWidth,
+      autoColumnWidths: {
+        ...DEFAULT_COLUMN_WIDTHS,
+        value: clampColumnWidth('value', Math.max(DEFAULT_COLUMN_WIDTHS.value, estimateTextWidth(COLUMN_LABELS.value, { charWidth: 7.2, padding: 92 }))),
+        effort: clampColumnWidth('effort', Math.max(DEFAULT_COLUMN_WIDTHS.effort, hasCustomEffort ? 232 : 0, estimateTextWidth(COLUMN_LABELS.effort, { charWidth: 7.2, padding: 112 }))),
+        status: clampColumnWidth('status', statusWidth),
+        scopes: clampColumnWidth('scopes', Math.max(DEFAULT_COLUMN_WIDTHS.scopes, longestScopeWidth)),
+        notes: clampColumnWidth('notes', longestNoteWidth),
+      },
     }
   }, [document])
+
+  const resolvedLabelColumnWidth = useMemo(
+    () => clampLabelColumnWidth(autoLabelColumnWidth),
+    [autoLabelColumnWidth],
+  )
 
   const resolvedColumnWidths = useMemo(() => {
     return DEFAULT_COLUMN_ORDER.reduce((acc, key) => {
@@ -968,9 +1311,25 @@ export function ListViewDrawer({
   }, [columnOrder, isListMode, showEstimateColumns, showLevels, showReleaseNotesColumn, showScopeColumn, showStatusColumn])
 
   const columnMinWidth = useMemo(() => {
-    const extraWidth = visibleListColumns.reduce((sum, key) => sum + (resolvedColumnWidths[key] ?? 0), 0)
-    return Math.min(1760, Math.max(420, 420 + extraWidth))
-  }, [resolvedColumnWidths, visibleListColumns])
+    const visibleColumnWidth = visibleListColumns.reduce((sum, key) => sum + (resolvedColumnWidths[key] ?? 0), 0)
+    const selectionOffset = selectionMode ? SELECTION_COLUMN_WIDTH : 0
+    const chromeWidth = 88
+    return Math.min(1760, Math.max(420, resolvedLabelColumnWidth + visibleColumnWidth + selectionOffset + chromeWidth))
+  }, [resolvedColumnWidths, resolvedLabelColumnWidth, selectionMode, visibleListColumns])
+
+  const sortFieldOptions = SORT_FIELD_OPTIONS
+
+  const sortSummaryLabel = useMemo(() => {
+    if (sortSelection.field === 'roadmap' || sortSelection.direction === 'roadmap') {
+      return 'Roadmap order'
+    }
+
+    const fieldLabel = sortFieldOptions.find((option) => option.value === sortSelection.field)?.label
+      ?? SORT_FIELD_LABELS[sortSelection.field]
+      ?? 'Name'
+
+    return `${fieldLabel} ${sortSelection.direction === 'desc' ? 'Z → A' : 'A → Z'}`
+  }, [sortFieldOptions, sortSelection])
 
   const handleResizePointerDown = useCallback((e) => {
     e.preventDefault()
@@ -1045,9 +1404,69 @@ export function ListViewDrawer({
     })
   }, [])
 
+  const ensureSortFieldVisible = useCallback((field) => {
+    if (field === 'value' || field === 'effort') {
+      setShowLevels(true)
+      setShowEstimateColumns(true)
+      return
+    }
+
+    if (field === 'status') {
+      setShowLevels(true)
+      setShowStatusColumn(true)
+      return
+    }
+
+    if (field === 'scopes') {
+      setShowLevels(true)
+      setShowScopeColumn(true)
+      return
+    }
+
+    if (field === 'notes') {
+      setShowLevels(true)
+      setShowReleaseNotesColumn(true)
+    }
+  }, [])
+
+  const handleSortFieldSelection = useCallback((field) => {
+    const nextDirection = sortSelection.direction === 'roadmap' ? 'asc' : sortSelection.direction
+    ensureSortFieldVisible(field)
+    setSortSelection({ field, direction: nextDirection })
+    setShowSortMenu(false)
+  }, [ensureSortFieldVisible, sortSelection.direction])
+
+  const handleSortDirectionClick = useCallback((direction) => {
+    setShowColumnsMenu(false)
+
+    if (direction === 'roadmap') {
+      setSortSelection((current) => ({ ...current, direction: 'roadmap' }))
+      setShowSortMenu(false)
+      return
+    }
+
+    ensureSortFieldVisible(sortSelection.field)
+    setSortSelection((current) => ({
+      field: current.field || DEFAULT_SORT_SELECTION.field,
+      direction,
+    }))
+    setShowSortMenu((open) => (sortSelection.direction === direction ? !open : true))
+  }, [ensureSortFieldVisible, sortSelection.direction, sortSelection.field])
+
   useEffect(() => {
     if (!showLevels && showEstimateColumns) setShowEstimateColumns(false)
   }, [showEstimateColumns, showLevels])
+
+  useEffect(() => {
+    setSelectionMode(selectionModeProp)
+  }, [selectionModeProp])
+
+  useEffect(() => {
+    if ((viewMode !== 'list' || !showLevels) && selectionMode) {
+      setSelectionMode(false)
+      onClearLevelSelection()
+    }
+  }, [onClearLevelSelection, selectionMode, showLevels, viewMode])
 
   useEffect(() => {
     if (drawerWidth !== null && drawerWidth < columnMinWidth) {
@@ -1072,17 +1491,21 @@ export function ListViewDrawer({
   }, [onSelectLevel, onSelectNode, openInspectorOnSelect, selectedNodeId, selectedProgressLevelId])
 
   useEffect(() => {
-    if (!showColumnsMenu) return undefined
+    if (!showColumnsMenu && !showSortMenu) return undefined
 
     const handlePointerDown = (event) => {
-      if (!columnsMenuRef.current?.contains(event.target)) {
+      if (showColumnsMenu && !columnsMenuRef.current?.contains(event.target)) {
         setShowColumnsMenu(false)
+      }
+      if (showSortMenu && !sortMenuRef.current?.contains(event.target)) {
+        setShowSortMenu(false)
       }
     }
 
     const handleKeyDown = (event) => {
       if (event.key === 'Escape') {
         setShowColumnsMenu(false)
+        setShowSortMenu(false)
       }
     }
 
@@ -1093,7 +1516,7 @@ export function ListViewDrawer({
       window.removeEventListener('pointerdown', handlePointerDown, true)
       window.removeEventListener('keydown', handleKeyDown)
     }
-  }, [showColumnsMenu])
+  }, [showColumnsMenu, showSortMenu])
 
   useEffect(() => {
     if (embedded && typeof onWidthChange === 'function') {
@@ -1199,6 +1622,16 @@ export function ListViewDrawer({
     [viewMode, showLevels, allRootNodes, matchesNodeFilters],
   )
 
+  const sortedFlatLevelEntries = useMemo(
+    () => sortFlatLevelEntries(flatLevelEntries, { ...sortSelection, scopeMap, selectedReleaseId }),
+    [flatLevelEntries, scopeMap, selectedReleaseId, sortSelection],
+  )
+
+  const sortedFlatNodes = useMemo(
+    () => sortFlatNodesBySelection(flatNodes, { ...sortSelection, scopeMap, selectedReleaseId }),
+    [flatNodes, scopeMap, selectedReleaseId, sortSelection],
+  )
+
   if (!opened) return null
 
   const isEmpty = allRootNodes.length === 0
@@ -1210,7 +1643,15 @@ export function ListViewDrawer({
       : filteredRootNodes.length === 0
   )
   const effectiveDrawerWidth = drawerWidth ?? columnMinWidth
-  const drawerStyle = embedded ? { width: '100%' } : { width: `${effectiveDrawerWidth}px` }
+  const sharedColumnStyle = {
+    '--listview-label-col-width': `${resolvedLabelColumnWidth}px`,
+    '--listview-value-col-width': `${resolvedColumnWidths.value}px`,
+    '--listview-effort-col-width': `${resolvedColumnWidths.effort}px`,
+    '--listview-status-col-width': `${resolvedColumnWidths.status}px`,
+    '--listview-scopes-col-width': `${resolvedColumnWidths.scopes}px`,
+    '--listview-notes-col-width': `${resolvedColumnWidths.notes}px`,
+  }
+  const drawerStyle = embedded ? { width: '100%', ...sharedColumnStyle } : { width: `${effectiveDrawerWidth}px`, ...sharedColumnStyle }
 
   return (
     <div
@@ -1233,6 +1674,11 @@ export function ListViewDrawer({
             {showLevels && (
               <span className="list-view-drawer__counter" aria-label="Open points counter">
                 {`Open points ${openPointsCount}/${openPointsTotalCount}`}
+              </span>
+            )}
+            {selectionMode && selectedLevelCount > 0 && (
+              <span className="list-view-drawer__counter list-view-drawer__counter--active" aria-label="Selected items counter">
+                {`Selected ${selectedLevelCount}`}
               </span>
             )}
           </div>
@@ -1273,12 +1719,33 @@ export function ListViewDrawer({
             <IconLayers />
           </button>
 
+          {isListMode && showLevels && (
+            <button
+              type="button"
+              className={`list-view-drawer__icon-toggle${selectionMode ? ' list-view-drawer__icon-toggle--active' : ''}`}
+              onClick={() => {
+                setSelectionMode((current) => {
+                  const next = !current
+                  if (!next) onClearLevelSelection()
+                  return next
+                })
+              }}
+              aria-label="Multi-select"
+              title="Multi-select"
+            >
+              <span aria-hidden="true">Multi-select</span>
+            </button>
+          )}
+
           {showLevels && (
             <div className="list-view-drawer__columns-menu-wrap" ref={columnsMenuRef}>
               <button
                 type="button"
                 className={`list-view-drawer__icon-toggle${showColumnsMenu ? ' list-view-drawer__icon-toggle--active' : ''}`}
-                onClick={() => setShowColumnsMenu((open) => !open)}
+                onClick={() => {
+                  setShowSortMenu(false)
+                  setShowColumnsMenu((open) => !open)
+                }}
                 aria-label="Columns"
                 aria-haspopup="menu"
                 aria-expanded={showColumnsMenu}
@@ -1337,6 +1804,57 @@ export function ListViewDrawer({
             </div>
           )}
 
+          <div className="list-view-drawer__columns-menu-wrap list-view-drawer__sort-controls" ref={sortMenuRef}>
+            <button
+              type="button"
+              className={`list-view-drawer__sort-chip${sortSelection.direction === 'roadmap' ? ' list-view-drawer__sort-chip--active' : ''}`}
+              onClick={() => handleSortDirectionClick('roadmap')}
+              aria-label="Roadmap order"
+              title="Keep the original roadmap order"
+            >
+              Roadmap order
+            </button>
+            <button
+              type="button"
+              className={`list-view-drawer__sort-chip${sortSelection.direction === 'asc' ? ' list-view-drawer__sort-chip--active' : ''}`}
+              onClick={() => handleSortDirectionClick('asc')}
+              aria-label="A → Z"
+              aria-haspopup="menu"
+              aria-expanded={showSortMenu && sortSelection.direction === 'asc'}
+              title={`Sort ascending by ${SORT_FIELD_LABELS[sortSelection.field] ?? 'Name'}`}
+            >
+              A → Z
+            </button>
+            <button
+              type="button"
+              className={`list-view-drawer__sort-chip${sortSelection.direction === 'desc' ? ' list-view-drawer__sort-chip--active' : ''}`}
+              onClick={() => handleSortDirectionClick('desc')}
+              aria-label="Z → A"
+              aria-haspopup="menu"
+              aria-expanded={showSortMenu && sortSelection.direction === 'desc'}
+              title={`Sort descending by ${SORT_FIELD_LABELS[sortSelection.field] ?? 'Name'}`}
+            >
+              Z → A
+            </button>
+
+            {showSortMenu && (
+              <div className="list-view-drawer__columns-menu list-view-drawer__sort-menu" role="menu" aria-label="Sort columns">
+                <span className="list-view-drawer__sort-summary">Choose column · hidden columns will be shown</span>
+                {sortFieldOptions.map((option) => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    aria-pressed={sortSelection.field === option.value}
+                    className={`list-view-drawer__sort-option${sortSelection.field === option.value ? ' list-view-drawer__sort-option--active' : ''}`}
+                    onClick={() => handleSortFieldSelection(option.value)}
+                  >
+                    <span>{option.label}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
           <span className="list-view-drawer__header-sep" aria-hidden="true" />
 
           <select
@@ -1384,6 +1902,16 @@ export function ListViewDrawer({
             placeholder="Search visible list…"
             aria-label="Search list"
           />
+          {selectionMode && (
+            <button
+              type="button"
+              className="list-view-drawer__mini-action"
+              onClick={onClearLevelSelection}
+              disabled={selectedLevelCount === 0}
+            >
+              Clear
+            </button>
+          )}
           <label className="list-view-drawer__inspector-toggle">
             <input
               type="checkbox"
@@ -1398,7 +1926,8 @@ export function ListViewDrawer({
       <div className="list-view-drawer__content">
         {showLevels && visibleListColumns.length > 0 && (
           <div className="list-view-drawer__metrics-header" aria-label="Visible columns">
-            <span className="list-view-drawer__metrics-header-spacer" />
+            {selectionMode && <span className="list-view-drawer__metrics-header-select-spacer" aria-hidden="true" />}
+            <span className="list-view-drawer__metrics-header-spacer">Name</span>
             {visibleListColumns.map((columnKey) => (
               <span
                 key={columnKey}
@@ -1428,7 +1957,7 @@ export function ListViewDrawer({
                   type="button"
                   className="list-view-drawer__metrics-header-resizer"
                   aria-label={`Resize ${COLUMN_LABELS[columnKey]} column`}
-                  title={`Drag to resize ${COLUMN_LABELS[columnKey]} column. Double-click to reset.`}
+                  title={`Drag to resize ${COLUMN_LABELS[columnKey]} column. Double-click to reset to autosize.`}
                   onPointerDown={(event) => handleColumnResizePointerDown(event, columnKey)}
                   onDoubleClick={(event) => {
                     event.preventDefault()
@@ -1448,25 +1977,27 @@ export function ListViewDrawer({
         ) : isListMode && showLevels ? (
           /* flat level list */
           <ul className="list-view-drawer__list">
-            {flatLevelEntries.map(({ node, level, levelIndex }) => (
+            {sortedFlatLevelEntries.map(({ node, level, levelIndex }) => (
               <LevelRow
                 key={`${node.id}::${level.id}`}
                 level={level}
                 levelIndex={levelIndex}
                 nodeId={node.id}
                 selectedNodeId={selectedNodeId}
+                selectedNodeIds={selectedNodeIds}
+                selectedLevelKeys={selectedLevelKeys}
                 selectedProgressLevelId={selectedProgressLevelId}
                 nodeLabel={node.label || node.shortName}
                 depth={0}
                 scopeMap={scopeMap}
                 selectedReleaseId={selectedReleaseId}
-                onSelectLevel={() => onSelectLevel(node.id, level.id, { openInspector: openInspectorOnSelect })}
+                onSelectLevel={() => onSelectLevel(node.id, level.id, selectionMode ? { multiSelect: true } : { openInspector: openInspectorOnSelect })}
                 showEstimateColumns={showEstimateColumns}
-                onSetEffort={(effort) => onSetLevelEffort(node.id, level.id, effort)}
-                onSetBenefit={(benefit) => onSetLevelBenefit(node.id, level.id, benefit)}
-                onSetStatus={(status) => onSetLevelStatus(node.id, level.id, status)}
-                onSetScopeIds={(scopeIds) => onSetLevelScopeIds(node.id, level.id, scopeIds)}
-                onSetOpenPoints={(hasOpenPoints) => onSetLevelOpenPoints(node.id, level.id, hasOpenPoints)}
+                onSetEffort={(effort, options) => onSetLevelEffort(node.id, level.id, effort, options)}
+                onSetBenefit={(benefit, options) => onSetLevelBenefit(node.id, level.id, benefit, options)}
+                onSetStatus={(status, options) => onSetLevelStatus(node.id, level.id, status, options)}
+                onSetScopeIds={(scopeIds, options) => onSetLevelScopeIds(node.id, level.id, scopeIds, options)}
+                onSetOpenPoints={(hasOpenPoints, options) => onSetLevelOpenPoints(node.id, level.id, hasOpenPoints, options)}
                 onSetReleaseNote={(releaseNote) => onSetLevelReleaseNote(node.id, level.id, releaseNote)}
                 showStatusColumn={showStatusColumn}
                 showScopeColumn={showScopeColumn}
@@ -1474,13 +2005,14 @@ export function ListViewDrawer({
                 visibleListColumns={visibleListColumns}
                 resolvedColumnWidths={resolvedColumnWidths}
                 listMode
+                selectionMode={selectionMode}
               />
             ))}
           </ul>
         ) : isListMode ? (
           /* flat node list */
           <ul className="list-view-drawer__list">
-            {flatNodes.map((node) => {
+            {sortedFlatNodes.map((node) => {
               const borderColor = getStatusBorderColor(getDisplayStatusKey(node, selectedReleaseId))
               const scopeIds = getNodeScopeIds(node)
               const scopeEntries = [...scopeIds].map((id) => scopeMap.get(id)).filter(Boolean)

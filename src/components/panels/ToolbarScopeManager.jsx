@@ -12,8 +12,35 @@ const TablerCirclePlusIcon = ({ size = 18 }) => (
   </svg>
 )
 
-const getScopeGroupKey = (color) => color ?? NO_COLOR_GROUP_KEY
+const getScopeGroupKey = (color) => (
+  typeof color === 'string' && color.trim().length > 0
+    ? color.trim().toLowerCase()
+    : NO_COLOR_GROUP_KEY
+)
 const getDefaultGroupLabel = (color) => (color ? color.toUpperCase() : 'Uncolored')
+
+const findScopeOption = (scopeId, scopeOptions = []) => (
+  (Array.isArray(scopeOptions) ? scopeOptions : []).find((scope) => (scope?.value ?? scope?.id) === scopeId) ?? null
+)
+
+export const getScopeGroupDropColor = (sourceId, targetId, scopeOptions = []) => {
+  if (!sourceId || !targetId || sourceId === targetId) {
+    return undefined
+  }
+
+  const sourceScope = findScopeOption(sourceId, scopeOptions)
+  const targetScope = findScopeOption(targetId, scopeOptions)
+
+  if (!sourceScope || !targetScope) {
+    return undefined
+  }
+
+  const sourceKey = getScopeGroupKey(sourceScope.color)
+  const targetColor = targetScope.color ?? null
+  const targetKey = getScopeGroupKey(targetColor)
+
+  return sourceKey === targetKey ? undefined : targetColor
+}
 
 const getScopeDragInsertPosition = (sourceId, targetId, event) => {
   if (!sourceId || !targetId || sourceId === targetId) {
@@ -68,6 +95,7 @@ export function ToolbarScopeManager({
   const [colorPickerOpenId, setColorPickerOpenId] = useState(null)
   const [draggedScopeId, setDraggedScopeId] = useState(null)
   const [dragOverScopeId, setDragOverScopeId] = useState(null)
+  const [dragOverGroupKey, setDragOverGroupKey] = useState(null)
   const [dragInsertPosition, setDragInsertPosition] = useState(null)
 
   const scopeSelectData = useMemo(
@@ -106,6 +134,7 @@ export function ToolbarScopeManager({
   const resetDragState = useCallback(() => {
     setDraggedScopeId(null)
     setDragOverScopeId(null)
+    setDragOverGroupKey(null)
     setDragInsertPosition(null)
   }, [])
 
@@ -226,34 +255,78 @@ export function ToolbarScopeManager({
     }
 
     event.preventDefault()
+    event.stopPropagation()
     if (event.dataTransfer) {
       event.dataTransfer.dropEffect = 'move'
     }
 
     const insertPosition = getScopeDragInsertPosition(sourceId, scopeId, event)
+    const targetScope = findScopeOption(scopeId, scopeSelectData)
     setDragOverScopeId(scopeId)
+    setDragOverGroupKey(getScopeGroupKey(targetScope?.color))
     setDragInsertPosition(insertPosition)
-  }, [draggedScopeId])
+  }, [draggedScopeId, scopeSelectData])
 
   const handleScopeDrop = useCallback((scopeId) => (event) => {
     event.preventDefault()
+    event.stopPropagation()
 
     const sourceId = draggedScopeId || event.dataTransfer?.getData('text/plain')
     const insertPosition = getScopeDragInsertPosition(sourceId, scopeId, event)
+    const nextColor = getScopeGroupDropColor(sourceId, scopeId, scopeSelectData)
     resetDragState()
 
     if (!sourceId || sourceId === scopeId || !insertPosition) {
       return
     }
 
-    const result = onReorderScope?.(sourceId, scopeId, insertPosition)
+    const result = onReorderScope?.(sourceId, scopeId, insertPosition, nextColor)
     if (result && !result.ok) {
       setScopeError(result.error ?? 'Scope order could not be updated.')
       return
     }
 
     setScopeError(null)
-  }, [draggedScopeId, onReorderScope, resetDragState])
+  }, [draggedScopeId, onReorderScope, resetDragState, scopeSelectData])
+
+  const handleGroupDragOver = useCallback((group) => (event) => {
+    const sourceId = draggedScopeId || event.dataTransfer?.getData('text/plain')
+    const sourceScope = findScopeOption(sourceId, scopeSelectData)
+
+    if (!sourceScope || getScopeGroupKey(sourceScope.color) === group.key) {
+      return
+    }
+
+    event.preventDefault()
+    if (event.dataTransfer) {
+      event.dataTransfer.dropEffect = 'move'
+    }
+
+    setDragOverScopeId(null)
+    setDragOverGroupKey(group.key)
+    setDragInsertPosition(null)
+  }, [draggedScopeId, scopeSelectData])
+
+  const handleGroupDrop = useCallback((group) => (event) => {
+    event.preventDefault()
+    event.stopPropagation()
+
+    const sourceId = draggedScopeId || event.dataTransfer?.getData('text/plain')
+    const sourceScope = findScopeOption(sourceId, scopeSelectData)
+    resetDragState()
+
+    if (!sourceScope || getScopeGroupKey(sourceScope.color) === group.key) {
+      return
+    }
+
+    const result = onSetScopeColor?.(sourceId, group.color ?? null)
+    if (result && !result.ok) {
+      setScopeError(result.error ?? 'Scope color could not be updated.')
+      return
+    }
+
+    setScopeError(null)
+  }, [draggedScopeId, onSetScopeColor, resetDragState, scopeSelectData])
 
   return (
     <Paper className="skill-panel skill-panel--scopes" radius={0} shadow="none">
@@ -285,13 +358,29 @@ export function ToolbarScopeManager({
 
           <Divider />
 
+          <Text size="xs" c="dimmed">
+            Drag a scope into another group to assign that group color.
+          </Text>
+
           <Stack gap="md">
             {scopeSelectData.length === 0 && (
               <Text size="sm" c="dimmed">No scopes yet.</Text>
             )}
 
             {groupedScopes.map((group) => (
-              <Stack key={group.key} gap={8}>
+              <Stack
+                key={group.key}
+                gap={8}
+                onDragOver={handleGroupDragOver(group)}
+                onDrop={handleGroupDrop(group)}
+                style={{
+                  padding: dragOverGroupKey === group.key ? 6 : 0,
+                  borderRadius: 10,
+                  background: dragOverGroupKey === group.key ? 'rgba(8, 145, 178, 0.08)' : 'transparent',
+                  boxShadow: dragOverGroupKey === group.key ? 'inset 0 0 0 1px rgba(103, 232, 249, 0.3)' : 'none',
+                  transition: 'background 120ms ease, box-shadow 120ms ease',
+                }}
+              >
                 {editingGroupKey === group.key ? (
                   <Paper withBorder radius="md" p="xs">
                     <Stack gap={8}>
@@ -322,7 +411,7 @@ export function ToolbarScopeManager({
                     <button
                       type="button"
                       onDoubleClick={() => handleStartGroupRename(group)}
-                      title="Double-click to rename group"
+                      title="Double-click to rename group or drop a scope here"
                       style={{
                         display: 'inline-flex',
                         alignItems: 'center',
@@ -331,7 +420,7 @@ export function ToolbarScopeManager({
                         background: 'transparent',
                         color: '#94a3b8',
                         padding: '0 2px',
-                        cursor: 'text',
+                        cursor: 'pointer',
                       }}
                     >
                       <span
@@ -368,7 +457,7 @@ export function ToolbarScopeManager({
                       onDragOver={handleScopeDragOver(scope.value)}
                       onDrop={handleScopeDrop(scope.value)}
                       onDragEnd={resetDragState}
-                      title={scopeSelectData.length > 1 ? 'Drag to reorder' : scope.label}
+                      title={scopeSelectData.length > 1 ? 'Drag to reorder or move into another group' : scope.label}
                       style={{
                         opacity: isDragging ? 0.55 : 1,
                         cursor: scopeSelectData.length > 1 ? 'grab' : 'default',

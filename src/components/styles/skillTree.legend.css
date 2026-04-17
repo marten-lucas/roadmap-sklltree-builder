@@ -10,12 +10,12 @@
     position: relative;
     z-index: 78;
     display: flex;
-    align-items: flex-start;
+    align-items: center;
     flex-wrap: nowrap;
-    gap: 0.5rem 0.75rem;
+    gap: 0.45rem 0.75rem;
     width: 100%;
-    overflow-x: auto;
-    overflow-y: hidden;
+    min-width: 0;
+    overflow: hidden;
     padding: 0.4rem 0.9rem 0.45rem;
     border-radius: 10px;
     color: #e2e8f0;
@@ -30,7 +30,8 @@
     align-items: center;
     justify-content: flex-start;
     gap: 0.5rem;
-    flex: 0 0 auto;
+    flex: 0 1 auto;
+    min-width: 0;
 }
 
 .skill-tree-legend__title {
@@ -44,7 +45,7 @@
 
 .skill-tree-legend__section {
     min-width: 0;
-    flex: 0 0 auto;
+    flex: 1 1 auto;
 }
 
 .skill-tree-legend__section + .skill-tree-legend__section {
@@ -66,8 +67,10 @@
 
 .skill-tree-legend__symbol-grid {
     display: flex;
-    align-items: flex-start;
+    align-items: center;
     gap: 0.45rem 0.75rem;
+    min-width: 0;
+    white-space: nowrap;
 }
 
 .skill-tree-legend__symbol-item {
@@ -77,15 +80,16 @@
     font-size: 0.66rem;
     line-height: 1.15;
     min-width: 0;
+    flex: 0 1 auto;
 }
 
-.skill-tree-legend__symbol-item > span:last-child {
+.skill-tree-legend__symbol-labels {
     display: flex;
     flex-direction: column;
     min-width: 0;
 }
 
-.skill-tree-legend__symbol-item strong {
+.skill-tree-legend__symbol-title {
     display: block;
     font-size: 0.67rem;
     line-height: 1.1;
@@ -175,10 +179,17 @@
     display: inline-flex;
     align-items: center;
     gap: 0.45rem;
-    flex: 0 0 auto;
+    flex: 0 1 16rem;
+    min-width: 0;
     color: #94a3b8;
     font-size: 0.66rem;
     white-space: nowrap;
+}
+
+.skill-tree-legend__tip-text {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .skill-tree-legend__tip-icon {
@@ -193,29 +204,42 @@
     border: 1px solid rgba(71, 85, 105, 0.55);
 }
 
+.skill-tree-legend[data-legend-density="compact"] .skill-tree-legend__symbol-copy,
+.skill-tree-legend[data-legend-density="no-portals"] .skill-tree-legend__symbol-copy,
+.skill-tree-legend[data-legend-density="icons-only"] .skill-tree-legend__symbol-copy {
+    display: none;
+}
+
+.skill-tree-legend[data-legend-density="no-portals"] .skill-tree-legend__symbol-item--portal,
+.skill-tree-legend[data-legend-density="icons-only"] .skill-tree-legend__symbol-item--portal {
+    display: none;
+}
+
+.skill-tree-legend[data-legend-density="icons-only"] {
+    gap: 0.35rem 0.45rem;
+}
+
+.skill-tree-legend[data-legend-density="icons-only"] .skill-tree-legend__symbol-grid {
+    gap: 0.3rem 0.4rem;
+}
+
+.skill-tree-legend[data-legend-density="icons-only"] .skill-tree-legend__header,
+.skill-tree-legend[data-legend-density="icons-only"] .skill-tree-legend__symbol-title,
+.skill-tree-legend[data-legend-density="icons-only"] .skill-tree-legend__tip-text {
+    display: none;
+}
+
 @media (max-width: 980px) {
     .skill-tree-legend-footer {
         padding: 0.35rem 0.5rem 0.5rem;
     }
 
     .skill-tree-legend {
-        flex-wrap: wrap;
-        overflow-x: visible;
-    }
-
-    .skill-tree-legend__section,
-    .skill-tree-legend__tip {
-        flex: 1 1 100%;
-    }
-
-    .skill-tree-legend__section + .skill-tree-legend__section {
-        padding-left: 0;
-        padding-top: 0.5rem;
-        border-left: 0;
-        border-top: 1px solid rgba(51, 65, 85, 0.45);
+        gap: 0.35rem 0.5rem;
+        padding: 0.35rem 0.55rem 0.4rem;
     }
 
     .skill-tree-legend__symbol-grid {
-        flex-wrap: wrap;
+        gap: 0.35rem 0.55rem;
     }
 }

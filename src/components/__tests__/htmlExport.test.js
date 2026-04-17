@@ -183,6 +183,37 @@ describe('htmlExport', () => {
     expect(extracted.value.children[0].levels[0].openPointsLabel).toBe('Need rollout owner')
   })
 
+  it('preserves scope colors and scope group labels across html export/import', () => {
+    const document = {
+      ...createDocument(),
+      scopes: [
+        { id: 'scope-frontend', label: 'Frontend', color: '#6366F1' },
+        { id: 'scope-platform', label: 'Platform', color: '#16a34a' },
+      ],
+      scopeGroups: [
+        { color: '#6366f1', label: 'Product' },
+        { color: '#16a34a', label: 'Engineering' },
+      ],
+    }
+
+    const html = buildHtmlExportDocument({
+      svgMarkup: '<svg viewBox="0 0 100 100"></svg>',
+      roadmapDocument: document,
+      styleText: '',
+    })
+
+    const imported = readDocumentFromHtmlText(html)
+
+    expect(imported.scopes).toEqual([
+      { id: 'scope-frontend', label: 'Frontend', color: '#6366F1' },
+      { id: 'scope-platform', label: 'Platform', color: '#16a34a' },
+    ])
+    expect(imported.scopeGroups).toEqual([
+      { color: '#6366f1', label: 'Product' },
+      { color: '#16a34a', label: 'Engineering' },
+    ])
+  })
+
   it('rejects html without embedded export payload', () => {
     const result = extractDocumentPayloadFromHtml('<html><body>Missing data</body></html>')
 

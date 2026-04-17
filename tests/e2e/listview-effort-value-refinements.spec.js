@@ -231,5 +231,18 @@ test.describe('ListView effort/value refinements', () => {
     await expect
       .poll(async () => valueHeader.evaluate((element) => element.getBoundingClientRect().width))
       .toBeGreaterThan(widthBeforeResize + 12)
+
+    const widthAfterManualResize = await valueHeader.evaluate((element) => element.getBoundingClientRect().width)
+    expect(widthAfterManualResize).toBeGreaterThan(widthBeforeResize + 12)
+
+    await resizeHandle.dblclick({ force: true })
+
+    await expect
+      .poll(async () => valueHeader.evaluate((element) => element.getBoundingClientRect().width))
+      .toBeLessThan(widthAfterManualResize - 12)
+
+    await expect
+      .poll(async () => valueHeader.evaluate((element) => element.getBoundingClientRect().width))
+      .toBeGreaterThan(widthBeforeResize - 8)
   })
 })

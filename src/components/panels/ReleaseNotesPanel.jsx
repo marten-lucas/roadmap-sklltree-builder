@@ -1,6 +1,7 @@
-import { ActionIcon, Alert, Paper, Stack, Text, Textarea } from '@mantine/core'
+import { ActionIcon, Alert, Paper, Stack, Text } from '@mantine/core'
 import { IconCheck, IconPencil } from '@tabler/icons-react'
 import { useEffect, useMemo, useState } from 'react'
+import { MarkdownField } from './MarkdownField'
 
 const normalizeCheckedMap = (value) => {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
@@ -149,21 +150,15 @@ export function ReleaseNotesPanel({
         ) : (
           <Stack gap="md">
             {mode === 'edit' ? (
-              <>
-                <Text size="sm" c="dimmed">
-                  Write your tasks as a markdown-style list, one item per line.
-                </Text>
-                <Textarea
-                  label="Markdown task list"
-                  placeholder={'- Add specific nodes\n- Review rollout\n- Update dependencies'}
-                  value={draftMarkdown}
-                  onChange={(event) => setDraftMarkdown(event.currentTarget.value)}
-                  onBlur={commitDraft}
-                  autosize
-                  minRows={12}
-                  classNames={{ input: 'mantine-dark-input', label: 'mantine-dark-label' }}
-                />
-              </>
+              <MarkdownField
+                label="Markdown task list"
+                placeholder={'- Add specific nodes\n- Review rollout\n- Update dependencies'}
+                value={draftMarkdown}
+                onChange={(nextValue) => setDraftMarkdown(nextValue)}
+                onBlur={commitDraft}
+                minRows={12}
+                description="Write your tasks as a markdown-style list, one item per line."
+              />
             ) : items.length === 0 ? (
               <Alert color="blue" variant="light">
                 No checklist items yet. Use the edit button in the top right to add a markdown list.

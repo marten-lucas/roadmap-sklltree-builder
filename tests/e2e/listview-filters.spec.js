@@ -68,6 +68,54 @@ test.describe('ListViewDrawer with status and scope filters', () => {
     expect(pageErrors).toHaveLength(0)
   })
 
+  test('uses compact sort buttons and reveals hidden columns when chosen for sorting', async ({ page }) => {
+    const pageErrors = []
+    page.on('pageerror', (error) => {
+      pageErrors.push(error)
+    })
+
+    await expect(page.locator('.skill-tree-toolbar')).toBeVisible()
+    await page.locator('button[aria-label="List View"]').click()
+    await expect(page.locator('.list-view-drawer')).toBeVisible({ timeout: 5000 })
+
+    const readOrder = async () => page.locator('.list-view-drawer__node-prefix').evaluateAll((nodes) => (
+      nodes
+        .map((node) => node.textContent?.replace(/·/g, '').trim())
+        .filter(Boolean)
+        .slice(0, 8)
+    ))
+
+    const originalOrder = await readOrder()
+    expect(originalOrder.length).toBeGreaterThan(1)
+
+    await expect(page.locator('.list-view-drawer').getByRole('button', { name: 'Roadmap order' })).toBeVisible()
+    await expect(page.locator('.list-view-drawer').getByRole('button', { name: 'A → Z' })).toBeVisible()
+    await expect(page.locator('.list-view-drawer').getByRole('button', { name: 'Z → A' })).toBeVisible()
+
+    await page.locator('.list-view-drawer button[title="Columns"]').click()
+    const releaseNotesToggle = page.locator('.list-view-drawer__columns-menu').getByLabel('Release Notes')
+    await releaseNotesToggle.check({ force: true })
+    await releaseNotesToggle.uncheck({ force: true })
+    await expect(page.locator('.list-view-drawer__metrics-header-col--notes')).toHaveCount(0)
+
+    await page.locator('.list-view-drawer').getByRole('button', { name: 'Z → A' }).click()
+    await expect(page.locator('.list-view-drawer__sort-menu')).toBeVisible()
+    await page.locator('.list-view-drawer__sort-menu').getByRole('button', { name: 'Name' }).click()
+
+    const descendingOrder = [...originalOrder].sort((left, right) => right.localeCompare(left, undefined, { sensitivity: 'base' }))
+    await expect.poll(readOrder).toEqual(descendingOrder)
+
+    await page.locator('.list-view-drawer').getByRole('button', { name: 'Roadmap order' }).click()
+    await expect.poll(readOrder).toEqual(originalOrder)
+
+    await page.locator('.list-view-drawer').getByRole('button', { name: 'A → Z' }).click()
+    await expect(page.locator('.list-view-drawer__sort-menu')).toBeVisible()
+    await page.locator('.list-view-drawer__sort-menu').getByRole('button', { name: 'Release Notes' }).click()
+    await expect(page.locator('.list-view-drawer__metrics-header-col--notes')).toBeVisible()
+
+    expect(pageErrors).toHaveLength(0)
+  })
+
   test('displays all status filter options', async ({ page }) => {
     const pageErrors = []
     page.on('pageerror', (error) => {

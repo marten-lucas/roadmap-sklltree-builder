@@ -93,6 +93,7 @@ import { VIEWPORT_DEFAULTS, computeFitScale, computeFitTransform, getNextZoomSte
 import { getInitialRoadmapDocument } from './utils/document'
 import { getSelectedReleaseId } from './utils/releases'
 import { resolveInspectorSelectedNode } from './utils/selection'
+import { LEGEND_DENSITY_MODES, resolveLegendDensity } from './utils/legendDensity'
 
 // `resolveInspectorSelectedNode` is exported from `src/components/utils/selection.js`
 // Tests/importers should import from that module instead of re-exporting from here.
@@ -105,6 +106,7 @@ const LEFT_SIDEBAR_DEFAULT_WIDTH = 460
 const RIGHT_SIDEBAR_MIN_WIDTH = 340
 const RIGHT_SIDEBAR_DEFAULT_WIDTH = 420
 const MIN_STAGE_WIDTH = 360
+const BULK_APPLY_CONFIRM_STORAGE_KEY = 'roadmap-skilltree.bulk-apply-confirm.dismissed'
 
 const getPortalCounterpartNodeId = (portal) => {
   if (!portal) return null
@@ -208,6 +210,7 @@ export function SkillTree() {
   const shellRef = useRef(null)
   const leftSidebarRef = useRef(null)
   const rightSidebarRef = useRef(null)
+  const legendRef = useRef(null)
   const leftSidebarWidthRef = useRef(LEFT_SIDEBAR_DEFAULT_WIDTH)
   const rightSidebarWidthRef = useRef(RIGHT_SIDEBAR_DEFAULT_WIDTH)
   const resizeFrameRef = useRef(null)
@@ -228,12 +231,21 @@ export function SkillTree() {
   const [draftRelease, setDraftRelease] = useState(null)
   const [leftSidebarWidth, setLeftSidebarWidth] = useState(LEFT_SIDEBAR_DEFAULT_WIDTH)
   const [rightSidebarWidth, setRightSidebarWidth] = useState(RIGHT_SIDEBAR_DEFAULT_WIDTH)
+  const [legendDensity, setLegendDensity] = useState(LEGEND_DENSITY_MODES.full)
+  const bulkApplyActionRef = useRef(null)
+  const [bulkApplyConfirmState, setBulkApplyConfirmState] = useState({
+    opened: false,
+    message: '',
+    rememberChoice: false,
+  })
 
   const {
     selectedNodeId,
     setSelectedNodeId,
     selectedNodeIds,
     setSelectedNodeIds,
+    selectedLevelKeys,
+    setSelectedLevelKeys,
     selectedProgressLevelId,
     setSelectedProgressLevelId,
     selectedSegmentId,
@@ -424,6 +436,69 @@ export function SkillTree() {
       rightSidebarRef.current.style.width = `${rightSidebarWidth}px`
     }
   }, [rightSidebarWidth])
+
+  useEffect(() => {
+    if (!isLegendVisible) {
+      setLegendDensity(LEGEND_DENSITY_MODES.full)
+      return undefined
+    }
+
+    if (typeof ResizeObserver === 'undefined' || typeof window === 'undefined' || !legendRef.current) {
+      return undefined
+    }
+
+    const legendElement = legendRef.current
+    let frameId = null
+
+    const syncLegendDensity = () => {
+      frameId = null
+
+      if (!legendRef.current) {
+        return
+      }
+
+      const availableWidth = legendElement.clientWidth
+      if (!availableWidth) {
+        return
+      }
+
+      const measureWidthForMode = (mode) => {
+        legendElement.dataset.legendDensity = mode
+        return legendElement.scrollWidth
+      }
+
+      const nextDensity = resolveLegendDensity({
+        availableWidth,
+        fullWidth: measureWidthForMode(LEGEND_DENSITY_MODES.full),
+        compactWidth: measureWidthForMode(LEGEND_DENSITY_MODES.compact),
+        portalLessWidth: measureWidthForMode(LEGEND_DENSITY_MODES.noPortals),
+        iconOnlyWidth: measureWidthForMode(LEGEND_DENSITY_MODES.iconsOnly),
+      })
+
+      legendElement.dataset.legendDensity = nextDensity
+      setLegendDensity((current) => (current === nextDensity ? current : nextDensity))
+    }
+
+    syncLegendDensity()
+
+    const observer = new ResizeObserver(() => {
+      if (!frameId) {
+        frameId = window.requestAnimationFrame(syncLegendDensity)
+      }
+    })
+    observer.observe(legendElement)
+
+    if (legendElement.parentElement) {
+      observer.observe(legendElement.parentElement)
+    }
+
+    return () => {
+      if (frameId) {
+        window.cancelAnimationFrame(frameId)
+      }
+      observer.disconnect()
+    }
+  }, [isLegendVisible, roadmapData?.statusDescriptions])
 
   useEffect(() => {
     if (typeof ResizeObserver === 'undefined' || !canvasAreaRef.current) {
@@ -1481,6 +1556,26 @@ export function SkillTree() {
     dispatchDocument({ type: 'apply', document: nextDocument })
   }
 
+  const requestBulkApplyConfirmation = useCallback((message, onConfirm) => {
+    if (typeof window === 'undefined') {
+      onConfirm()
+      return
+    }
+
+    const suppressed = window.localStorage.getItem(BULK_APPLY_CONFIRM_STORAGE_KEY) === 'true'
+    if (suppressed) {
+      onConfirm()
+      return
+    }
+
+    bulkApplyActionRef.current = onConfirm
+    setBulkApplyConfirmState({
+      opened: true,
+      message,
+      rememberChoice: false,
+    })
+  }, [])
+
   const applyToSelectedNodes = (applier, opts = {}) => {
     const ids = Array.isArray(selectedNodeIds) && selectedNodeIds.length > 0
       ? selectedNodeIds
@@ -1507,12 +1602,67 @@ export function SkillTree() {
         message += '\n\nNote: The change will be applied to all levels of each selected node.'
       }
 
-      const confirmed = window.confirm(message)
-      if (!confirmed) return
+      requestBulkApplyConfirmation(message, applyOnce)
+      return
     }
 
     applyOnce()
   }
+
+  const applyToSelectedLevels = useCallback((applier, opts = {}) => {
+    const entries = Array.isArray(selectedLevelKeys)
+      ? selectedLevelKeys
+          .map((key) => {
+            const [nodeId, levelId] = String(key ?? '').split('::')
+            return nodeId && levelId ? { key, nodeId, levelId } : null
+          })
+          .filter(Boolean)
+      : []
+
+    if (entries.length === 0) {
+      return false
+    }
+
+    const applyOnce = () => {
+      let next = roadmapData
+      for (const entry of entries) {
+        next = applier(next, entry)
+      }
+      commitDocument(next)
+    }
+
+    if (entries.length > 1 && !opts.skipConfirm) {
+      const message = opts.description
+        ? `Apply "${opts.description}" to ${entries.length} selected items?`
+        : `Apply change to ${entries.length} selected items?`
+      requestBulkApplyConfirmation(message, applyOnce)
+      return true
+    }
+
+    applyOnce()
+    return true
+  }, [commitDocument, requestBulkApplyConfirmation, roadmapData, selectedLevelKeys])
+
+  const closeBulkApplyConfirm = useCallback(() => {
+    bulkApplyActionRef.current = null
+    setBulkApplyConfirmState({
+      opened: false,
+      message: '',
+      rememberChoice: false,
+    })
+  }, [])
+
+  const confirmBulkApply = useCallback(() => {
+    const action = bulkApplyActionRef.current
+    const rememberChoice = bulkApplyConfirmState.rememberChoice
+
+    if (typeof window !== 'undefined' && rememberChoice) {
+      window.localStorage.setItem(BULK_APPLY_CONFIRM_STORAGE_KEY, 'true')
+    }
+
+    closeBulkApplyConfirm()
+    action?.()
+  }, [bulkApplyConfirmState.rememberChoice, closeBulkApplyConfirm])
 
   const handleOpenImportPicker = () => {
     importFileInputRef.current?.click()
@@ -2376,6 +2526,7 @@ export function SkillTree() {
   }
 
   const handleSelectNode = (nodeId, event) => {
+    setSelectedLevelKeys([])
     const isCtrl = event && (event.ctrlKey || event.metaKey)
     if (isCtrl) {
       setSelectedNodeIds((prev = []) => {
@@ -2408,16 +2559,31 @@ export function SkillTree() {
 
     setSelectedNodeId(allIds[0] ?? null)
     setSelectedNodeIds(allIds)
+    setSelectedLevelKeys([])
     setSelectedProgressLevelId(null)
     setSelectedPortalKey(null)
     setRightPanel(PANEL_INSPECTOR)
   }, [roadmapData, setRightPanel, setSelectedNodeId, setSelectedNodeIds, setSelectedPortalKey, setSelectedProgressLevelId])
 
   const handleSelectNodeFromListView = (nodeId, options = {}) => {
-    const { openInspector = false } = options
+    const { openInspector = false, multiSelect = false } = options
     const layoutNode = layoutNodesById.get(nodeId)
 
     flushSync(() => {
+      setSelectedLevelKeys([])
+
+      if (multiSelect) {
+        setSelectedNodeIds((prev = []) => {
+          const exists = prev.includes(nodeId)
+          const next = exists ? prev.filter((id) => id !== nodeId) : [...prev, nodeId]
+          setSelectedNodeId(next[next.length - 1] ?? null)
+          return next
+        })
+        setSelectedProgressLevelId(null)
+        setSelectedPortalKey(null)
+        return
+      }
+
       if (openInspector) {
         selectNodeId(nodeId)
         setRightPanel(PANEL_INSPECTOR)
@@ -2494,10 +2660,39 @@ export function SkillTree() {
   }
 
   const handleSelectLevelFromListView = (nodeId, levelId, options = {}) => {
-    const { openInspector = false } = options
+    const { openInspector = false, multiSelect = false } = options
     const layoutNode = layoutNodesById.get(nodeId)
 
+    if (multiSelect) {
+      flushSync(() => {
+        const nextKey = `${nodeId}::${levelId}`
+
+        setSelectedLevelKeys((prev = []) => {
+          const exists = prev.includes(nextKey)
+          const next = exists ? prev.filter((key) => key !== nextKey) : [...prev, nextKey]
+          const nextNodeIds = [...new Set(next.map((key) => String(key).split('::')[0]).filter(Boolean))]
+          const anchorKey = next[next.length - 1] ?? null
+
+          setSelectedNodeIds(nextNodeIds)
+          if (anchorKey) {
+            const [anchorNodeId, anchorLevelId] = anchorKey.split('::')
+            setSelectedNodeId(anchorNodeId || null)
+            setSelectedProgressLevelId(anchorLevelId || null)
+          } else {
+            setSelectedNodeId(null)
+            setSelectedProgressLevelId(null)
+          }
+
+          return next
+        })
+
+        setSelectedPortalKey(null)
+      })
+      return
+    }
+
     flushSync(() => {
+      setSelectedLevelKeys([])
       if (openInspector) {
         selectNodeId(nodeId)
         setRightPanel(PANEL_INSPECTOR)
@@ -2737,14 +2932,25 @@ export function SkillTree() {
     }
   }
 
-  const handleReorderScope = (sourceScopeId, targetScopeId, dropPosition = 'before') => {
-    const result = reorderScopesWithResult(roadmapData, sourceScopeId, targetScopeId, dropPosition)
+  const handleReorderScope = (sourceScopeId, targetScopeId, dropPosition = 'before', nextColor = undefined) => {
+    let result = reorderScopesWithResult(roadmapData, sourceScopeId, targetScopeId, dropPosition)
 
     if (!result.ok) {
       return {
         ok: false,
         error: result.error,
       }
+    }
+
+    if (nextColor !== undefined) {
+      const recolorResult = setScopeColorWithResult(result.tree, sourceScopeId, nextColor)
+      if (!recolorResult.ok) {
+        return {
+          ok: false,
+          error: recolorResult.error,
+        }
+      }
+      result = recolorResult
     }
 
     commitDocument(result.tree)
@@ -2843,45 +3049,85 @@ export function SkillTree() {
     applyToSelectedNodes((tree, id) => updateNodeProgressLevel(tree, id, levelId, { benefit: normalizeBenefit(benefit) }))
   }
 
-  const handleListViewLevelEffortChange = useCallback((nodeId, levelId, effort) => {
+  const handleListViewLevelEffortChange = useCallback((nodeId, levelId, effort, options = {}) => {
     if (!nodeId || !levelId) {
+      return
+    }
+
+    if (options.applyToSelection && selectedLevelKeys.length > 1) {
+      applyToSelectedLevels(
+        (tree, entry) => updateNodeProgressLevel(tree, entry.nodeId, entry.levelId, { effort: normalizeEffort(effort) }),
+        { description: 'Effort' },
+      )
       return
     }
 
     commitDocument(updateNodeProgressLevel(roadmapData, nodeId, levelId, { effort: normalizeEffort(effort) }))
-  }, [commitDocument, roadmapData])
+  }, [applyToSelectedLevels, commitDocument, roadmapData, selectedLevelKeys])
 
-  const handleListViewLevelBenefitChange = useCallback((nodeId, levelId, benefit) => {
+  const handleListViewLevelBenefitChange = useCallback((nodeId, levelId, benefit, options = {}) => {
     if (!nodeId || !levelId) {
+      return
+    }
+
+    if (options.applyToSelection && selectedLevelKeys.length > 1) {
+      applyToSelectedLevels(
+        (tree, entry) => updateNodeProgressLevel(tree, entry.nodeId, entry.levelId, { benefit: normalizeBenefit(benefit) }),
+        { description: 'Value' },
+      )
       return
     }
 
     commitDocument(updateNodeProgressLevel(roadmapData, nodeId, levelId, { benefit: normalizeBenefit(benefit) }))
-  }, [commitDocument, roadmapData])
+  }, [applyToSelectedLevels, commitDocument, roadmapData, selectedLevelKeys])
 
-  const handleListViewLevelStatusChange = useCallback((nodeId, levelId, status) => {
+  const handleListViewLevelStatusChange = useCallback((nodeId, levelId, status, options = {}) => {
     if (!nodeId || !levelId || !status) {
       return
     }
 
-    commitDocument(updateNodeProgressLevel(roadmapData, nodeId, levelId, { status }, activeReleaseId))
-  }, [activeReleaseId, commitDocument, roadmapData])
+    if (options.applyToSelection && selectedLevelKeys.length > 1) {
+      applyToSelectedLevels(
+        (tree, entry) => updateNodeProgressLevel(tree, entry.nodeId, entry.levelId, { status }, activeReleaseId),
+        { description: 'Status' },
+      )
+      return
+    }
 
-  const handleListViewLevelScopesChange = useCallback((nodeId, levelId, scopeIds) => {
+    commitDocument(updateNodeProgressLevel(roadmapData, nodeId, levelId, { status }, activeReleaseId))
+  }, [activeReleaseId, applyToSelectedLevels, commitDocument, roadmapData, selectedLevelKeys])
+
+  const handleListViewLevelScopesChange = useCallback((nodeId, levelId, scopeIds, options = {}) => {
     if (!nodeId || !levelId) {
+      return
+    }
+
+    if (options.applyToSelection && selectedLevelKeys.length > 1) {
+      applyToSelectedLevels(
+        (tree, entry) => updateNodeProgressLevel(tree, entry.nodeId, entry.levelId, { scopeIds }),
+        { description: 'Scopes' },
+      )
       return
     }
 
     commitDocument(updateNodeProgressLevel(roadmapData, nodeId, levelId, { scopeIds }))
-  }, [commitDocument, roadmapData])
+  }, [applyToSelectedLevels, commitDocument, roadmapData, selectedLevelKeys])
 
-  const handleListViewLevelOpenPointsChange = useCallback((nodeId, levelId, hasOpenPoints) => {
+  const handleListViewLevelOpenPointsChange = useCallback((nodeId, levelId, hasOpenPoints, options = {}) => {
     if (!nodeId || !levelId) {
       return
     }
 
+    if (options.applyToSelection && selectedLevelKeys.length > 1) {
+      applyToSelectedLevels(
+        (tree, entry) => updateNodeProgressLevel(tree, entry.nodeId, entry.levelId, { hasOpenPoints: Boolean(hasOpenPoints) }),
+        { description: hasOpenPoints ? 'Set open points' : 'Mark done' },
+      )
+      return
+    }
+
     commitDocument(updateNodeProgressLevel(roadmapData, nodeId, levelId, { hasOpenPoints: Boolean(hasOpenPoints) }))
-  }, [commitDocument, roadmapData])
+  }, [applyToSelectedLevels, commitDocument, roadmapData, selectedLevelKeys])
 
   const handleListViewLevelReleaseNoteChange = useCallback((nodeId, levelId, releaseNote) => {
     if (!nodeId || !levelId) {
@@ -3027,7 +3273,15 @@ export function SkillTree() {
       onSetLevelReleaseNote={handleListViewLevelReleaseNoteChange}
       selectedReleaseId={activeReleaseId}
       selectedNodeId={selectedNodeId}
+      selectedNodeIds={selectedNodeIds}
+      selectedLevelKeys={selectedLevelKeys}
       selectedProgressLevelId={selectedProgressLevelId}
+      onClearLevelSelection={() => {
+        setSelectedLevelKeys([])
+        setSelectedNodeIds([])
+        setSelectedNodeId(null)
+        setSelectedProgressLevelId(null)
+      }}
       onWidthChange={handleListViewWidthChange}
     />
   ) : null
@@ -3175,6 +3429,40 @@ export function SkillTree() {
         style={{ display: 'none' }}
         onChange={handleJsonDocumentFileSelected}
       />
+
+      <Modal
+        opened={bulkApplyConfirmState.opened}
+        onClose={closeBulkApplyConfirm}
+        title="Apply change to selected items?"
+        centered
+        size="sm"
+        closeOnClickOutside={false}
+      >
+        <Stack gap="md">
+          <Text size="sm">
+            {bulkApplyConfirmState.message}
+          </Text>
+          <Checkbox
+            checked={bulkApplyConfirmState.rememberChoice}
+            onChange={(event) => {
+              const checked = event.currentTarget.checked
+              setBulkApplyConfirmState((current) => ({
+                ...current,
+                rememberChoice: checked,
+              }))
+            }}
+            label="Don't show again"
+          />
+          <Group justify="flex-end">
+            <Button variant="default" onClick={closeBulkApplyConfirm}>
+              Cancel
+            </Button>
+            <Button onClick={confirmBulkApply}>
+              Apply to all
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
 
       <Modal
         opened={csvImportDialogOpen}
@@ -3429,7 +3717,12 @@ export function SkillTree() {
 
             {isLegendVisible && (
               <div className="skill-tree-legend-footer">
-                <aside className="skill-tree-legend" aria-label="Status legend">
+                <aside
+                  ref={legendRef}
+                  className="skill-tree-legend"
+                  aria-label="Status legend"
+                  data-legend-density={legendDensity}
+                >
                   <div className="skill-tree-legend__header">
                     <div className="skill-tree-legend__title">Legend</div>
                   </div>
@@ -3437,7 +3730,11 @@ export function SkillTree() {
                   <div className="skill-tree-legend__section">
                     <div className="skill-tree-legend__symbol-grid">
                       {LEGEND_STATUS_ORDER.map((statusKey) => (
-                        <div key={statusKey} className="skill-tree-legend__symbol-item">
+                        <div
+                          key={statusKey}
+                          className="skill-tree-legend__symbol-item skill-tree-legend__symbol-item--status"
+                          title={STATUS_LABELS[statusKey]}
+                        >
                           <span
                             className="skill-tree-legend__node-preview"
                             style={getLegendNodePreviewStyle(statusKey)}
@@ -3446,14 +3743,17 @@ export function SkillTree() {
                             <span className="skill-tree-legend__node-ring" />
                             <span className="skill-tree-legend__node-core" />
                           </span>
-                          <span>
-                            <strong>{STATUS_LABELS[statusKey]}</strong>
+                          <span className="skill-tree-legend__symbol-labels">
+                            <strong className="skill-tree-legend__symbol-title">{STATUS_LABELS[statusKey]}</strong>
                             <span className="skill-tree-legend__symbol-copy">{legendStatusDescriptions[statusKey]}</span>
                           </span>
                         </div>
                       ))}
 
-                      <div className="skill-tree-legend__symbol-item">
+                      <div
+                        className="skill-tree-legend__symbol-item skill-tree-legend__symbol-item--portal"
+                        title="Incoming portal"
+                      >
                         <span className="skill-tree-legend__portal-symbol" aria-hidden="true">
                           <svg viewBox="-12 -12 24 24" className="skill-tree-legend__portal-svg">
                             <path
@@ -3463,13 +3763,16 @@ export function SkillTree() {
                             />
                           </svg>
                         </span>
-                        <span>
-                          <strong>Incoming portal</strong>
+                        <span className="skill-tree-legend__symbol-labels">
+                          <strong className="skill-tree-legend__symbol-title">Incoming portal</strong>
                           <span className="skill-tree-legend__symbol-copy">This node depends on another skill.</span>
                         </span>
                       </div>
 
-                      <div className="skill-tree-legend__symbol-item">
+                      <div
+                        className="skill-tree-legend__symbol-item skill-tree-legend__symbol-item--portal"
+                        title="Outgoing portal"
+                      >
                         <span className="skill-tree-legend__portal-symbol" aria-hidden="true">
                           <svg viewBox="-16 -10 32 20" className="skill-tree-legend__portal-svg">
                             <path
@@ -3478,8 +3781,8 @@ export function SkillTree() {
                             />
                           </svg>
                         </span>
-                        <span>
-                          <strong>Outgoing portal</strong>
+                        <span className="skill-tree-legend__symbol-labels">
+                          <strong className="skill-tree-legend__symbol-title">Outgoing portal</strong>
                           <span className="skill-tree-legend__symbol-copy">This node enables or links to another skill.</span>
                         </span>
                       </div>
@@ -3488,7 +3791,7 @@ export function SkillTree() {
 
                   <div className="skill-tree-legend__tip skill-tree-legend__tip--footer">
                     <span className="skill-tree-legend__tip-icon" aria-hidden="true">ⓘ</span>
-                    <span>Tip: Zooming in or hovering reveals more node details.</span>
+                    <span className="skill-tree-legend__tip-text">Tip: Zooming in or hovering reveals more node details.</span>
                   </div>
                 </aside>
               </div>

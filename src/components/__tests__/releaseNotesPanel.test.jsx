@@ -47,5 +47,6 @@ describe('ReleaseNotesPanel', () => {
     expect(html).toContain('Done editing')
     expect(html).toContain('Markdown task list')
     expect(html).toContain('Add specific nodes')
+    expect(html).toContain('Open large markdown editor')
   })
 })

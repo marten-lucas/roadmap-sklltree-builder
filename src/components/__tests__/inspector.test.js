@@ -3,6 +3,7 @@ import { createElement } from 'react'
 import { renderToString } from 'react-dom/server'
 import { MantineProvider } from '@mantine/core'
 import { InspectorPanel, getLevelDragInsertPosition } from '../panels/InspectorPanel'
+import { getScopeGroupDropColor } from '../panels/ToolbarScopeManager'
 import { commitInspectorDrafts, shouldCenterInspectorOnCommit } from '../utils/inspectorCommit'
 import { resolveInspectorSelectedNode } from '../utils/selection'
 
@@ -179,6 +180,20 @@ describe('level drag indicator helper', () => {
 
     expect(getLevelDragInsertPosition('c', 'b', beforeEvent, levels)).toBe('before')
     expect(getLevelDragInsertPosition('a', 'b', afterEvent, levels)).toBe('after')
+  })
+})
+
+describe('scope group drag helper', () => {
+  it('returns the target group color when dropping a scope into another group', () => {
+    const scopeOptions = [
+      { value: 'scope-a', label: 'Alpha', color: '#6366f1' },
+      { value: 'scope-b', label: 'Beta', color: '#16a34a' },
+      { value: 'scope-c', label: 'Gamma', color: null },
+    ]
+
+    expect(getScopeGroupDropColor('scope-a', 'scope-b', scopeOptions)).toBe('#16a34a')
+    expect(getScopeGroupDropColor('scope-a', 'scope-c', scopeOptions)).toBeNull()
+    expect(getScopeGroupDropColor('scope-a', 'scope-a', scopeOptions)).toBeUndefined()
   })
 })
 
