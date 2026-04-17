@@ -133,8 +133,6 @@ const releaseArgs = [
 
 if (draft) {
   releaseArgs.push('--draft')
-} else {
-  releaseArgs.push('--latest')
 }
 
 console.log(`Creating GitHub release ${tag}...`)
