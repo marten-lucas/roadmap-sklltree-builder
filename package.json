@@ -1,11 +1,14 @@
 {
   "name": "roadmap-skilltree-builder",
   "private": true,
-  "version": "0.0.0",
+  "version": "v1.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "build:pages": "vite build && node scripts/prepare-github-pages.mjs",
+    "build:release": "npm run build:pages && node scripts/create-github-release.mjs",
+    "release:github": "node scripts/create-github-release.mjs",
     "lint": "eslint .",
     "test": "vitest",
     "test:unit": "vitest src/components/__tests__ --exclude src/components/__tests__/segmentIntegration.test.js --exclude src/components/__tests__/multiselect.test.js",

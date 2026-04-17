@@ -204,12 +204,58 @@ const normalizeScopeEntries = (value) => {
   return scopes
 }
 
+const isValidScopeColor = (color) => typeof color === 'string' && /^#[0-9a-fA-F]{6}$/.test(color)
+
+const normalizeScopeGroupColor = (color) => (isValidScopeColor(color) ? color.toLowerCase() : null)
+
+const buildScopeGroupKey = (color) => normalizeScopeGroupColor(color) ?? '__none__'
+
+const getDefaultScopeGroupLabel = (color) => {
+  const normalizedColor = normalizeScopeGroupColor(color)
+  return normalizedColor ? normalizedColor.toUpperCase() : 'Uncolored'
+}
+
+const normalizeScopeGroupEntries = (value, scopes = []) => {
+  const entries = Array.isArray(value) ? value : []
+  const labelsByKey = new Map()
+
+  for (const entry of entries) {
+    const color = normalizeScopeGroupColor(entry?.color)
+    const key = buildScopeGroupKey(color)
+    if (labelsByKey.has(key)) {
+      continue
+    }
+
+    const label = String(entry?.label ?? '').trim() || getDefaultScopeGroupLabel(color)
+    labelsByKey.set(key, { color, label })
+  }
+
+  const colorsInUse = []
+  const seenKeys = new Set()
+
+  for (const scope of Array.isArray(scopes) ? scopes : []) {
+    const color = normalizeScopeGroupColor(scope?.color)
+    const key = buildScopeGroupKey(color)
+    if (seenKeys.has(key)) {
+      continue
+    }
+    seenKeys.add(key)
+    colorsInUse.push(color)
+  }
+
+  return colorsInUse.map((color) => {
+    const key = buildScopeGroupKey(color)
+    return labelsByKey.get(key) ?? { color, label: getDefaultScopeGroupLabel(color) }
+  })
+}
+
 const normalizeScopeAssignments = (tree) => {
   if (!tree || typeof tree !== 'object') {
     return tree
   }
 
   const scopes = normalizeScopeEntries(tree.scopes)
+  const scopeGroups = normalizeScopeGroupEntries(tree.scopeGroups, scopes)
   const allowedScopeIds = new Set(scopes.map((scope) => scope.id))
 
   const sanitizeLevelScopeIds = (level) => uniqueStringArray(level?.scopeIds)
@@ -233,6 +279,7 @@ const normalizeScopeAssignments = (tree) => {
   const canonical = {
     ...tree,
     scopes,
+    scopeGroups,
     children: (tree.children ?? []).map(sanitizeNode),
   }
 
@@ -1214,6 +1261,45 @@ const createNewScope = (label) => ({
   label: String(label ?? '').trim(),
 })
 
+export const reorderScopesWithResult = (treeData, sourceScopeId, targetScopeId, dropPosition = 'before') => {
+  const scopes = Array.isArray(treeData?.scopes) ? [...treeData.scopes] : []
+  const sourceIndex = scopes.findIndex((scope) => scope.id === sourceScopeId)
+  const targetIndex = scopes.findIndex((scope) => scope.id === targetScopeId)
+
+  if (sourceIndex < 0 || targetIndex < 0) {
+    return {
+      ok: false,
+      error: 'Scope not found.',
+      tree: treeData,
+    }
+  }
+
+  if (sourceIndex === targetIndex) {
+    return {
+      ok: true,
+      error: null,
+      tree: treeData,
+    }
+  }
+
+  const normalizedPosition = dropPosition === 'after' ? 'after' : 'before'
+  const [movedScope] = scopes.splice(sourceIndex, 1)
+  const adjustedTargetIndex = scopes.findIndex((scope) => scope.id === targetScopeId)
+  const insertIndex = normalizedPosition === 'after' ? adjustedTargetIndex + 1 : adjustedTargetIndex
+
+  scopes.splice(Math.max(0, insertIndex), 0, movedScope)
+
+  return {
+    ok: true,
+    error: null,
+    tree: withNormalizedDependencies({
+      ...treeData,
+      scopes,
+      scopeGroups: normalizeScopeGroupEntries(treeData?.scopeGroups, scopes),
+    }),
+  }
+}
+
 export const addScopeWithResult = (treeData, label) => {
   const validation = validateScopeLabel(treeData, label)
   if (!validation.ok) {
@@ -1226,9 +1312,11 @@ export const addScopeWithResult = (treeData, label) => {
   }
 
   const scope = createNewScope(validation.label)
+  const nextScopes = [...(treeData.scopes ?? []), scope]
   const nextTree = withNormalizedDependencies({
     ...treeData,
-    scopes: [...(treeData.scopes ?? []), scope],
+    scopes: nextScopes,
+    scopeGroups: normalizeScopeGroupEntries(treeData.scopeGroups, nextScopes),
   })
 
   return {
@@ -1236,6 +1324,46 @@ export const addScopeWithResult = (treeData, label) => {
     error: null,
     tree: nextTree,
     scope,
+  }
+}
+
+export const renameScopeGroupWithResult = (treeData, color, nextLabel) => {
+  const scopes = Array.isArray(treeData?.scopes) ? treeData.scopes : []
+  const normalizedColor = normalizeScopeGroupColor(color)
+  const groupExists = scopes.some((scope) => normalizeScopeGroupColor(scope?.color) === normalizedColor)
+
+  if (!groupExists) {
+    return {
+      ok: false,
+      error: 'Scope group not found.',
+      tree: treeData,
+    }
+  }
+
+  const label = String(nextLabel ?? '').trim()
+  if (!label) {
+    return {
+      ok: false,
+      error: 'Group label cannot be empty.',
+      tree: treeData,
+    }
+  }
+
+  const groupKey = buildScopeGroupKey(normalizedColor)
+  const normalizedGroups = normalizeScopeGroupEntries(treeData?.scopeGroups, scopes)
+  const nextGroups = normalizedGroups.map((group) => (
+    buildScopeGroupKey(group.color) === groupKey
+      ? { ...group, color: normalizedColor, label }
+      : group
+  ))
+
+  return {
+    ok: true,
+    error: null,
+    tree: withNormalizedDependencies({
+      ...treeData,
+      scopeGroups: nextGroups,
+    }),
   }
 }
 
@@ -1290,13 +1418,16 @@ export const setScopeColorWithResult = (treeData, scopeId, color) => {
   // Accept null/undefined to clear the color, or a valid 6-digit hex color.
   const normalizedColor = color == null ? null : (typeof color === 'string' && /^#[0-9a-fA-F]{6}$/.test(color) ? color : null)
 
+  const nextScopes = (treeData.scopes ?? []).map((scope) =>
+    scope.id === scopeId
+      ? { ...scope, color: normalizedColor }
+      : scope,
+  )
+
   const nextTree = withNormalizedDependencies({
     ...treeData,
-    scopes: (treeData.scopes ?? []).map((scope) =>
-      scope.id === scopeId
-        ? { ...scope, color: normalizedColor }
-        : scope,
-    ),
+    scopes: nextScopes,
+    scopeGroups: normalizeScopeGroupEntries(treeData.scopeGroups, nextScopes),
   })
 
   return {
@@ -1316,9 +1447,11 @@ export const deleteScopeWithResult = (treeData, scopeId) => {
     }
   }
 
+  const nextScopes = (treeData.scopes ?? []).filter((scope) => scope.id !== scopeId)
   const nextTree = withNormalizedDependencies({
     ...treeData,
-    scopes: (treeData.scopes ?? []).filter((scope) => scope.id !== scopeId),
+    scopes: nextScopes,
+    scopeGroups: normalizeScopeGroupEntries(treeData.scopeGroups, nextScopes),
   })
 
   return {

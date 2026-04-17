@@ -57,9 +57,9 @@ test.describe('ListViewDrawer with status and scope filters', () => {
     await expect(page.locator('.list-view-drawer button[title="List view"]')).toHaveClass(/list-view-drawer__icon-toggle--active/)
     await expect(page.locator('.list-view-drawer__search-input')).toBeVisible()
 
-    // Verify filter selects are present (Status and Scope)
+    // Verify filter selects are present (Status, Scope and Flags)
     const filterSelects = page.locator('.list-view-drawer__filter-select')
-    await expect(filterSelects).toHaveCount(2)
+    await expect(filterSelects).toHaveCount(3)
 
     // Verify content area exists
     await expect(page.locator('.list-view-drawer__content')).toBeVisible()
@@ -183,7 +183,7 @@ test.describe('ListViewDrawer with status and scope filters', () => {
     // Open
     await listViewButton.click()
     await expect(drawer).toBeVisible({ timeout: 5000 })
-    await expect(filterSelects).toHaveCount(2)
+    await expect(filterSelects).toHaveCount(3)
 
     // Close
     await page.locator('.list-view-drawer__close').click()
@@ -192,7 +192,7 @@ test.describe('ListViewDrawer with status and scope filters', () => {
     // Reopen
     await listViewButton.click()
     await expect(drawer).toBeVisible()
-    await expect(filterSelects).toHaveCount(2)
+    await expect(filterSelects).toHaveCount(3)
 
     expect(pageErrors).toHaveLength(0)
   })

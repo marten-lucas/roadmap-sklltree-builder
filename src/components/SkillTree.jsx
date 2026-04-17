@@ -1,5 +1,5 @@
-import { Alert, Button, Checkbox, Group, Modal, Radio, Stack, Text, TextInput } from '@mantine/core'
-import { startTransition, useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react'
+import { Alert, Button, Checkbox, Group, Modal, Radio, Stack, Text } from '@mantine/core'
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react'
 import { flushSync } from 'react-dom'
 import { TransformComponent, TransformWrapper } from 'react-zoom-pan-pinch'
 import './styles/skillTree.base.css'
@@ -20,13 +20,13 @@ import {
   DEFAULT_CENTER_ICON_SRC,
   documentHistoryReducer,
 } from './utils/documentState'
-import { SystemPanel, InspectorPanel, SegmentPanel, ToolbarScopeManager, ReleaseNotesPanel } from './panels'
+import { SystemPanel, InspectorPanel, SegmentPanel, ToolbarScopeManager } from './panels'
 import { PriorityMatrix } from './panels/PriorityMatrix'
 import { ListViewDrawer } from './panels/ListViewDrawer'
 import { solveSkillTreeLayout } from './utils/layoutSolver'
 import { UNASSIGNED_SEGMENT_ID } from './utils/layoutShared'
 import { getSkillTreeShortcutAction } from './utils/keyboardShortcuts'
-import { togglePanel, PANEL_INSPECTOR, PANEL_CENTER, PANEL_SCOPES, PANEL_SEGMENTS, PANEL_RELEASE_NOTES } from './utils/panelsState'
+import { togglePanel, PANEL_INSPECTOR, PANEL_CENTER, PANEL_SCOPES, PANEL_SEGMENTS } from './utils/panelsState'
 import { getDisplayStatusKey } from './utils/nodeStatus'
 import {
   getAdditionalDependencyOptionsForLevel,
@@ -56,15 +56,16 @@ import {
   getNodeAdditionalDependencies,
   getNodeLevelInfo,
   moveNodeToParent,
+  renameScopeGroupWithResult,
   renameScopeWithResult,
   removeNodeProgressLevel,
   reorderNodeProgressLevels,
+  reorderScopesWithResult,
   setLevelAdditionalDependencies,
   updateNodeData as updateNodeDataInTree,
   updateNodeEffort,
   updateNodeBenefit,
   updateNodeProgressLevel,
-  updateNodeProgressLevelsBulk,
   updateNodeShortName,
   updateSegmentLabel,
 } from './utils/treeData'
@@ -90,7 +91,7 @@ import {
 } from './utils/visibility'
 import { VIEWPORT_DEFAULTS, computeFitScale, computeFitTransform, getNextZoomStep, getViewportKeyboardAction } from './utils/viewport'
 import { getInitialRoadmapDocument } from './utils/document'
-import { getSelectedReleaseId, updateRelease } from './utils/releases'
+import { getSelectedReleaseId } from './utils/releases'
 import { resolveInspectorSelectedNode } from './utils/selection'
 
 // `resolveInspectorSelectedNode` is exported from `src/components/utils/selection.js`
@@ -118,6 +119,7 @@ const DEFAULT_CSV_IMPORT_PROCESS_OPTIONS = {
   processSegments: true,
   processManualLevels: true,
 }
+const DIRECT_IMPORT_ACCEPT = 'text/html,.html,text/csv,.csv,application/json,.json'
 const LEGEND_STATUS_ORDER = ['done', 'now', 'next', 'later', 'someday']
 const LEGEND_PORTAL_SOCKET_PATH = 'M 0 -9 A 9 9 0 0 1 0 9'
 const LEGEND_PORTAL_PLUG_PATH = 'M -14 -7 L 7 -7 L 14 0 L 7 7 L -14 7 Z'
@@ -152,13 +154,6 @@ const collectAllNodes = (document) => {
   }
 
   return all
-}
-
-const createLevelSelectionKey = (nodeId, levelId) => `${nodeId}::${levelId}`
-
-const parseLevelSelectionKey = (key) => {
-  const [nodeId, levelId] = String(key ?? '').split('::')
-  return { nodeId: nodeId || null, levelId: levelId || null }
 }
 
 const estimateWrappedLineCount = (text) => {
@@ -203,6 +198,7 @@ export function SkillTree() {
   const roadmapData = documentHistory.present
   const canUndo = documentHistory.past.length > 0
   const canRedo = documentHistory.future.length > 0
+  const importFileInputRef = useRef(null)
   const documentFileInputRef = useRef(null)
   const csvDocumentFileInputRef = useRef(null)
   const jsonDocumentFileInputRef = useRef(null)
@@ -229,9 +225,6 @@ export function SkillTree() {
   const [pendingCsvImport, setPendingCsvImport] = useState(null)
   const [priorityMatrixOpen, setPriorityMatrixOpen] = useState(false)
   const [listViewOpen, setListViewOpen] = useState(false)
-  const [selectedListLevelKeys, setSelectedListLevelKeys] = useState([])
-  const [openPointsDialogOpen, setOpenPointsDialogOpen] = useState(false)
-  const [openPointsDialogValue, setOpenPointsDialogValue] = useState('')
   const [draftRelease, setDraftRelease] = useState(null)
   const [leftSidebarWidth, setLeftSidebarWidth] = useState(LEFT_SIDEBAR_DEFAULT_WIDTH)
   const [rightSidebarWidth, setRightSidebarWidth] = useState(RIGHT_SIDEBAR_DEFAULT_WIDTH)
@@ -411,23 +404,12 @@ export function SkillTree() {
     [roadmapData.segments, selectedSegmentId],
   )
 
-  useEffect(() => {
-    const validLevelKeys = new Set(
-      collectAllNodes(roadmapData).flatMap((node) =>
-        (node.levels ?? []).map((level) => createLevelSelectionKey(node.id, level.id)),
-      ),
-    )
-
-    setSelectedListLevelKeys((prev) => prev.filter((key) => validLevelKeys.has(key)))
-  }, [roadmapData])
-
   const isLeftSidebarVisible = listViewOpen || priorityMatrixOpen
   const isRightSidebarVisible = Boolean(selectedSegment)
     || rightPanel === PANEL_INSPECTOR
     || rightPanel === PANEL_CENTER
     || rightPanel === PANEL_SCOPES
     || rightPanel === PANEL_SEGMENTS
-    || rightPanel === PANEL_RELEASE_NOTES
 
   useEffect(() => {
     leftSidebarWidthRef.current = leftSidebarWidth
@@ -531,7 +513,6 @@ export function SkillTree() {
         status: selectedNode.status,
         releaseNote: '',
         hasOpenPoints: false,
-        openPointsLabel: '',
         scopeIds: [],
       },
     ]
@@ -553,14 +534,18 @@ export function SkillTree() {
     [activeSelectedProgressLevelId, selectedNodeLevels],
   )
 
-  const scopeOptions = useMemo(
-    () => (roadmapData.scopes ?? []).map((scope) => ({
+  const scopeOptions = useMemo(() => {
+    const groupLabelByKey = new Map(
+      (roadmapData.scopeGroups ?? []).map((group) => [group.color ?? '__none__', group.label ?? null]),
+    )
+
+    return (roadmapData.scopes ?? []).map((scope) => ({
       value: scope.id,
       label: scope.label,
       color: scope.color ?? null,
-    })),
-    [roadmapData.scopes],
-  )
+      groupLabel: groupLabelByKey.get(scope.color ?? '__none__') ?? null,
+    }))
+  }, [roadmapData.scopeGroups, roadmapData.scopes])
 
   useEffect(() => {
     if (selectedScopeFilterId === SCOPE_FILTER_ALL) {
@@ -1529,6 +1514,10 @@ export function SkillTree() {
     applyOnce()
   }
 
+  const handleOpenImportPicker = () => {
+    importFileInputRef.current?.click()
+  }
+
   const handleOpenDocumentPicker = () => {
     documentFileInputRef.current?.click()
   }
@@ -1791,6 +1780,59 @@ export function SkillTree() {
     }
   }
 
+  const handleImportFileSelected = async (event) => {
+    const file = event.target.files?.[0]
+
+    if (!file) {
+      return
+    }
+
+    const fileName = String(file.name ?? '').toLowerCase()
+    const fileType = String(file.type ?? '').toLowerCase()
+    const isCsvFile = fileName.endsWith('.csv') || fileType.includes('csv')
+    const isJsonFile = fileName.endsWith('.json') || fileType.includes('json')
+
+    try {
+      const rawText = await file.text()
+
+      if (isCsvFile) {
+        setPendingCsvImport({ fileName: file.name || 'skilltree-roadmap.csv', rawText })
+        setCsvImportOptions(DEFAULT_CSV_IMPORT_PROCESS_OPTIONS)
+        setCsvImportDialogOpen(true)
+        return
+      }
+
+      if (isJsonFile) {
+        const nextDocument = readDocumentFromJsonText(rawText)
+        dispatchDocument({ type: 'replace', document: nextDocument })
+        setTransformKey((current) => current + 1)
+        resetSelections()
+        return
+      }
+
+      const { readDocumentFromHtmlText } = await import('./utils/htmlExport')
+      const nextDocument = readDocumentFromHtmlText(rawText)
+      dispatchDocument({ type: 'replace', document: nextDocument })
+      setTransformKey((current) => current + 1)
+      resetSelections()
+    } catch (error) {
+      if (isCsvFile) {
+        console.error('CSV import failed', error)
+        const message = getCsvImportErrorMessage(error)
+        window.alert(message)
+      } else if (isJsonFile) {
+        console.error('JSON import failed', error)
+        window.alert(`JSON import failed: ${error?.message ?? 'Unknown error'}`)
+      } else {
+        console.error('HTML import failed', error)
+        const message = getHtmlImportErrorMessage(error)
+        window.alert(message)
+      }
+    } finally {
+      event.target.value = ''
+    }
+  }
+
   const handleDocumentFileSelected = async (event) => {
     const file = event.target.files?.[0]
 
@@ -1936,7 +1978,7 @@ export function SkillTree() {
 
       if (action === 'import-html') {
         event.preventDefault()
-        handleOpenDocumentPicker()
+        handleOpenImportPicker()
         return
       }
 
@@ -2375,25 +2417,24 @@ export function SkillTree() {
     const { openInspector = false } = options
     const layoutNode = layoutNodesById.get(nodeId)
 
-    setSelectedListLevelKeys([])
-
-    if (openInspector) {
-      selectNodeId(nodeId)
-      setRightPanel(PANEL_INSPECTOR)
-    } else {
-      setSelectedNodeId((prev) => (prev === nodeId ? prev : nodeId))
-      setSelectedNodeIds((prev) => (prev.length === 1 && prev[0] === nodeId ? prev : [nodeId]))
-    }
-
-    setSelectedProgressLevelId(null)
-    setSelectedPortalKey(null)
+    flushSync(() => {
+      if (openInspector) {
+        selectNodeId(nodeId)
+        setRightPanel(PANEL_INSPECTOR)
+      } else {
+        setSelectedNodeId(nodeId)
+        setSelectedNodeIds([nodeId])
+      }
+      setSelectedProgressLevelId(null)
+      setSelectedPortalKey(null)
+    })
 
     if (layoutNode && transformApiRef.current && canvasAreaRef.current) {
-      const TARGET_SCALE = 4
+      const TARGET_SCALE = 4 // 400% zoom
       const rect = canvasAreaRef.current.getBoundingClientRect()
       const positionX = rect.width / 2 - layoutNode.x * TARGET_SCALE
       const positionY = rect.height / 2 - layoutNode.y * TARGET_SCALE
-      transformApiRef.current.setTransform(positionX, positionY, TARGET_SCALE, 180, 'easeOut')
+      transformApiRef.current.setTransform(positionX, positionY, TARGET_SCALE, 500, 'easeOut')
     }
   }
 
@@ -2453,39 +2494,27 @@ export function SkillTree() {
   }
 
   const handleSelectLevelFromListView = (nodeId, levelId, options = {}) => {
-    const { openInspector = false, event = null, multiSelect = false } = options
+    const { openInspector = false } = options
     const layoutNode = layoutNodesById.get(nodeId)
-    const nextLevelKey = createLevelSelectionKey(nodeId, levelId)
-    const hasMultiModifier = multiSelect || Boolean(event?.ctrlKey || event?.metaKey)
 
-    if (hasMultiModifier) {
-      setSelectedListLevelKeys((prev) => (
-        prev.includes(nextLevelKey)
-          ? prev.filter((key) => key !== nextLevelKey)
-          : [...prev, nextLevelKey]
-      ))
-      return
-    }
-
-    setSelectedListLevelKeys([nextLevelKey])
-
-    if (openInspector) {
-      selectNodeId(nodeId)
-      setRightPanel(PANEL_INSPECTOR)
-    } else {
-      setSelectedNodeId((prev) => (prev === nodeId ? prev : nodeId))
-      setSelectedNodeIds((prev) => (prev.length === 1 && prev[0] === nodeId ? prev : [nodeId]))
-    }
-
-    setSelectedProgressLevelId(levelId)
-    setSelectedPortalKey(null)
+    flushSync(() => {
+      if (openInspector) {
+        selectNodeId(nodeId)
+        setRightPanel(PANEL_INSPECTOR)
+      } else {
+        setSelectedNodeId(nodeId)
+        setSelectedNodeIds([nodeId])
+      }
+      setSelectedProgressLevelId(levelId)
+      setSelectedPortalKey(null)
+    })
 
     if (layoutNode && transformApiRef.current && canvasAreaRef.current) {
-      const TARGET_SCALE = 4
+      const TARGET_SCALE = 4 // 400% zoom
       const rect = canvasAreaRef.current.getBoundingClientRect()
       const positionX = rect.width / 2 - layoutNode.x * TARGET_SCALE
       const positionY = rect.height / 2 - layoutNode.y * TARGET_SCALE
-      transformApiRef.current.setTransform(positionX, positionY, TARGET_SCALE, 180, 'easeOut')
+      transformApiRef.current.setTransform(positionX, positionY, TARGET_SCALE, 500, 'easeOut')
     }
   }
 
@@ -2576,10 +2605,6 @@ export function SkillTree() {
       return
     }
 
-    if (!hasOpenPoints && levelId) {
-      setSelectedListLevelKeys((prev) => prev.filter((key) => parseLevelSelectionKey(key).levelId !== levelId))
-    }
-
     let sourceLevelIndex = 0
     if (levelId && selectedNodeId) {
       try {
@@ -2598,38 +2623,11 @@ export function SkillTree() {
       const levels = Array.isArray(targetNode?.levels) ? targetNode.levels : []
       const targetLevelId = levels[sourceLevelIndex]?.id ?? (levels[0]?.id ?? null)
       if (!targetLevelId) return tree
-      return updateNodeProgressLevel(tree, id, targetLevelId, {
-        hasOpenPoints: Boolean(hasOpenPoints),
-        openPointsLabel: hasOpenPoints
-          ? String((levels.find((entry) => entry.id === targetLevelId)?.openPointsLabel) ?? '')
-          : '',
-      })
+      return updateNodeProgressLevel(tree, id, targetLevelId, { hasOpenPoints: Boolean(hasOpenPoints) })
     }, {
       description: hasOpenPoints ? 'Set open points' : 'Mark done',
     })
   }
-
-  const handleOpenPointsLabelChange = (openPointsLabel, levelId = activeSelectedProgressLevelId) => {
-    if (!selectedNodeId || !levelId) {
-      return
-    }
-
-    commitDocument(updateNodeProgressLevel(roadmapData, selectedNodeId, levelId, { openPointsLabel }))
-  }
-
-  const handleOpenPointTagChange = useCallback((openPointsLabel, levelId = activeSelectedProgressLevelId) => {
-    const nextLabel = String(openPointsLabel ?? '').trim()
-    if (!selectedNodeId || !levelId || !nextLabel) {
-      return
-    }
-
-    startTransition(() => {
-      commitDocument(updateNodeProgressLevel(roadmapData, selectedNodeId, levelId, {
-        hasOpenPoints: true,
-        openPointsLabel: nextLabel,
-      }))
-    })
-  }, [activeSelectedProgressLevelId, commitDocument, roadmapData, selectedNodeId])
 
   const handleReleaseNoteChange = (releaseNote, levelId = activeSelectedProgressLevelId) => {
     if ((!selectedNodeId && !(Array.isArray(selectedNodeIds) && selectedNodeIds.length > 0)) || !levelId) {
@@ -2705,6 +2703,42 @@ export function SkillTree() {
 
   const handleSetScopeColor = (scopeId, color) => {
     const result = setScopeColorWithResult(roadmapData, scopeId, color)
+
+    if (!result.ok) {
+      return {
+        ok: false,
+        error: result.error,
+      }
+    }
+
+    commitDocument(result.tree)
+
+    return {
+      ok: true,
+      error: null,
+    }
+  }
+
+  const handleRenameScopeGroup = (color, label) => {
+    const result = renameScopeGroupWithResult(roadmapData, color, label)
+
+    if (!result.ok) {
+      return {
+        ok: false,
+        error: result.error,
+      }
+    }
+
+    commitDocument(result.tree)
+
+    return {
+      ok: true,
+      error: null,
+    }
+  }
+
+  const handleReorderScope = (sourceScopeId, targetScopeId, dropPosition = 'before') => {
+    const result = reorderScopesWithResult(roadmapData, sourceScopeId, targetScopeId, dropPosition)
 
     if (!result.ok) {
       return {
@@ -2830,9 +2864,7 @@ export function SkillTree() {
       return
     }
 
-    startTransition(() => {
-      commitDocument(updateNodeProgressLevel(roadmapData, nodeId, levelId, { status }, activeReleaseId))
-    })
+    commitDocument(updateNodeProgressLevel(roadmapData, nodeId, levelId, { status }, activeReleaseId))
   }, [activeReleaseId, commitDocument, roadmapData])
 
   const handleListViewLevelScopesChange = useCallback((nodeId, levelId, scopeIds) => {
@@ -2848,19 +2880,7 @@ export function SkillTree() {
       return
     }
 
-    const nextSelectionKey = createLevelSelectionKey(nodeId, levelId)
-    if (!hasOpenPoints) {
-      setSelectedListLevelKeys((prev) => prev.filter((key) => key !== nextSelectionKey))
-    }
-
-    startTransition(() => {
-      commitDocument(updateNodeProgressLevel(roadmapData, nodeId, levelId, {
-        hasOpenPoints: Boolean(hasOpenPoints),
-        openPointsLabel: hasOpenPoints
-          ? String(findNodeById(roadmapData, nodeId)?.levels?.find((entry) => entry.id === levelId)?.openPointsLabel ?? '')
-          : '',
-      }))
-    })
+    commitDocument(updateNodeProgressLevel(roadmapData, nodeId, levelId, { hasOpenPoints: Boolean(hasOpenPoints) }))
   }, [commitDocument, roadmapData])
 
   const handleListViewLevelReleaseNoteChange = useCallback((nodeId, levelId, releaseNote) => {
@@ -2870,86 +2890,6 @@ export function SkillTree() {
 
     commitDocument(updateNodeProgressLevel(roadmapData, nodeId, levelId, { releaseNote }))
   }, [commitDocument, roadmapData])
-
-  const handleSelectAllVisibleListLevels = useCallback((levelEntries = []) => {
-    const nextKeys = levelEntries
-      .map(({ nodeId, levelId }) => createLevelSelectionKey(nodeId, levelId))
-      .filter(Boolean)
-
-    setSelectedListLevelKeys(Array.from(new Set(nextKeys)))
-
-    if (levelEntries[0]?.nodeId && levelEntries[0]?.levelId) {
-      setSelectedNodeId(levelEntries[0].nodeId)
-      setSelectedNodeIds([levelEntries[0].nodeId])
-      setSelectedProgressLevelId(levelEntries[0].levelId)
-    }
-  }, [setSelectedNodeId, setSelectedNodeIds, setSelectedProgressLevelId])
-
-  const handleClearSelectedListLevels = useCallback(() => {
-    setSelectedListLevelKeys([])
-  }, [])
-
-  const handleOpenOpenPointsDialog = useCallback(() => {
-    if (selectedListLevelKeys.length === 0) {
-      return
-    }
-
-    const { nodeId, levelId } = parseLevelSelectionKey(selectedListLevelKeys[0])
-    const currentLabel = String(findNodeById(roadmapData, nodeId)?.levels?.find((level) => level.id === levelId)?.openPointsLabel ?? '')
-    setOpenPointsDialogValue(currentLabel)
-    setOpenPointsDialogOpen(true)
-  }, [roadmapData, selectedListLevelKeys])
-
-  const handleOpenPointsDialogForLevel = useCallback((nodeId, levelId) => {
-    if (!nodeId || !levelId) {
-      return
-    }
-
-    setSelectedListLevelKeys([createLevelSelectionKey(nodeId, levelId)])
-    const currentLabel = String(findNodeById(roadmapData, nodeId)?.levels?.find((level) => level.id === levelId)?.openPointsLabel ?? '')
-    setOpenPointsDialogValue(currentLabel)
-    setOpenPointsDialogOpen(true)
-  }, [roadmapData])
-
-  const handleApplyOpenPointsTag = useCallback((tag, levelKeys = selectedListLevelKeys) => {
-    const nextLabel = String(tag ?? '').trim()
-    if (!nextLabel || levelKeys.length === 0) {
-      return
-    }
-
-    const entries = levelKeys
-      .map((key) => {
-        const { nodeId, levelId } = parseLevelSelectionKey(key)
-        if (!nodeId || !levelId) {
-          return null
-        }
-
-        return {
-          nodeId,
-          levelId,
-          updates: {
-            hasOpenPoints: true,
-            openPointsLabel: nextLabel,
-          },
-        }
-      })
-      .filter(Boolean)
-
-    if (entries.length === 0) {
-      return
-    }
-
-    setSelectedListLevelKeys([])
-    startTransition(() => {
-      commitDocument(updateNodeProgressLevelsBulk(roadmapData, entries))
-    })
-  }, [commitDocument, roadmapData, selectedListLevelKeys])
-
-  const handleApplyOpenPointsDialog = useCallback(() => {
-    handleApplyOpenPointsTag(openPointsDialogValue)
-    setOpenPointsDialogOpen(false)
-    setOpenPointsDialogValue('')
-  }, [handleApplyOpenPointsTag, openPointsDialogValue])
 
   const handleLevelChange = (newLevel) => {
     if (!selectedNodeId) {
@@ -2997,17 +2937,6 @@ export function SkillTree() {
     selectSegmentId(null)
     setSelectedPortalKey(null)
   }
-
-  const handleCommitReleaseNotes = useCallback((releaseId, updates) => {
-    if (!releaseId || !updates) {
-      return
-    }
-
-    commitDocument({
-      ...roadmapData,
-      releases: updateRelease(roadmapData.releases ?? [], releaseId, updates),
-    })
-  }, [commitDocument, roadmapData])
 
   // Global toast state (listens for window events dispatched by child components)
   const [globalToast, setGlobalToast] = useState({ visible: false, message: '', type: 'info' })
@@ -3069,7 +2998,7 @@ export function SkillTree() {
   }, [handleFitToScreen])
 
   const handleListViewWidthChange = useCallback((nextWidth) => {
-    setLeftSidebarWidth((current) => Math.max(current, Math.min(nextWidth, 1600)))
+    setLeftSidebarWidth((current) => Math.max(current, Math.min(nextWidth, 900)))
   }, [])
 
   const leftSidebarContent = priorityMatrixOpen ? (
@@ -3095,14 +3024,10 @@ export function SkillTree() {
       onSetLevelStatus={handleListViewLevelStatusChange}
       onSetLevelScopeIds={handleListViewLevelScopesChange}
       onSetLevelOpenPoints={handleListViewLevelOpenPointsChange}
-      onApplyOpenPointsTag={handleApplyOpenPointsTag}
       onSetLevelReleaseNote={handleListViewLevelReleaseNoteChange}
       selectedReleaseId={activeReleaseId}
       selectedNodeId={selectedNodeId}
       selectedProgressLevelId={selectedProgressLevelId}
-      selectedLevelKeys={selectedListLevelKeys}
-      onSelectAllVisibleLevels={handleSelectAllVisibleListLevels}
-      onClearLevelSelection={handleClearSelectedListLevels}
       onWidthChange={handleListViewWidthChange}
     />
   ) : null
@@ -3123,9 +3048,6 @@ export function SkillTree() {
       onShortNameChange={handleShortNameChange}
       onStatusChange={handleStatusChange}
       onOpenPointsChange={handleOpenPointsChange}
-      onOpenPointsLabelChange={handleOpenPointsLabelChange}
-      onOpenPointTagChange={handleOpenPointTagChange}
-      onOpenPointsDialogForLevel={handleOpenPointsDialogForLevel}
       onReleaseNoteChange={handleReleaseNoteChange}
       onLevelLabelChange={handleLevelLabelChange}
       onScopeIdsChange={handleLevelScopesChange}
@@ -3178,20 +3100,15 @@ export function SkillTree() {
       onBenefitChange={handleBenefitChange}
       selectedReleaseId={activeReleaseId}
     />
-  ) : rightPanel === PANEL_RELEASE_NOTES ? (
-    <ReleaseNotesPanel
-      isOpen={rightPanel === PANEL_RELEASE_NOTES}
-      release={(roadmapData.releases ?? []).find((entry) => entry.id === activeReleaseId) ?? (roadmapData.releases ?? [])[0] ?? null}
-      onClose={() => { if (rightPanel === PANEL_RELEASE_NOTES) setRightPanel(null) }}
-      onCommitReleaseNotes={handleCommitReleaseNotes}
-    />
   ) : rightPanel === PANEL_SCOPES ? (
     <ToolbarScopeManager
       scopeOptions={scopeOptions}
       onCreateScope={handleCreateScope}
       onRenameScope={handleRenameScope}
+      onRenameScopeGroup={handleRenameScopeGroup}
       onDeleteScope={handleDeleteScope}
       onSetScopeColor={handleSetScopeColor}
+      onReorderScope={handleReorderScope}
       onClose={handleCloseScopeManager}
     />
   ) : rightPanel === PANEL_CENTER ? (
@@ -3227,6 +3144,14 @@ export function SkillTree() {
 
   return (
     <main ref={shellRef} className="skill-tree-shell">
+      <input
+        ref={importFileInputRef}
+        type="file"
+        accept={DIRECT_IMPORT_ACCEPT}
+        style={{ display: 'none' }}
+        onChange={handleImportFileSelected}
+      />
+
       <input
         ref={documentFileInputRef}
         type="file"
@@ -3310,37 +3235,6 @@ export function SkillTree() {
       </Modal>
 
       <Modal
-        opened={openPointsDialogOpen}
-        onClose={() => setOpenPointsDialogOpen(false)}
-        title="Name open point"
-        size="sm"
-      >
-        <Stack gap="md">
-          <Text size="sm" c="dimmed">
-            Set one open-point label for the selected levels.
-          </Text>
-          <TextInput
-            label="Open point"
-            placeholder="e.g. Missing status values"
-            value={openPointsDialogValue}
-            onChange={(event) => setOpenPointsDialogValue(event.currentTarget.value)}
-            autoFocus
-          />
-          <Group justify="space-between">
-            <Text size="xs" c="dimmed">{selectedListLevelKeys.length} selected</Text>
-            <Group justify="flex-end">
-              <Button variant="default" onClick={() => setOpenPointsDialogOpen(false)}>
-                Cancel
-              </Button>
-              <Button color="red" onClick={handleApplyOpenPointsDialog} disabled={!String(openPointsDialogValue ?? '').trim()}>
-                Apply
-              </Button>
-            </Group>
-          </Group>
-        </Stack>
-      </Modal>
-
-      <Modal
         opened={exportLabelDialogOpen}
         onClose={cancelExportLabelDialog}
         title="Node label in export"
@@ -3386,7 +3280,8 @@ export function SkillTree() {
         onToggleLegend={() => {
           setIsLegendVisible((prev) => !prev)
         }}
-        onOpenDocumentPicker={handleOpenDocumentPicker}
+        onOpenDocumentPicker={handleOpenImportPicker}
+        onOpenHtmlDocumentPicker={handleOpenDocumentPicker}
         onOpenCsvDocumentPicker={handleOpenCsvDocumentPicker}
         onOpenJsonDocumentPicker={handleOpenJsonDocumentPicker}
         onExportHtml={() => void handleExportHtml()}
@@ -3410,9 +3305,6 @@ export function SkillTree() {
         onOpenListView={() => {
           setListViewOpen((v) => !v)
           setPriorityMatrixOpen(false)
-        }}
-        onOpenReleaseNotes={() => {
-          setRightPanel((current) => togglePanel(current, PANEL_RELEASE_NOTES))
         }}
         releaseFilter={releaseFilter}
         setReleaseFilter={setReleaseFilter}

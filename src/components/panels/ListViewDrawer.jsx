@@ -1,6 +1,5 @@
 import { MultiSelect } from '@mantine/core'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Tooltip } from '../tooltip'
 import { STATUS_LABELS, STATUS_STYLES, normalizeStatusKey } from '../config'
 import { BENEFIT_SIZE_LABELS, BENEFIT_SIZES, EFFORT_SIZE_LABELS, EFFORT_SIZES } from '../utils/effortBenefit'
 import { commitReleaseNoteDraft } from '../utils/releaseNoteDraft'
@@ -79,26 +78,6 @@ const IconScope = () => (
   </svg>
 )
 
-const IconChecklist = () => (
-  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-    <path d="M9 11l3 3L22 4" />
-    <path d="M2 12l3 3" />
-    <path d="M7 16l5-5" />
-    <path d="M2 5h10" />
-    <path d="M2 19h10" />
-  </svg>
-)
-
-const IconMultiSelect = () => (
-  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-    <rect x="3" y="3" width="8" height="8" rx="1.5" />
-    <path d="M13 7h8" />
-    <path d="M13 12h8" />
-    <path d="M3 16h18" />
-    <path d="M3 21h10" />
-  </svg>
-)
-
 // ── helpers ───────────────────────────────────────────────────────────────────
 
 const ScopeChip = ({ label, color }) => (
@@ -110,28 +89,22 @@ const ScopeChip = ({ label, color }) => (
   </span>
 )
 
-const OpenPointsToggle = ({ checked = false, label = '', onChange = () => {} }) => {
-  if (!checked) {
-    return null
-  }
-
-  return (
-    <button
-      type="button"
-      className="list-view-drawer__open-points-toggle list-view-drawer__open-points-toggle--active"
-      aria-pressed
-      aria-label="Mark open point done"
-      title="Click to mark done"
-      onClick={(event) => {
-        event.stopPropagation()
-        onChange(false)
-      }}
-    >
-      <span className="list-view-drawer__open-points-dot" aria-hidden="true" />
-      <span>{String(label || '').trim() || 'Open point'}</span>
-    </button>
-  )
-}
+const OpenPointsToggle = ({ checked = false, onChange = () => {} }) => (
+  <button
+    type="button"
+    className={`list-view-drawer__open-points-toggle${checked ? ' list-view-drawer__open-points-toggle--active' : ''}`}
+    aria-pressed={checked}
+    aria-label={checked ? 'Clear open points' : 'Mark open points'}
+    title={checked ? 'Click to mark done' : 'Click to flag open points'}
+    onClick={(event) => {
+      event.stopPropagation()
+      onChange(!checked)
+    }}
+  >
+    <span className="list-view-drawer__open-points-dot" aria-hidden="true" />
+    <span>{checked ? 'Open points' : 'Done'}</span>
+  </button>
+)
 
 const getStatusBorderColor = (status) => {
   const key = status ?? 'later'
@@ -144,15 +117,6 @@ const getNodeScopeIds = (node) => {
     for (const id of level.scopeIds ?? []) ids.add(id)
   }
   return ids
-}
-
-const documentHasOpenPoints = (document) => {
-  const walk = (nodes = []) => nodes.some((node) => (
-    (node.levels ?? []).some((level) => Boolean(level?.hasOpenPoints))
-    || walk(node.children ?? [])
-  ))
-
-  return walk(document?.children ?? [])
 }
 
 const withAlpha = (color, alpha) => {
@@ -206,9 +170,38 @@ const STATUS_RADIO_OPTIONS = [
   }
 })
 
+const DEFAULT_COLUMN_ORDER = ['value', 'effort', 'status', 'scopes', 'notes']
+const COLUMN_LABELS = {
+  value: 'Value',
+  effort: 'Effort',
+  status: 'Status',
+  scopes: 'Scopes',
+  notes: 'Release Notes',
+}
+const DEFAULT_COLUMN_WIDTHS = {
+  value: 148,
+  effort: 188,
+  status: 372,
+  scopes: 220,
+  notes: 320,
+}
+const MIN_COLUMN_WIDTHS = {
+  value: 120,
+  effort: 150,
+  status: 280,
+  scopes: 160,
+  notes: 260,
+}
+
+const clampColumnWidth = (key, width) => {
+  const minWidth = MIN_COLUMN_WIDTHS[key] ?? 120
+  const maxWidth = key === 'notes' ? 760 : 520
+  return Math.max(minWidth, Math.min(maxWidth, Number(width) || minWidth))
+}
+
 // ── Metric slider ─────────────────────────────────────────────────────────────
 
-const MetricSlider = ({ sizes, activeValue, onChange, kind, customPoints, onCustomChange, isSelected = false }) => {
+const MetricSlider = ({ sizes, activeValue, onChange, kind, customPoints, onCustomChange, isSelected = false, width = null }) => {
   const labels = kind === 'value' ? BENEFIT_LABELS : EFFORT_LABELS
   const [draftValue, setDraftValue] = useState(activeValue)
   const [wheelArmed, setWheelArmed] = useState(false)
@@ -280,6 +273,7 @@ const MetricSlider = ({ sizes, activeValue, onChange, kind, customPoints, onCust
     <div
       ref={sliderRootRef}
       className={`list-view-drawer__metric-slider list-view-drawer__metric-slider--${kind}${isSelected ? ' list-view-drawer__metric-slider--selected' : ''}${wheelArmed ? ' list-view-drawer__metric-slider--wheel-armed' : ''}`}
+      style={width ? { width: `${width}px` } : undefined}
       role="group"
       aria-label={kind}
       onWheel={handleWheel}
@@ -375,43 +369,43 @@ const MetricSlider = ({ sizes, activeValue, onChange, kind, customPoints, onCust
 
 // ── Status group ──────────────────────────────────────────────────────────────
 
-const StatusRadioGroup = ({ value, onChange, groupName, isSelected = false }) => (
+const StatusRadioGroup = ({ value, onChange, groupName, isSelected = false, width = null }) => (
   <div
     className={`list-view-drawer__status-group${isSelected ? ' list-view-drawer__status-group--selected' : ''}`}
+    style={width ? { width: `${width}px` } : undefined}
     role="radiogroup"
     aria-label="Status"
     onClick={(e) => e.stopPropagation()}
   >
     {STATUS_RADIO_OPTIONS.map((option) => (
-      <Tooltip key={option.value} label={option.label} withArrow position="top" openDelay={80}>
-        <label
-          className={`list-view-drawer__status-option${value === option.value ? ' list-view-drawer__status-option--active' : ''}`}
-          aria-label={option.label}
-          onClick={(e) => e.stopPropagation()}
+      <label
+        key={option.value}
+        className={`list-view-drawer__status-option${value === option.value ? ' list-view-drawer__status-option--active' : ''}`}
+        title={option.label}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <input
+          type="radio"
+          name={groupName}
+          value={option.value}
+          checked={value === option.value}
+          onChange={(e) => {
+            e.stopPropagation()
+            if (e.currentTarget.checked) onChange(option.value)
+          }}
+        />
+        <span
+          className={`list-view-drawer__status-pill list-view-drawer__status-pill--${option.value}`}
+          style={option.pillStyle}
         >
-          <input
-            type="radio"
-            name={groupName}
-            value={option.value}
-            checked={value === option.value}
-            aria-label={option.label}
-            onChange={(e) => {
-              e.stopPropagation()
-              if (e.currentTarget.checked) onChange(option.value)
-            }}
-          />
-          <span
-            className={`list-view-drawer__status-pill list-view-drawer__status-pill--${option.value}`}
-            style={option.pillStyle}
-            aria-hidden="true"
-          />
-        </label>
-      </Tooltip>
+          {option.label}
+        </span>
+      </label>
     ))}
   </div>
 )
 
-const ScopeAssignGroup = ({ scopeOptions, selectedScopeIds = [], onChange, isSelected = false }) => {
+const ScopeAssignGroup = ({ scopeOptions, selectedScopeIds = [], onChange, isSelected = false, width = null }) => {
   const scopeSelectData = scopeOptions.map((scope) => ({
     value: scope.id,
     label: scope.label,
@@ -431,6 +425,7 @@ const ScopeAssignGroup = ({ scopeOptions, selectedScopeIds = [], onChange, isSel
   return (
     <div
       className={`list-view-drawer__scope-group${isSelected ? ' list-view-drawer__scope-group--selected' : ''}`}
+      style={width ? { width: `${width}px` } : undefined}
       aria-label="Scopes"
       onClick={(e) => e.stopPropagation()}
     >
@@ -470,7 +465,7 @@ const ScopeAssignGroup = ({ scopeOptions, selectedScopeIds = [], onChange, isSel
   )
 }
 
-const ReleaseNoteEditor = ({ value, onChange, isSelected = false }) => {
+const ReleaseNoteEditor = ({ value, onChange, isSelected = false, width = null }) => {
   const [draft, setDraft] = useState(value ?? '')
 
   useEffect(() => {
@@ -488,6 +483,7 @@ const ReleaseNoteEditor = ({ value, onChange, isSelected = false }) => {
   return (
     <div
       className={`list-view-drawer__release-note-editor${isSelected ? ' list-view-drawer__release-note-editor--selected' : ''}`}
+      style={width ? { width: `${width}px` } : undefined}
       onClick={(e) => e.stopPropagation()}
     >
       <textarea
@@ -524,14 +520,12 @@ const LevelRow = ({
   nodeId,
   selectedNodeId,
   selectedProgressLevelId,
-  selectedLevelKeys = [],
   nodeLabel,
   levelIndex = 0,
   depth,
   scopeMap,
   selectedReleaseId,
   onSelectLevel,
-  onToggleLevelSelection,
   showEstimateColumns,
   onSetEffort,
   onSetBenefit,
@@ -540,11 +534,11 @@ const LevelRow = ({
   onSetOpenPoints,
   onSetReleaseNote,
   showStatusColumn,
-  showTasksColumn,
   showScopeColumn,
   showReleaseNotesColumn,
+  visibleListColumns = [],
+  resolvedColumnWidths = {},
   listMode,
-  selectionMode = false,
 }) => {
   const statusKey = normalizeStatusKey(getLevelStatus(level, selectedReleaseId))
   const isHidden = statusKey === 'hidden'
@@ -553,12 +547,76 @@ const LevelRow = ({
   const allScopeOptions = [...scopeMap.values()].filter(Boolean)
   const benefitValue = level.benefit?.size ?? 'unclear'
   const effortValue = level.effort?.size ?? 'unclear'
-  const levelSelectionKey = `${nodeId}::${level.id}`
-  const isMultiSelected = selectedLevelKeys.includes(levelSelectionKey)
-  const isSelected = isMultiSelected || (selectedNodeId === nodeId && selectedProgressLevelId === level.id)
+  const isSelected = selectedNodeId === nodeId && selectedProgressLevelId === level.id
   const levelLabel = getLevelDisplayLabel(level?.label, levelIndex)
   const hasOpenPoints = Boolean(level?.hasOpenPoints)
-  const openPointsLabel = String(level?.openPointsLabel ?? '').trim()
+
+  const renderListColumn = (columnKey) => {
+    const width = resolvedColumnWidths[columnKey] ?? null
+
+    switch (columnKey) {
+      case 'value':
+        return (
+          <MetricSlider
+            key="value"
+            sizes={BENEFIT_SIZES}
+            activeValue={benefitValue}
+            kind="value"
+            width={width}
+            isSelected={isSelected}
+            onChange={(size) => onSetBenefit({ size })}
+          />
+        )
+      case 'effort':
+        return (
+          <MetricSlider
+            key="effort"
+            sizes={EFFORT_SIZES}
+            activeValue={effortValue}
+            kind="effort"
+            width={width}
+            isSelected={isSelected}
+            customPoints={level.effort?.customPoints ?? null}
+            onCustomChange={(pts) => onSetEffort({ size: 'custom', customPoints: pts })}
+            onChange={(size) => onSetEffort({ size, customPoints: size === 'custom' ? (level.effort?.customPoints ?? null) : null })}
+          />
+        )
+      case 'status':
+        return (
+          <StatusRadioGroup
+            key="status"
+            value={statusKey}
+            width={width}
+            onChange={onSetStatus}
+            groupName={`status-${nodeId}-${level.id}`}
+            isSelected={isSelected}
+          />
+        )
+      case 'scopes':
+        return (
+          <ScopeAssignGroup
+            key="scopes"
+            scopeOptions={allScopeOptions}
+            selectedScopeIds={level.scopeIds ?? []}
+            width={width}
+            onChange={onSetScopeIds}
+            isSelected={isSelected}
+          />
+        )
+      case 'notes':
+        return (
+          <ReleaseNoteEditor
+            key="notes"
+            value={level.releaseNote ?? ''}
+            width={width}
+            onChange={onSetReleaseNote}
+            isSelected={isSelected}
+          />
+        )
+      default:
+        return null
+    }
+  }
 
   return (
     <li
@@ -572,25 +630,21 @@ const LevelRow = ({
         {!listMode && (
           <span className="list-view-drawer__toggle list-view-drawer__toggle--leaf" aria-hidden="true" />
         )}
-        {selectionMode && (
-          <label className="list-view-drawer__level-select-toggle" onClick={(event) => event.stopPropagation()}>
-            <input
-              type="checkbox"
-              checked={isMultiSelected}
-              aria-label={`Select ${levelLabel}`}
-              onChange={(event) => onToggleLevelSelection?.(event.currentTarget.checked, event)}
-            />
-          </label>
-        )}
         <div
           className={`list-view-drawer__item-body list-view-drawer__item-body--level${isSelected ? ' list-view-drawer__item-body--selected' : ''}`}
           role="button"
           tabIndex={0}
-          onClick={(event) => onSelectLevel(event)}
-          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') onSelectLevel(e) }}
+          onClick={onSelectLevel}
+          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') onSelectLevel() }}
         >
           <div className="list-view-drawer__item-mainline">
-            <span className="list-view-drawer__item-label list-view-drawer__item-label--level">
+            <span
+              className="list-view-drawer__item-label list-view-drawer__item-label--level"
+              onClick={(event) => {
+                event.stopPropagation()
+                onSelectLevel()
+              }}
+            >
               {isHidden && <EyeOffIcon />}
               {listMode && nodeLabel && (
                 <span className="list-view-drawer__node-prefix">{nodeLabel}&nbsp;·&nbsp;</span>
@@ -598,7 +652,7 @@ const LevelRow = ({
               <span className="list-view-drawer__level-name">{levelLabel}</span>
               {isHidden && <span style={{ fontSize: '0.7em', color: '#6b7280', marginLeft: 2 }}>(hidden)</span>}
             </span>
-            {!listMode && <OpenPointsToggle checked={hasOpenPoints} label={openPointsLabel} onChange={onSetOpenPoints} />}
+            <OpenPointsToggle checked={hasOpenPoints} onChange={onSetOpenPoints} />
             {scopeEntries.length > 0 && !(listMode && showScopeColumn) && (
               <span className="list-view-drawer__item-chips">
                 {scopeEntries.map((scope) => (
@@ -609,61 +663,55 @@ const LevelRow = ({
           </div>
         </div>
 
-        {listMode && showTasksColumn && (
-          <div
-            className={`list-view-drawer__tasks-group${isSelected ? ' list-view-drawer__tasks-group--selected' : ''}`}
-            aria-label="Tasks"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <OpenPointsToggle checked={hasOpenPoints} label={openPointsLabel} onChange={onSetOpenPoints} />
-          </div>
-        )}
-
-        {listMode && showStatusColumn && (
-          <StatusRadioGroup
-            value={statusKey}
-            onChange={onSetStatus}
-            groupName={`status-${nodeId}-${level.id}`}
-            isSelected={isSelected}
-          />
-        )}
-
-        {showEstimateColumns && (
+        {listMode ? visibleListColumns.map((columnKey) => renderListColumn(columnKey)) : (
           <>
-            <MetricSlider
-              sizes={EFFORT_SIZES}
-              activeValue={effortValue}
-              kind="effort"
-              isSelected={isSelected}
-              customPoints={level.effort?.customPoints ?? null}
-              onCustomChange={(pts) => onSetEffort({ size: 'custom', customPoints: pts })}
-              onChange={(size) => onSetEffort({ size, customPoints: size === 'custom' ? (level.effort?.customPoints ?? null) : null })}
-            />
-            <MetricSlider
-              sizes={BENEFIT_SIZES}
-              activeValue={benefitValue}
-              kind="value"
-              isSelected={isSelected}
-              onChange={(size) => onSetBenefit({ size })}
-            />
+            {showEstimateColumns && (
+              <>
+                <MetricSlider
+                  sizes={BENEFIT_SIZES}
+                  activeValue={benefitValue}
+                  kind="value"
+                  isSelected={isSelected}
+                  onChange={(size) => onSetBenefit({ size })}
+                />
+                <MetricSlider
+                  sizes={EFFORT_SIZES}
+                  activeValue={effortValue}
+                  kind="effort"
+                  isSelected={isSelected}
+                  customPoints={level.effort?.customPoints ?? null}
+                  onCustomChange={(pts) => onSetEffort({ size: 'custom', customPoints: pts })}
+                  onChange={(size) => onSetEffort({ size, customPoints: size === 'custom' ? (level.effort?.customPoints ?? null) : null })}
+                />
+              </>
+            )}
+
+            {showStatusColumn && (
+              <StatusRadioGroup
+                value={statusKey}
+                onChange={onSetStatus}
+                groupName={`status-${nodeId}-${level.id}`}
+                isSelected={isSelected}
+              />
+            )}
+
+            {showScopeColumn && (
+              <ScopeAssignGroup
+                scopeOptions={allScopeOptions}
+                selectedScopeIds={level.scopeIds ?? []}
+                onChange={onSetScopeIds}
+                isSelected={isSelected}
+              />
+            )}
+
+            {showReleaseNotesColumn && (
+              <ReleaseNoteEditor
+                value={level.releaseNote ?? ''}
+                onChange={onSetReleaseNote}
+                isSelected={isSelected}
+              />
+            )}
           </>
-        )}
-
-        {listMode && showScopeColumn && (
-          <ScopeAssignGroup
-            scopeOptions={allScopeOptions}
-            selectedScopeIds={level.scopeIds ?? []}
-            onChange={onSetScopeIds}
-            isSelected={isSelected}
-          />
-        )}
-
-        {listMode && showReleaseNotesColumn && (
-          <ReleaseNoteEditor
-            value={level.releaseNote ?? ''}
-            onChange={onSetReleaseNote}
-            isSelected={isSelected}
-          />
         )}
       </div>
     </li>
@@ -692,9 +740,6 @@ const TreeNode = ({
   onSetLevelReleaseNote,
   selectedNodeId,
   selectedProgressLevelId,
-  selectedLevelKeys,
-  selectionMode = false,
-  showTasksColumn = false,
 }) => {
   const hasChildren = (node.children ?? []).length > 0
   const levels = node.levels ?? []
@@ -711,8 +756,6 @@ const TreeNode = ({
 
   const scopeIds = getNodeScopeIds(node)
   const scopeEntries = [...scopeIds].map((id) => scopeMap.get(id)).filter(Boolean)
-  const nodeHasOpenPoints = levels.some((level) => Boolean(level?.hasOpenPoints))
-  const nodeOpenPointsLabel = String(levels.find((level) => level?.hasOpenPoints)?.openPointsLabel ?? '').trim() || 'Open point'
 
   return (
     <>
@@ -741,7 +784,6 @@ const TreeNode = ({
               <span className="list-view-drawer__item-label" style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                 {isNodeFullyHidden && <EyeOffIcon />}
                 {node.label || node.shortName || '\u2013'}
-                {nodeHasOpenPoints && <span className="list-view-drawer__node-open-dot" aria-label={nodeOpenPointsLabel} title={nodeOpenPointsLabel} />}
                 {isNodeFullyHidden && <span style={{ fontSize: '0.7em', color: '#6b7280', marginLeft: 2 }}>(hidden)</span>}
               </span>
               {scopeEntries.length > 0 && !showLevels && (
@@ -767,11 +809,7 @@ const TreeNode = ({
           depth={depth + 2}
           scopeMap={scopeMap}
           selectedReleaseId={selectedReleaseId}
-          selectedLevelKeys={selectedLevelKeys}
-          onSelectLevel={(event) => onSelectLevel(node.id, level.id, selectionMode
-            ? { event, multiSelect: true, openInspector: false }
-            : { event })}
-          onToggleLevelSelection={(checked, event) => onSelectLevel(node.id, level.id, { event, multiSelect: true, openInspector: false })}
+          onSelectLevel={() => onSelectLevel(node.id, level.id)}
           showEstimateColumns={showEstimateColumns}
           onSetEffort={(effort) => onSetLevelEffort(node.id, level.id, effort)}
           onSetBenefit={(benefit) => onSetLevelBenefit(node.id, level.id, benefit)}
@@ -780,11 +818,9 @@ const TreeNode = ({
           onSetOpenPoints={(hasOpenPoints) => onSetLevelOpenPoints(node.id, level.id, hasOpenPoints)}
           onSetReleaseNote={(releaseNote) => onSetLevelReleaseNote(node.id, level.id, releaseNote)}
           showStatusColumn={false}
-          showTasksColumn={false}
           showScopeColumn={false}
           showReleaseNotesColumn={false}
           listMode={false}
-          selectionMode={selectionMode}
         />
       ))}
 
@@ -810,9 +846,6 @@ const TreeNode = ({
           onSetLevelReleaseNote={onSetLevelReleaseNote}
           selectedNodeId={selectedNodeId}
           selectedProgressLevelId={selectedProgressLevelId}
-          selectedLevelKeys={selectedLevelKeys}
-          selectionMode={selectionMode}
-          showTasksColumn={showTasksColumn}
         />
       ))}
     </>
@@ -863,22 +896,16 @@ export function ListViewDrawer({
   onSetLevelStatus = () => {},
   onSetLevelScopeIds = () => {},
   onSetLevelOpenPoints = () => {},
-  onApplyOpenPointsTag = () => {},
   onSetLevelReleaseNote = () => {},
   selectedReleaseId = null,
   selectedNodeId = null,
   selectedProgressLevelId = null,
-  selectedLevelKeys = [],
-  onSelectAllVisibleLevels = () => {},
-  onClearLevelSelection = () => {},
   embedded = false,
   onWidthChange = null,
 }) {
   const drawerRef = useRef(null)
   const columnsMenuRef = useRef(null)
-  const tagMenuRef = useRef(null)
-  const pendingTagFrameRef = useRef(null)
-  const previousOpenPointsCountRef = useRef(documentHasOpenPoints(document) ? 1 : 0)
+  const previousOpenInspectorOnSelectRef = useRef(false)
 
   // ── state (all declared before any callback that might reference them) ──────
   const [drawerWidth, setDrawerWidth] = useState(null) // null = use CSS default
@@ -886,32 +913,64 @@ export function ListViewDrawer({
   const [showLevels, setShowLevels] = useState(true)
   const [showEstimateColumns, setShowEstimateColumns] = useState(false)
   const [showStatusColumn, setShowStatusColumn] = useState(true)
-  const [showTasksColumn, setShowTasksColumn] = useState(() => documentHasOpenPoints(document))
   const [showScopeColumn, setShowScopeColumn] = useState(true)
   const [showReleaseNotesColumn, setShowReleaseNotesColumn] = useState(false)
   const [showColumnsMenu, setShowColumnsMenu] = useState(false)
+  const [columnOrder, setColumnOrder] = useState(DEFAULT_COLUMN_ORDER)
+  const [columnWidths, setColumnWidths] = useState({})
+  const [draggingColumnKey, setDraggingColumnKey] = useState(null)
   const [statusFilter, setStatusFilter] = useState('all')
   const [scopeFilter, setScopeFilter] = useState(SCOPE_FILTER_ALL)
   const [openPointsFilter, setOpenPointsFilter] = useState('all')
   const [searchQuery, setSearchQuery] = useState('')
   const [openInspectorOnSelect, setOpenInspectorOnSelect] = useState(false)
   const [viewMode, setViewMode] = useState('list') // 'tree' | 'list'
-  const [isMultiSelectMode, setIsMultiSelectMode] = useState(false)
-  const [showTagMenu, setShowTagMenu] = useState(false)
-  const [tagDraft, setTagDraft] = useState('')
+
+  const isListMode = viewMode === 'list'
+
+  const autoColumnWidths = useMemo(() => {
+    const scopeOptions = document?.scopes ?? []
+    const longestScopeLabel = scopeOptions.reduce((maxLength, scope) => {
+      return Math.max(maxLength, String(scope?.label ?? '').trim().length)
+    }, 6)
+
+    const statusWidth = 26 + STATUS_RADIO_OPTIONS.reduce((sum, option) => {
+      return sum + Math.max(42, option.label.length * 6 + 18)
+    }, 0)
+
+    return {
+      ...DEFAULT_COLUMN_WIDTHS,
+      status: clampColumnWidth('status', statusWidth),
+      scopes: clampColumnWidth('scopes', 120 + Math.min(140, longestScopeLabel * 7)),
+      notes: DEFAULT_COLUMN_WIDTHS.notes,
+    }
+  }, [document])
+
+  const resolvedColumnWidths = useMemo(() => {
+    return DEFAULT_COLUMN_ORDER.reduce((acc, key) => {
+      acc[key] = clampColumnWidth(key, columnWidths[key] ?? autoColumnWidths[key] ?? DEFAULT_COLUMN_WIDTHS[key])
+      return acc
+    }, {})
+  }, [autoColumnWidths, columnWidths])
+
+  const visibleListColumns = useMemo(() => {
+    if (!(isListMode && showLevels)) {
+      return []
+    }
+
+    return columnOrder.filter((key) => {
+      if (key === 'value' || key === 'effort') return showEstimateColumns
+      if (key === 'status') return showStatusColumn
+      if (key === 'scopes') return showScopeColumn
+      if (key === 'notes') return showReleaseNotesColumn
+      return false
+    })
+  }, [columnOrder, isListMode, showEstimateColumns, showLevels, showReleaseNotesColumn, showScopeColumn, showStatusColumn])
 
   const columnMinWidth = useMemo(() => {
-    const showListColumns = viewMode === 'list' && showLevels
-    return Math.min(2200, Math.max(
-      420,
-      420
-        + (showEstimateColumns ? 340 : 0)
-        + (showListColumns && showStatusColumn ? 124 : 0)
-        + (showListColumns && showTasksColumn ? 190 : 0)
-        + (showListColumns && showScopeColumn ? 280 : 0)
-        + (showListColumns && showReleaseNotesColumn ? 320 : 0),
-    ))
-  }, [showEstimateColumns, showLevels, showReleaseNotesColumn, showScopeColumn, showStatusColumn, showTasksColumn, viewMode])
+    const extraWidth = visibleListColumns.reduce((sum, key) => sum + (resolvedColumnWidths[key] ?? 0), 0)
+    return Math.min(1760, Math.max(420, 420 + extraWidth))
+  }, [resolvedColumnWidths, visibleListColumns])
 
   const handleResizePointerDown = useCallback((e) => {
     e.preventDefault()
@@ -920,7 +979,7 @@ export function ListViewDrawer({
     // Use live DOM width; fall back to 420 if element not yet measured
     const startWidth = drawerRef.current?.getBoundingClientRect().width ?? 420
     const onMove = (mv) => {
-      const newWidth = Math.max(minWidth, Math.min(2200, startWidth + (mv.clientX - startX)))
+      const newWidth = Math.max(minWidth, Math.min(1760, startWidth + (mv.clientX - startX)))
       setDrawerWidth(newWidth)
     }
     const onUp = () => {
@@ -931,13 +990,64 @@ export function ListViewDrawer({
     window.addEventListener('pointerup', onUp)
   }, [columnMinWidth])
 
-  useEffect(() => {
-    if (!showLevels) {
-      if (showEstimateColumns) setShowEstimateColumns(false)
-      if (showTasksColumn) setShowTasksColumn(false)
-      if (isMultiSelectMode) setIsMultiSelectMode(false)
+  const moveColumn = useCallback((sourceKey, targetKey) => {
+    if (!sourceKey || !targetKey || sourceKey === targetKey) {
+      return
     }
-  }, [isMultiSelectMode, showEstimateColumns, showLevels, showTasksColumn])
+
+    setColumnOrder((prev) => {
+      const next = [...prev]
+      const fromIndex = next.indexOf(sourceKey)
+      const toIndex = next.indexOf(targetKey)
+
+      if (fromIndex === -1 || toIndex === -1) {
+        return prev
+      }
+
+      const [moved] = next.splice(fromIndex, 1)
+      next.splice(toIndex, 0, moved)
+      return next
+    })
+  }, [])
+
+  const handleColumnResizePointerDown = useCallback((event, columnKey) => {
+    event.preventDefault()
+    event.stopPropagation()
+
+    const startX = event.clientX
+    const startWidth = resolvedColumnWidths[columnKey] ?? DEFAULT_COLUMN_WIDTHS[columnKey] ?? 160
+
+    const onMove = (mv) => {
+      setColumnWidths((prev) => ({
+        ...prev,
+        [columnKey]: clampColumnWidth(columnKey, startWidth + (mv.clientX - startX)),
+      }))
+    }
+
+    const onUp = () => {
+      window.removeEventListener('pointermove', onMove)
+      window.removeEventListener('pointerup', onUp)
+    }
+
+    window.addEventListener('pointermove', onMove)
+    window.addEventListener('pointerup', onUp)
+  }, [resolvedColumnWidths])
+
+  const handleResetColumnWidth = useCallback((columnKey) => {
+    setColumnWidths((prev) => {
+      if (!(columnKey in prev)) {
+        return prev
+      }
+
+      const next = { ...prev }
+      delete next[columnKey]
+      return next
+    })
+  }, [])
+
+  useEffect(() => {
+    if (!showLevels && showEstimateColumns) setShowEstimateColumns(false)
+  }, [showEstimateColumns, showLevels])
 
   useEffect(() => {
     if (drawerWidth !== null && drawerWidth < columnMinWidth) {
@@ -946,21 +1056,33 @@ export function ListViewDrawer({
   }, [columnMinWidth, drawerWidth])
 
   useEffect(() => {
-    if (!showColumnsMenu && !showTagMenu) return undefined
+    const wasEnabled = previousOpenInspectorOnSelectRef.current
+    previousOpenInspectorOnSelectRef.current = openInspectorOnSelect
+
+    if (!openInspectorOnSelect || wasEnabled || !selectedNodeId) {
+      return
+    }
+
+    if (selectedProgressLevelId) {
+      onSelectLevel(selectedNodeId, selectedProgressLevelId, { openInspector: true })
+      return
+    }
+
+    onSelectNode(selectedNodeId, { openInspector: true })
+  }, [onSelectLevel, onSelectNode, openInspectorOnSelect, selectedNodeId, selectedProgressLevelId])
+
+  useEffect(() => {
+    if (!showColumnsMenu) return undefined
 
     const handlePointerDown = (event) => {
       if (!columnsMenuRef.current?.contains(event.target)) {
         setShowColumnsMenu(false)
-      }
-      if (!tagMenuRef.current?.contains(event.target)) {
-        setShowTagMenu(false)
       }
     }
 
     const handleKeyDown = (event) => {
       if (event.key === 'Escape') {
         setShowColumnsMenu(false)
-        setShowTagMenu(false)
       }
     }
 
@@ -971,25 +1093,13 @@ export function ListViewDrawer({
       window.removeEventListener('pointerdown', handlePointerDown, true)
       window.removeEventListener('keydown', handleKeyDown)
     }
-  }, [showColumnsMenu, showTagMenu])
+  }, [showColumnsMenu])
 
   useEffect(() => {
     if (embedded && typeof onWidthChange === 'function') {
       onWidthChange(columnMinWidth)
     }
   }, [columnMinWidth, embedded, onWidthChange])
-
-  useEffect(() => () => {
-    if (pendingTagFrameRef.current && typeof window !== 'undefined' && typeof window.cancelAnimationFrame === 'function') {
-      window.cancelAnimationFrame(pendingTagFrameRef.current)
-    }
-  }, [])
-
-  useEffect(() => {
-    if (!isMultiSelectMode) {
-      setShowTagMenu(false)
-    }
-  }, [isMultiSelectMode])
 
   const handleToggle = useCallback((nodeId) => {
     setCollapsedIds((prev) => {
@@ -1000,51 +1110,9 @@ export function ListViewDrawer({
     })
   }, [])
 
-  const applyTagToSelection = useCallback((value) => {
-    const nextTag = String(value ?? '').trim()
-    if (!nextTag) {
-      return
-    }
-
-    const selectedKeysSnapshot = [...selectedLevelKeys]
-    setTagDraft('')
-    setShowTagMenu(false)
-
-    const runApply = () => onApplyOpenPointsTag(nextTag, selectedKeysSnapshot)
-
-    if (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function') {
-      if (pendingTagFrameRef.current) {
-        window.cancelAnimationFrame(pendingTagFrameRef.current)
-      }
-      pendingTagFrameRef.current = window.requestAnimationFrame(() => {
-        pendingTagFrameRef.current = null
-        runApply()
-      })
-      return
-    }
-
-    runApply()
-  }, [onApplyOpenPointsTag, selectedLevelKeys])
-
-  const allRootNodes = document?.children ?? []
-  const scopeMap = new Map((document?.scopes ?? []).map((s) => [s.id, s]))
-  const scopeFilterOptions = document?.scopes ?? []
-  const availableOpenPointsTags = useMemo(() => {
-    const tags = new Set()
-    const walk = (nodes) => {
-      for (const node of nodes) {
-        for (const level of node.levels ?? []) {
-          const label = String(level?.openPointsLabel ?? '').trim()
-          if (label) {
-            tags.add(label)
-          }
-        }
-        walk(node.children ?? [])
-      }
-    }
-    walk(allRootNodes)
-    return Array.from(tags)
-  }, [allRootNodes])
+  const allRootNodes = useMemo(() => document?.children ?? [], [document])
+  const scopeFilterOptions = useMemo(() => document?.scopes ?? [], [document])
+  const scopeMap = useMemo(() => new Map(scopeFilterOptions.map((s) => [s.id, s])), [scopeFilterOptions])
 
   const normalizedSearchQuery = searchQuery.trim().toLowerCase()
 
@@ -1131,26 +1199,11 @@ export function ListViewDrawer({
     [viewMode, showLevels, allRootNodes, matchesNodeFilters],
   )
 
-  const visibleLevelEntries = useMemo(
-    () => (showLevels
-      ? (viewMode === 'list' ? flatLevelEntries : collectFlatLevels(filteredRootNodes, (level, node) => matchesLevelFilters(level, node)))
-      : []),
-    [filteredRootNodes, flatLevelEntries, matchesLevelFilters, showLevels, viewMode],
-  )
-
   if (!opened) return null
 
   const isEmpty = allRootNodes.length === 0
-  const isListMode = viewMode === 'list'
   const openPointsCount = levelEntriesForCounter.filter(({ level }) => Boolean(level?.hasOpenPoints)).length
   const openPointsTotalCount = levelEntriesForCounter.length
-
-  useEffect(() => {
-    if (openPointsCount > previousOpenPointsCountRef.current) {
-      setShowTasksColumn(true)
-    }
-    previousOpenPointsCountRef.current = openPointsCount
-  }, [openPointsCount])
   const isFilteredEmpty = !isEmpty && (
     isListMode
       ? (showLevels ? flatLevelEntries.length === 0 : flatNodes.length === 0)
@@ -1158,7 +1211,6 @@ export function ListViewDrawer({
   )
   const effectiveDrawerWidth = drawerWidth ?? columnMinWidth
   const drawerStyle = embedded ? { width: '100%' } : { width: `${effectiveDrawerWidth}px` }
-  const canTagSelectedLevels = showLevels && selectedLevelKeys.length > 0
 
   return (
     <div
@@ -1176,16 +1228,11 @@ export function ListViewDrawer({
       )}
       <div className="list-view-drawer__header">
         <div className="list-view-drawer__header-top">
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', minWidth: 0, flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', minWidth: 0 }}>
             <span className="list-view-drawer__title">Node List</span>
             {showLevels && (
               <span className="list-view-drawer__counter" aria-label="Open points counter">
                 {`Open points ${openPointsCount}/${openPointsTotalCount}`}
-              </span>
-            )}
-            {showLevels && (
-              <span className="list-view-drawer__counter" aria-label="Selected levels counter" style={{ borderColor: 'rgba(59, 130, 246, 0.35)', background: 'rgba(30, 64, 175, 0.18)', color: '#93c5fd' }}>
-                {`Selected ${selectedLevelKeys.length}`}
               </span>
             )}
           </div>
@@ -1242,30 +1289,6 @@ export function ListViewDrawer({
 
               {showColumnsMenu && (
                 <div className="list-view-drawer__columns-menu" role="menu" aria-label="Columns">
-                  {viewMode === 'list' && (
-                    <>
-                      <label className="list-view-drawer__columns-option">
-                        <input
-                          type="checkbox"
-                          checked={showTasksColumn}
-                          onChange={(e) => setShowTasksColumn(e.target.checked)}
-                        />
-                        <span className="list-view-drawer__columns-option-icon"><IconChecklist /></span>
-                        <span>Tasks</span>
-                      </label>
-
-                      <label className="list-view-drawer__columns-option">
-                        <input
-                          type="checkbox"
-                          checked={showStatusColumn}
-                          onChange={(e) => setShowStatusColumn(e.target.checked)}
-                        />
-                        <span className="list-view-drawer__columns-option-icon"><IconStatus /></span>
-                        <span>Status</span>
-                      </label>
-                    </>
-                  )}
-
                   <label className="list-view-drawer__columns-option">
                     <input
                       type="checkbox"
@@ -1278,6 +1301,16 @@ export function ListViewDrawer({
 
                   {viewMode === 'list' && (
                     <>
+                      <label className="list-view-drawer__columns-option">
+                        <input
+                          type="checkbox"
+                          checked={showStatusColumn}
+                          onChange={(e) => setShowStatusColumn(e.target.checked)}
+                        />
+                        <span className="list-view-drawer__columns-option-icon"><IconStatus /></span>
+                        <span>Status</span>
+                      </label>
+
                       <label className="list-view-drawer__columns-option">
                         <input
                           type="checkbox"
@@ -1338,85 +1371,8 @@ export function ListViewDrawer({
           >
             <option value="all">All Flags</option>
             <option value="open">Open points</option>
-            <option value="clear">Without tag</option>
+            <option value="clear">Done only</option>
           </select>
-
-          {showLevels && (
-            <>
-              <button
-                type="button"
-                className={`list-view-drawer__icon-toggle${isMultiSelectMode ? ' list-view-drawer__icon-toggle--active' : ''}`}
-                onClick={() => setIsMultiSelectMode((prev) => !prev)}
-                aria-label="Multi-select levels"
-                title="Multi-select levels"
-              >
-                <IconMultiSelect />
-              </button>
-
-              <div className="list-view-drawer__columns-menu-wrap" ref={tagMenuRef}>
-                <button
-                  type="button"
-                  className={`list-view-drawer__icon-toggle${showTagMenu ? ' list-view-drawer__icon-toggle--active' : ''}`}
-                  onClick={() => {
-                    if (!canTagSelectedLevels) {
-                      return
-                    }
-                    setShowTagMenu((open) => !open)
-                  }}
-                  aria-label="Tag selected levels"
-                  title={canTagSelectedLevels ? 'Tag selected levels' : 'Select levels first'}
-                  disabled={!canTagSelectedLevels}
-                >
-                  <IconChecklist />
-                </button>
-
-                {showTagMenu && (
-                  <div className="list-view-drawer__columns-menu" role="menu" aria-label="Tag selected levels">
-                    <div className="list-view-drawer__tag-section-title">Existing tags</div>
-                    {availableOpenPointsTags.length > 0 ? availableOpenPointsTags.map((tag) => (
-                      <button
-                        key={tag}
-                        type="button"
-                        className="list-view-drawer__columns-option list-view-drawer__columns-option--button"
-                        onClick={() => applyTagToSelection(tag)}
-                      >
-                        <span className="list-view-drawer__open-points-dot" aria-hidden="true" />
-                        <span>{tag}</span>
-                      </button>
-                    )) : (
-                      <div className="list-view-drawer__tag-empty">No tags yet</div>
-                    )}
-
-                    <div className="list-view-drawer__tag-section-title">New tag</div>
-                    <div className="list-view-drawer__tag-input-row">
-                      <input
-                        type="text"
-                        className="list-view-drawer__search-input"
-                        value={tagDraft}
-                        onChange={(event) => setTagDraft(event.currentTarget.value)}
-                        placeholder="Add tag"
-                        aria-label="Add new tag"
-                        onKeyDown={(event) => {
-                          if (event.key === 'Enter') {
-                            event.preventDefault()
-                            applyTagToSelection(tagDraft)
-                          }
-                        }}
-                      />
-                      <button
-                        type="button"
-                        className="list-view-drawer__mini-action"
-                        onClick={() => applyTagToSelection(tagDraft)}
-                        disabled={!String(tagDraft ?? '').trim()}
-                      >
-                        Add
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </>
-          )}
         </div>
 
         <div className="list-view-drawer__search-row">
@@ -1428,22 +1384,6 @@ export function ListViewDrawer({
             placeholder="Search visible list…"
             aria-label="Search list"
           />
-          <button
-            type="button"
-            className="list-view-drawer__mini-action"
-            onClick={() => onSelectAllVisibleLevels(visibleLevelEntries.map(({ node, level }) => ({ nodeId: node.id, levelId: level.id })))}
-            disabled={!showLevels || !isMultiSelectMode || visibleLevelEntries.length === 0}
-          >
-            All
-          </button>
-          <button
-            type="button"
-            className="list-view-drawer__mini-action"
-            onClick={onClearLevelSelection}
-            disabled={!isMultiSelectMode || selectedLevelKeys.length === 0}
-          >
-            Clear
-          </button>
           <label className="list-view-drawer__inspector-toggle">
             <input
               type="checkbox"
@@ -1456,15 +1396,48 @@ export function ListViewDrawer({
       </div>
 
       <div className="list-view-drawer__content">
-        {showLevels && (showEstimateColumns || (isListMode && (showStatusColumn || showTasksColumn || showScopeColumn || showReleaseNotesColumn))) && (
-          <div className="list-view-drawer__metrics-header" aria-hidden="true">
+        {showLevels && visibleListColumns.length > 0 && (
+          <div className="list-view-drawer__metrics-header" aria-label="Visible columns">
             <span className="list-view-drawer__metrics-header-spacer" />
-            {isListMode && showTasksColumn && <span className="list-view-drawer__metrics-header-col list-view-drawer__metrics-header-col--tasks">Tasks</span>}
-            {isListMode && showStatusColumn && <span className="list-view-drawer__metrics-header-col list-view-drawer__metrics-header-col--status">Status</span>}
-            {showEstimateColumns && <span className="list-view-drawer__metrics-header-col list-view-drawer__metrics-header-col--effort">Effort</span>}
-            {showEstimateColumns && <span className="list-view-drawer__metrics-header-col list-view-drawer__metrics-header-col--value">Value</span>}
-            {isListMode && showScopeColumn && <span className="list-view-drawer__metrics-header-col list-view-drawer__metrics-header-col--scopes">Scopes</span>}
-            {isListMode && showReleaseNotesColumn && <span className="list-view-drawer__metrics-header-col list-view-drawer__metrics-header-col--notes">Release Notes</span>}
+            {visibleListColumns.map((columnKey) => (
+              <span
+                key={columnKey}
+                className={`list-view-drawer__metrics-header-col list-view-drawer__metrics-header-col--${columnKey}${draggingColumnKey === columnKey ? ' list-view-drawer__metrics-header-col--dragging' : ''}`}
+                style={{ width: `${resolvedColumnWidths[columnKey]}px` }}
+                draggable
+                title={`Drag to reorder ${COLUMN_LABELS[columnKey]}`}
+                onDragStart={(event) => {
+                  setDraggingColumnKey(columnKey)
+                  event.dataTransfer.effectAllowed = 'move'
+                  event.dataTransfer.setData('text/plain', columnKey)
+                }}
+                onDragOver={(event) => {
+                  event.preventDefault()
+                  event.dataTransfer.dropEffect = 'move'
+                }}
+                onDrop={(event) => {
+                  event.preventDefault()
+                  const sourceKey = event.dataTransfer.getData('text/plain') || draggingColumnKey
+                  moveColumn(sourceKey, columnKey)
+                  setDraggingColumnKey(null)
+                }}
+                onDragEnd={() => setDraggingColumnKey(null)}
+              >
+                <span className="list-view-drawer__metrics-header-label">{COLUMN_LABELS[columnKey]}</span>
+                <button
+                  type="button"
+                  className="list-view-drawer__metrics-header-resizer"
+                  aria-label={`Resize ${COLUMN_LABELS[columnKey]} column`}
+                  title={`Drag to resize ${COLUMN_LABELS[columnKey]} column. Double-click to reset.`}
+                  onPointerDown={(event) => handleColumnResizePointerDown(event, columnKey)}
+                  onDoubleClick={(event) => {
+                    event.preventDefault()
+                    event.stopPropagation()
+                    handleResetColumnWidth(columnKey)
+                  }}
+                />
+              </span>
+            ))}
           </div>
         )}
 
@@ -1487,11 +1460,7 @@ export function ListViewDrawer({
                 depth={0}
                 scopeMap={scopeMap}
                 selectedReleaseId={selectedReleaseId}
-                selectedLevelKeys={selectedLevelKeys}
-                onSelectLevel={(event) => onSelectLevel(node.id, level.id, isMultiSelectMode
-                  ? { openInspector: false, event, multiSelect: true }
-                  : { openInspector: openInspectorOnSelect, event })}
-                onToggleLevelSelection={(checked, event) => onSelectLevel(node.id, level.id, { openInspector: false, event, multiSelect: true })}
+                onSelectLevel={() => onSelectLevel(node.id, level.id, { openInspector: openInspectorOnSelect })}
                 showEstimateColumns={showEstimateColumns}
                 onSetEffort={(effort) => onSetLevelEffort(node.id, level.id, effort)}
                 onSetBenefit={(benefit) => onSetLevelBenefit(node.id, level.id, benefit)}
@@ -1500,11 +1469,11 @@ export function ListViewDrawer({
                 onSetOpenPoints={(hasOpenPoints) => onSetLevelOpenPoints(node.id, level.id, hasOpenPoints)}
                 onSetReleaseNote={(releaseNote) => onSetLevelReleaseNote(node.id, level.id, releaseNote)}
                 showStatusColumn={showStatusColumn}
-                showTasksColumn={showTasksColumn}
                 showScopeColumn={showScopeColumn}
                 showReleaseNotesColumn={showReleaseNotesColumn}
+                visibleListColumns={visibleListColumns}
+                resolvedColumnWidths={resolvedColumnWidths}
                 listMode
-                selectionMode={isMultiSelectMode}
               />
             ))}
           </ul>
@@ -1515,8 +1484,6 @@ export function ListViewDrawer({
               const borderColor = getStatusBorderColor(getDisplayStatusKey(node, selectedReleaseId))
               const scopeIds = getNodeScopeIds(node)
               const scopeEntries = [...scopeIds].map((id) => scopeMap.get(id)).filter(Boolean)
-              const nodeHasOpenPoints = (node.levels ?? []).some((level) => Boolean(level?.hasOpenPoints))
-              const nodeOpenPointsLabel = String((node.levels ?? []).find((level) => level?.hasOpenPoints)?.openPointsLabel ?? '').trim() || 'Open point'
               return (
                 <li key={node.id} className="list-view-drawer__item" style={{ paddingLeft: '0.5rem' }}>
                   <div className="list-view-drawer__item-row" style={{ borderRight: `3px solid ${borderColor}` }}>
@@ -1528,10 +1495,7 @@ export function ListViewDrawer({
                       onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') onSelectNode(node.id, { openInspector: openInspectorOnSelect }) }}
                     >
                       <div className="list-view-drawer__item-mainline">
-                        <span className="list-view-drawer__item-label" style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                          {node.label || node.shortName || '\u2013'}
-                          {nodeHasOpenPoints && <span className="list-view-drawer__node-open-dot" aria-label={nodeOpenPointsLabel} title={nodeOpenPointsLabel} />}
-                        </span>
+                        <span className="list-view-drawer__item-label">{node.label || node.shortName || '\u2013'}</span>
                         {scopeEntries.length > 0 && (
                           <span className="list-view-drawer__item-chips">
                             {scopeEntries.map((scope) => (
@@ -1559,8 +1523,6 @@ export function ListViewDrawer({
                 onToggle={handleToggle}
                 onSelectNode={(nodeId, options) => onSelectNode(nodeId, options ?? { openInspector: openInspectorOnSelect })}
                 onSelectLevel={(nodeId, levelId, options) => onSelectLevel(nodeId, levelId, options ?? { openInspector: openInspectorOnSelect })}
-                selectedLevelKeys={selectedLevelKeys}
-                selectionMode={isMultiSelectMode}
                 showLevels={showLevels}
                 showEstimateColumns={showEstimateColumns}
                 selectedReleaseId={selectedReleaseId}

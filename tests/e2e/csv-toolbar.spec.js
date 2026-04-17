@@ -41,7 +41,7 @@ test.describe('CSV toolbar flow', () => {
     await confirmAndReset(page)
     await expect(page.locator('foreignObject.skill-node-export-anchor')).toHaveCount(0)
 
-    await page.getByRole('button', { name: 'HTML importieren', exact: true }).hover()
+    await page.getByRole('button', { name: /HTML importieren|Import HTML/i }).first().hover()
     await expect(page.getByRole('menuitem', { name: 'CSV', exact: true })).toBeVisible()
     const importCsvText = [
       'ShortName,Name,Scope,Ebene,Segment,Parent,AdditionalDependency,ProgressLevel,Status,ReleaseNotes',
@@ -55,10 +55,12 @@ test.describe('CSV toolbar flow', () => {
       buffer: Buffer.from(importCsvText, 'utf-8'),
     })
 
-    const dialog = page.getByRole('dialog', { name: 'CSV-Import Optionen' })
+    const dialog = page.getByRole('dialog').filter({
+      has: page.getByRole('heading', { name: /CSV Import Options|CSV-Import Optionen/i }),
+    })
     await expect(dialog).toBeVisible()
 
-    const segmentsCheckbox = dialog.getByRole('checkbox', { name: 'Segmente verarbeiten' })
+    const segmentsCheckbox = dialog.getByRole('checkbox', { name: /Process segments|Segmente verarbeiten/i })
     await expect(segmentsCheckbox).toBeChecked()
     await segmentsCheckbox.click()
     await expect(segmentsCheckbox).not.toBeChecked()
@@ -94,5 +96,30 @@ test.describe('CSV toolbar flow', () => {
     expect(childNode?.label).toBe('Child Node')
 
     expect(normalizeCsv(csvText)).toContain('ShortName,Name,Scope,Ebene,Segment,Parent,AdditionalDependency,ProgressLevel,Status,ReleaseNotes')
+  })
+
+  test('accepts all supported import formats from the direct import action', async ({ page }) => {
+    const importCsvText = [
+      'ShortName,Name,Scope,Ebene,Segment,Parent,AdditionalDependency,ProgressLevel,Status,ReleaseNotes',
+      'ROOT,Root Node,Alpha,9,Core,,,1,now,"# Root note"',
+    ].join('\n')
+
+    const directImportButton = page.getByRole('button', { name: /HTML importieren|Import HTML/i }).first()
+    await expect(directImportButton).toBeVisible()
+    await directImportButton.click()
+
+    const combinedImportInput = page.locator('input[type="file"][accept="text/html,.html,text/csv,.csv,application/json,.json"]')
+    await expect(combinedImportInput).toHaveCount(1)
+
+    await combinedImportInput.setInputFiles({
+      name: 'skilltree-import.csv',
+      mimeType: 'text/csv',
+      buffer: Buffer.from(importCsvText, 'utf-8'),
+    })
+
+    const dialog = page.getByRole('dialog').filter({
+      has: page.getByRole('heading', { name: /CSV Import Options|CSV-Import Optionen/i }),
+    })
+    await expect(dialog).toBeVisible()
   })
 })

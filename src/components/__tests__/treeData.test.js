@@ -6,9 +6,11 @@ import {
   findParentNodeId,
   getNodeAdditionalDependencies,
   moveNodeToParent,
+  renameScopeGroupWithResult,
   renameScopeWithResult,
   removeNodeProgressLevel,
   reorderNodeProgressLevels,
+  reorderScopesWithResult,
   setLevelAdditionalDependencies,
   updateNodeProgressLevel,
   updateNodeData,
@@ -523,6 +525,45 @@ describe('treeData', () => {
 
       const level = findNodeById(deleted.tree, 'child-react').levels[0]
       expect(level.scopeIds).toEqual(['scope-b'])
+    })
+
+    it('should reorder scopes by drag-and-drop position', () => {
+      const tree = {
+        ...createSimpleTree(),
+        scopes: [
+          { id: 'scope-a', label: 'Alpha', color: '#6366f1' },
+          { id: 'scope-b', label: 'Beta', color: '#6366f1' },
+          { id: 'scope-c', label: 'Gamma', color: '#ef4444' },
+        ],
+      }
+
+      const result = reorderScopesWithResult(tree, 'scope-c', 'scope-a', 'before')
+
+      expect(result.ok).toBe(true)
+      expect(result.tree.scopes.map((scope) => scope.id)).toEqual(['scope-c', 'scope-a', 'scope-b'])
+    })
+
+    it('should store editable labels for scope color groups', () => {
+      const tree = {
+        ...createSimpleTree(),
+        scopes: [
+          { id: 'scope-a', label: 'Alpha', color: '#6366f1' },
+          { id: 'scope-b', label: 'Beta', color: '#ef4444' },
+          { id: 'scope-c', label: 'Gamma' },
+        ],
+      }
+
+      const result = renameScopeGroupWithResult(tree, '#6366f1', 'Platform Team')
+      expect(result.ok).toBe(true)
+      expect(result.tree.scopeGroups).toEqual(expect.arrayContaining([
+        expect.objectContaining({ color: '#6366f1', label: 'Platform Team' }),
+      ]))
+
+      const uncolored = renameScopeGroupWithResult(result.tree, null, 'General')
+      expect(uncolored.ok).toBe(true)
+      expect(uncolored.tree.scopeGroups).toEqual(expect.arrayContaining([
+        expect.objectContaining({ color: null, label: 'General' }),
+      ]))
     })
   })
 })

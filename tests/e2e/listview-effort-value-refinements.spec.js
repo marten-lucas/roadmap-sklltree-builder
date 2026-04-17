@@ -92,6 +92,9 @@ test.describe('ListView effort/value refinements', () => {
     await scopeColumnToggle.click()
     await expect(firstScopeGroup).toBeVisible()
 
+    await columnsButton.click()
+    await expect(page.locator('.list-view-drawer__columns-menu')).toHaveCount(0)
+
     const firstDoneRadio = firstStatusGroup.locator('input[value="done"]')
     const firstSomedayRadio = firstStatusGroup.locator('input[value="someday"]')
     await expect(firstSomedayRadio).toBeVisible()
@@ -181,18 +184,18 @@ test.describe('ListView effort/value refinements', () => {
 
     await expect.soft(page.locator('.skill-panel--inspector')).toHaveCount(0)
 
-    await page.locator('.list-view-drawer__item-body--level').first().click()
+    await page.locator('.list-view-drawer__level-name').first().click()
 
     await expect.soft(page.locator('.skill-panel--inspector')).toHaveCount(0)
 
     await inspectorToggle.check({ force: true })
     await expect(inspectorToggle).toBeChecked()
 
-    await page.locator('.list-view-drawer__item-body--level').first().click()
+    await page.locator('.list-view-drawer__level-name').first().click()
     await expect(page.locator('.skill-panel--inspector')).toBeVisible()
 
     const secondLevelName = String(await page.locator('.list-view-drawer__level-name').nth(1).textContent() ?? '').trim()
-    await page.locator('.list-view-drawer__item-body--level').nth(1).click()
+    await page.locator('.list-view-drawer__level-name').nth(1).click()
     await expect(page.locator('.skill-panel--inspector [role="tab"][aria-selected="true"]').first()).toHaveAttribute('aria-label', secondLevelName)
 
     await expect
@@ -201,5 +204,32 @@ test.describe('ListView effort/value refinements', () => {
 
     const scale = await readCanvasScale(page)
     expect.soft(scale).toBeLessThan(4.05)
+
+    const headerOrderBefore = await page.locator('.list-view-drawer__metrics-header-col').allTextContents()
+    expect(headerOrderBefore.map((value) => value.trim()).filter(Boolean)).toEqual(['Value', 'Effort', 'Status', 'Scopes', 'Release Notes'])
+
+    const valueHeader = page.locator('.list-view-drawer__metrics-header-col').filter({ hasText: 'Value' }).first()
+    const statusHeader = page.locator('.list-view-drawer__metrics-header-col').filter({ hasText: 'Status' }).first()
+    await statusHeader.dragTo(valueHeader)
+
+    await expect
+      .poll(async () => {
+        const labels = await page.locator('.list-view-drawer__metrics-header-col').allTextContents()
+        return labels.map((value) => value.trim()).filter(Boolean).join('|')
+      })
+      .toContain('Status|Value|Effort')
+
+    const widthBeforeResize = await valueHeader.evaluate((element) => element.getBoundingClientRect().width)
+    const resizeHandle = valueHeader.locator('.list-view-drawer__metrics-header-resizer')
+    const box = await resizeHandle.boundingBox()
+    expect(box).not.toBeNull()
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
+    await page.mouse.down()
+    await page.mouse.move(box.x + box.width / 2 + 48, box.y + box.height / 2)
+    await page.mouse.up()
+
+    await expect
+      .poll(async () => valueHeader.evaluate((element) => element.getBoundingClientRect().width))
+      .toBeGreaterThan(widthBeforeResize + 12)
   })
 })

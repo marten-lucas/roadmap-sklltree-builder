@@ -114,9 +114,35 @@ roadmap-skilltree-builder/
 
 ```bash
 npm run build
+npm run build:pages
 ```
 
-Produces `dist/roadmap-skilltree-builder.html` — a single minified file with all JS, CSS, and the html-to-image library inlined. No server required to open it.
+- `npm run build` produces `dist/roadmap-skilltree-builder.html` — a single minified file with all JS, CSS, and the html-to-image library inlined.
+- `npm run build:pages` additionally prepares `dist/index.html` and `.nojekyll` for direct GitHub Pages publishing.
+
+No server required to open it.
+
+---
+
+## GitHub Pages Release Deploy
+
+The repository includes a GitHub Actions workflow for controlled Pages deployment.
+
+- Regular commits do not publish the site.
+- The Pages site is updated only when a GitHub Release is published.
+- The workflow can also be started manually from the Actions tab.
+- The deployed artifact is prepared via `npm run build:pages`.
+
+### Create a Release from the Terminal
+
+```bash
+npm run build:release
+npm run build:release -- v1.0.0
+```
+
+- `build:release` builds the GitHub Pages artifact, pushes the current branch, and creates a GitHub Release.
+- The self-contained HTML file is attached to the release automatically.
+- This requires the official GitHub CLI and a login via `gh auth login`.
 
 ---
 

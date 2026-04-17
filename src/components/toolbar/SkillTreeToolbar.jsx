@@ -49,6 +49,7 @@ export function SkillTreeToolbar({
   isCollapsed,
   onToggleCollapsed,
   onOpenDocumentPicker,
+  onOpenHtmlDocumentPicker,
   onOpenCsvDocumentPicker,
   onOpenJsonDocumentPicker,
   onExportHtml,
@@ -204,11 +205,11 @@ export function SkillTreeToolbar({
               closeDelay={180}
             >
               <Menu.Target>
-                <Tooltip label="Import HTML (Ctrl+O)" position="top" middlewares={TOOLBAR_TOOLTIP_MIDDLEWARES}>
+                <Tooltip label="Importieren (Klick: alle Formate, Hover: gezielt wählen)" position="top" middlewares={TOOLBAR_TOOLTIP_MIDDLEWARES}>
                   <ActionIcon
                     size="md"
                     variant="default"
-                    aria-label="Import HTML"
+                    aria-label="HTML importieren"
                     onClick={onOpenDocumentPicker}
                   >
                     <IconDownload {...TOOLBAR_ICON_PROPS} />
@@ -218,7 +219,7 @@ export function SkillTreeToolbar({
 
               <Menu.Dropdown>
                 <Menu.Label>Import</Menu.Label>
-                <Menu.Item onClick={onOpenDocumentPicker}>
+                <Menu.Item onClick={onOpenHtmlDocumentPicker ?? onOpenDocumentPicker}>
                   HTML
                 </Menu.Item>
                 <Menu.Item onClick={onOpenCsvDocumentPicker}>
