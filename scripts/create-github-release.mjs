@@ -38,7 +38,7 @@ function normalizeVersionTag(value) {
 }
 
 function printHelp() {
-  console.log(`Usage:\n  npm run build:release\n  npm run build:release -- v1.2.3\n  npm run release:github -- v1.2.3 --draft\n  npm run release:github -- --dry-run\n\nNotes:\n- Without a tag argument, the script uses the package.json version and normalizes the leading v automatically.\n- Use --dry-run to preview the exact tag, title, branch, and asset without publishing anything.\n- Requires the official GitHub CLI and a logged-in session via gh auth login for the real release.\n- The published release includes dist/roadmap-skilltree-builder.html as a downloadable asset.`)
+  console.log(`Usage:\n  npm run build:release\n  npm run build:release -- v1.2.3\n  npm run release:github -- v1.2.3 --draft\n  npm run release:github -- --dry-run\n\nNotes:\n- Without a tag argument, the script uses the package.json version and normalizes the leading v automatically.\n- Use --dry-run to preview the exact tag, title, branch, and asset without publishing anything.\n- If the tag already exists, the script updates the existing release asset and re-triggers the Pages deploy.\n- Requires the official GitHub CLI and a logged-in session via gh auth login for the real release.\n- The published release includes dist/roadmap-skilltree-builder.html as a downloadable asset.`)
 }
 
 const args = process.argv.slice(2)
@@ -118,6 +118,23 @@ if (repoStatus) {
 
 console.log(`Pushing ${currentBranch} to origin...`)
 run('git', ['push', 'origin', `HEAD:${currentBranch}`], { inherit: true })
+
+const existingRelease = spawnSync('gh', ['release', 'view', tag], {
+  cwd: rootDir,
+  encoding: 'utf8',
+  stdio: 'pipe',
+})
+
+if (existingRelease.status === 0) {
+  console.log(`Release ${tag} already exists. Updating the existing release...`)
+  run('git', ['tag', '-f', tag, currentSha], { inherit: true })
+  run('git', ['push', 'origin', `refs/tags/${tag}`, '--force'], { inherit: true })
+  run('gh', ['release', 'upload', tag, releaseAssetPath, '--clobber'], { inherit: true })
+  console.log('Triggering the GitHub Pages workflow for the updated release...')
+  run('gh', ['workflow', 'run', 'deploy-pages-release.yml'], { inherit: true })
+  console.log(`GitHub release ${tag} updated successfully.`)
+  process.exit(0)
+}
 
 const releaseArgs = [
   'release',
