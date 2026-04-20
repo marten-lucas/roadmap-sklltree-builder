@@ -5,6 +5,7 @@ import {
   DEFAULT_STORY_POINT_MAP,
   STATUS_BUDGET_KEYS,
   computeStatusBudgetSummaries,
+  normalizeFeatureStatuses,
   normalizeStatusBudgets,
 } from '../utils/effortBenefit'
 import { addRelease, deleteRelease, updateRelease } from '../utils/releases'
@@ -233,6 +234,20 @@ export const SystemPanel = forwardRef(function SystemPanel(
     })
   }, [commitDocument, releases, roadmapData])
 
+  const updateReleaseFeatureStatus = useCallback((release, statusKey, checked) => {
+    const nextFeatureStatuses = normalizeFeatureStatuses({
+      ...(release?.featureStatuses ?? {}),
+      [statusKey]: checked,
+    })
+
+    commitDocument({
+      ...roadmapData,
+      releases: updateRelease(releases, release.id, {
+        featureStatuses: nextFeatureStatuses,
+      }),
+    })
+  }, [commitDocument, releases, roadmapData])
+
   return (
     <Paper className="skill-panel skill-panel--system" radius={0} shadow="none">
       {/* hidden file input */}
@@ -365,6 +380,7 @@ export const SystemPanel = forwardRef(function SystemPanel(
                   <div className="skill-panel__compact-budget-list">
                     {(() => {
                       const releaseSummaries = computeStatusBudgetSummaries(allNodes, storyPointMap, release.statusBudgets ?? null, release.id)
+                      const featureStatuses = normalizeFeatureStatuses(release.featureStatuses)
 
                       return STATUS_BUDGET_KEYS.map((statusKey) => {
                         const statusSummary = releaseSummaries[statusKey] ?? {
@@ -374,6 +390,7 @@ export const SystemPanel = forwardRef(function SystemPanel(
                           utilization: null,
                         }
                         const hasBudget = statusSummary.budget != null
+                        const countsAsFeature = Boolean(featureStatuses[statusKey])
 
                         return (
                           <div
@@ -382,12 +399,14 @@ export const SystemPanel = forwardRef(function SystemPanel(
                           >
                             <div className="skill-panel__compact-budget-copy">
                               <Text size="sm" fw={600}>{STATUS_LABELS[statusKey]}</Text>
-                              <Text size="xs" c={statusSummary.isOverBudget ? 'red.3' : 'dimmed'}>
-                                {hasBudget
-                                  ? `Budget for ${STATUS_LABELS[statusKey]} · ${statusSummary.total} / ${statusSummary.budget} SP · ${statusSummary.utilization}%`
-                                  : `Budget for ${STATUS_LABELS[statusKey]} · ${statusSummary.total} SP`}
-                              </Text>
                             </div>
+
+                            <Checkbox
+                              size="xs"
+                              checked={countsAsFeature}
+                              onChange={(event) => updateReleaseFeatureStatus(release, statusKey, event.currentTarget.checked)}
+                              label="Inscope"
+                            />
 
                             <Checkbox
                               size="xs"

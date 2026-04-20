@@ -67,9 +67,12 @@ const formatDisplayDate = (value) => {
   return parsed.toLocaleDateString()
 }
 
-export const collectReleaseNoteEntries = (roadmapDocument, releaseId = null) => {
+export const collectReleaseNoteEntries = (roadmapDocument, releaseId = null, selectedStatusKeys = null) => {
   const segmentLabelById = new Map((roadmapDocument?.segments ?? []).map((segment) => [segment.id, segment.label]))
   const scopes = Array.isArray(roadmapDocument?.scopes) ? roadmapDocument.scopes : []
+  const allowedStatuses = new Set(
+    (selectedStatusKeys == null ? ['now'] : selectedStatusKeys).map((statusKey) => normalizeStatusKey(statusKey)),
+  )
   const entries = []
   const walk = (node) => {
     if (!node) {
@@ -82,7 +85,7 @@ export const collectReleaseNoteEntries = (roadmapDocument, releaseId = null) => 
       const releaseNote = String(level?.releaseNote ?? '').trim()
       const statusKey = normalizeStatusKey(getLevelStatus(level, releaseId))
 
-      if (!releaseNote || statusKey !== 'now') {
+      if (!releaseNote || !allowedStatuses.has(statusKey)) {
         return
       }
 
@@ -437,6 +440,7 @@ export const buildPdfExportHtml = ({
 export const tryExportPdfFromSkillTree = ({
   svgElement,
   roadmapDocument,
+  selectedReleaseNoteStatuses = null,
 }) => {
   if (typeof window === 'undefined' || typeof window.document === 'undefined') {
     return {
@@ -454,7 +458,7 @@ export const tryExportPdfFromSkillTree = ({
   }
 
   const styleText = collectStyleText(window.document)
-  const releaseNoteEntries = collectReleaseNoteEntries(roadmapDocument)
+  const releaseNoteEntries = collectReleaseNoteEntries(roadmapDocument, null, selectedReleaseNoteStatuses)
   const html = buildPdfExportHtml({
     svgMarkup,
     releaseNoteEntries,

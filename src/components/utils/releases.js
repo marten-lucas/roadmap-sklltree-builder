@@ -1,5 +1,10 @@
 import { generateUUID } from './uuid'
-import { createDefaultStatusBudgets, normalizeStatusBudgets } from './effortBenefit'
+import {
+  createDefaultFeatureStatuses,
+  createDefaultStatusBudgets,
+  normalizeFeatureStatuses,
+  normalizeStatusBudgets,
+} from './effortBenefit'
 
 const normalizeNotesChecked = (value) => {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
@@ -21,6 +26,7 @@ export const createRelease = (name = '') => ({
   date: '',
   storyPointBudget: null,
   statusBudgets: createDefaultStatusBudgets(),
+  featureStatuses: createDefaultFeatureStatuses(),
   notesMarkdown: '',
   notesChecked: {},
 })
@@ -48,6 +54,7 @@ export const addRelease = (releases, name, copyFromId = null) => {
     if (source) {
       newRelease.storyPointBudget = source.storyPointBudget
       newRelease.statusBudgets = { ...normalizeStatusBudgets(source.statusBudgets, source.storyPointBudget) }
+      newRelease.featureStatuses = { ...normalizeFeatureStatuses(source.featureStatuses) }
     }
   }
   return { releases: [...releases, newRelease], newReleaseId: newRelease.id }
@@ -118,6 +125,7 @@ export const normalizeRelease = (raw) => {
     date: typeof raw.date === 'string' ? raw.date : '',
     storyPointBudget: raw.storyPointBudget != null ? Number(raw.storyPointBudget) : null,
     statusBudgets: normalizeStatusBudgets(raw.statusBudgets, raw.storyPointBudget),
+    featureStatuses: normalizeFeatureStatuses(raw.featureStatuses),
     notesMarkdown: typeof raw.notesMarkdown === 'string' ? raw.notesMarkdown : '',
     notesChecked: normalizeNotesChecked(raw.notesChecked),
   }

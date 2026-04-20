@@ -88,6 +88,59 @@ describe('htmlExport', () => {
     expect(html).toContain('window.htmlToImage?.toBlob')
   })
 
+  it('filters rendered release notes by the selected statuses', () => {
+    const document = {
+      ...createDocument(),
+      children: [
+        {
+          id: 'node-1',
+          label: 'Now Item',
+          shortName: 'NOW',
+          status: 'now',
+          segmentId: 'segment-frontend',
+          levels: [
+            { id: 'level-1', label: 'Level 1', status: 'now', releaseNote: 'Now note', scopeIds: [] },
+          ],
+          children: [],
+        },
+        {
+          id: 'node-2',
+          label: 'Next Item',
+          shortName: 'NXT',
+          status: 'next',
+          segmentId: 'segment-frontend',
+          levels: [
+            { id: 'level-2', label: 'Level 1', status: 'next', releaseNote: 'Next note', scopeIds: [] },
+          ],
+          children: [],
+        },
+        {
+          id: 'node-3',
+          label: 'Later Item',
+          shortName: 'LTR',
+          status: 'later',
+          segmentId: 'segment-frontend',
+          levels: [
+            { id: 'level-3', label: 'Level 1', status: 'later', releaseNote: 'Later note', scopeIds: [] },
+          ],
+          children: [],
+        },
+      ],
+    }
+
+    const html = buildHtmlExportDocument({
+      svgMarkup: '<svg viewBox="0 0 100 100"></svg>',
+      roadmapDocument: document,
+      styleText: '',
+      selectedReleaseNoteStatuses: ['next'],
+    })
+
+    expect(html).toContain('<strong>Next Item (NXT)</strong>')
+    expect(html).toContain('<div class="html-export__note-markdown"><p>Next note</p></div>')
+    expect(html).not.toContain('<div class="html-export__note-markdown"><p>Now note</p></div>')
+    expect(html).not.toContain('<div class="html-export__note-markdown"><p>Later note</p></div>')
+  })
+
   it('omits level labels for single-level release notes and keeps them for multi-level nodes', () => {
     const singleLevelDocument = createDocument()
     const singleLevelHtml = buildHtmlExportDocument({

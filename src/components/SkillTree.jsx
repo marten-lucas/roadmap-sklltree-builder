@@ -69,7 +69,13 @@ import {
   updateNodeShortName,
   updateSegmentLabel,
 } from './utils/treeData'
-import { DEFAULT_STORY_POINT_MAP, computeStatusBudgetSummaries, normalizeEffort, normalizeBenefit } from './utils/effortBenefit'
+import {
+  DEFAULT_STORY_POINT_MAP,
+  computeStatusBudgetSummaries,
+  normalizeEffort,
+  normalizeBenefit,
+  normalizeFeatureStatuses,
+} from './utils/effortBenefit'
 import { toDegrees, toRadians } from './utils/layoutMath'
 import { SkillTreeCanvas } from './canvas'
 import { SkillTreeToolbar } from './toolbar'
@@ -220,7 +226,9 @@ export function SkillTree() {
   const [currentZoomScale, setCurrentZoomScale] = useState(1)
   const [exportLabelModeOverride, setExportLabelModeOverride] = useState(null)
   const [exportLabelDialogOpen, setExportLabelDialogOpen] = useState(false)
+  const [exportLabelDialogKind, setExportLabelDialogKind] = useState('visual')
   const [exportLabelDialogMode, setExportLabelDialogMode] = useState('mid')
+  const [exportReleaseNoteStatuses, setExportReleaseNoteStatuses] = useState(() => normalizeFeatureStatuses(null))
   const exportLabelDialogResolveRef = useRef(null)
   const [lastSavedAt, setLastSavedAt] = useState(null)
   const [csvImportDialogOpen, setCsvImportDialogOpen] = useState(false)
@@ -1765,17 +1773,22 @@ export function SkillTree() {
     setSelectedProgressLevelId(null)
   }
 
-  // --- Export label-mode dialog helpers ---
+  // --- Export dialog helpers ---
 
-  const openExportLabelDialog = () => new Promise((resolve) => {
+  const openExportLabelDialog = ({ kind = 'visual', initialReleaseNoteStatuses = null } = {}) => new Promise((resolve) => {
     exportLabelDialogResolveRef.current = resolve
+    setExportLabelDialogKind(kind)
     setExportLabelDialogMode('mid')
+    setExportReleaseNoteStatuses(normalizeFeatureStatuses(initialReleaseNoteStatuses))
     setExportLabelDialogOpen(true)
   })
 
   const confirmExportLabelDialog = () => {
     setExportLabelDialogOpen(false)
-    exportLabelDialogResolveRef.current?.(exportLabelDialogMode)
+    exportLabelDialogResolveRef.current?.({
+      labelMode: exportLabelDialogMode,
+      releaseNoteStatuses: exportReleaseNoteStatuses,
+    })
     exportLabelDialogResolveRef.current = null
   }
 
@@ -1793,9 +1806,9 @@ export function SkillTree() {
 
     try {
       flushSync(() => resetSelections())
-      const selectedMode = await openExportLabelDialog()
-      if (selectedMode === null) return
-      flushSync(() => setExportLabelModeOverride(selectedMode))
+      const selectedOptions = await openExportLabelDialog({ kind: 'visual' })
+      if (selectedOptions === null) return
+      flushSync(() => setExportLabelModeOverride(selectedOptions.labelMode))
       const { exportSvgFromElement } = await import('./utils/svgExport')
       const exported = exportSvgFromElement(canvasSvgRef.current, {
         fileName: buildExportFileName(roadmapData, 'svg'),
@@ -1823,9 +1836,9 @@ export function SkillTree() {
 
     try {
       flushSync(() => resetSelections())
-      const selectedMode = await openExportLabelDialog()
-      if (selectedMode === null) return
-      flushSync(() => setExportLabelModeOverride(selectedMode))
+      const selectedOptions = await openExportLabelDialog({ kind: 'visual' })
+      if (selectedOptions === null) return
+      flushSync(() => setExportLabelModeOverride(selectedOptions.labelMode))
       const { exportPngFromElement } = await import('./utils/svgExport')
       const exported = await exportPngFromElement(canvasSvgRef.current, {
         fileName: buildExportFileName(roadmapData, 'png'),
@@ -1853,9 +1866,9 @@ export function SkillTree() {
 
     try {
       flushSync(() => resetSelections())
-      const selectedMode = await openExportLabelDialog()
-      if (selectedMode === null) return
-      flushSync(() => setExportLabelModeOverride(selectedMode))
+      const selectedOptions = await openExportLabelDialog({ kind: 'visual' })
+      if (selectedOptions === null) return
+      flushSync(() => setExportLabelModeOverride(selectedOptions.labelMode))
       const { exportSvgFromElement } = await import('./utils/svgExport')
       const exported = exportSvgFromElement(canvasSvgRef.current, {
         fileName: buildExportFileName(roadmapData, 'svg', { suffix: 'clean' }),
@@ -1883,6 +1896,16 @@ export function SkillTree() {
 
     try {
       flushSync(() => resetSelections())
+      const selectedOptions = await openExportLabelDialog({
+        kind: 'html',
+        initialReleaseNoteStatuses: activeRelease?.featureStatuses ?? null,
+      })
+      if (selectedOptions === null) return
+
+      const selectedReleaseNoteStatuses = LEGEND_STATUS_ORDER.filter(
+        (statusKey) => statusKey !== 'hidden' && selectedOptions.releaseNoteStatuses?.[statusKey],
+      )
+
       // Render in 'far' mode so the HTML viewer script has the base dimensions
       // and can apply responsive label modes dynamically.
       flushSync(() => setExportLabelModeOverride('far'))
@@ -1890,6 +1913,7 @@ export function SkillTree() {
       const exported = exportHtmlFromSkillTree({
         svgElement: canvasSvgRef.current,
         roadmapDocument: roadmapData,
+        selectedReleaseNoteStatuses,
       })
 
       if (!exported) {
@@ -1926,13 +1950,20 @@ export function SkillTree() {
 
     try {
       flushSync(() => resetSelections())
-      const selectedMode = await openExportLabelDialog()
-      if (selectedMode === null) return
-      flushSync(() => setExportLabelModeOverride(selectedMode))
+      const selectedOptions = await openExportLabelDialog({
+        kind: 'pdf',
+        initialReleaseNoteStatuses: activeRelease?.featureStatuses ?? null,
+      })
+      if (selectedOptions === null) return
+      flushSync(() => setExportLabelModeOverride(selectedOptions.labelMode))
+      const selectedReleaseNoteStatuses = LEGEND_STATUS_ORDER.filter(
+        (statusKey) => statusKey !== 'hidden' && selectedOptions.releaseNoteStatuses?.[statusKey],
+      )
       const { tryExportPdfFromSkillTree } = await import('./utils/pdfExport')
       const exported = tryExportPdfFromSkillTree({
         svgElement: canvasSvgRef.current,
         roadmapDocument: roadmapData,
+        selectedReleaseNoteStatuses,
       })
 
       if (!exported.ok) {
@@ -2123,28 +2154,7 @@ export function SkillTree() {
 
       if (action === 'export-html') {
         event.preventDefault()
-        void (async () => {
-          try {
-            if (!canvasSvgRef.current) {
-              window.alert('HTML export not available.')
-              return
-            }
-
-            flushSync(() => resetSelections())
-            const { exportHtmlFromSkillTree } = await import('./utils/htmlExport')
-            const exported = exportHtmlFromSkillTree({
-              svgElement: canvasSvgRef.current,
-              roadmapDocument: roadmapData,
-            })
-
-            if (!exported) {
-              window.alert('HTML export failed.')
-            }
-          } catch (error) {
-            console.error('HTML export shortcut failed', error)
-            window.alert('HTML export failed.')
-          }
-        })()
+        void handleExportHtml()
         return
       }
 
@@ -3587,21 +3597,49 @@ export function SkillTree() {
       <Modal
         opened={exportLabelDialogOpen}
         onClose={cancelExportLabelDialog}
-        title="Node label in export"
+        title={exportLabelDialogKind === 'html' ? 'HTML export' : exportLabelDialogKind === 'pdf' ? 'PDF export' : 'Node label in export'}
         size="sm"
       >
         <Stack gap="md">
-          <Radio.Group
-            value={exportLabelDialogMode}
-            onChange={setExportLabelDialogMode}
-            label="Choose zoom level for export"
-          >
-            <Stack gap="xs" mt="xs">
-              <Radio value="far" label="Far – abbreviation only (abc)" />
-              <Radio value="mid" label="Normal – name + abbreviation" />
-              <Radio value="close" label="Close – name + abbreviation + release note" />
-            </Stack>
-          </Radio.Group>
+          {exportLabelDialogKind !== 'html' && (
+            <Radio.Group
+              value={exportLabelDialogMode}
+              onChange={setExportLabelDialogMode}
+              label="Choose zoom level for export"
+            >
+              <Stack gap="xs" mt="xs">
+                <Radio value="far" label="Far – abbreviation only (abc)" />
+                <Radio value="mid" label="Normal – name + abbreviation" />
+                <Radio value="close" label="Close – name + abbreviation + release note" />
+              </Stack>
+            </Radio.Group>
+          )}
+
+          {(exportLabelDialogKind === 'html' || exportLabelDialogKind === 'pdf') && (
+            <div>
+              <Text size="sm" fw={600} mb={8}>Release notes status filter</Text>
+              <Stack gap="xs">
+                {LEGEND_STATUS_ORDER.filter((statusKey) => statusKey !== 'hidden').map((statusKey) => (
+                  <Checkbox
+                    key={`export-status-${statusKey}`}
+                    checked={Boolean(exportReleaseNoteStatuses[statusKey])}
+                    onChange={(event) => {
+                      const checked = event.currentTarget.checked
+                      setExportReleaseNoteStatuses((current) => ({
+                        ...current,
+                        [statusKey]: checked,
+                      }))
+                    }}
+                    label={STATUS_LABELS[statusKey]}
+                  />
+                ))}
+              </Stack>
+              <Text size="xs" c="dimmed" mt={8}>
+                Vorbelegung kommt aus dem Inscope-Setup des System-Panels und gilt nur für diesen Export.
+              </Text>
+            </div>
+          )}
+
           <Group justify="flex-end">
             <Button variant="default" onClick={cancelExportLabelDialog}>
               Cancel

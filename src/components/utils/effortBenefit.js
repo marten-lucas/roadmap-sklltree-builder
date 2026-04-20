@@ -60,6 +60,28 @@ export const createDefaultStatusBudgets = () => ({
   someday: null,
 })
 
+export const createDefaultFeatureStatuses = () => ({
+  done: false,
+  now: true,
+  next: true,
+  later: false,
+  someday: false,
+})
+
+export const normalizeFeatureStatuses = (raw) => {
+  const next = createDefaultFeatureStatuses()
+
+  if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+    for (const key of STATUS_BUDGET_KEYS) {
+      if (raw[key] != null) {
+        next[key] = Boolean(raw[key])
+      }
+    }
+  }
+
+  return next
+}
+
 export const normalizeStatusBudgets = (raw, legacyBudget = null) => {
   const next = createDefaultStatusBudgets()
 

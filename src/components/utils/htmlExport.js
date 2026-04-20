@@ -313,10 +313,10 @@ const buildPriorityMatrixSvgMarkup = (roadmapDocument, releaseId = null) => {
   return `<svg id="pm-export-svg" width="100%" viewBox="0 0 ${MATRIX_CONTENT_WIDTH} ${MATRIX_CONTENT_HEIGHT}" preserveAspectRatio="xMidYMid meet" style="display:block;max-height:520px;max-width:100%">${cellRects}${xAxisLabels}${xAxisTitle}${yAxisLabels}${yAxisTitle}${nodeCircles}${emptyState}</svg>`
 }
 
-const buildReleaseSectionsMarkup = ({ roadmapDocument, releaseIds }) => {
+const buildReleaseSectionsMarkup = ({ roadmapDocument, releaseIds, releaseNoteStatusKeys = null }) => {
   const releases = Array.isArray(roadmapDocument?.releases) ? roadmapDocument.releases : []
   if (releases.length === 0 || releaseIds.length === 0) {
-    const releaseNoteEntries = collectReleaseNoteEntries(roadmapDocument)
+    const releaseNoteEntries = collectReleaseNoteEntries(roadmapDocument, null, releaseNoteStatusKeys)
     const introduction = String(roadmapDocument?.release?.introduction ?? '')
     return buildReleaseNotesMarkup(releaseNoteEntries, introduction)
   }
@@ -329,7 +329,7 @@ const buildReleaseSectionsMarkup = ({ roadmapDocument, releaseIds }) => {
     const releaseMotto = String(release?.motto ?? '').trim()
     const releaseDate = String(release?.date ?? '').trim()
     const introduction = String(release?.introduction ?? '')
-    const releaseNoteEntries = collectReleaseNoteEntries(roadmapDocument, releaseId)
+    const releaseNoteEntries = collectReleaseNoteEntries(roadmapDocument, releaseId, releaseNoteStatusKeys)
     const subtitleParts = []
 
     if (releaseMotto) {
@@ -1700,6 +1700,7 @@ export const buildHtmlExportDocument = ({
   roadmapDocument,
   styleText,
   selectedReleaseIds = null,
+  selectedReleaseNoteStatuses = null,
   includePriorityMatrix = false,
 }) => {
   const resolvedReleaseIds = getResolvedReleaseIds(roadmapDocument, selectedReleaseIds)
@@ -2456,7 +2457,7 @@ export const buildHtmlExportDocument = ({
       <header class="html-export__section-header">
         <p class="html-export__eyebrow">Release Notes</p>
       </header>
-      <div class="html-export__release-list">${buildReleaseSectionsMarkup({ roadmapDocument: canonicalDoc, releaseIds: resolvedReleaseIds })}</div>
+      <div class="html-export__release-list">${buildReleaseSectionsMarkup({ roadmapDocument: canonicalDoc, releaseIds: resolvedReleaseIds, releaseNoteStatusKeys: selectedReleaseNoteStatuses })}</div>
     </section>
 
     ${includePriorityMatrix ? `<section class="html-export__panel">
@@ -2534,6 +2535,7 @@ export const exportHtmlFromSkillTree = ({
   svgElement,
   roadmapDocument,
   selectedReleaseIds = null,
+  selectedReleaseNoteStatuses = null,
   includePriorityMatrix = false,
   sourceDocument = globalThis?.document,
 }) => {
@@ -2552,6 +2554,7 @@ export const exportHtmlFromSkillTree = ({
     roadmapDocument,
     styleText: collectStyleText(sourceDocument),
     selectedReleaseIds,
+    selectedReleaseNoteStatuses,
     includePriorityMatrix,
   })
 

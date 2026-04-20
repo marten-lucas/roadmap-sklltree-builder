@@ -71,7 +71,8 @@ describe('SystemPanel status descriptions', () => {
     )
 
     expect(html).toContain('Status budgets')
+    expect(html).toContain('Inscope')
     expect(html).toContain('Budget for Now')
-    expect(html).toContain('Budget for Next')
+    expect(html).not.toContain('Budget for Now ·')
   })
 })

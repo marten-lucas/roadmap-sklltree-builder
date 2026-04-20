@@ -62,6 +62,16 @@ describe('pdfExport', () => {
     })
   })
 
+  it('can collect release note entries for selected statuses', () => {
+    const entries = collectReleaseNoteEntries(createDocument(), null, ['next'])
+
+    expect(entries).toHaveLength(1)
+    expect(entries[0]).toMatchObject({
+      nodeLabel: 'API Design',
+      statusLabel: 'Next',
+    })
+  })
+
   it('builds a printable html document with roadmap and release notes pages', () => {
     const html = buildPdfExportHtml({
       svgMarkup: '<svg viewBox="0 0 100 100"></svg>',
