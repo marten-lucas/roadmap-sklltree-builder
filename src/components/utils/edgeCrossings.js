@@ -270,3 +270,4 @@ export function detectCrossingLinks(links, { nodes = [], nodeSize = 48 } = {}) {
 
   return portalIds
 }
+

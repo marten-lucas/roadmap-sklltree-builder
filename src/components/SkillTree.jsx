@@ -107,7 +107,7 @@ import {
   nodeMatchesScopeFilter,
   normalizeScopeFilterIds,
 } from './utils/visibility'
-import { VIEWPORT_DEFAULTS, computeFitScale, computeFitTransform, getNextZoomStep, getViewportKeyboardAction } from './utils/viewport'
+import { VIEWPORT_DEFAULTS, computeFitScale, computeFitTransform, computeCenterTransform, getNextZoomStep, getViewportKeyboardAction } from './utils/viewport'
 import { getInitialRoadmapDocument } from './utils/document'
 import { getSelectedReleaseId } from './utils/releases'
 import { resolveInspectorSelectedNode } from './utils/selection'
@@ -235,6 +235,7 @@ export function SkillTree() {
   const resizeFrameRef = useRef(null)
   const lastCanvasViewportRef = useRef(null)
   const systemPanelRef = useRef(null)
+  const lastRightClickRef = useRef(0)
   const [isPanModeActive, setIsPanModeActive] = useState(false)
   const [currentZoomScale, setCurrentZoomScale] = useState(1)
   const [exportLabelModeOverride, setExportLabelModeOverride] = useState(null)
@@ -243,6 +244,7 @@ export function SkillTree() {
   const [exportLabelDialogMode, setExportLabelDialogMode] = useState('mid')
   const [exportReleaseNoteStatuses, setExportReleaseNoteStatuses] = useState(() => normalizeFeatureStatuses(null))
   const [exportStatusSummarySortMode, setExportStatusSummarySortMode] = useState(DEFAULT_STATUS_SUMMARY_SETTINGS.sortMode)
+  const [includePriorityMatrixInExport, setIncludePriorityMatrixInExport] = useState(false)
   const exportLabelDialogResolveRef = useRef(null)
   const [lastSavedAt, setLastSavedAt] = useState(null)
   const [csvImportDialogOpen, setCsvImportDialogOpen] = useState(false)
@@ -1802,6 +1804,7 @@ export function SkillTree() {
       labelMode: exportLabelDialogMode,
       releaseNoteStatuses: exportReleaseNoteStatuses,
       statusSummarySortMode: exportStatusSummarySortMode,
+      includePriorityMatrix: includePriorityMatrixInExport,
     })
     exportLabelDialogResolveRef.current = null
   }
@@ -1920,9 +1923,9 @@ export function SkillTree() {
         (statusKey) => statusKey !== 'hidden' && selectedOptions.releaseNoteStatuses?.[statusKey],
       )
 
-      // Render in 'far' mode so the HTML viewer script has the base dimensions
-      // and can apply responsive label modes dynamically.
-      flushSync(() => setExportLabelModeOverride('far'))
+      // Keep the current canvas geometry for export so builder and exported SVG
+      // share the same source of truth for routing markers and node presentation.
+      flushSync(() => setExportLabelModeOverride(null))
       const { exportHtmlFromSkillTree } = await import('./utils/htmlExport')
       const exported = exportHtmlFromSkillTree({
         svgElement: canvasSvgRef.current,
@@ -1930,6 +1933,7 @@ export function SkillTree() {
         selectedReleaseId: activeRelease?.id ?? null,
         selectedReleaseNoteStatuses,
         statusSummarySortMode: selectedOptions.statusSummarySortMode,
+        includePriorityMatrix: selectedOptions.includePriorityMatrix,
       })
 
       if (!exported) {
@@ -2203,7 +2207,7 @@ export function SkillTree() {
     ? `Autosave ${lastSavedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}`
     : 'Autosave aktiv'
 
-  const handleFitToScreen = () => {
+  const handleFitToScreen = useCallback(() => {
     if (!transformApiRef.current) return
     const { width: vw, height: vh } = getCanvasViewportMetrics()
     const { positionX, positionY, scale } = computeFitTransform({
@@ -2215,15 +2219,20 @@ export function SkillTree() {
       maxScale: VIEWPORT_DEFAULTS.maxScale,
     })
     transformApiRef.current.setTransform(positionX, positionY, scale, 300, 'easeOut')
-  }
+  }, [fitContentBounds, getCanvasViewportMetrics])
 
   const handleZoomToNode = (nodeX, nodeY) => {
     if (!transformApiRef.current || !canvasAreaRef.current) return
     const rect = canvasAreaRef.current.getBoundingClientRect()
     const newScale = Math.min(3.0, VIEWPORT_DEFAULTS.maxScale)
-    const newPositionX = rect.width / 2 - nodeX * newScale
-    const newPositionY = rect.height / 2 - nodeY * newScale
-    transformApiRef.current.setTransform(newPositionX, newPositionY, newScale, 400, 'easeOut')
+    const { positionX, positionY } = computeCenterTransform({
+      x: nodeX,
+      y: nodeY,
+      scale: newScale,
+      viewportWidth: rect.width,
+      viewportHeight: rect.height,
+    })
+    transformApiRef.current.setTransform(positionX, positionY, newScale, 400, 'easeOut')
   }
 
   const focusNodeInViewport = (nodeId, options = {}) => {
@@ -2237,8 +2246,13 @@ export function SkillTree() {
     const activeScale = Number.isFinite(scale)
       ? Math.max(VIEWPORT_DEFAULTS.minScale, Math.min(VIEWPORT_DEFAULTS.maxScale, scale))
       : transformApiRef.current.state.scale
-    const positionX = rect.width / 2 - layoutNode.x * activeScale
-    const positionY = rect.height / 2 - layoutNode.y * activeScale
+    const { positionX, positionY } = computeCenterTransform({
+      x: layoutNode.x,
+      y: layoutNode.y,
+      scale: activeScale,
+      viewportWidth: rect.width,
+      viewportHeight: rect.height,
+    })
     transformApiRef.current.setTransform(positionX, positionY, activeScale, duration, 'easeOut')
   }
 
@@ -3301,20 +3315,40 @@ export function SkillTree() {
   useEffect(() => {
     const el = canvasAreaRef.current
     if (!el) return
-    let lastRightClick = 0
     const onContextMenu = (e) => {
       e.preventDefault()
       const now = Date.now()
-      if (now - lastRightClick < 400) {
+      if (now - lastRightClickRef.current < 400) {
         handleFitToScreen()
-        lastRightClick = 0
+        lastRightClickRef.current = 0
       } else {
-        lastRightClick = now
+        lastRightClickRef.current = now
       }
     }
     el.addEventListener('contextmenu', onContextMenu)
     return () => el.removeEventListener('contextmenu', onContextMenu)
   }, [handleFitToScreen])
+
+  useEffect(() => {
+    if (!transformApiRef.current) return
+
+    const fitWhenReady = () => {
+      if (!transformApiRef.current || !canvasAreaRef.current) return
+
+      const rect = canvasAreaRef.current.getBoundingClientRect()
+      if (rect.width <= 0 || rect.height <= 0) {
+        window.requestAnimationFrame(fitWhenReady)
+        return
+      }
+
+      handleFitToScreen()
+    }
+
+    const delays = [0, 64, 180, 420]
+    delays.forEach((delay) => {
+      window.setTimeout(fitWhenReady, delay)
+    })
+  }, [transformKey])
 
   const handleListViewWidthChange = useCallback((nextWidth) => {
     setLeftSidebarWidth((current) => Math.max(current, Math.min(nextWidth, 900)))
@@ -3692,6 +3726,14 @@ export function SkillTree() {
                 Applies to the export status summary and the ordering of release-note items.
               </Text>
             </div>
+          )}
+
+          {(exportLabelDialogKind === 'html') && (
+            <Checkbox
+              checked={includePriorityMatrixInExport}
+              onChange={(event) => setIncludePriorityMatrixInExport(event.currentTarget.checked)}
+              label="Priority Matrix in Export einschließen"
+            />
           )}
 
           <Group justify="flex-end">

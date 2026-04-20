@@ -184,7 +184,7 @@ describe('htmlExport', () => {
     expect(html).not.toContain('<div class="html-export__note-markdown"><p>Later note</p></div>')
   })
 
-  it('omits level labels for single-level release notes and keeps them for multi-level nodes', () => {
+  it('omits level labels and status subtitles in release notes', () => {
     const singleLevelDocument = createDocument()
     const singleLevelHtml = buildHtmlExportDocument({
       svgMarkup: '<svg viewBox="0 0 100 100"></svg>',
@@ -193,7 +193,7 @@ describe('htmlExport', () => {
       title: 'Skill Tree Viewer',
     })
 
-    expect(singleLevelHtml).toContain('<span>Now</span>')
+    expect(singleLevelHtml).not.toContain('<div class="html-export__note-meta">')
     expect(singleLevelHtml).not.toContain('Level 1 · Now')
 
     const multiLevelDocument = createDocument()
@@ -211,8 +211,8 @@ describe('htmlExport', () => {
       title: 'Skill Tree Viewer',
     })
 
-    expect(multiLevelHtml).toContain('Level 1 · Now')
-    expect(multiLevelHtml).toContain('Level 2 · Now')
+    expect(multiLevelHtml).not.toContain('Level 1 · Now')
+    expect(multiLevelHtml).not.toContain('Level 2 · Now')
   })
 
   it('renders builder-like very-close node details and scope metadata into the export payload', () => {

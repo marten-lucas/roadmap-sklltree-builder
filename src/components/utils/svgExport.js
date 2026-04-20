@@ -25,6 +25,7 @@ const EXPORT_VIEWPORT_SELECTORS = [
   '[data-link-source-id][data-link-target-id]',
   '[data-segment-id]',
   '[data-segment-left][data-segment-right]',
+  '[data-split-dot-key]',
 ]
 
 const createSvgElement = (tagName) => document.createElementNS(SVG_NS, tagName)

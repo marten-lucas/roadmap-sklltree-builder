@@ -85,6 +85,16 @@ const extractRingRotation = (html, type) => {
   return match ? Number(match[1]) : null
 }
 
+const normalizeAngle = (angle) => {
+  const normalized = angle % 360
+  return normalized < 0 ? normalized + 360 : normalized
+}
+
+const minimalAngleDelta = (left, right) => {
+  const delta = Math.abs(normalizeAngle(left) - normalizeAngle(right))
+  return Math.min(delta, 360 - delta)
+}
+
 describe('SkillTreeCanvas', () => {
   it('renders to string without runtime reference errors', () => {
     const html = renderToString(
@@ -131,7 +141,7 @@ describe('SkillTreeCanvas', () => {
     expect(angle).toBeCloseTo(0, 5)
   })
 
-  it('keeps requires portals on the inward centerline when that radial is also a hierarchy link', () => {
+  it('offsets requires portals away from blocked inward connection lines', () => {
     const angle = pickPortalSlotAngle({
       type: 'source',
       inwardAngle: 0,
@@ -139,10 +149,11 @@ describe('SkillTreeCanvas', () => {
       reservedAngles: [],
     })
 
-    expect(angle).toBeCloseTo(0, 5)
+    expect(angle).not.toBeCloseTo(0, 5)
+    expect(Math.abs(angle)).toBeLessThanOrEqual(80)
   })
 
-  it('keeps enables portals on the outward centerline when that radial is also blocked by a link', () => {
+  it('offsets enables portals away from blocked outward connection lines', () => {
     const angle = pickPortalSlotAngle({
       type: 'target',
       inwardAngle: 0,
@@ -150,7 +161,36 @@ describe('SkillTreeCanvas', () => {
       reservedAngles: [],
     })
 
-    expect(angle).toBeCloseTo(180, 5)
+    expect(angle).not.toBeCloseTo(180, 5)
+    const outwardDelta = Math.abs((((angle - 180) % 360) + 540) % 360 - 180)
+    expect(outwardDelta).toBeLessThanOrEqual(80)
+  })
+
+  it('keeps source inward and target outward hemispheres for all four cardinal center directions', () => {
+    const inwardAngles = [0, 90, 180, 270]
+
+    for (const inwardAngle of inwardAngles) {
+      const outwardAngle = normalizeAngle(inwardAngle + 180)
+
+      const sourceAngle = pickPortalSlotAngle({
+        type: 'source',
+        inwardAngle,
+        blockedDirs: [inwardAngle],
+        reservedAngles: [],
+      })
+
+      const targetAngle = pickPortalSlotAngle({
+        type: 'target',
+        inwardAngle,
+        blockedDirs: [outwardAngle],
+        reservedAngles: [],
+      })
+
+      expect(minimalAngleDelta(sourceAngle, inwardAngle)).toBeLessThanOrEqual(80)
+      expect(minimalAngleDelta(sourceAngle, outwardAngle)).toBeGreaterThan(80)
+      expect(minimalAngleDelta(targetAngle, outwardAngle)).toBeLessThanOrEqual(80)
+      expect(minimalAngleDelta(targetAngle, inwardAngle)).toBeGreaterThan(80)
+    }
   })
 
   it('renders the same hover hitbox primitives for sockets and plugs', () => {

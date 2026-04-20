@@ -205,7 +205,6 @@ export function SkillTreeCanvas({
   const getLinkStatusStyle = (link) => getConnectionStatusStyle(link, layoutNodesById, releaseId)
 
   const splitDots = useMemo(() => {
-
     return Array.from(
       filteredLinks.reduce((acc, link) => {
         if (link.sourceDepth <= 0 || link.linkKind === 'ring' || !link.splitPoint) return acc
@@ -220,9 +219,10 @@ export function SkillTreeCanvas({
           })
         }
         return acc
-      }, new Map()).values(),
-    )
+      }, new Map()),
+    ).map(([, dot]) => dot)
   }, [filteredLinks, layoutNodesById, releaseId])
+
   const hoveredPeerNodeId = hoveredPortal
     ? (hoveredPortal.type === 'source' ? hoveredPortal.targetId : hoveredPortal.sourceId)
     : null
@@ -443,10 +443,13 @@ export function SkillTreeCanvas({
         {splitDots.map((dot) => (
           <circle
             key={`split-dot-${dot.key}`}
+            data-split-dot-key={dot.key}
             cx={dot.x}
             cy={dot.y}
-            r={9}
+            r={8}
             fill={dot.fill}
+            stroke="#1a1a1a"
+            strokeWidth="2"
             fillOpacity={1}
             style={{ pointerEvents: 'none' }}
           />

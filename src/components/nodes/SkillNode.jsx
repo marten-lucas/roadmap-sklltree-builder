@@ -310,15 +310,23 @@ const _SkillNode = ({ node, nodeSize, isSelected, isPortalPeerHovered = false, o
                       const lsKey = levelStatusKeys[i] ?? 'later'
                       const lsStyle = STATUS_STYLES[lsKey] ?? STATUS_STYLES.later
                       return (
-                        <button
+                        <div
                           key={i}
-                          type="button"
+                          role="button"
+                          tabIndex={0}
                           className={`skill-node-vc__tab${vcActiveLevel === i ? ' skill-node-vc__tab--active' : ''}`}
                           style={{ '--tab-color': lsStyle.ringBand }}
                           onClick={(e) => { e.stopPropagation(); setVcActiveLevel(i) }}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.preventDefault()
+                              e.stopPropagation()
+                              setVcActiveLevel(i)
+                            }
+                          }}
                         >
                           L{i + 1}
-                        </button>
+                        </div>
                       )
                     })}
                   </div>

@@ -13,7 +13,7 @@ import { AXIS_SIZES, AXIS_COUNT, MATRIX_PADDING, NODE_RADIUS, computeMatrixLayou
 import { getNodeDisplayEffort, getNodeDisplayBenefit, EFFORT_SIZE_LABELS, BENEFIT_SIZE_LABELS } from './effortBenefit'
 import { getDisplayStatusKey } from './nodeStatus'
 import { buildStatusSummaryGroups, getOrderedNodeRankMap, getStatusSummarySortLabel } from './statusSummary'
-import { RELEASE_FILTER_OPTIONS, SCOPE_FILTER_ALL, getReleaseVisibilityMode as getSharedReleaseVisibilityMode } from './visibility'
+import { RELEASE_FILTER_OPTIONS, SCOPE_FILTER_ALL } from './visibility'
 import { getPortalViewModel } from './portalPresentation'
 import htmlToImageBundle from 'html-to-image/dist/html-to-image.js?raw'
 import printFocusedCssText from './printed.css?raw'
@@ -190,6 +190,11 @@ const escapeJsonForScriptTag = (value) => value
   .replace(/</g, '\\u003c')
   .replace(/-->/g, '--\\u003e')
 
+const stringifyForInlineScript = (value) => JSON.stringify(value)
+  .replace(/<\//g, '<\\/')
+  .replace(/\u2028/g, '\\u2028')
+  .replace(/\u2029/g, '\\u2029')
+
 const compareText = (left, right) => String(left ?? '').localeCompare(String(right ?? ''), undefined, {
   sensitivity: 'base',
   numeric: true,
@@ -334,51 +339,24 @@ const buildReleaseNotesMarkup = (entries, releaseMeta = {}) => {
   const quoteMarkup = buildVoiceOfCustomerMarkup(releaseData.voiceOfCustomer ?? '', releaseData.fictionalCustomerName ?? '')
 
   if (entries.length === 0) {
-    return `${introductionHtml ? `<article class="html-export__intro">${introductionHtml}</article>` : ''}<p class="html-export__empty">Keine Release Notes vorhanden.</p>${quoteMarkup}`
+    return `${introductionHtml ? `<section class="html-export__release-intro">${introductionHtml}</section>` : ''}<p class="html-export__empty">Keine Release Notes vorhanden.</p>${quoteMarkup}`
   }
 
   const parts = []
-  const entriesBySegment = new Map()
 
   if (introductionHtml) {
-    parts.push(`<article class="html-export__intro">${introductionHtml}</article>`)
+    parts.push(`<section class="html-export__release-intro">${introductionHtml}</section>`)
   }
 
   entries.forEach((entry) => {
-    if (!entriesBySegment.has(entry.segmentLabel)) {
-      entriesBySegment.set(entry.segmentLabel, [])
-    }
+    const title = entry.shortName
+      ? `${escapeHtml(entry.nodeLabel)} (${escapeHtml(entry.shortName)})`
+      : escapeHtml(entry.nodeLabel)
+    const scopeMarkup = renderScopeLabelsMarkup(entry.scopeLabels)
 
-    entriesBySegment.get(entry.segmentLabel).push(entry)
+    const noteHtml = `<article class="html-export__note-card html-export__note-card--flow"><div class="html-export__note-layout"><div class="html-export__note-main"><header class="html-export__note-header html-export__note-header--flow"><h3 class="html-export__note-title"><strong>${title}</strong></h3></header><div class="html-export__note-markdown">${renderMarkdownToHtml(entry.releaseNote)}</div></div>${scopeMarkup ? `<aside class="html-export__note-aside"><div class="skill-node-tooltip__scopes" aria-label="Scopes">${scopeMarkup}</div></aside>` : ''}</div></article>`
+    parts.push(noteHtml)
   })
-
-  for (const [segmentLabel, segmentEntries] of entriesBySegment.entries()) {
-    parts.push(`<section class="html-export__release-group"><p class="html-export__release-group-label">${escapeHtml(segmentLabel)}</p></section>`)
-
-    segmentEntries.forEach((entry) => {
-      const title = entry.shortName
-        ? `${escapeHtml(entry.nodeLabel)} (${escapeHtml(entry.shortName)})`
-        : escapeHtml(entry.nodeLabel)
-      const levelText = entry.levelCount > 1 ? escapeHtml(entry.levelLabel) : ''
-      const statusText = escapeHtml(entry.statusLabel)
-      const scopeMarkup = renderScopeLabelsMarkup(entry.scopeLabels)
-
-      parts.push(`
-        <article class="html-export__note-card">
-          <div class="html-export__note-layout">
-            <div class="html-export__note-main">
-              <header class="html-export__note-header">
-                <strong>${title}</strong>
-                <span>${levelText ? `${levelText} · ` : ''}${statusText}</span>
-              </header>
-              <div class="html-export__note-markdown">${renderMarkdownToHtml(entry.releaseNote)}</div>
-            </div>
-            ${scopeMarkup ? `<aside class="html-export__note-aside"><div class="skill-node-tooltip__scopes" aria-label="Scopes">${scopeMarkup}</div></aside>` : ''}
-          </div>
-        </article>
-      `)
-    })
-  }
 
   if (quoteMarkup) {
     parts.push(quoteMarkup)
@@ -513,7 +491,17 @@ const buildReleaseSectionsMarkup = ({
       collectReleaseNoteEntries(roadmapDocument, selectedReleaseId, releaseNoteStatusKeys),
       nodeRankById,
     )
-    return buildReleaseNotesMarkup(releaseNoteEntries, roadmapDocument?.release ?? {})
+    const releaseNotesMarkup = buildReleaseNotesMarkup(releaseNoteEntries, roadmapDocument?.release ?? {})
+    
+    // If no release notes, show status summary instead
+    if (releaseNoteEntries.length === 0) {
+      return `
+        <h2 class="html-export__status-summary-title">Status Summary</h2>
+        ${buildStatusSummaryMarkup(roadmapDocument, { sortMode: statusSummarySortMode, selectedReleaseId })}
+      `
+    }
+    
+    return releaseNotesMarkup
   }
 
   const releaseById = new Map(releases.map((release) => [release.id, release]))
@@ -565,15 +553,20 @@ const buildViewerScript = (exportBaseName = 'skilltree-roadmap') => `
         fitPadding: ${VIEWPORT_DEFAULTS.fitPadding},
       }
 
+      const computeCenterTransform = ({ x, y, scale, viewportWidth, viewportHeight }) => ({
+        positionX: (Number(viewportWidth) || 0) / 2 - (Number(x) || 0) * scale,
+        positionY: (Number(viewportHeight) || 0) / 2 - (Number(y) || 0) * scale,
+      })
+
       // Zoom thresholds for responsive node labels (mirrors NODE_LABEL_ZOOM in config.js)
       const NODE_LABEL_ZOOM = {
         farToMid: ${NODE_LABEL_ZOOM.farToMid},
         midToClose: ${NODE_LABEL_ZOOM.midToClose},
         closeToVeryClose: ${NODE_LABEL_ZOOM.closeToVeryClose},
       }
-      const EMPTY_RELEASE_NOTE = ${JSON.stringify(EMPTY_RELEASE_NOTE)}
-      const INTERACTIVE_SVG_RUNTIME_SCRIPT = ${JSON.stringify(INTERACTIVE_SVG_RUNTIME_SCRIPT)}
-      const INTERACTIVE_SVG_RUNTIME_STYLE_TEXT = ${JSON.stringify(INTERACTIVE_SVG_RUNTIME_STYLE_TEXT)}
+      const EMPTY_RELEASE_NOTE = ${stringifyForInlineScript(EMPTY_RELEASE_NOTE)}
+      const INTERACTIVE_SVG_RUNTIME_SCRIPT = ${stringifyForInlineScript(INTERACTIVE_SVG_RUNTIME_SCRIPT)}
+      const INTERACTIVE_SVG_RUNTIME_STYLE_TEXT = ${stringifyForInlineScript(INTERACTIVE_SVG_RUNTIME_STYLE_TEXT)}
 
       const STATUS_TEXT_COLORS = {
         done: '#5a6576',
@@ -615,7 +608,25 @@ const buildViewerScript = (exportBaseName = 'skilltree-roadmap') => `
         return levelStatusKeys[0] ?? 'later'
       }
 
-      const getReleaseVisibilityMode = ${getSharedReleaseVisibilityMode.toString()}
+      const getReleaseVisibilityMode = (statusKey, releaseFilter) => {
+        if (releaseFilter === RELEASE_FILTER.now) {
+          if (statusKey === 'now') {
+            return 'full'
+          }
+
+          return 'minimal'
+        }
+
+        if (releaseFilter === RELEASE_FILTER.next) {
+          if (statusKey === 'now' || statusKey === 'next') {
+            return 'full'
+          }
+
+          return 'minimal'
+        }
+
+        return 'full'
+      }
       const getPortalViewModel = ${getPortalViewModel.toString()}
 
       const walkNodes = (node, visitor) => {
@@ -1495,9 +1506,17 @@ const buildViewerScript = (exportBaseName = 'skilltree-roadmap') => `
         const centerX = contentBounds.x + contentBounds.width / 2
         const centerY = contentBounds.y + contentBounds.height / 2
 
+        const { positionX, positionY } = computeCenterTransform({
+          x: centerX,
+          y: centerY,
+          scale: fittedScale,
+          viewportWidth: shellWidth,
+          viewportHeight: shellHeight,
+        })
+
         panZoomState.scale = fittedScale
-        panZoomState.translateX = shellWidth / 2 - centerX * fittedScale
-        panZoomState.translateY = shellHeight / 2 - centerY * fittedScale
+        panZoomState.translateX = positionX
+        panZoomState.translateY = positionY
         applyPanZoom()
       }
 
@@ -1520,9 +1539,17 @@ const buildViewerScript = (exportBaseName = 'skilltree-roadmap') => `
         const centerX = nodeX + nodeWidth / 2
         const centerY = nodeY + nodeHeight / 2
 
+        const { positionX, positionY } = computeCenterTransform({
+          x: centerX,
+          y: centerY,
+          scale: activeScale,
+          viewportWidth: treeShell.clientWidth,
+          viewportHeight: treeShell.clientHeight,
+        })
+
         panZoomState.scale = activeScale
-        panZoomState.translateX = treeShell.clientWidth / 2 - centerX * activeScale
-        panZoomState.translateY = treeShell.clientHeight / 2 - centerY * activeScale
+        panZoomState.translateX = positionX
+        panZoomState.translateY = positionY
         applyPanZoom()
       }
 
@@ -2226,7 +2253,7 @@ const buildViewerScript = (exportBaseName = 'skilltree-roadmap') => `
       const collectStandaloneSvgStyles = () => Array.from(document.querySelectorAll('style'))
         .map((styleElement) => String(styleElement.textContent ?? '').trim())
         .filter(Boolean)
-        .join('\n')
+        .join('\\n')
 
       const injectStandaloneSvgStyles = (svgElement) => {
         if (!svgElement || svgElement.querySelector('.skill-tree-interactive-runtime-style')) {
@@ -2235,7 +2262,7 @@ const buildViewerScript = (exportBaseName = 'skilltree-roadmap') => `
 
         const style = document.createElementNS('http://www.w3.org/2000/svg', 'style')
         style.setAttribute('class', 'skill-tree-interactive-runtime-style')
-        style.textContent = collectStandaloneSvgStyles() + '\n' + INTERACTIVE_SVG_RUNTIME_STYLE_TEXT
+        style.textContent = collectStandaloneSvgStyles() + '\\n' + INTERACTIVE_SVG_RUNTIME_STYLE_TEXT
         svgElement.insertBefore(style, svgElement.firstChild)
       }
 
@@ -2475,20 +2502,21 @@ export const buildHtmlExportDocument = ({
     }
 
     .html-export {
-      max-width: 1440px;
-      margin: 0 auto;
-      padding: 24px;
+      width: 100vw;
+      max-width: none;
+      margin: 0;
+      padding: 0;
       display: flex;
       flex-direction: column;
-      gap: 18px;
+      gap: 0;
       min-height: 100vh;
     }
 
     .html-export__header,
     .html-export__panel {
       background: var(--export-surface);
-      border: 1px solid var(--export-border);
-      border-radius: 20px;
+      border: none;
+      border-radius: 0;
       backdrop-filter: blur(12px);
     }
 
@@ -2499,7 +2527,8 @@ export const buildHtmlExportDocument = ({
       align-items: flex-start;
       justify-content: space-between;
       gap: 16px;
-      padding: 22px 24px;
+      padding: 20px 24px;
+      border-bottom: 1px solid var(--export-border);
     }
 
     .html-export__title {
@@ -2712,8 +2741,16 @@ export const buildHtmlExportDocument = ({
     }
 
     .html-export__status-summary {
-      display: grid;
-      gap: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .html-export__status-summary-title {
+      font-size: 1.8rem;
+      font-weight: 700;
+      margin: 0 0 8px;
+      color: #f8fafc;
     }
 
     .html-export__status-group {
@@ -3038,7 +3075,7 @@ export const buildHtmlExportDocument = ({
       overflow: visible;
     }
 
-    .html-export__tree-shell .skill-tree-center-icon__image {
+    .html-export__tree-shell img.skill-tree-center-icon__image {
       display: block;
       width: 100%;
       height: 100%;
@@ -3049,11 +3086,14 @@ export const buildHtmlExportDocument = ({
     }
 
     .html-export__intro {
-      margin-bottom: 16px;
-      padding: 14px 16px;
-      border-radius: 16px;
-      border: 1px solid rgba(71, 85, 105, 0.48);
-      background: rgba(15, 23, 42, 0.9);
+      margin-bottom: 24px;
+      padding: 0;
+      border: 0;
+      background: transparent;
+    }
+
+    .html-export__intro--no-indent {
+      padding-left: 0 !important;
     }
 
     .html-export__customer-quote {
@@ -3063,7 +3103,7 @@ export const buildHtmlExportDocument = ({
       border: 1px solid rgba(103, 232, 249, 0.4);
       background: rgba(8, 47, 73, 0.38);
     }
-
+    
     .html-export__customer-quote-eyebrow {
       margin: 0 0 8px;
       color: #a5f3fc;
@@ -3091,8 +3131,8 @@ export const buildHtmlExportDocument = ({
     .html-export__intro p,
     .html-export__note-markdown p,
     .html-export__customer-quote-markdown p {
-      margin: 8px 0 0;
-      line-height: 1.55;
+      margin: 12px 0 0;
+      line-height: 1.6;
     }
 
     .html-export__intro h1,
@@ -3104,27 +3144,80 @@ export const buildHtmlExportDocument = ({
     .html-export__customer-quote-markdown h1,
     .html-export__customer-quote-markdown h2,
     .html-export__customer-quote-markdown h3 {
-      margin: 12px 0 0;
-      line-height: 1.15;
+      margin: 24px 0 0;
+      line-height: 1.25;
       color: #f8fafc;
+      font-weight: 600;
     }
 
     .html-export__intro h1,
     .html-export__note-markdown h1,
     .html-export__customer-quote-markdown h1 {
-      font-size: 1.45rem;
+      font-size: 2.25rem;
     }
 
     .html-export__intro h2,
     .html-export__note-markdown h2,
     .html-export__customer-quote-markdown h2 {
-      font-size: 1.2rem;
+      font-size: 1.85rem;
     }
 
     .html-export__intro h3,
     .html-export__note-markdown h3,
     .html-export__customer-quote-markdown h3 {
-      font-size: 1.05rem;
+      font-size: 1.45rem;
+    }
+
+    .html-export__release-group-title {
+      font-size: 2rem;
+      color: var(--export-accent);
+      margin: 48px 0 12px;
+      font-weight: 700;
+      border-bottom: 1px solid var(--export-border);
+      padding-bottom: 8px;
+    }
+
+    .html-export__note-card--flow {
+      border: 0 !important;
+      padding: 24px 0 0 !important;
+      margin: 0 !important;
+    }
+
+    .html-export__note-layout {
+      display: flex;
+      gap: 24px;
+      align-items: flex-start;
+    }
+
+    .html-export__note-main {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .html-export__note-aside {
+      flex-shrink: 0;
+    }
+
+    .html-export__note-header--flow {
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 4px;
+    }
+
+    .html-export__note-title {
+      font-size: 1.6rem;
+      margin: 0;
+      color: #f8fafc;
+    }
+
+    .html-export__note-meta {
+      font-size: 0.9rem;
+      color: var(--export-muted);
+    }
+
+    .html-export__note-markdown p {
+      font-size: 1.1rem;
+      line-height: 1.7;
     }
 
     .html-export__intro ul,
@@ -3253,7 +3346,7 @@ export const buildHtmlExportDocument = ({
 
     @media (max-width: 960px) {
       .html-export {
-        padding: 14px;
+        padding: 0;
       }
 
       .html-export__header {
@@ -3487,17 +3580,6 @@ export const buildHtmlExportDocument = ({
       <div id="html-export-tree-shell" class="html-export__tree-shell">
         <div id="html-export-tree-canvas" class="html-export__tree-canvas">${svgMarkup}</div>
       </div>
-    </section>
-
-    <section class="html-export__panel">
-      <header class="html-export__section-header">
-        <p class="html-export__eyebrow">Status Summary</p>
-        <p class="html-export__menu-filter-hint">Sorted by ${escapeHtml(getStatusSummarySortLabel(statusSummarySortMode))}</p>
-      </header>
-      ${buildStatusSummaryMarkup(canonicalDoc, {
-        sortMode: statusSummarySortMode,
-        selectedReleaseId: selectedReleaseId ?? resolvedReleaseIds[0] ?? null,
-      })}
     </section>
 
     <section class="html-export__panel">

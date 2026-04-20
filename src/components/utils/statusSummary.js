@@ -6,6 +6,7 @@ import { buildLevelIdToNodeIdMap } from './treeData'
 export const STATUS_SUMMARY_GROUP_ORDER = ['now', 'next', 'later', 'someday', 'done']
 export const STATUS_SUMMARY_SORT_OPTIONS = [
   { value: 'manual', label: 'Manual delivery order' },
+  { value: 'scope', label: 'Scope' },
   { value: 'status', label: 'Status' },
   { value: 'value', label: 'Value' },
   { value: 'name', label: 'Name' },
@@ -235,8 +236,52 @@ export const sortNodesForStatusSummary = (nodes = [], document, {
     return compareManual(left, right)
   }
 
+  const compareScope = (left, right) => {
+    const leftScopeIds = new Set()
+    for (const level of left.levels ?? []) {
+      for (const sid of level.scopeIds ?? []) {
+        if (sid) leftScopeIds.add(sid)
+      }
+    }
+
+    const rightScopeIds = new Set()
+    for (const level of right.levels ?? []) {
+      for (const sid of level.scopeIds ?? []) {
+        if (sid) rightScopeIds.add(sid)
+      }
+    }
+
+    // Single scope vs Multiple vs None
+    const leftScopeCount = leftScopeIds.size
+    const rightScopeCount = rightScopeIds.size
+
+    if (leftScopeCount === 0 && rightScopeCount > 0) return 1
+    if (leftScopeCount > 0 && rightScopeCount === 0) return -1
+    if (leftScopeCount !== rightScopeCount) return leftScopeCount - rightScopeCount
+
+    // Primary scope label comparison (joining for deterministic multi-scope sort)
+    const scopeLabelById = new Map((document?.scopes ?? []).map((s) => [s.id, s.label ?? '']))
+    const leftLabel = Array.from(leftScopeIds)
+      .map((sid) => scopeLabelById.get(sid) ?? '')
+      .sort()
+      .join(', ')
+    const rightLabel = Array.from(rightScopeIds)
+      .map((sid) => scopeLabelById.get(sid) ?? '')
+      .sort()
+      .join(', ')
+
+    const labelDelta = compareText(leftLabel, rightLabel)
+    if (labelDelta !== 0) return labelDelta
+
+    return compareManual(left, right)
+  }
+
   if (sortMode === 'status') {
     return rawNodes.sort(compareStatus)
+  }
+
+  if (sortMode === 'scope') {
+    return rawNodes.sort(compareScope)
   }
 
   if (sortMode === 'value') {

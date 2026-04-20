@@ -74,4 +74,40 @@ test.describe('Viewport keyboard and fit interactions', () => {
       return centeredX < 8 && centeredY < 8
     }, { timeout: 3000 }).toBeTruthy()
   })
+
+  test('double right-click on canvas fits to screen', async ({ page }) => {
+    const canvasArea = page.locator('.skill-tree-canvas-area').first()
+    await expect(canvasArea).toBeVisible()
+
+    // Move viewport away from fit position first.
+    await page.keyboard.down('Shift')
+    await page.keyboard.press('ArrowRight')
+    await page.keyboard.press('ArrowDown')
+    await page.keyboard.up('Shift')
+
+    const moved = parseMatrix(await getTransform(page))
+    expect(Number.isFinite(moved.x)).toBe(true)
+    expect(moved.x !== 0 || moved.y !== 0).toBe(true)
+
+    const canvasBox = await canvasArea.boundingBox()
+    const centerX = canvasBox.x + canvasBox.width / 2
+    const centerY = canvasBox.y + canvasBox.height / 2
+
+    // First right-click
+    await page.mouse.click(centerX, centerY, { button: 'right' })
+    // Second right-click (within 400ms)
+    await page.mouse.click(centerX, centerY, { button: 'right' })
+
+    const viewport = page.viewportSize()
+    await expect.poll(async () => {
+      const box = await page.locator('.skill-tree-center-icon__foreign').boundingBox()
+      if (!box) {
+        return false
+      }
+
+      const centeredX = Math.abs((box.x + box.width / 2) - viewport.width / 2)
+      const centeredY = Math.abs((box.y + box.height / 2) - viewport.height / 2)
+      return centeredX < 8 && centeredY < 8
+    }, { timeout: 3000 }).toBeTruthy()
+  })
 })

@@ -593,7 +593,7 @@ describe('layoutSolver', () => {
       expect(links.every((l) => l.linkKind === 'routed')).toBe(true)
     })
 
-    it('routed shared-trunk links should expose valid split points at the parent fork', () => {
+    it('routed shared-trunk links should expose split points only for non-extreme children', () => {
       const tree = {
         segments: [{ id: 'seg', label: 'Seg' }],
         children: [
@@ -614,17 +614,19 @@ describe('layoutSolver', () => {
 
       const result = solveSkillTreeLayout(tree, TREE_CONFIG)
       const routedLinks = result.layout.links.filter((link) => link.linkKind === 'routed')
-      expect(routedLinks.length).toBeGreaterThan(1)
+      expect(routedLinks.length).toBe(3)
 
-      const points = routedLinks.map((link) => link.splitPoint)
-      points.forEach((point) => {
-        expect(point).toBeTruthy()
-        expect(Number.isFinite(point.x)).toBe(true)
-        expect(Number.isFinite(point.y)).toBe(true)
-      })
+      // Arc extremes (first and last by angle) are elbow turns — no T-junction, no dot.
+      // Only the middle child(ren) get a split point dot.
+      const withDot = routedLinks.filter((link) => link.splitPoint != null)
+      const withoutDot = routedLinks.filter((link) => link.splitPoint == null)
 
-      const uniquePointCount = new Set(points.map((p) => `${p.x.toFixed(3)}|${p.y.toFixed(3)}`)).size
-      expect(uniquePointCount).toBe(1)
+      expect(withDot.length).toBe(1)
+      expect(withoutDot.length).toBe(2)
+
+      const [dot] = withDot.map((link) => link.splitPoint)
+      expect(Number.isFinite(dot.x)).toBe(true)
+      expect(Number.isFinite(dot.y)).toBe(true)
     })
 
     it('direct links should not expose split points', () => {

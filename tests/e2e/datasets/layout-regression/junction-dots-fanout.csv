@@ -1,0 +1,8 @@
+ShortName,Name,Scope,Ebene,Segment,Parent,AdditionalDependency,ProgressLevel,Status,ReleaseNotes
+PAR,Parent Node,,1,Core,,,1,now,"Shared-trunk parent"
+C1,Child One,,2,Core,PAR,,1,now,"Same-segment child – segDist=0"
+C2,Child Two,,2,Core,PAR,,1,next,"Same-segment child – segDist=0"
+C3,Child Three,,2,Core,PAR,,1,later,"Same-segment child – segDist=0"
+XPAR,Cross Parent,,1,Alpha,,,1,now,"Cross-segment parent"
+X1,Cross A,,2,Beta,XPAR,,1,now,"segDist=1"
+X2,Cross B,,2,Gamma,XPAR,,1,next,"segDist=2"

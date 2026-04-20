@@ -27,19 +27,11 @@ export const pickPortalSlotAngle = ({
   reservedAngles = [],
   slotStep = 20,
   hemiSpan = 80,
-  linkBlock = 32,
+  linkBlock = 26,
   portalSep = 20,
 } = {}) => {
   const center = normalizeAngle(type === 'source' ? inwardAngle : inwardAngle + 180)
   const slots = buildSlots(center, slotStep, hemiSpan)
-  const hasPortalConflict = (slot) => reservedAngles.some((angle) => isAngleNear(slot, angle, portalSep))
-
-  // Keep the lead portal anchored on the semantic radial axis whenever that slot
-  // is still free. This makes "requires" face the tree centre and "enables"
-  // face away from it, even when a hierarchy line runs along the same angle.
-  if (slots.length > 0 && !hasPortalConflict(slots[0])) {
-    return slots[0]
-  }
 
   let bestSlot = slots[0] ?? center
   let bestScore = Number.POSITIVE_INFINITY
@@ -47,7 +39,12 @@ export const pickPortalSlotAngle = ({
   for (const slot of slots) {
     const linkHits = blockedDirs.filter((angle) => isAngleNear(slot, angle, linkBlock)).length
     const portalHits = reservedAngles.filter((angle) => isAngleNear(slot, angle, portalSep)).length
-    const score = portalHits * 10_000 + linkHits * 100 + Math.abs(getAngleDelta(slot, center))
+
+    // Priority order:
+    // 1) avoid hierarchy/connection-line collisions,
+    // 2) avoid piling portals on top of each other,
+    // 3) stay close to the semantic center radial for the given type.
+    const score = linkHits * 1_000_000 + portalHits * 10_000 + Math.abs(getAngleDelta(slot, center))
 
     if (score < bestScore) {
       bestScore = score

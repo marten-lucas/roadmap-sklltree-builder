@@ -50,6 +50,15 @@ test.describe('HTML export – content matches builder', () => {
     expect(exportNodeCount).toBe(builderNodeCount)
   })
 
+  test('exported html preserves split-dot markers from the builder canvas', async ({ page }) => {
+    const builderSplitDotCount = await page.locator('circle[data-split-dot-key]').count()
+
+    const html = await exportHtml(page)
+
+    const exportSplitDotCount = (html.match(/data-split-dot-key="/g) ?? []).length
+    expect(exportSplitDotCount).toBe(builderSplitDotCount)
+  })
+
   test('embedded json payload matches builder segments and tree structure', async ({ page }) => {
     const html = await exportHtml(page)
     const payload = extractJsonPayload(html)
@@ -158,6 +167,91 @@ test.describe('HTML export – viewer page shows same content as builder', () =>
         .locator('.html-export__tree-shell [class*="skill-node-export-anchor"]')
         .count()
       expect(exportNodeCount).toBe(builderNodeCount)
+    } finally {
+      await exportPage.close()
+      await exportContext.close()
+    }
+  })
+
+  test('exported html viewer keeps center icon image aligned to its hit area', async ({
+    page,
+    browser,
+  }) => {
+    const html = await exportHtml(page)
+
+    const exportContext = await browser.newContext()
+    const exportPage = await exportContext.newPage()
+    try {
+      await exportPage.setContent(html)
+      await exportPage.waitForSelector('#html-export-tree-canvas svg', { timeout: 10_000 })
+
+      const imageBox = await exportPage.locator('.skill-tree-center-icon__image').first().boundingBox()
+      const hitAreaBox = await exportPage.locator('.skill-tree-center-icon__hit-area').first().boundingBox()
+
+      expect(imageBox).toBeTruthy()
+      expect(hitAreaBox).toBeTruthy()
+
+      const imageWidth = imageBox?.width ?? 0
+      const imageHeight = imageBox?.height ?? 0
+      const hitWidth = hitAreaBox?.width ?? 1
+      const hitHeight = hitAreaBox?.height ?? 1
+
+      expect(imageWidth).toBeGreaterThan(0)
+      expect(imageHeight).toBeGreaterThan(0)
+
+      // The center icon artwork should stay within the same order of magnitude
+      // as its interaction hit area, not expand to the full viewport.
+      expect(imageWidth).toBeLessThan(hitWidth * 1.2)
+      expect(imageHeight).toBeLessThan(hitHeight * 1.2)
+      expect(imageWidth).toBeGreaterThan(hitWidth * 0.35)
+      expect(imageHeight).toBeGreaterThan(hitHeight * 0.35)
+    } finally {
+      await exportPage.close()
+      await exportContext.close()
+    }
+  })
+
+  test('exported html viewer runs without console errors and uses full viewport width', async ({
+    page,
+    browser,
+  }) => {
+    const html = await exportHtml(page)
+
+    const exportContext = await browser.newContext()
+    const exportPage = await exportContext.newPage()
+    const runtimeErrors = []
+
+    exportPage.on('pageerror', (error) => {
+      runtimeErrors.push(`pageerror: ${error.message}`)
+    })
+
+    exportPage.on('console', (message) => {
+      if (message.type() === 'error') {
+        runtimeErrors.push(`console.error: ${message.text()}`)
+      }
+    })
+
+    try {
+      await exportPage.setContent(html)
+      await exportPage.waitForSelector('#html-export-tree-canvas svg', { timeout: 10_000 })
+
+      const widthCheck = await exportPage.evaluate(() => {
+        const exportRoot = document.querySelector('.html-export')
+        if (!exportRoot) {
+          return { ok: false, viewportWidth: 0, exportWidth: 0 }
+        }
+
+        const viewportWidth = window.innerWidth
+        const exportWidth = Math.round(exportRoot.getBoundingClientRect().width)
+        return {
+          ok: Math.abs(viewportWidth - exportWidth) <= 1,
+          viewportWidth,
+          exportWidth,
+        }
+      })
+
+      expect(widthCheck.ok).toBe(true)
+      expect(runtimeErrors).toEqual([])
     } finally {
       await exportPage.close()
       await exportContext.close()

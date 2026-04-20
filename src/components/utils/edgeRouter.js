@@ -407,9 +407,13 @@ export const buildRoutedEdgeLinks = ({ edgeRouting, nodesById, origin, nodeSize 
           parts.push(corridorArc)
         }
 
-        // Split marker at the shared parent-side fork where the common trunk ends
-        // and the child-specific branch begins.
-        splitPoint = { x: corridorTrunkPoint.x, y: corridorTrunkPoint.y }
+        // Junction dot at each child's spoke-start on the corridor ring.
+        // The first and last children in the group's arc sweep are arc endpoints
+        // (elbow turns only) — they do not create a T-junction, so skip them.
+        const isArcExtreme = plan.childAngle === plan.minGroupAngle || plan.childAngle === plan.maxGroupAngle
+        if (!isArcExtreme) {
+          splitPoint = { x: corridorChildPoint.x, y: corridorChildPoint.y }
+        }
 
         // Radial spoke from corridor ring down to child node.
         parts.push(`L ${child.x} ${child.y}`)

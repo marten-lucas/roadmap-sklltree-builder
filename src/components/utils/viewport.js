@@ -104,6 +104,20 @@ export const computeFitTransform = ({
   }
 }
 
+/**
+ * Calculates a transform that centers a specific coordinate in the viewport.
+ */
+export const computeCenterTransform = ({
+  x,
+  y,
+  scale,
+  viewportWidth,
+  viewportHeight,
+}) => ({
+  positionX: (Number(viewportWidth) || 0) / 2 - (Number(x) || 0) * scale,
+  positionY: (Number(viewportHeight) || 0) / 2 - (Number(y) || 0) * scale,
+})
+
 export const getViewportKeyboardAction = ({
   key,
   ctrlKey = false,
