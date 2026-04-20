@@ -1,4 +1,5 @@
 import { generateUUID } from './uuid'
+import { createDefaultStatusBudgets, normalizeStatusBudgets } from './effortBenefit'
 
 const normalizeNotesChecked = (value) => {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
@@ -19,6 +20,7 @@ export const createRelease = (name = '') => ({
   introduction: '',
   date: '',
   storyPointBudget: null,
+  statusBudgets: createDefaultStatusBudgets(),
   notesMarkdown: '',
   notesChecked: {},
 })
@@ -45,6 +47,7 @@ export const addRelease = (releases, name, copyFromId = null) => {
     const source = releases.find((r) => r.id === copyFromId)
     if (source) {
       newRelease.storyPointBudget = source.storyPointBudget
+      newRelease.statusBudgets = { ...normalizeStatusBudgets(source.statusBudgets, source.storyPointBudget) }
     }
   }
   return { releases: [...releases, newRelease], newReleaseId: newRelease.id }
@@ -114,6 +117,7 @@ export const normalizeRelease = (raw) => {
     introduction: typeof raw.introduction === 'string' ? raw.introduction : '',
     date: typeof raw.date === 'string' ? raw.date : '',
     storyPointBudget: raw.storyPointBudget != null ? Number(raw.storyPointBudget) : null,
+    statusBudgets: normalizeStatusBudgets(raw.statusBudgets, raw.storyPointBudget),
     notesMarkdown: typeof raw.notesMarkdown === 'string' ? raw.notesMarkdown : '',
     notesChecked: normalizeNotesChecked(raw.notesChecked),
   }

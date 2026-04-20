@@ -1,7 +1,12 @@
-import { ActionIcon, Alert, Button, NumberInput, Paper, Stack, Tabs, Text, TextInput } from '@mantine/core'
+import { ActionIcon, Button, Checkbox, NumberInput, Paper, Stack, Tabs, Text, TextInput } from '@mantine/core'
 import { useCallback, useEffect, useImperativeHandle, useRef, useState, forwardRef } from 'react'
 import { MarkdownField } from './MarkdownField'
-import { DEFAULT_STORY_POINT_MAP, computeBudgetSummary } from '../utils/effortBenefit'
+import {
+  DEFAULT_STORY_POINT_MAP,
+  STATUS_BUDGET_KEYS,
+  computeStatusBudgetSummaries,
+  normalizeStatusBudgets,
+} from '../utils/effortBenefit'
 import { addRelease, deleteRelease, updateRelease } from '../utils/releases'
 import { DEFAULT_STATUS_DESCRIPTIONS, STATUS_LABELS } from '../config'
 
@@ -207,13 +212,29 @@ export const SystemPanel = forwardRef(function SystemPanel(
     onReleaseChange?.(nextReleaseId)
   }
 
-  const activeBudget = activeRelease?.storyPointBudget ?? null
-  const summary = activeRelease
-    ? computeBudgetSummary(allNodes, roadmapData.storyPointMap ?? DEFAULT_STORY_POINT_MAP, activeBudget, activeRelease.id)
-    : { total: 0, budget: null, isOverBudget: false }
+  const storyPointMap = roadmapData.storyPointMap ?? DEFAULT_STORY_POINT_MAP
+
+  const updateReleaseStatusBudget = useCallback((release, statusKey, nextBudgetValue) => {
+    const nextStatusBudgets = normalizeStatusBudgets({
+      ...(release?.statusBudgets ?? {}),
+      [statusKey]: nextBudgetValue,
+    })
+
+    const combinedBudget = Object.values(nextStatusBudgets).reduce((sum, value) => (
+      value != null ? sum + Number(value) : sum
+    ), 0)
+
+    commitDocument({
+      ...roadmapData,
+      releases: updateRelease(releases, release.id, {
+        statusBudgets: nextStatusBudgets,
+        storyPointBudget: combinedBudget > 0 ? combinedBudget : null,
+      }),
+    })
+  }, [commitDocument, releases, roadmapData])
 
   return (
-    <Paper className="skill-panel skill-panel--icon" radius={0} shadow="none">
+    <Paper className="skill-panel skill-panel--system" radius={0} shadow="none">
       {/* hidden file input */}
       <input
         ref={fileInputRef}
@@ -297,8 +318,9 @@ export const SystemPanel = forwardRef(function SystemPanel(
           {releases.map((release) => (
             <Tabs.Panel key={release.id} value={release.id}>
               <div className="skill-panel__tab-scroll skill-panel__tab-scroll--fill">
-                <Stack gap="md" style={{ flexShrink: 0 }}>
+                <div className="skill-panel__compact-grid" style={{ flexShrink: 0 }}>
                   <TextInput
+                    size="xs"
                     label="Release name"
                     value={releaseDraftId === release.id ? releaseNameDraft : (release.name ?? '')}
                     onChange={(e) => {
@@ -310,17 +332,7 @@ export const SystemPanel = forwardRef(function SystemPanel(
                   />
 
                   <TextInput
-                    label="Motto"
-                    value={releaseDraftId === release.id ? releaseMottoDraft : (release.motto ?? '')}
-                    onChange={(e) => {
-                      setReleaseDraftId(release.id)
-                      setReleaseMottoDraft(e.currentTarget.value)
-                    }}
-                    onBlur={() => commitTextDrafts(release.id)}
-                    classNames={{ input: 'mantine-dark-input', label: 'mantine-dark-label' }}
-                  />
-
-                  <TextInput
+                    size="xs"
                     label="Release Date"
                     placeholder="YYYY-MM-DD"
                     type="date"
@@ -333,27 +345,78 @@ export const SystemPanel = forwardRef(function SystemPanel(
                     classNames={{ input: 'mantine-dark-input', label: 'mantine-dark-label' }}
                   />
 
-                  <NumberInput
-                    label="Available Story Points (Budget)"
-                    placeholder="e.g. 40"
-                    value={release.storyPointBudget ?? ''}
-                    onChange={(val) => commitDocument({
-                      ...roadmapData,
-                      releases: updateRelease(releases, release.id, { storyPointBudget: val === '' ? null : Number(val) }),
-                    })}
-                    min={0}
-                    allowDecimal={false}
-                    classNames={{ input: 'mantine-dark-input', label: 'mantine-dark-label' }}
-                  />
+                  <div className="skill-panel__compact-grid-span">
+                    <TextInput
+                      size="xs"
+                      label="Motto"
+                      value={releaseDraftId === release.id ? releaseMottoDraft : (release.motto ?? '')}
+                      onChange={(e) => {
+                        setReleaseDraftId(release.id)
+                        setReleaseMottoDraft(e.currentTarget.value)
+                      }}
+                      onBlur={() => commitTextDrafts(release.id)}
+                      classNames={{ input: 'mantine-dark-input', label: 'mantine-dark-label' }}
+                    />
+                  </div>
+                </div>
 
-                  {release.id === activeRelease?.id && (
-                    <Alert color={summary.isOverBudget ? 'red' : 'teal'} variant="light">
-                      {summary.budget != null
-                        ? `Used: ${summary.total} / ${summary.budget} SP${summary.isOverBudget ? ' ⚠ Budget exceeded!' : ''}`
-                        : `Used: ${summary.total} SP (no budget set)`}
-                    </Alert>
-                  )}
-                </Stack>
+                <div className="skill-panel__compact-section">
+                  <Text size="xs" fw={600} tt="uppercase" c="dimmed" lts="0.1em">Status budgets</Text>
+                  <div className="skill-panel__compact-budget-list">
+                    {(() => {
+                      const releaseSummaries = computeStatusBudgetSummaries(allNodes, storyPointMap, release.statusBudgets ?? null, release.id)
+
+                      return STATUS_BUDGET_KEYS.map((statusKey) => {
+                        const statusSummary = releaseSummaries[statusKey] ?? {
+                          total: 0,
+                          budget: null,
+                          isOverBudget: false,
+                          utilization: null,
+                        }
+                        const hasBudget = statusSummary.budget != null
+
+                        return (
+                          <div
+                            key={`${release.id}-${statusKey}`}
+                            className={`skill-panel__compact-budget-row${statusSummary.isOverBudget ? ' skill-panel__compact-budget-row--over' : ''}`}
+                          >
+                            <div className="skill-panel__compact-budget-copy">
+                              <Text size="sm" fw={600}>{STATUS_LABELS[statusKey]}</Text>
+                              <Text size="xs" c={statusSummary.isOverBudget ? 'red.3' : 'dimmed'}>
+                                {hasBudget
+                                  ? `Budget for ${STATUS_LABELS[statusKey]} · ${statusSummary.total} / ${statusSummary.budget} SP · ${statusSummary.utilization}%`
+                                  : `Budget for ${STATUS_LABELS[statusKey]} · ${statusSummary.total} SP`}
+                              </Text>
+                            </div>
+
+                            <Checkbox
+                              size="xs"
+                              checked={hasBudget}
+                              onChange={(event) => {
+                                const checked = event.currentTarget.checked
+                                updateReleaseStatusBudget(release, statusKey, checked ? (statusSummary.budget ?? 0) : null)
+                              }}
+                              label="Budget"
+                            />
+
+                            <NumberInput
+                              size="xs"
+                              aria-label={`Budget for ${STATUS_LABELS[statusKey]}`}
+                              placeholder="SP"
+                              value={statusSummary.budget ?? ''}
+                              onChange={(val) => updateReleaseStatusBudget(release, statusKey, val === '' ? null : Number(val))}
+                              min={0}
+                              allowDecimal={false}
+                              hideControls
+                              disabled={!hasBudget}
+                              classNames={{ input: 'mantine-dark-input', label: 'mantine-dark-label' }}
+                            />
+                          </div>
+                        )
+                      })
+                    })()}
+                  </div>
+                </div>
 
                 <div className="skill-panel__release-note-fill">
                   <MarkdownField
@@ -365,7 +428,7 @@ export const SystemPanel = forwardRef(function SystemPanel(
                       setIntroductionDraft(nextValue)
                     }}
                     onBlur={() => commitTextDrafts(release.id)}
-                    minRows={4}
+                    minRows={8}
                   />
                 </div>
 
@@ -388,8 +451,9 @@ export const SystemPanel = forwardRef(function SystemPanel(
           {/* ── SP-Skala Tab ── */}
           <Tabs.Panel value="system">
             <div className="skill-panel__tab-scroll">
-              <Stack gap="md">
+              <Stack gap="xs">
                 <TextInput
+                  size="xs"
                   label="Systemname"
                   value={systemNameDraft}
                   onChange={(e) => setSystemNameDraft(e.currentTarget.value)}
@@ -398,10 +462,11 @@ export const SystemPanel = forwardRef(function SystemPanel(
                 />
 
                 <Text size="xs" fw={600} tt="uppercase" c="dimmed" lts="0.1em">Status descriptions</Text>
-                <Stack gap={6}>
+                <div className="skill-panel__compact-grid">
                   {STATUS_DESCRIPTION_KEYS.map((key) => (
                     <TextInput
                       key={key}
+                      size="xs"
                       label={`${STATUS_LABELS[key]} description`}
                       value={statusDescriptionsDraft[key] ?? ''}
                       placeholder={DEFAULT_STATUS_DESCRIPTIONS[key]}
@@ -416,13 +481,14 @@ export const SystemPanel = forwardRef(function SystemPanel(
                       classNames={{ input: 'mantine-dark-input', label: 'mantine-dark-label' }}
                     />
                   ))}
-                </Stack>
+                </div>
 
                 <Text size="xs" fw={600} tt="uppercase" c="dimmed" lts="0.1em">Story Point Scale</Text>
-                <Stack gap={6}>
+                <div className="skill-panel__compact-grid skill-panel__compact-grid--sp">
                   {T_SHIRT_KEYS.map((key) => (
                     <NumberInput
                       key={key}
+                      size="xs"
                       label={`SP for ${key.toUpperCase()}`}
                       value={roadmapData?.storyPointMap?.[key] ?? DEFAULT_STORY_POINT_MAP[key]}
                       onChange={(val) => {
@@ -436,7 +502,7 @@ export const SystemPanel = forwardRef(function SystemPanel(
                       classNames={{ input: 'mantine-dark-input', label: 'mantine-dark-label' }}
                     />
                   ))}
-                </Stack>
+                </div>
               </Stack>
             </div>
           </Tabs.Panel>
@@ -444,20 +510,20 @@ export const SystemPanel = forwardRef(function SystemPanel(
           {/* ── Icon Tab ── */}
           <Tabs.Panel value="icon">
             <div className="skill-panel__tab-scroll">
-              <Stack gap="md">
+              <Stack gap="xs">
                 <Paper className="skill-panel__icon-preview" radius="lg" withBorder>
                   <img src={iconSource} alt="Center icon preview" className="skill-panel__icon-preview-image" />
                 </Paper>
 
-                <Button onClick={() => fileInputRef.current?.click()}>
+                <Button size="xs" onClick={() => fileInputRef.current?.click()}>
                   Upload SVG
                 </Button>
 
-                <Button variant="outline" color="gray" onClick={onResetDefault}>
+                <Button size="xs" variant="outline" color="gray" onClick={onResetDefault}>
                   Restore default icon
                 </Button>
 
-                <Text size="sm" c="dimmed">
+                <Text size="xs" c="dimmed">
                   Upload an SVG file. The icon will be saved to the roadmap and included in exports.
                 </Text>
               </Stack>

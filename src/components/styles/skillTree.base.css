@@ -749,6 +749,93 @@
     color: #67e8f9;
 }
 
+.skill-panel--system .skill-panel__header {
+    padding: 0.8rem 0.9rem;
+}
+
+.skill-panel--system .skill-panel__tabs-list {
+    padding: 0 0.55rem;
+    gap: 0.1rem;
+}
+
+.skill-panel--system .skill-panel__tab-scroll,
+.skill-panel--system .skill-panel__tab-scroll--fill {
+    padding: 0.7rem 0.85rem;
+}
+
+.skill-panel--system .skill-panel__release-note-fill {
+    flex: 1 1 auto;
+    min-height: clamp(16rem, 42vh, 34rem);
+    padding-top: 0.6rem;
+}
+
+.skill-panel--system .skill-panel__icon-preview {
+    min-height: 9rem;
+    padding: 0.65rem;
+}
+
+.skill-panel--system .skill-panel__icon-preview-image {
+    max-width: 7.5rem;
+    max-height: 7.5rem;
+}
+
+.skill-panel__compact-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.45rem 0.55rem;
+}
+
+.skill-panel__compact-grid--sp {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.skill-panel__compact-grid-span {
+    grid-column: 1 / -1;
+}
+
+.skill-panel__compact-section {
+    margin-top: 0.5rem;
+}
+
+.skill-panel__compact-budget-list {
+    display: grid;
+    gap: 0.4rem;
+    margin-top: 0.35rem;
+}
+
+.skill-panel__compact-budget-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto 5.2rem;
+    gap: 0.45rem;
+    align-items: center;
+    padding: 0.42rem 0.55rem;
+    border-radius: 8px;
+    background: rgba(15, 23, 42, 0.52);
+    border: 1px solid rgba(71, 85, 105, 0.36);
+}
+
+.skill-panel__compact-budget-row--over {
+    background: rgba(127, 29, 29, 0.16);
+    border-color: rgba(239, 68, 68, 0.4);
+}
+
+.skill-panel__compact-budget-copy {
+    min-width: 0;
+}
+
+.skill-panel__compact-budget-copy .mantine-Text-root+.mantine-Text-root {
+    margin-top: 0.08rem;
+}
+
+@media (max-width: 860px) {
+
+    .skill-panel__compact-grid,
+    .skill-panel__compact-grid--sp,
+    .skill-panel__compact-budget-row {
+        grid-template-columns: 1fr;
+    }
+}
+
 .skill-panel__title-editor {
     display: flex;
     align-items: flex-start;

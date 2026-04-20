@@ -20,7 +20,10 @@ export const BENEFIT_SIZE_LABELS = {
   xl: 'XL',
 }
 
+import { normalizeStatusKey } from '../config'
+
 export const DEFAULT_STORY_POINT_MAP = { xs: 1, s: 3, m: 5, l: 8, xl: 13 }
+export const STATUS_BUDGET_KEYS = ['done', 'now', 'next', 'later', 'someday']
 
 export const createDefaultEffort = () => ({ size: 'unclear', customPoints: null })
 export const createDefaultBenefit = () => ({ size: 'unclear' })
@@ -47,6 +50,38 @@ export const normalizeStoryPointMap = (raw) => {
     result[key] = Number.isFinite(val) && val >= 0 ? val : DEFAULT_STORY_POINT_MAP[key]
   }
   return result
+}
+
+export const createDefaultStatusBudgets = () => ({
+  done: null,
+  now: null,
+  next: null,
+  later: null,
+  someday: null,
+})
+
+export const normalizeStatusBudgets = (raw, legacyBudget = null) => {
+  const next = createDefaultStatusBudgets()
+
+  if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+    for (const key of STATUS_BUDGET_KEYS) {
+      const value = raw[key]
+      if (value == null || value === '') {
+        next[key] = null
+        continue
+      }
+
+      const normalized = Number(value)
+      next[key] = Number.isFinite(normalized) && normalized >= 0 ? normalized : null
+    }
+  }
+
+  const fallbackBudget = legacyBudget == null || legacyBudget === '' ? null : Number(legacyBudget)
+  if (next.now == null && Number.isFinite(fallbackBudget) && fallbackBudget >= 0) {
+    next.now = fallbackBudget
+  }
+
+  return next
 }
 
 /**
@@ -98,15 +133,78 @@ const resolveStoryPointsFromEffort = (effort, storyPointMap) => {
 }
 
 /**
- * Returns true when a level has 'now' status for the given release.
+ * Returns the normalized status for a level in the given release.
  * Falls back to the legacy level.status field.
  */
-const levelIsNow = (level, releaseId) => {
+const getLevelStatus = (level, releaseId) => {
   if (releaseId && level?.statuses && typeof level.statuses === 'object') {
-    const s = level.statuses[releaseId]
-    if (s !== undefined) return s === 'now'
+    const releaseStatus = level.statuses[releaseId]
+    if (releaseStatus !== undefined) {
+      return normalizeStatusKey(releaseStatus)
+    }
   }
-  return (level?.status ?? 'later') === 'now'
+
+  return normalizeStatusKey(level?.status ?? 'later')
+}
+
+const levelHasStatus = (level, statusKey, releaseId) => getLevelStatus(level, releaseId) === normalizeStatusKey(statusKey)
+
+export const computeStatusBudgetSummaries = (allNodes, storyPointMapOrDocument, statusBudgetsOrUndefined = null, releaseId = null) => {
+  let storyPointMap
+  let statusBudgets
+
+  if (
+    statusBudgetsOrUndefined === null
+    && storyPointMapOrDocument
+    && typeof storyPointMapOrDocument === 'object'
+    && ('children' in storyPointMapOrDocument || 'releases' in storyPointMapOrDocument)
+  ) {
+    storyPointMap = normalizeStoryPointMap(storyPointMapOrDocument?.storyPointMap)
+    const activeRelease = releaseId
+      ? (storyPointMapOrDocument.releases ?? []).find((release) => release?.id === releaseId) ?? null
+      : null
+    statusBudgets = normalizeStatusBudgets(activeRelease?.statusBudgets, activeRelease?.storyPointBudget ?? storyPointMapOrDocument?.storyPointBudget ?? null)
+  } else {
+    storyPointMap = normalizeStoryPointMap(storyPointMapOrDocument)
+    statusBudgets = normalizeStatusBudgets(statusBudgetsOrUndefined)
+  }
+
+  const summaries = Object.fromEntries(
+    STATUS_BUDGET_KEYS.map((statusKey) => [statusKey, {
+      status: statusKey,
+      total: 0,
+      budget: statusBudgets[statusKey],
+      isOverBudget: false,
+      utilization: null,
+    }]),
+  )
+
+  for (const node of allNodes) {
+    const levels = Array.isArray(node?.levels) ? node.levels : []
+    for (const level of levels) {
+      const statusKey = getLevelStatus(level, releaseId)
+      if (!Object.hasOwn(summaries, statusKey)) {
+        continue
+      }
+
+      const pts = resolveStoryPointsFromEffort(level.effort, storyPointMap)
+      if (pts != null) {
+        summaries[statusKey].total += pts
+      }
+    }
+  }
+
+  for (const statusKey of STATUS_BUDGET_KEYS) {
+    const entry = summaries[statusKey]
+    entry.isOverBudget = entry.budget != null && entry.total > entry.budget
+    entry.utilization = entry.budget != null
+      ? entry.budget === 0
+        ? (entry.total > 0 ? 100 : 0)
+        : Math.round((entry.total / entry.budget) * 100)
+      : null
+  }
+
+  return summaries
 }
 
 /**
@@ -131,11 +229,10 @@ export const computeBudgetSummary = (allNodes, storyPointMapOrDocument, budgetOr
   let total = 0
 
   if (releaseId) {
-    // Only count levels with status 'now' for this release
     for (const node of allNodes) {
       const levels = Array.isArray(node?.levels) ? node.levels : []
       for (const level of levels) {
-        if (!levelIsNow(level, releaseId)) continue
+        if (!levelHasStatus(level, 'now', releaseId)) continue
         const pts = resolveStoryPointsFromEffort(level.effort, storyPointMap)
         if (pts != null) total += pts
       }

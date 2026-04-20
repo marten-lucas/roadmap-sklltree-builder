@@ -20,13 +20,13 @@ import {
   DEFAULT_CENTER_ICON_SRC,
   documentHistoryReducer,
 } from './utils/documentState'
-import { SystemPanel, InspectorPanel, SegmentPanel, ToolbarScopeManager } from './panels'
+import { SystemPanel, InspectorPanel, SegmentPanel, ReleaseNotesPanel, ToolbarScopeManager } from './panels'
 import { PriorityMatrix } from './panels/PriorityMatrix'
 import { ListViewDrawer } from './panels/ListViewDrawer'
 import { solveSkillTreeLayout } from './utils/layoutSolver'
 import { UNASSIGNED_SEGMENT_ID } from './utils/layoutShared'
 import { getSkillTreeShortcutAction } from './utils/keyboardShortcuts'
-import { togglePanel, PANEL_INSPECTOR, PANEL_CENTER, PANEL_SCOPES, PANEL_SEGMENTS } from './utils/panelsState'
+import { togglePanel, PANEL_INSPECTOR, PANEL_CENTER, PANEL_SCOPES, PANEL_SEGMENTS, PANEL_RELEASE_NOTES } from './utils/panelsState'
 import { getDisplayStatusKey } from './utils/nodeStatus'
 import {
   getAdditionalDependencyOptionsForLevel,
@@ -69,7 +69,7 @@ import {
   updateNodeShortName,
   updateSegmentLabel,
 } from './utils/treeData'
-import { DEFAULT_STORY_POINT_MAP, computeBudgetSummary, normalizeEffort, normalizeBenefit } from './utils/effortBenefit'
+import { DEFAULT_STORY_POINT_MAP, computeStatusBudgetSummaries, normalizeEffort, normalizeBenefit } from './utils/effortBenefit'
 import { toDegrees, toRadians } from './utils/layoutMath'
 import { SkillTreeCanvas } from './canvas'
 import { SkillTreeToolbar } from './toolbar'
@@ -258,6 +258,8 @@ export function SkillTree() {
     setIsToolbarCollapsed,
     isLegendVisible,
     setIsLegendVisible,
+    isBudgetOverviewVisible,
+    setIsBudgetOverviewVisible,
     selectedScopeFilterId,
     setSelectedScopeFilterId,
     releaseFilter,
@@ -422,6 +424,7 @@ export function SkillTree() {
     || rightPanel === PANEL_CENTER
     || rightPanel === PANEL_SCOPES
     || rightPanel === PANEL_SEGMENTS
+    || rightPanel === PANEL_RELEASE_NOTES
 
   useEffect(() => {
     leftSidebarWidthRef.current = leftSidebarWidth
@@ -644,18 +647,30 @@ export function SkillTree() {
     [roadmapData.releases, activeReleaseId],
   )
 
-  const releaseBudgetSummaries = useMemo(() => {
-    const allNodes = collectAllNodes(roadmapData)
-    const storyPointMap = roadmapData.storyPointMap ?? DEFAULT_STORY_POINT_MAP
-    const summariesByReleaseId = new Map()
-
-    for (const release of roadmapData.releases ?? []) {
-      const summary = computeBudgetSummary(allNodes, storyPointMap, release.storyPointBudget ?? null)
-      summariesByReleaseId.set(release.id, summary)
+  const activeStatusBudgetSummaries = useMemo(() => {
+    if (!activeRelease) {
+      return {}
     }
 
-    return summariesByReleaseId
-  }, [roadmapData])
+    const allNodes = collectAllNodes(roadmapData)
+    const storyPointMap = roadmapData.storyPointMap ?? DEFAULT_STORY_POINT_MAP
+    return computeStatusBudgetSummaries(allNodes, storyPointMap, activeRelease.statusBudgets ?? null, activeRelease.id)
+  }, [activeRelease, roadmapData])
+
+  const activeStatusBudgetEntries = useMemo(
+    () => LEGEND_STATUS_ORDER.map((statusKey) => ({
+      statusKey,
+      ...(activeStatusBudgetSummaries[statusKey] ?? {
+        total: 0,
+        budget: null,
+        isOverBudget: false,
+        utilization: null,
+      }),
+    })).filter((entry) => entry.statusKey !== 'done' && entry.total > 0),
+    [activeStatusBudgetSummaries],
+  )
+
+  const hasBudgetAlert = activeStatusBudgetEntries.some((entry) => entry.isOverBudget)
 
   useEffect(() => {
     const releases = roadmapData.releases ?? []
@@ -1491,6 +1506,13 @@ export function SkillTree() {
     selectNodeId(null)
     selectSegmentId(null)
     setRightPanel((prev) => togglePanel(prev, PANEL_SEGMENTS))
+  }
+
+  const handleOpenReleaseNotes = (event) => {
+    event?.stopPropagation()
+    selectNodeId(null)
+    selectSegmentId(null)
+    setRightPanel((prev) => togglePanel(prev, PANEL_RELEASE_NOTES))
   }
 
   const handleCloseScopeManager = () => {
@@ -3403,6 +3425,22 @@ export function SkillTree() {
       onReleaseChange={setSelectedReleaseId}
       onDraftChange={handleDraftChange}
     />
+  ) : rightPanel === PANEL_RELEASE_NOTES ? (
+    <ReleaseNotesPanel
+      isOpen={rightPanel === PANEL_RELEASE_NOTES}
+      release={activeRelease}
+      onClose={() => {
+        if (rightPanel === PANEL_RELEASE_NOTES) setRightPanel(null)
+      }}
+      onCommitReleaseNotes={(releaseId, updates) => {
+        commitDocument({
+          ...roadmapData,
+          releases: (roadmapData.releases ?? []).map((release) => (
+            release.id === releaseId ? { ...release, ...updates } : release
+          )),
+        })
+      }}
+    />
   ) : isRightSidebarVisible ? (
     <SegmentPanel
       selectedSegment={selectedSegment}
@@ -3592,6 +3630,12 @@ export function SkillTree() {
         onToggleLegend={() => {
           setIsLegendVisible((prev) => !prev)
         }}
+        isBudgetOverviewVisible={isBudgetOverviewVisible}
+        onToggleBudgetOverview={() => {
+          setIsLegendVisible(true)
+          setIsBudgetOverviewVisible((prev) => !prev)
+        }}
+        hasBudgetAlert={hasBudgetAlert}
         onOpenDocumentPicker={handleOpenImportPicker}
         onOpenHtmlDocumentPicker={handleOpenDocumentPicker}
         onOpenCsvDocumentPicker={handleOpenCsvDocumentPicker}
@@ -3618,6 +3662,7 @@ export function SkillTree() {
           setListViewOpen((v) => !v)
           setPriorityMatrixOpen(false)
         }}
+        onOpenReleaseNotes={handleOpenReleaseNotes}
         releaseFilter={releaseFilter}
         setReleaseFilter={setReleaseFilter}
         selectedReleaseFilterLabel={selectedReleaseFilterLabel}
@@ -3639,7 +3684,6 @@ export function SkillTree() {
         releases={roadmapData.releases ?? []}
         selectedReleaseId={activeReleaseId}
         onReleaseChange={setSelectedReleaseId}
-        releaseBudgetSummaries={releaseBudgetSummaries}
       />
 
       <div className="skill-tree-workspace">
@@ -3818,6 +3862,46 @@ export function SkillTree() {
                     <span className="skill-tree-legend__tip-text">Tip: Zooming in or hovering reveals more node details.</span>
                   </div>
                 </aside>
+
+                {isBudgetOverviewVisible && activeRelease && activeStatusBudgetEntries.length > 0 && (
+                  <div className="skill-tree-budget-overview" aria-label="Budget overview">
+                    <div className="skill-tree-budget-overview__grid">
+                      {activeStatusBudgetEntries.map((entry) => {
+                        const accent = STATUS_STYLES[entry.statusKey]?.ringBand ?? '#94a3b8'
+                        const budgetStateClass = entry.budget == null
+                          ? ''
+                          : entry.isOverBudget
+                            ? ' skill-tree-budget-overview__card--over'
+                            : (entry.utilization ?? 0) >= 80
+                              ? ' skill-tree-budget-overview__card--warn'
+                              : ' skill-tree-budget-overview__card--good'
+                        const cardClassName = entry.budget != null
+                          ? `skill-tree-budget-overview__card skill-tree-budget-overview__card--budgeted${budgetStateClass}`
+                          : 'skill-tree-budget-overview__card'
+                        const valueClassName = entry.budget == null
+                          ? 'skill-tree-budget-overview__value'
+                          : entry.isOverBudget
+                            ? 'skill-tree-budget-overview__value skill-tree-budget-overview__value--over'
+                            : (entry.utilization ?? 0) >= 80
+                              ? 'skill-tree-budget-overview__value skill-tree-budget-overview__value--warn'
+                              : 'skill-tree-budget-overview__value skill-tree-budget-overview__value--good'
+
+                        return (
+                          <div
+                            key={entry.statusKey}
+                            className={cardClassName}
+                            style={{ '--budget-accent': accent }}
+                          >
+                            <div className="skill-tree-budget-overview__label">{STATUS_LABELS[entry.statusKey]}</div>
+                            <div className={valueClassName}>
+                              {entry.budget != null ? `${entry.total}/${entry.budget}` : `${entry.total} SP`}
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>

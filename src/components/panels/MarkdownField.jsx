@@ -13,9 +13,9 @@ const toolbarActions = [
 ]
 
 const fillTextareaStyles = {
-  root: { flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 },
-  wrapper: { flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 },
-  input: { flex: 1, resize: 'none', height: 'auto' },
+  root: { flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, height: '100%' },
+  wrapper: { flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, height: '100%' },
+  input: { flex: 1, resize: 'none', minHeight: '100%', height: '100%' },
 }
 
 const fullscreenTextareaStyles = {
@@ -150,7 +150,7 @@ export function MarkdownField({
 
   return (
     <>
-      <Stack gap={8} style={fill ? { flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 } : undefined}>
+      <Stack gap={8} style={fill ? { flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, height: '100%' } : undefined}>
         <Group justify="space-between" align="center" gap="sm">
           <Text component="label" size="sm" className="mantine-dark-label">
             {label}

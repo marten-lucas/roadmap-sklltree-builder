@@ -93,6 +93,9 @@ export function SkillTreeToolbar({
   releaseBudgetSummaries = new Map(),
   isLegendVisible = false,
   onToggleLegend,
+  isBudgetOverviewVisible = false,
+  onToggleBudgetOverview,
+  hasBudgetAlert = false,
 }) {
   const [toolbarSearch, setToolbarSearch] = useState('')
   const [isZoomMenuOpen, setIsZoomMenuOpen] = useState(false)
@@ -119,13 +122,6 @@ export function SkillTreeToolbar({
     value: Math.round(step * 100),
     label: '',
   }))
-  const selectedReleaseBudgetSummary = selectedReleaseId ? releaseBudgetSummaries.get(selectedReleaseId) : null
-
-  const budgetChipText = selectedReleaseBudgetSummary?.budget != null
-    ? `${selectedReleaseBudgetSummary.total}/${selectedReleaseBudgetSummary.budget} SP`
-    : null
-  const budgetIsOver = selectedReleaseBudgetSummary?.isOverBudget ?? false
-
   return (
     <Paper
       className={isCollapsed ? 'skill-tree-toolbar skill-tree-toolbar--collapsed' : 'skill-tree-toolbar'}
@@ -391,6 +387,18 @@ export function SkillTreeToolbar({
               </ActionIcon>
             </Tooltip>
 
+            <Tooltip label={isBudgetOverviewVisible ? 'Hide budget overview' : 'Show budget overview'} position="top" middlewares={TOOLBAR_TOOLTIP_MIDDLEWARES}>
+              <ActionIcon
+                size="md"
+                variant={isBudgetOverviewVisible || hasBudgetAlert ? 'filled' : 'default'}
+                color={hasBudgetAlert ? 'red' : isBudgetOverviewVisible ? 'teal' : undefined}
+                aria-label={isBudgetOverviewVisible ? 'Hide budget overview' : 'Show budget overview'}
+                onClick={onToggleBudgetOverview}
+              >
+                <Text size="xs" fw={700}>SP</Text>
+              </ActionIcon>
+            </Tooltip>
+
             <Tooltip label={isLegendVisible ? 'Hide legend' : 'Show legend'} position="top" middlewares={TOOLBAR_TOOLTIP_MIDDLEWARES}>
               <ActionIcon
                 size="md"
@@ -536,29 +544,6 @@ export function SkillTreeToolbar({
                   aria-label="Select release"
                   allowDeselect={false}
                 />
-                {budgetChipText && (
-                  <Tooltip
-                    label={budgetIsOver ? 'Budget exceeded' : 'Within budget'}
-                    position="top"
-                    middlewares={TOOLBAR_TOOLTIP_MIDDLEWARES}
-                  >
-                    <Text
-                      size="xs"
-                      style={{
-                        padding: '2px 8px',
-                        borderRadius: 999,
-                        background: budgetIsOver ? 'rgba(239,68,68,0.18)' : 'rgba(34,197,94,0.15)',
-                        border: `1px solid ${budgetIsOver ? 'rgba(239,68,68,0.55)' : 'rgba(34,197,94,0.45)'}`,
-                        color: budgetIsOver ? '#f87171' : '#86efac',
-                        fontWeight: 600,
-                        whiteSpace: 'nowrap',
-                        cursor: 'default',
-                      }}
-                    >
-                      {budgetChipText}
-                    </Text>
-                  </Tooltip>
-                )}
               </div>
             )}
             <Text size="xs" c="dimmed" className="skill-tree-toolbar__status">{autosaveLabel}</Text>

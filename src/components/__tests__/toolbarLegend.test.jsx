@@ -58,6 +58,7 @@ describe('SkillTreeToolbar legend toggle', () => {
 
     expect(html).toContain('Show legend')
     expect(html).toContain('Internal notes')
+    expect(html).toContain('Show budget overview')
     expect(html).not.toContain('Open points for selected levels')
   })
 })

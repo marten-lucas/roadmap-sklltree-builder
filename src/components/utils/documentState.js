@@ -35,6 +35,7 @@ const ensureDocumentDefaults = (document) => {
   }
 
   const nextScopes = Array.isArray(document.scopes) ? document.scopes : []
+  const nextReleases = normalizeReleases(document.releases)
   const hasSPMap = isObject(document.storyPointMap)
   const hasShowHiddenNodes = 'showHiddenNodes' in document
   const hasReleases = Array.isArray(document.releases) && document.releases.length > 0
@@ -55,7 +56,7 @@ const ensureDocumentDefaults = (document) => {
     ...document,
     centerIconSrc: normalizeCenterIconSrc(document.centerIconSrc),
     scopes: nextScopes,
-    releases: normalizeReleases(document.releases),
+    releases: nextReleases,
     storyPointMap: hasSPMap ? normalizeStoryPointMap(document.storyPointMap) : { ...DEFAULT_STORY_POINT_MAP },
     showHiddenNodes: hasShowHiddenNodes ? document.showHiddenNodes : false,
     statusDescriptions: {

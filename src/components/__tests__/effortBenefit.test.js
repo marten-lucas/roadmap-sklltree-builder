@@ -10,6 +10,7 @@ import {
   normalizeStoryPointMap,
   resolveStoryPoints,
   computeBudgetSummary,
+  computeStatusBudgetSummaries,
 } from '../utils/effortBenefit'
 import { createEmptyDocument } from '../utils/documentState'
 import { addInitialRootNodeWithResult, updateNodeEffort, updateNodeBenefit, findNodeById } from '../utils/treeData'
@@ -175,11 +176,52 @@ describe('computeBudgetSummary', () => {
   })
 })
 
+describe('computeStatusBudgetSummaries', () => {
+  it('computes totals and over-budget state per status for the selected release', () => {
+    const releaseId = 'rel-1'
+    const nodes = [
+      {
+        levels: [
+          { statuses: { [releaseId]: 'now' }, effort: { size: 'm' } },
+          { statuses: { [releaseId]: 'next' }, effort: { size: 's' } },
+        ],
+      },
+      {
+        levels: [
+          { statuses: { [releaseId]: 'later' }, effort: { size: 'xl' } },
+          { statuses: { [releaseId]: 'now' }, effort: { size: 'xs' } },
+        ],
+      },
+    ]
+
+    const result = computeStatusBudgetSummaries(nodes, DEFAULT_STORY_POINT_MAP, {
+      now: 4,
+      next: null,
+      later: 20,
+    }, releaseId)
+
+    expect(result.now.total).toBe(6)
+    expect(result.now.budget).toBe(4)
+    expect(result.now.isOverBudget).toBe(true)
+    expect(result.next.total).toBe(3)
+    expect(result.next.budget).toBeNull()
+    expect(result.later.total).toBe(13)
+    expect(result.later.isOverBudget).toBe(false)
+  })
+})
+
 describe('createEmptyDocument', () => {
   it('includes storyPointMap and storyPointBudget per-release', () => {
     const doc = createEmptyDocument()
     expect(doc.storyPointMap).toEqual(DEFAULT_STORY_POINT_MAP)
     expect(doc.releases[0].storyPointBudget).toBeNull()
+    expect(doc.releases[0].statusBudgets).toEqual({
+      done: null,
+      now: null,
+      next: null,
+      later: null,
+      someday: null,
+    })
   })
 })
 
