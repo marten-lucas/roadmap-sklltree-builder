@@ -4,26 +4,7 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { MantineProvider } from '@mantine/core'
 import { NODE_LABEL_ZOOM } from '../config'
 import { MarkdownTooltipContent } from '../tooltip'
-
-// Pure helper mirroring the zoomLabelMode logic in SkillTree.jsx and htmlExport.js
-const getLabelMode = (scale) => {
-  if (scale < NODE_LABEL_ZOOM.farToMid) return 'far'
-  if (scale >= NODE_LABEL_ZOOM.midToClose) return 'close'
-  return 'mid'
-}
-
-// Mirrors getShortName in SkillNode.jsx
-const getShortName = (node) => {
-  const explicitShortName = String(node?.shortName ?? '').trim().toLowerCase().slice(0, 3)
-  if (explicitShortName) return explicitShortName
-
-  const letters = String(node?.label ?? '')
-    .replace(/[^A-Za-z0-9]/g, '')
-    .toLowerCase()
-    .slice(0, 3)
-
-  return letters || 'skl'
-}
+import { EMPTY_RELEASE_NOTE, buildNodeExportLevelEntries, getNodeLabelMode, getNodeShortName, getNodeTooltipReleaseNote } from '../utils/nodePresentation'
 
 describe('NODE_LABEL_ZOOM thresholds', () => {
   it('exposes configurable farToMid and midToClose thresholds', () => {
@@ -33,60 +14,86 @@ describe('NODE_LABEL_ZOOM thresholds', () => {
   })
 })
 
-describe('getLabelMode', () => {
+describe('getNodeLabelMode', () => {
   it('returns far below farToMid threshold', () => {
-    expect(getLabelMode(0)).toBe('far')
-    expect(getLabelMode(NODE_LABEL_ZOOM.farToMid - 0.01)).toBe('far')
+    expect(getNodeLabelMode(0)).toBe('far')
+    expect(getNodeLabelMode(NODE_LABEL_ZOOM.farToMid - 0.01)).toBe('far')
   })
 
   it('returns mid at farToMid threshold', () => {
-    expect(getLabelMode(NODE_LABEL_ZOOM.farToMid)).toBe('mid')
+    expect(getNodeLabelMode(NODE_LABEL_ZOOM.farToMid)).toBe('mid')
   })
 
-  it('returns mid between the two thresholds', () => {
-    const mid = (NODE_LABEL_ZOOM.farToMid + NODE_LABEL_ZOOM.midToClose) / 2
-    expect(getLabelMode(mid)).toBe('mid')
+  it('returns close between midToClose and closeToVeryClose', () => {
+    expect(getNodeLabelMode(NODE_LABEL_ZOOM.midToClose)).toBe('close')
+    expect(getNodeLabelMode(NODE_LABEL_ZOOM.closeToVeryClose - 0.01)).toBe('close')
   })
 
-  it('returns close at and above midToClose threshold', () => {
-    expect(getLabelMode(NODE_LABEL_ZOOM.midToClose)).toBe('close')
-    expect(getLabelMode(NODE_LABEL_ZOOM.midToClose + 1)).toBe('close')
-  })
-
-  it('returns far for default (scale = 0.5 with default thresholds 0.5/1.0)', () => {
-    // With the default config farToMid = 0.5: scale 0.5 is exactly mid
-    const result = getLabelMode(NODE_LABEL_ZOOM.farToMid)
-    expect(['mid', 'far']).toContain(result)
+  it('returns very-close at and above closeToVeryClose', () => {
+    expect(getNodeLabelMode(NODE_LABEL_ZOOM.closeToVeryClose)).toBe('very-close')
+    expect(getNodeLabelMode(NODE_LABEL_ZOOM.closeToVeryClose + 1)).toBe('very-close')
   })
 })
 
-describe('getShortName – lowercase', () => {
+describe('getNodeShortName – lowercase', () => {
   it('returns explicit shortName in lowercase', () => {
-    expect(getShortName({ shortName: 'RCT', label: 'React' })).toBe('rct')
-    expect(getShortName({ shortName: 'ABC', label: 'Anything' })).toBe('abc')
+    expect(getNodeShortName({ shortName: 'RCT', label: 'React' })).toBe('rct')
+    expect(getNodeShortName({ shortName: 'ABC', label: 'Anything' })).toBe('abc')
   })
 
   it('falls back to first 3 lowercase letters of label when shortName is empty', () => {
-    expect(getShortName({ shortName: '', label: 'React' })).toBe('rea')
-    expect(getShortName({ shortName: undefined, label: 'Backend' })).toBe('bac')
+    expect(getNodeShortName({ shortName: '', label: 'React' })).toBe('rea')
+    expect(getNodeShortName({ shortName: undefined, label: 'Backend' })).toBe('bac')
   })
 
   it('strips non-alphanumeric characters from label fallback', () => {
-    expect(getShortName({ shortName: '', label: '##Hello!' })).toBe('hel')
+    expect(getNodeShortName({ shortName: '', label: '##Hello!' })).toBe('hel')
   })
 
   it('truncates to 3 characters', () => {
-    expect(getShortName({ shortName: 'ABCDE', label: 'Ignored' })).toBe('abc')
+    expect(getNodeShortName({ shortName: 'ABCDE', label: 'Ignored' })).toBe('abc')
   })
 
   it('returns skl when both shortName and label are empty', () => {
-    expect(getShortName({ shortName: '', label: '' })).toBe('skl')
-    expect(getShortName({})).toBe('skl')
+    expect(getNodeShortName({ shortName: '', label: '' })).toBe('skl')
+    expect(getNodeShortName({})).toBe('skl')
   })
 
   it('never returns uppercase characters', () => {
-    const result = getShortName({ shortName: 'XYZ', label: 'UPPERCASE' })
+    const result = getNodeShortName({ shortName: 'XYZ', label: 'UPPERCASE' })
     expect(result).toBe(result.toLowerCase())
+  })
+})
+
+describe('shared node presentation helpers', () => {
+  it('returns the empty note fallback when no tooltip note exists', () => {
+    expect(getNodeTooltipReleaseNote({ label: 'Node', levels: [] })).toBe(EMPTY_RELEASE_NOTE)
+  })
+
+  it('builds export level entries with display labels and scope labels', () => {
+    const entries = buildNodeExportLevelEntries({
+      levels: [
+        {
+          id: 'level-1',
+          label: 'Foundation',
+          status: 'now',
+          releaseNote: 'Ship it',
+          scopeIds: ['scope-a'],
+          effort: { size: 'm' },
+          benefit: { size: 'l' },
+        },
+      ],
+    }, [
+      { value: 'scope-a', label: 'Platform', color: '#0ea5e9' },
+      { id: 'scope-a', label: 'Platform', color: '#0ea5e9' },
+    ])
+
+    expect(entries).toHaveLength(1)
+    expect(entries[0].label).toContain('Foundation')
+    expect(entries[0].scopeLabels).toEqual(
+      expect.arrayContaining([expect.objectContaining({ label: 'Platform' })]),
+    )
+    expect(entries[0].releaseNote).toBe('Ship it')
   })
 })
 

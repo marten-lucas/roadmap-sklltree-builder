@@ -8,7 +8,8 @@ import './styles/skillTree.list-view.css'
 import './styles/skillTree.priority-matrix.css'
 import './styles/skillTree.layout.css'
 import './styles/skillTree.legend.css'
-import { DEFAULT_STATUS_DESCRIPTIONS, TREE_CONFIG, STATUS_LABELS, STATUS_STYLES, NODE_LABEL_ZOOM } from './config'
+import { DEFAULT_STATUS_DESCRIPTIONS, TREE_CONFIG, STATUS_LABELS, STATUS_STYLES } from './config'
+import { getNodeLabelMode } from './utils/nodePresentation'
 import {
   saveDocumentToLocalStorage,
   downloadDocumentJson,
@@ -371,12 +372,7 @@ export function SkillTree() {
   const initialPositionY = viewportHeight / 2 - canvas.origin.y * initialViewScale
 
   // Responsive label mode: derived from live zoom scale (or overridden for exports)
-  const zoomLabelMode = useMemo(() => {
-    if (currentZoomScale < NODE_LABEL_ZOOM.farToMid) return 'far'
-    if (currentZoomScale >= NODE_LABEL_ZOOM.closeToVeryClose) return 'very-close'
-    if (currentZoomScale >= NODE_LABEL_ZOOM.midToClose) return 'close'
-    return 'mid'
-  }, [currentZoomScale])
+  const zoomLabelMode = useMemo(() => getNodeLabelMode(currentZoomScale), [currentZoomScale])
   const activeLabelMode = exportLabelModeOverride ?? zoomLabelMode
 
   const centerIconSource = roadmapData.centerIconSrc ?? DEFAULT_CENTER_ICON_SRC

@@ -2,50 +2,17 @@ import { useState, useRef, memo } from 'react'
 import { Paper, Text } from '@mantine/core'
 import { NODE_LABEL_ZOOM, STATUS_STYLES } from '../config'
 import { getDisplayStatusKey, getLevelStatusKeys } from '../utils/nodeStatus'
-import { resolveScopeEntries } from '../utils/scopeDisplay'
 import { MarkdownTooltipContent, Tooltip } from '../tooltip'
 import { EFFORT_SIZE_LABELS, BENEFIT_SIZE_LABELS } from '../utils/effortBenefit'
 import { renderMarkdownToHtml } from '../utils/markdown'
 import { getLevelDisplayLabel } from '../utils/treeData'
+import { getNodeTooltipViewModel } from '../utils/nodePresentation'
+import { getNodeLevelIndexFromPointer, isDoubleActivation } from '../utils/nodeInteraction'
 import { IconBolt, IconStar } from '@tabler/icons-react'
 
 const CHIP_ICON_STYLE = { display: 'block', flexShrink: 0 }
 const EffortIcon = () => <IconBolt size="1em" style={CHIP_ICON_STYLE} aria-hidden="true" />
 const BenefitIcon = () => <IconStar size="1em" style={CHIP_ICON_STYLE} aria-hidden="true" />
-
-const getShortName = (node) => {
-  const explicitShortName = String(node?.shortName ?? '').trim().toLowerCase().slice(0, 3)
-  if (explicitShortName) {
-    return explicitShortName
-  }
-
-  const letters = String(node?.label ?? '')
-    .replace(/[^A-Za-z0-9]/g, '')
-    .toLowerCase()
-    .slice(0, 3)
-
-  return letters || 'skl'
-}
-
-const getTooltipLevel = (node, releaseId = null) => {
-  const levels = Array.isArray(node?.levels) ? node.levels : []
-  const levelStatusKeys = getLevelStatusKeys(node, releaseId)
-  const preferredStatus = getDisplayStatusKey(node, releaseId)
-  const preferredLevel = levels.find((level, index) => levelStatusKeys[index] === preferredStatus && String(level?.releaseNote ?? '').trim())
-
-  if (preferredLevel) {
-    return preferredLevel
-  }
-
-  return levels.find((level) => String(level?.releaseNote ?? '').trim()) ?? null
-}
-
-const getTooltipReleaseNote = (node, releaseId = null) => {
-  const tooltipLevel = getTooltipLevel(node, releaseId)
-  const releaseNote = String(tooltipLevel?.releaseNote ?? '').trim()
-
-  return releaseNote || 'Keine Release Note hinterlegt.'
-}
 
 const pushConicSegmentRange = (gradientParts, color, start, end, { dashed = false } = {}) => {
   if (!dashed || color === 'transparent') {
@@ -115,9 +82,27 @@ const _SkillNode = ({ node, nodeSize, isSelected, isPortalPeerHovered = false, o
     1,
   )
   const levels = Array.isArray(node?.levels) ? node.levels : []
-  const tooltipLevel = getTooltipLevel(node, releaseId)
-  const initVcLevel = Math.max(0, levels.indexOf(tooltipLevel))
-  const [vcActiveLevel, setVcActiveLevel] = useState(initVcLevel)
+  const {
+    shortName,
+    tooltipReleaseNote,
+    tooltipScopeLabels,
+    tooltipEffort,
+    tooltipBenefit,
+    activeTooltipReleaseNote,
+    activeTooltipScopeLabels,
+    activeTooltipEffort,
+    activeTooltipBenefit,
+    activeLevelLabel,
+    activeTooltipTitle,
+    exportLevelEntries,
+    initialVeryCloseIndex,
+  } = getNodeTooltipViewModel({
+    node,
+    scopeOptions,
+    releaseId,
+    hoveredLevelIndex,
+  })
+  const [vcActiveLevel, setVcActiveLevel] = useState(initialVeryCloseIndex)
   const glowPadding = isMinimal ? 8 : isVeryClose ? 36 : Math.round(18 + farZoomProgress * 10)
   const renderSize = nodeSize + glowPadding * 2
   const showChips = !isMinimal && (labelMode === 'mid' || labelMode === 'close' || labelMode === 'very-close')
@@ -130,29 +115,6 @@ const _SkillNode = ({ node, nodeSize, isSelected, isPortalPeerHovered = false, o
   const labelTextColor = statusKey === 'later' || statusKey === 'someday'
     ? statusStyles.textColor
     : '#f8fafc'
-  const shortName = getShortName(node)
-  const tooltipReleaseNote = getTooltipReleaseNote(node, releaseId)
-  const tooltipScopeLabels = resolveScopeEntries(tooltipLevel?.scopeIds, scopeOptions)
-  const tooltipEffort = tooltipLevel?.effort ?? node.effort
-  const tooltipBenefit = tooltipLevel?.benefit ?? node.benefit
-  const activeTooltipReleaseNote = hoveredLevelIndex !== null
-    ? (String(levels[hoveredLevelIndex]?.releaseNote ?? '').trim() || 'Keine Release Note hinterlegt.')
-    : tooltipReleaseNote
-  const activeTooltipScopeLabels = hoveredLevelIndex !== null
-    ? resolveScopeEntries(levels[hoveredLevelIndex]?.scopeIds, scopeOptions)
-    : tooltipScopeLabels
-  const activeTooltipEffort = hoveredLevelIndex !== null
-    ? (levels[hoveredLevelIndex]?.effort ?? node.effort)
-    : tooltipEffort
-  const activeTooltipBenefit = hoveredLevelIndex !== null
-    ? (levels[hoveredLevelIndex]?.benefit ?? node.benefit)
-    : tooltipBenefit
-  const activeLevelLabel = hoveredLevelIndex !== null
-    ? getLevelDisplayLabel(levels[hoveredLevelIndex]?.label, hoveredLevelIndex)
-    : ''
-  const activeTooltipTitle = hoveredLevelIndex !== null && levels.length > 1
-    ? `${node.label} – ${activeLevelLabel}`
-    : node.label
   const levelStatusKeys = getLevelStatusKeys(node, releaseId)
   const hasOpenPoints = levels.some((level) => Boolean(level?.hasOpenPoints))
   const openPointsTitle = String(levels.find((level) => level?.hasOpenPoints)?.openPointsLabel ?? '').trim() || 'Open point'
@@ -161,16 +123,6 @@ const _SkillNode = ({ node, nodeSize, isSelected, isPortalPeerHovered = false, o
     (key) => STATUS_STYLES[key]?.ringBand ?? STATUS_STYLES.later.ringBand,
     { dashedStatuses: new Set(['someday']) },
   )
-  const exportLevelEntries = Array.isArray(node?.levels)
-    ? node.levels.map((level, index) => ({
-      id: level?.id ?? `level-${index + 1}`,
-      label: getLevelDisplayLabel(level?.label, index),
-      status: String(level?.status ?? 'later').trim().toLowerCase(),
-      statusLabel: STATUS_STYLES[String(level?.status ?? 'later').trim().toLowerCase()]?.label ?? String(level?.status ?? 'Later'),
-      releaseNote: String(level?.releaseNote ?? ''),
-      scopeLabels: resolveScopeEntries(level?.scopeIds, scopeOptions),
-    }))
-    : []
   const levelGlowStyle = buildSegmentConicStyle(
     levelStatusKeys,
     (key) => STATUS_STYLES[key]?.glowSegment ?? 'transparent',
@@ -216,20 +168,19 @@ const _SkillNode = ({ node, nodeSize, isSelected, isPortalPeerHovered = false, o
           : 'radial-gradient(circle at 32% 28%, rgb(21, 45, 94), rgb(15, 23, 42) 58%, rgb(2, 6, 23) 100%)'
 
   const handleRingMouseMove = (event) => {
-    if (levels.length <= 1) return
-    const rect = event.currentTarget.getBoundingClientRect()
-    const cx = rect.left + rect.width / 2
-    const cy = rect.top + rect.height / 2
-    const dx = event.clientX - cx
-    const dy = event.clientY - cy
-    const dist = Math.sqrt(dx * dx + dy * dy)
-    if (dist >= (nodeSize / 2) * 0.5) {
-      const angle = (Math.atan2(dy, dx) * 180 / Math.PI + 90 + 360) % 360
-      const index = Math.min(Math.floor(angle / (360 / levels.length)), levels.length - 1)
-      setHoveredLevelIndex(prev => prev === index ? prev : index)
-    } else {
+    const index = getNodeLevelIndexFromPointer({
+      event,
+      nodeSize,
+      levelsLength: levels.length,
+      innerRadiusRatio: 0.5,
+    })
+
+    if (index === null) {
       setHoveredLevelIndex(null)
+      return
     }
+
+    setHoveredLevelIndex(prev => prev === index ? prev : index)
   }
 
   const handleRingMouseLeave = () => setHoveredLevelIndex(null)
@@ -238,7 +189,7 @@ const _SkillNode = ({ node, nodeSize, isSelected, isPortalPeerHovered = false, o
     event.preventDefault()
     event.stopPropagation()
     const now = Date.now()
-    if (now - lastRightClickRef.current < 400) {
+    if (isDoubleActivation(lastRightClickRef.current, now)) {
       lastRightClickRef.current = 0
       onZoomToNode?.(node.x, node.y)
     } else {
@@ -249,18 +200,14 @@ const _SkillNode = ({ node, nodeSize, isSelected, isPortalPeerHovered = false, o
   const handleNodeClick = (event) => {
     onSelect(node.id, event)
     if (onSelectLevel && levels.length > 0) {
-      const rect = event.currentTarget.getBoundingClientRect()
-      const cx = rect.left + rect.width / 2
-      const cy = rect.top + rect.height / 2
-      const dx = event.clientX - cx
-      const dy = event.clientY - cy
-      const dist = Math.sqrt(dx * dx + dy * dy)
-      if (dist >= (nodeSize / 2) * 0.74) {
-        const angle = (Math.atan2(dy, dx) * 180 / Math.PI + 90 + 360) % 360
-        const index = Math.min(Math.floor(angle / (360 / levels.length)), levels.length - 1)
-        const levelId = levels[index]?.id
-        if (levelId) onSelectLevel(levelId)
-      }
+      const index = getNodeLevelIndexFromPointer({
+        event,
+        nodeSize,
+        levelsLength: levels.length,
+        innerRadiusRatio: 0.74,
+      })
+      const levelId = index === null ? null : levels[index]?.id
+      if (levelId) onSelectLevel(levelId)
     }
   }
 
@@ -388,9 +335,10 @@ const _SkillNode = ({ node, nodeSize, isSelected, isPortalPeerHovered = false, o
                   ) : null
                 })()}
                 {showChips && (() => {
-                  const vcScopeLabels = resolveScopeEntries(levels[vcActiveLevel]?.scopeIds, scopeOptions)
-                  const vcEffort = levels[vcActiveLevel]?.effort ?? node.effort
-                  const vcBenefit = levels[vcActiveLevel]?.benefit ?? node.benefit
+                  const activeEntry = exportLevelEntries[vcActiveLevel] ?? null
+                  const vcScopeLabels = activeEntry?.scopeLabels ?? []
+                  const vcEffort = activeEntry?.effort ?? node.effort
+                  const vcBenefit = activeEntry?.benefit ?? node.benefit
                   const hasChips = vcScopeLabels.length > 0 || (vcEffort?.size && vcEffort.size !== 'unclear') || (vcBenefit?.size && vcBenefit.size !== 'unclear')
                   return hasChips ? (
                     <div className="skill-node-inner-chips skill-node-vc__chips" style={{ fontSize: `${26 / zoomScale}px`, '--chip-bw': `${0.5 / zoomScale}px`, '--chip-pad-v': `${0.5 / zoomScale}px`, '--chip-pad-h': `${2.5 / zoomScale}px`, '--chip-gap': `${2 / zoomScale}px`, '--chip-radius': `${8 / zoomScale}px` }}>

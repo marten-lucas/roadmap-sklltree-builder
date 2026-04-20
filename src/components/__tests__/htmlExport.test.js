@@ -59,6 +59,12 @@ describe('htmlExport', () => {
     expect(html).toContain('SVG (interactive)')
     expect(html).toContain('SVG clean')
     expect(html).toContain('id="html-export-png"')
+    expect(html).toContain('id="html-export-fullscreen"')
+    expect(html).toContain('Open fullscreen roadmap')
+    expect(html).toContain('Exit fullscreen')
+    expect(html).toContain('html-export--fullscreen')
+    expect(html).toContain('width: 100vw;')
+    expect(html).toContain('height: 100vh;')
     expect(html).toContain('html-export__panel--roadmap')
     expect(html).toContain('height: 78vh;')
     expect(html).toContain('min-height: 58vh;')
@@ -85,7 +91,19 @@ describe('htmlExport', () => {
     expect(html).toContain('const getOccupiedBounds = () =>')
     expect(html).toContain('let contentGroupBounds = null')
     expect(html).toContain('const getVisibleViewportBounds = () =>')
+    expect(html).toContain('const adaptiveStep = 0.0018 * Math.sqrt(panZoomState.scale)')
+    expect(html).toContain('const ratio = Math.exp(adaptiveStep * delta * direction)')
+    expect(html).toContain('const VIEWPORT_ZOOM_STEPS = [0.25,0.5,0.75,1,2,3,4,5,6,7,8,9,10]')
+    expect(html).toContain("if (action === 'pan-left') {")
+    expect(html).toContain('panZoomState.translateX -= 48')
+    expect(html).toContain("treeShell.addEventListener('contextmenu'")
     expect(html).toContain('window.htmlToImage?.toBlob')
+    expect(html).toContain('readonlySelectionState')
+    expect(html).toContain('syncReadonlySelection')
+    expect(html).toContain('skill-node-vc__tabs')
+    expect(html).toContain('html-export__node--selected')
+    expect(html).toContain('skill-tree-portal--selected')
+    expect(html).toContain('const focusNodeInViewport = (nodeId, options = {}) =>')
   })
 
   it('filters rendered release notes by the selected statuses', () => {
@@ -170,6 +188,20 @@ describe('htmlExport', () => {
 
     expect(multiLevelHtml).toContain('Level 1 · Now')
     expect(multiLevelHtml).toContain('Level 2 · Now')
+  })
+
+  it('renders builder-like very-close node details and scope metadata into the export payload', () => {
+    const document = createDocument()
+    const html = buildHtmlExportDocument({
+      svgMarkup: '<svg viewBox="0 0 100 100"></svg>',
+      roadmapDocument: document,
+      styleText: '',
+    })
+
+    expect(html).toContain('renderVeryCloseContent')
+    expect(html).toContain('skill-node-inner-chip--scope')
+    expect(html).toContain('buildNodeChipsHtml')
+    expect(html).toContain('bindVeryCloseTabs')
   })
 
   it('keeps the export viewer crisp by resizing the svg instead of scaling the entire canvas layer', () => {

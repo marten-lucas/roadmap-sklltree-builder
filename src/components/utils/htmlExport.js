@@ -4,7 +4,9 @@ import { renderMarkdownToHtml } from './markdown'
 import { renderScopeLabelsMarkup } from './scopeDisplay'
 import { buildExportFileName, sanitizeFileNamePart } from './exportFileName'
 import { serializeSvgElementForExport } from './svgExport'
-import { VIEWPORT_DEFAULTS } from './viewport'
+import { VIEWPORT_DEFAULTS, VIEWPORT_ZOOM_STEPS } from './viewport'
+import { EMPTY_RELEASE_NOTE, getNodeLabelMode } from './nodePresentation'
+import { getPortalCounterpartNodeIdFromData, isDoubleActivation } from './nodeInteraction'
 import { NODE_LABEL_ZOOM, STATUS_STYLES } from '../config'
 import { AXIS_SIZES, AXIS_COUNT, MATRIX_PADDING, NODE_RADIUS, computeMatrixLayout } from './matrixLayout'
 import { getNodeDisplayEffort, getNodeDisplayBenefit, EFFORT_SIZE_LABELS, BENEFIT_SIZE_LABELS } from './effortBenefit'
@@ -361,7 +363,7 @@ const buildViewerScript = (exportBaseName = 'skilltree-roadmap') => `
       }
       const SCOPE_FILTER_ALL = '__all__'
       const MINIMAL_NODE_SCALE = 0.32
-      const VIEWPORT_ZOOM_STEPS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 2, 3, 4, 5, 7.5, 10]
+      const VIEWPORT_ZOOM_STEPS = ${JSON.stringify(VIEWPORT_ZOOM_STEPS)}
       const VIEWPORT = {
         minScale: ${VIEWPORT_DEFAULTS.minScale},
         maxScale: ${VIEWPORT_DEFAULTS.maxScale},
@@ -374,6 +376,7 @@ const buildViewerScript = (exportBaseName = 'skilltree-roadmap') => `
         midToClose: ${NODE_LABEL_ZOOM.midToClose},
         closeToVeryClose: ${NODE_LABEL_ZOOM.closeToVeryClose},
       }
+      const EMPTY_RELEASE_NOTE = ${JSON.stringify(EMPTY_RELEASE_NOTE)}
 
       const STATUS_TEXT_COLORS = {
         done: '#5a6576',
@@ -449,12 +452,14 @@ const buildViewerScript = (exportBaseName = 'skilltree-roadmap') => `
       const treeCanvas = document.getElementById('html-export-tree-canvas')
       const svgRoot = treeCanvas?.querySelector('svg')
       const treeShell = document.getElementById('html-export-tree-shell')
+      const roadmapPanel = document.querySelector('.html-export__panel--roadmap')
       const zoomToggleButton = document.getElementById('html-export-zoom-toggle')
       const zoomOutButton = document.getElementById('html-export-zoom-out')
       const zoomInButton = document.getElementById('html-export-zoom-in')
       const zoomSlider = document.getElementById('html-export-zoom-slider')
       const zoomValue = document.getElementById('html-export-zoom-value')
       const fitButton = document.getElementById('html-export-fit')
+      const fullscreenButton = document.getElementById('html-export-fullscreen')
       const scopeFilterSelect = document.getElementById('html-export-filter-scope')
       const releaseFilterSelect = document.getElementById('html-export-filter-release')
       const printButton = document.getElementById('html-export-print')
@@ -583,7 +588,11 @@ const buildViewerScript = (exportBaseName = 'skilltree-roadmap') => `
         if (!Array.isArray(levels) || levels.length === 0) {
           return {
             label: 'L1',
-            releaseNote: String(fallbackNote ?? '').trim(),
+            releaseNote: String(fallbackNote ?? EMPTY_RELEASE_NOTE).trim() || EMPTY_RELEASE_NOTE,
+            releaseNoteHtml: renderSimpleMarkdown(String(fallbackNote ?? EMPTY_RELEASE_NOTE).trim() || EMPTY_RELEASE_NOTE),
+            scopeLabels: [],
+            effort: null,
+            benefit: null,
           }
         }
 
@@ -592,16 +601,64 @@ const buildViewerScript = (exportBaseName = 'skilltree-roadmap') => `
         const selected = withNotes ?? first
 
         return {
+          ...selected,
           label: String(selected?.label ?? 'L1'),
-          releaseNote: String(selected?.releaseNote ?? fallbackNote ?? '').trim(),
+          releaseNote: String(selected?.releaseNote ?? fallbackNote ?? EMPTY_RELEASE_NOTE).trim() || EMPTY_RELEASE_NOTE,
+          releaseNoteHtml: String(selected?.releaseNoteHtml ?? '').trim() || renderSimpleMarkdown(String(selected?.releaseNote ?? fallbackNote ?? EMPTY_RELEASE_NOTE).trim() || EMPTY_RELEASE_NOTE),
         }
       }
 
-      const getLabelMode = (scale) => {
-        if (scale < NODE_LABEL_ZOOM.farToMid) return 'far'
-        if (scale >= NODE_LABEL_ZOOM.closeToVeryClose) return 'very-close'
-        if (scale >= NODE_LABEL_ZOOM.midToClose) return 'close'
-        return 'mid'
+      const EFFORT_LABELS = ${JSON.stringify(EFFORT_SIZE_LABELS)}
+      const BENEFIT_LABELS = ${JSON.stringify(BENEFIT_SIZE_LABELS)}
+      const getLabelMode = ${getNodeLabelMode.toString()}
+      const isDoubleActivation = ${isDoubleActivation.toString()}
+      const getPortalCounterpartNodeId = ${getPortalCounterpartNodeIdFromData.toString()}
+      const readonlySelectionState = {
+        nodeId: null,
+        segmentId: null,
+        portalKey: null,
+      }
+      const nodeContentState = {
+        activeVeryCloseLevelByNodeId: new Map(),
+      }
+
+      const buildScopeChipsHtml = (scopeLabels = []) => {
+        if (!Array.isArray(scopeLabels) || scopeLabels.length === 0) {
+          return ''
+        }
+
+        return scopeLabels.slice(0, 4).map((scope) => {
+          const color = scope?.color ?? '#fbbf24'
+          const label = escapeLabelHtml(scope?.label ?? '')
+          return '<span class="skill-node-inner-chip skill-node-inner-chip--scope" style="background:' + color + '22;border-color:' + color + '99;color:' + color + '" title="' + label + '">' + label + '</span>'
+        }).join('')
+      }
+
+      const buildMetricChipsHtml = (level) => {
+        const effortSize = level?.effort?.size
+        const benefitSize = level?.benefit?.size
+        const parts = []
+
+        if (effortSize && effortSize !== 'unclear') {
+          const effortLabel = escapeLabelHtml(EFFORT_LABELS[effortSize] ?? effortSize)
+          parts.push('<span class="skill-node-inner-chip skill-node-inner-chip--effort" title="' + effortLabel + '">⚡ ' + effortLabel + '</span>')
+        }
+
+        if (benefitSize && benefitSize !== 'unclear') {
+          const benefitLabel = escapeLabelHtml(BENEFIT_LABELS[benefitSize] ?? benefitSize)
+          parts.push('<span class="skill-node-inner-chip skill-node-inner-chip--benefit" title="' + benefitLabel + '">★ ' + benefitLabel + '</span>')
+        }
+
+        return parts.join('')
+      }
+
+      const buildNodeChipsHtml = (level) => {
+        const chipsHtml = buildScopeChipsHtml(level?.scopeLabels) + buildMetricChipsHtml(level)
+        if (!chipsHtml) {
+          return ''
+        }
+
+        return '<div class="skill-node-inner-chips">' + chipsHtml + '</div>'
       }
 
       let currentLabelMode = null
@@ -639,6 +696,49 @@ const buildViewerScript = (exportBaseName = 'skilltree-roadmap') => `
         })
       }
 
+      const renderLabeledContent = ({ label, shortName, textColor, fontWeight, preferredLevel }) => (
+        '<p class="skill-node-button__label" style="color:#f8fafc;font-weight:500;white-space:normal;word-break:break-word;">' + escapeLabelHtml(label) + '</p>' +
+        '<p class="skill-node-button__shortname" style="font-size:0.7rem;font-weight:' + fontWeight + ';line-height:1;letter-spacing:0.12em;opacity:0.65;color:' + textColor + ';">' + escapeLabelHtml(shortName) + '</p>' +
+        buildNodeChipsHtml(preferredLevel)
+      )
+
+      const renderVeryCloseContent = ({ anchor, label, levels, fallbackNote }) => {
+        const nodeId = anchor.getAttribute('data-node-id') || ''
+        const preferredLevel = getPreferredVeryCloseLevel(levels, fallbackNote)
+        const defaultIndex = Math.max(0, levels.findIndex((level) => String(level?.label ?? '') === String(preferredLevel?.label ?? '')))
+        const activeIndex = nodeContentState.activeVeryCloseLevelByNodeId.get(nodeId) ?? defaultIndex
+        const activeLevel = levels[activeIndex] ?? preferredLevel
+        const tabsHtml = levels.length > 1
+          ? '<div class="skill-node-vc__tabs">' + levels.map((level, index) => {
+            const isActive = index === activeIndex
+            const statusKey = escapeLabelHtml(level?.status ?? 'later')
+            const tabLabel = escapeLabelHtml(level?.label ?? ('L' + (index + 1)))
+            return '<button type="button" class="skill-node-vc__tab' + (isActive ? ' skill-node-vc__tab--active' : '') + '" data-level-index="' + index + '" style="--tab-color:' + (STATUS_STYLES[level?.status ?? 'later']?.ringBand ?? STATUS_STYLES.later.ringBand) + '">' + tabLabel + '</button>'
+          }).join('') + '</div>'
+          : ''
+        const noteHtml = String(activeLevel?.releaseNoteHtml ?? '').trim() || renderSimpleMarkdown(activeLevel?.releaseNote || EMPTY_RELEASE_NOTE)
+        const chipsHtml = buildNodeChipsHtml(activeLevel)
+
+        return '<p class="skill-node-vc__headline">' + escapeLabelHtml(label) + '</p>' + tabsHtml + '<div class="skill-node-vc__body skill-node-vc__body--markdown">' + noteHtml + '</div>' + chipsHtml
+      }
+
+      const bindVeryCloseTabs = (anchor, label, levels, fallbackNote) => {
+        const nodeId = anchor.getAttribute('data-node-id') || ''
+        anchor.querySelectorAll('.skill-node-vc__tab').forEach((tab) => {
+          tab.addEventListener('click', (event) => {
+            event.stopPropagation()
+            const nextIndex = Number.parseInt(tab.getAttribute('data-level-index') ?? '0', 10)
+            nodeContentState.activeVeryCloseLevelByNodeId.set(nodeId, Number.isFinite(nextIndex) ? nextIndex : 0)
+            const content = anchor.querySelector('.skill-node-button__content')
+            if (!content) {
+              return
+            }
+            content.innerHTML = renderVeryCloseContent({ anchor, label, levels, fallbackNote })
+            bindVeryCloseTabs(anchor, label, levels, fallbackNote)
+          })
+        })
+      }
+
       const applyLabelMode = (mode) => {
         if (mode === currentLabelMode) return
         currentLabelMode = mode
@@ -658,21 +758,21 @@ const buildViewerScript = (exportBaseName = 'skilltree-roadmap') => `
           const content = anchor.querySelector('.skill-node-button__content')
           if (!content) return
 
+          const levels = parseExportLevels(anchor.getAttribute('data-export-levels'))
+          const fallbackNote = anchor.getAttribute('data-export-note') || ''
+          const preferredLevel = getPreferredVeryCloseLevel(levels, fallbackNote)
+
           if (mode === 'far') {
             content.className = 'skill-node-button__content'
             content.innerHTML = '<p class="skill-node-button__shortname" style="font-size:2rem;font-weight:' + fontWeight + ';line-height:1;letter-spacing:0.08em;color:' + textColor + ';">' + escapeLabelHtml(shortName) + '</p>'
             removeNodeCard(anchor)
           } else if (mode === 'mid') {
             content.className = 'skill-node-button__content skill-node-button__content--labeled'
-            content.innerHTML =
-              '<p class="skill-node-button__label" style="color:#f8fafc;font-weight:500;white-space:normal;word-break:break-word;">' + escapeLabelHtml(label) + '</p>' +
-              '<p class="skill-node-button__shortname" style="font-size:0.7rem;font-weight:' + fontWeight + ';line-height:1;letter-spacing:0.12em;opacity:0.65;color:' + textColor + ';">' + escapeLabelHtml(shortName) + '</p>'
+            content.innerHTML = renderLabeledContent({ label, shortName, textColor, fontWeight, preferredLevel })
             removeNodeCard(anchor)
           } else if (mode === 'close') {
             content.className = 'skill-node-button__content skill-node-button__content--labeled'
-            content.innerHTML =
-              '<p class="skill-node-button__label" style="color:#f8fafc;font-weight:500;white-space:normal;word-break:break-word;">' + escapeLabelHtml(label) + '</p>' +
-              '<p class="skill-node-button__shortname" style="font-size:0.7rem;font-weight:' + fontWeight + ';line-height:1;letter-spacing:0.12em;opacity:0.65;color:' + textColor + ';">' + escapeLabelHtml(shortName) + '</p>'
+            content.innerHTML = renderLabeledContent({ label, shortName, textColor, fontWeight, preferredLevel })
             removeNodeCard(anchor)
             const wrapper = anchor.querySelector('.skill-node-foreign')
             if (wrapper) {
@@ -683,19 +783,14 @@ const buildViewerScript = (exportBaseName = 'skilltree-roadmap') => `
               btn.style.borderRadius = ''
             }
           } else if (mode === 'very-close') {
-            const levels = parseExportLevels(anchor.getAttribute('data-export-levels'))
-            const fallbackNote = anchor.getAttribute('data-export-note') || ''
-            const preferredLevel = getPreferredVeryCloseLevel(levels, fallbackNote)
-            const markdownHtml = renderSimpleMarkdown(preferredLevel.releaseNote || 'Keine Release Note hinterlegt.')
             const wrapper = anchor.querySelector('.skill-node-foreign')
             if (wrapper) {
               wrapper.classList.add('skill-node-foreign--veryclose')
             }
 
             content.className = 'skill-node-button__content skill-node-button__content--veryclose'
-            content.innerHTML =
-              '<p class="skill-node-vc__headline">' + escapeLabelHtml(label) + '</p>' +
-              '<div class="skill-node-vc__body skill-node-vc__body--markdown">' + markdownHtml + '</div>'
+            content.innerHTML = renderVeryCloseContent({ anchor, label, levels, fallbackNote })
+            bindVeryCloseTabs(anchor, label, levels, fallbackNote)
 
             const btn = anchor.querySelector('.skill-node-button')
             if (btn) {
@@ -780,12 +875,19 @@ const buildViewerScript = (exportBaseName = 'skilltree-roadmap') => `
         return clamp(snapScaleToStep(clampedCurrent, steps), VIEWPORT.minScale, VIEWPORT.maxScale)
       }
 
-      const getViewportKeyboardAction = ({ key, ctrlKey = false, metaKey = false, shiftKey = false, isEditableTarget = false }) => {
+      const getViewportKeyboardAction = ({
+        key,
+        ctrlKey = false,
+        metaKey = false,
+        shiftKey = false,
+        spaceKey = false,
+        isEditableTarget = false,
+      }) => {
         if (isEditableTarget) {
           return null
         }
 
-        if (key === ' ') {
+        if (spaceKey || key === ' ') {
           return 'pan-hold'
         }
 
@@ -796,11 +898,23 @@ const buildViewerScript = (exportBaseName = 'skilltree-roadmap') => `
         if (shiftKey && normalizedKey === 'arrowright') return 'pan-right'
         if (shiftKey && normalizedKey === 'arrowup') return 'pan-up'
         if (shiftKey && normalizedKey === 'arrowdown') return 'pan-down'
-        if (!hasPrimaryModifier) return null
 
-        if (normalizedKey === '+' || normalizedKey === '=' || normalizedKey === 'add') return 'zoom-in'
-        if (normalizedKey === '-' || normalizedKey === '_' || normalizedKey === 'subtract') return 'zoom-out'
-        if (normalizedKey === '0') return 'fit'
+        if (!hasPrimaryModifier) {
+          return null
+        }
+
+        if (normalizedKey === '+' || normalizedKey === '=' || normalizedKey === 'add') {
+          return 'zoom-in'
+        }
+
+        if (normalizedKey === '-' || normalizedKey === '_' || normalizedKey === 'subtract') {
+          return 'zoom-out'
+        }
+
+        if (normalizedKey === '0') {
+          return 'fit'
+        }
+
         return null
       }
 
@@ -1014,38 +1128,19 @@ const buildViewerScript = (exportBaseName = 'skilltree-roadmap') => `
         const shellHeight = treeShell.clientHeight || baseHeight
         const occupied = getOccupiedBounds()
         const padding = VIEWPORT.fitPadding
-        const boundsX = occupied.minX - viewBoxX
-        const boundsY = occupied.minY - viewBoxY
-        const contentWidth = Math.max(1, occupied.maxX - occupied.minX)
-        const contentHeight = Math.max(1, occupied.maxY - occupied.minY)
-        const centerGroup = svgRoot?.querySelector('.skill-tree-center-icon')
-        const centerTransform = String(centerGroup?.getAttribute('transform') ?? '').trim()
-        let centerX = boundsX + contentWidth / 2
-        let centerY = boundsY + contentHeight / 2
-
-        const centerMatch = centerTransform.match(/translate[(] *([-0-9.]+)(?:[, ]+)([-0-9.]+) *[)]/)
-        if (centerMatch) {
-          const parsedX = Number.parseFloat(centerMatch[1])
-          const parsedY = Number.parseFloat(centerMatch[2])
-
-          if (Number.isFinite(parsedX)) centerX = parsedX - viewBoxX
-          if (Number.isFinite(parsedY)) centerY = parsedY - viewBoxY
+        const contentBounds = {
+          x: occupied.minX - viewBoxX,
+          y: occupied.minY - viewBoxY,
+          width: Math.max(1, occupied.maxX - occupied.minX),
+          height: Math.max(1, occupied.maxY - occupied.minY),
         }
-        const boundsMaxX = boundsX + contentWidth
-        const boundsMaxY = boundsY + contentHeight
-        const halfWidth = Math.max(centerX - boundsX, boundsMaxX - centerX)
-        const halfHeight = Math.max(centerY - boundsY, boundsMaxY - centerY)
-        const fittedBoundsWidth = Math.max(contentWidth, halfWidth * 2)
-        const fittedBoundsHeight = Math.max(contentHeight, halfHeight * 2)
-        const fittedBoundsX = centerX - halfWidth
-        const fittedBoundsY = centerY - halfHeight
         const fittedScale = clamp(
-            Math.min(shellWidth / (fittedBoundsWidth + padding * 2), shellHeight / (fittedBoundsHeight + padding * 2)),
+          Math.min(shellWidth / (contentBounds.width + padding * 2), shellHeight / (contentBounds.height + padding * 2)),
           VIEWPORT.minScale,
           VIEWPORT.maxScale,
         )
 
-        if (!Number.isFinite(fittedScale) || !Number.isFinite(fittedBoundsX) || !Number.isFinite(fittedBoundsY)) {
+        if (!Number.isFinite(fittedScale)) {
           panZoomState.scale = 1
           panZoomState.translateX = 0
           panZoomState.translateY = 0
@@ -1053,9 +1148,37 @@ const buildViewerScript = (exportBaseName = 'skilltree-roadmap') => `
           return
         }
 
+        const centerX = contentBounds.x + contentBounds.width / 2
+        const centerY = contentBounds.y + contentBounds.height / 2
+
         panZoomState.scale = fittedScale
-        panZoomState.translateX = ((shellWidth - fittedBoundsWidth * fittedScale) / 2) - (fittedBoundsX * fittedScale)
-        panZoomState.translateY = ((shellHeight - fittedBoundsHeight * fittedScale) / 2) - (fittedBoundsY * fittedScale)
+        panZoomState.translateX = shellWidth / 2 - centerX * fittedScale
+        panZoomState.translateY = shellHeight / 2 - centerY * fittedScale
+        applyPanZoom()
+      }
+
+      const focusNodeInViewport = (nodeId, options = {}) => {
+        const anchor = nodeAnchorById.get(nodeId)
+        if (!anchor || !treeShell) {
+          return
+        }
+
+        ensureFinitePanZoomState()
+
+        const { scale } = options
+        const activeScale = Number.isFinite(scale)
+          ? clamp(scale, VIEWPORT.minScale, VIEWPORT.maxScale)
+          : panZoomState.scale
+        const nodeX = Number.parseFloat(anchor.dataset.origX ?? anchor.getAttribute('x') ?? '0')
+        const nodeY = Number.parseFloat(anchor.dataset.origY ?? anchor.getAttribute('y') ?? '0')
+        const nodeWidth = Number.parseFloat(anchor.dataset.origWidth ?? anchor.getAttribute('width') ?? '0')
+        const nodeHeight = Number.parseFloat(anchor.dataset.origHeight ?? anchor.getAttribute('height') ?? '0')
+        const centerX = nodeX + nodeWidth / 2
+        const centerY = nodeY + nodeHeight / 2
+
+        panZoomState.scale = activeScale
+        panZoomState.translateX = treeShell.clientWidth / 2 - centerX * activeScale
+        panZoomState.translateY = treeShell.clientHeight / 2 - centerY * activeScale
         applyPanZoom()
       }
 
@@ -1076,6 +1199,81 @@ const buildViewerScript = (exportBaseName = 'skilltree-roadmap') => `
           shellHeight,
         }
       }
+
+      const syncFullscreenButton = () => {
+        if (!fullscreenButton) {
+          return
+        }
+
+        const isNativeFullscreen = document.fullscreenElement === roadmapPanel
+        const isFallbackFullscreen = roadmapPanel?.classList.contains('html-export__panel--fullscreen')
+        const isFullscreenActive = isNativeFullscreen || isFallbackFullscreen
+
+        fullscreenButton.setAttribute('aria-label', isFullscreenActive ? 'Exit fullscreen roadmap' : 'Open fullscreen roadmap')
+        fullscreenButton.setAttribute('title', isFullscreenActive ? 'Exit fullscreen' : 'Open fullscreen')
+        fullscreenButton.setAttribute('aria-pressed', String(isFullscreenActive))
+      }
+
+      const exitFallbackFullscreen = () => {
+        roadmapPanel?.classList.remove('html-export__panel--fullscreen')
+        document.body.classList.remove('html-export--fullscreen-fallback')
+        syncFullscreenButton()
+        window.requestAnimationFrame(() => {
+          fitToWidth()
+        })
+      }
+
+      const enterFallbackFullscreen = () => {
+        roadmapPanel?.classList.add('html-export__panel--fullscreen')
+        document.body.classList.add('html-export--fullscreen-fallback')
+        syncFullscreenButton()
+        window.requestAnimationFrame(() => {
+          fitToWidth()
+        })
+      }
+
+      const toggleFullscreen = async () => {
+        if (!roadmapPanel) {
+          return
+        }
+
+        if (document.fullscreenElement === roadmapPanel) {
+          try {
+            if (typeof document.exitFullscreen === 'function') {
+              await document.exitFullscreen()
+            }
+          } catch {
+            // Keep the viewer usable even if fullscreen exit is blocked.
+          }
+          syncFullscreenButton()
+          window.requestAnimationFrame(() => {
+            fitToWidth()
+          })
+          return
+        }
+
+        if (roadmapPanel.classList.contains('html-export__panel--fullscreen')) {
+          exitFallbackFullscreen()
+          return
+        }
+
+        if (typeof roadmapPanel.requestFullscreen === 'function') {
+          try {
+            await roadmapPanel.requestFullscreen()
+            syncFullscreenButton()
+            window.requestAnimationFrame(() => {
+              fitToWidth()
+            })
+            return
+          } catch {
+            // Fall back to CSS fullscreen when the browser API is unavailable.
+          }
+        }
+
+        enterFallbackFullscreen()
+      }
+
+      syncFullscreenButton()
 
       const beginDrag = (event) => {
         if (!treeShell || !treeCanvas || event.button !== 0) {
@@ -1129,25 +1327,46 @@ const buildViewerScript = (exportBaseName = 'skilltree-roadmap') => `
         treeShell.style.cursor = 'grab'
         treeCanvas.style.visibility = 'hidden'
         treeShell.addEventListener('pointerdown', beginDrag)
+        treeShell.addEventListener('click', (event) => {
+          if (event.target === treeShell || event.target === treeCanvas || event.target === svgRoot) {
+            clearReadonlySelection()
+          }
+        })
         window.addEventListener('pointermove', moveDrag)
         window.addEventListener('pointerup', endDrag)
         window.addEventListener('pointercancel', endDrag)
+        let lastRightClick = 0
+
         treeShell.addEventListener('wheel', (event) => {
           event.preventDefault()
-          const zoomFactor = event.deltaY < 0 ? 1.08 : 0.92
-          zoomAtPoint(event.clientX, event.clientY, zoomFactor)
+          const adaptiveStep = 0.0018 * Math.sqrt(panZoomState.scale)
+          const delta = Math.min(Math.abs(event.deltaY), 200)
+          const direction = event.deltaY < 0 ? 1 : -1
+          const ratio = Math.exp(adaptiveStep * delta * direction)
+          const rect = treeShell.getBoundingClientRect()
+          const pointX = event.clientX - rect.left
+          const pointY = event.clientY - rect.top
+          zoomToScale(panZoomState.scale * ratio, pointX, pointY)
         }, { passive: false })
 
-        treeShell.addEventListener('dblclick', (event) => {
-          if (event.target !== treeShell && event.target !== svgRoot) {
-            return
-          }
-
+        treeShell.addEventListener('contextmenu', (event) => {
           event.preventDefault()
-          fitToWidth()
+          const now = Date.now()
+          if (isDoubleActivation(lastRightClick, now)) {
+            fitToWidth()
+            lastRightClick = 0
+          } else {
+            lastRightClick = now
+          }
         })
 
         window.addEventListener('keydown', (event) => {
+          if (event.key === 'Escape' && roadmapPanel?.classList.contains('html-export__panel--fullscreen')) {
+            event.preventDefault()
+            exitFallbackFullscreen()
+            return
+          }
+
           const editableTarget = isEditableTarget(event.target)
           const action = getViewportKeyboardAction({
             key: event.key,
@@ -1193,25 +1412,25 @@ const buildViewerScript = (exportBaseName = 'skilltree-roadmap') => `
           }
 
           if (action === 'pan-left') {
-            panZoomState.translateX += 48
-            applyPanZoom()
-            return
-          }
-
-          if (action === 'pan-right') {
             panZoomState.translateX -= 48
             applyPanZoom()
             return
           }
 
+          if (action === 'pan-right') {
+            panZoomState.translateX += 48
+            applyPanZoom()
+            return
+          }
+
           if (action === 'pan-up') {
-            panZoomState.translateY += 48
+            panZoomState.translateY -= 48
             applyPanZoom()
             return
           }
 
           if (action === 'pan-down') {
-            panZoomState.translateY -= 48
+            panZoomState.translateY += 48
             applyPanZoom()
             return
           }
@@ -1230,6 +1449,18 @@ const buildViewerScript = (exportBaseName = 'skilltree-roadmap') => `
         zoomOutButton?.addEventListener('click', () => zoomByDirection(-1))
         zoomInButton?.addEventListener('click', () => zoomByDirection(1))
         fitButton?.addEventListener('click', () => fitToWidth())
+        fullscreenButton?.addEventListener('click', () => {
+          void toggleFullscreen()
+        })
+
+        document.addEventListener('fullscreenchange', () => {
+          syncFullscreenButton()
+          if (document.fullscreenElement === roadmapPanel || !document.fullscreenElement) {
+            window.requestAnimationFrame(() => {
+              fitToWidth()
+            })
+          }
+        })
 
         zoomSlider?.addEventListener('input', (event) => {
           const nextValue = Number.parseFloat(event.currentTarget.value) / 100
@@ -1429,9 +1660,40 @@ const buildViewerScript = (exportBaseName = 'skilltree-roadmap') => `
         })
 
         setTooltipMode(currentLabelMode ?? getLabelMode(panZoomState.scale))
+        syncReadonlySelection()
       }
 
       let hoveredPortalElement = null
+
+      const syncReadonlySelection = () => {
+        nodeAnchors.forEach((anchor) => {
+          const isSelected = !!readonlySelectionState.nodeId && anchor.getAttribute('data-node-id') === readonlySelectionState.nodeId
+          anchor.classList.toggle('html-export__node--selected', isSelected)
+          anchor.setAttribute('data-selected', isSelected ? 'true' : 'false')
+        })
+
+        segmentLabels.forEach((label) => {
+          const segmentId = label.getAttribute('data-segment-id')
+          const isSelected = !!segmentId && segmentId === readonlySelectionState.segmentId
+          const text = label.querySelector('.skill-tree-segment-label') || label.querySelector('text')
+          text?.classList.toggle('html-export__segment-label--selected', isSelected)
+          if (text?.classList.contains('skill-tree-segment-label')) {
+            text.classList.toggle('skill-tree-segment-label--selected', isSelected)
+          }
+        })
+
+        portalElements.forEach((portalElement) => {
+          const portalKey = String(portalElement.getAttribute('data-portal-key') ?? '')
+          portalElement.classList.toggle('skill-tree-portal--selected', !!portalKey && portalKey === readonlySelectionState.portalKey)
+        })
+      }
+
+      const clearReadonlySelection = () => {
+        readonlySelectionState.nodeId = null
+        readonlySelectionState.segmentId = null
+        readonlySelectionState.portalKey = null
+        syncReadonlySelection()
+      }
 
       const clearPortalPeerHighlight = () => {
         portalElements.forEach((portalElement) => {
@@ -1444,34 +1706,12 @@ const buildViewerScript = (exportBaseName = 'skilltree-roadmap') => `
         })
       }
 
-      const getPortalCounterpartNodeId = (portalElement) => {
-        const nodeId = String(portalElement.getAttribute('data-portal-node-id') ?? '')
-        const sourceId = String(portalElement.getAttribute('data-portal-source-id') ?? '')
-        const targetId = String(portalElement.getAttribute('data-portal-target-id') ?? '')
-
-        if (!nodeId || !sourceId || !targetId) {
-          return null
-        }
-
-        if (nodeId === sourceId) {
-          return targetId
-        }
-
-        if (nodeId === targetId) {
-          return sourceId
-        }
-
-        const portalKey = String(portalElement.getAttribute('data-portal-key') ?? '')
-        if (portalKey.endsWith(':source')) {
-          return targetId
-        }
-
-        if (portalKey.endsWith(':target')) {
-          return sourceId
-        }
-
-        return targetId
-      }
+      const getCounterpartNodeIdForElement = (portalElement) => getPortalCounterpartNodeId({
+        nodeId: portalElement?.getAttribute('data-portal-node-id') ?? '',
+        sourceId: portalElement?.getAttribute('data-portal-source-id') ?? '',
+        targetId: portalElement?.getAttribute('data-portal-target-id') ?? '',
+        portalKey: portalElement?.getAttribute('data-portal-key') ?? '',
+      })
 
       const setPortalPeerHighlight = (portalElement) => {
         clearPortalPeerHighlight()
@@ -1489,7 +1729,7 @@ const buildViewerScript = (exportBaseName = 'skilltree-roadmap') => `
           }
         })
 
-        const counterpartNodeId = getPortalCounterpartNodeId(portalElement)
+        const counterpartNodeId = getCounterpartNodeIdForElement(portalElement)
         if (!counterpartNodeId) {
           return
         }
@@ -1504,6 +1744,29 @@ const buildViewerScript = (exportBaseName = 'skilltree-roadmap') => `
       }
 
       portalElements.forEach((portalElement) => {
+        portalElement.addEventListener('pointerdown', (event) => {
+          event.stopPropagation()
+        })
+
+        portalElement.addEventListener('click', (event) => {
+          event.stopPropagation()
+
+          if (!portalElement.classList.contains('skill-tree-portal--interactive')) {
+            return
+          }
+
+          const nextSelectedNodeId = getCounterpartNodeIdForElement(portalElement)
+          if (!nextSelectedNodeId) {
+            return
+          }
+
+          readonlySelectionState.segmentId = null
+          readonlySelectionState.portalKey = null
+          readonlySelectionState.nodeId = nextSelectedNodeId
+          syncReadonlySelection()
+          focusNodeInViewport(nextSelectedNodeId)
+        })
+
         portalElement.addEventListener('pointerenter', () => {
           hoveredPortalElement = portalElement
           setPortalPeerHighlight(portalElement)
@@ -1516,6 +1779,45 @@ const buildViewerScript = (exportBaseName = 'skilltree-roadmap') => `
           clearPortalPeerHighlight()
         })
       })
+
+      nodeAnchors.forEach((anchor) => {
+        anchor.addEventListener('pointerdown', (event) => {
+          event.stopPropagation()
+        })
+
+        anchor.addEventListener('click', (event) => {
+          event.stopPropagation()
+          const nodeId = anchor.getAttribute('data-node-id')
+          readonlySelectionState.nodeId = nodeId || null
+          readonlySelectionState.segmentId = null
+          readonlySelectionState.portalKey = null
+          syncReadonlySelection()
+        })
+      })
+
+      segmentLabels.forEach((label) => {
+        label.addEventListener('pointerdown', (event) => {
+          event.stopPropagation()
+        })
+
+        label.addEventListener('click', (event) => {
+          event.stopPropagation()
+          const segmentId = label.getAttribute('data-segment-id')
+          readonlySelectionState.segmentId = segmentId || null
+          readonlySelectionState.nodeId = null
+          readonlySelectionState.portalKey = null
+          syncReadonlySelection()
+        })
+      })
+
+      const centerGroups = svgRoot?.querySelectorAll('.skill-tree-center-icon') ?? []
+      centerGroups.forEach((centerGroup) => {
+        centerGroup.addEventListener('pointerdown', (event) => {
+          event.stopPropagation()
+        })
+      })
+
+      syncReadonlySelection()
 
       if (scopeFilterSelect) {
         const existingValues = new Set(Array.from(scopeFilterSelect.options).map((option) => option.value))
@@ -1754,6 +2056,10 @@ export const buildHtmlExportDocument = ({
       background: #000000;
     }
 
+    body.html-export--fullscreen-fallback {
+      overflow: hidden;
+    }
+
     .html-export {
       max-width: 1440px;
       margin: 0 auto;
@@ -1917,7 +2223,8 @@ export const buildHtmlExportDocument = ({
       text-align: center;
     }
 
-    .html-export__action--fit {
+    .html-export__action--fit,
+    .html-export__action--fullscreen {
       align-self: center;
       display: inline-flex;
       align-items: center;
@@ -1984,6 +2291,42 @@ export const buildHtmlExportDocument = ({
       display: flex;
       flex-direction: column;
       min-height: 0;
+    }
+
+    .html-export__panel--roadmap:fullscreen,
+    .html-export__panel--roadmap.html-export__panel--fullscreen {
+      width: 100vw;
+      height: 100vh;
+      max-width: 100vw;
+      min-height: 100vh;
+      margin: 0;
+      padding: 16px;
+      border-radius: 0;
+      background: #000000;
+    }
+
+    .html-export__panel--roadmap:fullscreen .html-export__section-header,
+    .html-export__panel--roadmap.html-export__panel--fullscreen .html-export__section-header {
+      position: relative;
+      z-index: 2;
+      margin-bottom: 10px;
+    }
+
+    .html-export__panel--roadmap:fullscreen .html-export__tree-shell,
+    .html-export__panel--roadmap.html-export__panel--fullscreen .html-export__tree-shell {
+      flex: 1 1 auto;
+      width: 100%;
+      height: 100%;
+      min-height: 0;
+      padding: 8px;
+    }
+
+    .html-export__node--selected .skill-node-button {
+      box-shadow: 0 0 0 2px rgba(103, 232, 249, 0.92), 0 0 0 6px rgba(103, 232, 249, 0.14);
+    }
+
+    .skill-tree-segment-label.html-export__segment-label--selected {
+      fill: #a5f3fc;
     }
 
     .html-export__section-header {
@@ -2393,6 +2736,16 @@ export const buildHtmlExportDocument = ({
                 <path d="M20 4h-6v2h4v4h2z" />
                 <path d="M4 20h6v-2H6v-4H4z" />
                 <path d="M20 20h-6v-2h4v-4h2z" />
+              </svg>
+            </span>
+          </button>
+          <button id="html-export-fullscreen" class="html-export__action html-export__action--fullscreen" type="button" aria-label="Open fullscreen roadmap" title="Open fullscreen">
+            <span class="html-export__action-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M8 3H3v5" />
+                <path d="M16 3h5v5" />
+                <path d="M3 16v5h5" />
+                <path d="M21 16v5h-5" />
               </svg>
             </span>
           </button>
