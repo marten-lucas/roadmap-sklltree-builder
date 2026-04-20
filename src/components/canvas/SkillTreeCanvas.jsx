@@ -1,26 +1,18 @@
 import { useState, useMemo, memo } from 'react'
 import { TREE_CONFIG, STATUS_STYLES } from '../config'
 import { getDisplayStatusKey } from '../utils/nodeStatus'
+import { getConnectionStatusStyle, getConnectionZOrder } from '../utils/linkPresentation'
 import { SkillTreeNode } from '../nodes/SkillTreeNode'
 import { MarkdownTooltipContent, Tooltip } from '../tooltip'
 import { renderMarkdownToHtml } from '../utils/markdown'
+import { CENTER_ICON_HIT_PADDING } from '../utils/centerIconPresentation'
+import { getPortalViewModel } from '../utils/portalPresentation'
 
 
 const CHEVRON_SPACING = 7
 // Half-opening angle of the V. 25° keeps arm tips within the line's half-width
 // when arm length = line-width (verified: sin(25°) * lineW ≤ lineW/2 for all widths).
 const CHEVRON_HALF_OPEN = 25 * (Math.PI / 180)
-const LATER_SOURCE_LINK_STROKE = '#74849c'
-
-// Lower value = rendered first (below); higher = rendered last (on top).
-const LINK_Z_ORDER = { someday: 0, later: 0, done: 0, hidden: 0, next: 1, now: 2 }
-const getLinkZOrder = (link, nodesById, releaseId) => {
-  const sourceNode = link.sourceId ? nodesById.get(link.sourceId) : null
-  const sourceStatus = sourceNode ? getDisplayStatusKey(sourceNode, releaseId) : 'later'
-  const childNode = link.targetId ? nodesById.get(link.targetId) : null
-  const targetStatus = childNode ? getDisplayStatusKey(childNode, releaseId) : 'later'
-  return Math.max(LINK_Z_ORDER[sourceStatus] ?? 0, LINK_Z_ORDER[targetStatus] ?? 0)
-}
 
 // Compute arm length so chevron tips stay strictly inside a line of `lineWidth`.
 // Formula: armLen * sin(halfOpen) = lineWidth/2 * 0.88  (88% of half-width)
@@ -120,26 +112,6 @@ const getPortalClassName = (portal, isSelected, isPeerHovered) => [
   isPeerHovered ? 'skill-tree-portal--peer-hovered' : '',
 ].filter(Boolean).join(' ')
 
-const buildPortalSocketPath = (size) => {
-  const radius = size * 0.5
-  // Open semicircle (socket): right half of a circle, open on the left.
-  return `M 0 ${-radius} A ${radius} ${radius} 0 0 1 0 ${radius}`
-}
-
-const buildPortalPlugPath = (width, height, tipLength) => {
-  const halfH = height * 0.5
-  const bodyStart = -width * 0.5
-  const bodyEnd = width * 0.5 - tipLength
-  return [
-    `M ${bodyStart} ${-halfH}`,
-    `L ${bodyEnd} ${-halfH}`,
-    `L ${width * 0.5} 0`,
-    `L ${bodyEnd} ${halfH}`,
-    `L ${bodyStart} ${halfH}`,
-    'Z',
-  ].join(' ')
-}
-
 function CenterIconTooltipContent({ systemName, release, draftRelease }) {
   const hasRelease = Boolean(release)
   const displayRelease = draftRelease && draftRelease.id === release?.id
@@ -230,35 +202,10 @@ export function SkillTreeCanvas({
     ? visibleDependencyPortals.find((portal) => portal.key === hoveredPortalKey) ?? null
     : null
 
-  const getLinkStatusStyle = (link) => {
-    const sourceNode = link.sourceId ? layoutNodesById.get(link.sourceId) : null
-    const sourceStatus = sourceNode ? getDisplayStatusKey(sourceNode, releaseId) : null
-    const childNode = link.targetId ? layoutNodesById.get(link.targetId) : null
-    const nodeStatus = childNode ? getDisplayStatusKey(childNode, releaseId) : 'later'
-    const baseStyle = STATUS_STYLES[nodeStatus] ?? STATUS_STYLES.later
-
-    if (sourceStatus === 'later') {
-      return { ...baseStyle, linkStroke: LATER_SOURCE_LINK_STROKE }
-    }
-
-    return baseStyle
-  }
+  const getLinkStatusStyle = (link) => getConnectionStatusStyle(link, layoutNodesById, releaseId)
 
   const splitDots = useMemo(() => {
-    const getLinkStatusStyle = (link) => {
-      const sourceNode = link.sourceId ? layoutNodesById.get(link.sourceId) : null
-      const sourceStatus = sourceNode ? getDisplayStatusKey(sourceNode, releaseId) : null
-      const childNode = link.targetId ? layoutNodesById.get(link.targetId) : null
-      const nodeStatus = childNode ? getDisplayStatusKey(childNode, releaseId) : 'later'
-      const baseStyle = STATUS_STYLES[nodeStatus] ?? STATUS_STYLES.later
 
-      if (sourceStatus === 'later') {
-        return { ...baseStyle, linkStroke: LATER_SOURCE_LINK_STROKE }
-      }
-
-      return baseStyle
-    }
-    
     return Array.from(
       filteredLinks.reduce((acc, link) => {
         if (link.sourceDepth <= 0 || link.linkKind === 'ring' || !link.splitPoint) return acc
@@ -350,7 +297,7 @@ export function SkillTreeCanvas({
                 className="skill-tree-center-icon__image"
               />
             </foreignObject>
-            <circle r={centerIconSize / 2 + 8} className="skill-tree-center-icon__hit-area" />
+            <circle r={centerIconSize / 2 + CENTER_ICON_HIT_PADDING} className="skill-tree-center-icon__hit-area" />
           </g>
         </Tooltip>
 
@@ -447,7 +394,7 @@ export function SkillTreeCanvas({
         ))}
 
         {[...filteredLinks.filter((link) => link.sourceDepth > 0 && link.linkKind !== 'ring')]
-          .sort((a, b) => getLinkZOrder(a, layoutNodesById, releaseId) - getLinkZOrder(b, layoutNodesById, releaseId))
+          .sort((a, b) => getConnectionZOrder(a, layoutNodesById, releaseId) - getConnectionZOrder(b, layoutNodesById, releaseId))
           .map((link) => {
           const statusStyle = getLinkStatusStyle(link)
 
@@ -470,7 +417,7 @@ export function SkillTreeCanvas({
         {/* ── Connection line direction chevrons — only at close/very-close, only later+next ── */}
         {(labelMode === 'close' || labelMode === 'very-close') &&
           [...filteredLinks.filter((link) => link.sourceDepth > 0 && link.linkKind !== 'ring')]
-            .sort((a, b) => getLinkZOrder(a, layoutNodesById, releaseId) - getLinkZOrder(b, layoutNodesById, releaseId))
+            .sort((a, b) => getConnectionZOrder(a, layoutNodesById, releaseId) - getConnectionZOrder(b, layoutNodesById, releaseId))
             .map((link) => {
               const statusStyle = getLinkStatusStyle(link)
               const lineWidth = parseFloat(statusStyle.linkStrokeWidth)
@@ -512,68 +459,15 @@ export function SkillTreeCanvas({
           const hoveredBaseKey = hoveredPortalKey ? hoveredPortalKey.replace(/:(?:source|target)$/, '') : null
           const isPeerHovered = !isPortalSelected && hoveredBaseKey === portalBaseKey && hoveredPortalKey !== portal.key
           const portalClassName = getPortalClassName(portal, isPortalSelected, isPeerHovered)
-          const isSource = portal.type === 'source'
-          const dotIdx = portal.otherLabel ? portal.otherLabel.indexOf('\u00B7') : -1
-          const labelName = dotIdx >= 0 ? portal.otherLabel.slice(0, dotIdx) : (portal.otherLabel ?? '')
-          // eslint-disable-next-line no-unused-vars
-          const labelLevel = dotIdx >= 0 ? portal.otherLabel.slice(dotIdx + 1) : null
-
-          // Spoke: line from node boundary point to portal tip
-          const nodeData = layoutNodesById.get(portal.nodeId)
-          const nodeX = nodeData?.x ?? portal.x
-          const nodeY = nodeData?.y ?? portal.y
-          const angleRad = (portal.angle ?? 0) * Math.PI / 180
-          // Use the actual rendered node footprint here; minimized nodes are much smaller,
-          // and using the full-size radius flips the portal tangent by 180°.
-          const renderedNodeSize = portal.isMinimal ? minimalNodeSize : nodeSize
-          // For rounded-rect nodes (very-close) use rectangular boundary so corners don't clip
-          const halfSize = renderedNodeSize / 2
-          const boundaryRadius = labelMode === 'very-close'
-            ? halfSize / Math.max(Math.abs(Math.cos(angleRad)), Math.abs(Math.sin(angleRad)))
-            : halfSize
-          // Coords relative to portal center (translate group origin = portal.x/y)
-          const bxLocal = (nodeX + Math.cos(angleRad) * boundaryRadius) - portal.x
-          const byLocal = (nodeY + Math.sin(angleRad) * boundaryRadius) - portal.y
-          // Extend spoke tip by the same amount the rect boundary exceeds the circle boundary
-          // → zero at cardinal angles, max at 45° corners; no extension for circle nodes
-          const spokeLen = Math.sqrt(bxLocal * bxLocal + byLocal * byLocal)
-          const ext = (labelMode === 'very-close' && !portal.isMinimal)
-            ? halfSize * (1 / Math.max(Math.abs(Math.cos(angleRad)), Math.abs(Math.sin(angleRad))) - 1)
-            : 0
-          const extTipX = spokeLen > 0 ? (-bxLocal / spokeLen) * ext : 0
-          const extTipY = spokeLen > 0 ? (-byLocal / spokeLen) * ext : 0
-          // Midpoint + rotation for label along the spoke
-          // eslint-disable-next-line no-unused-vars
-          const mx = (bxLocal + extTipX) / 2
-          // eslint-disable-next-line no-unused-vars
-          const my = (byLocal + extTipY) / 2
-          const lineAngleDeg = Math.atan2(byLocal, bxLocal) * 180 / Math.PI
-          // eslint-disable-next-line no-unused-vars
-          const readAngleDeg = (lineAngleDeg > 90 || lineAngleDeg < -90) ? lineAngleDeg + 180 : lineAngleDeg
-
-          // Method 2: compound-path chevrons computed directly from spoke endpoints.
-          const spokeDx = extTipX - bxLocal
-          const spokeDy = extTipY - byLocal
-          const spokeDist = Math.sqrt(spokeDx * spokeDx + spokeDy * spokeDy)
-          const spokeLinePath = `M${bxLocal.toFixed(2)},${byLocal.toFixed(2)} L${extTipX.toFixed(2)},${extTipY.toFixed(2)}`
-          const spokeTangent = spokeDist > 0 ? Math.atan2(spokeDy, spokeDx) : 0
-          const spokeSamples = []
-          if (spokeDist > CHEVRON_SPACING * 0.5) {
-            const n = Math.floor(spokeDist / CHEVRON_SPACING)
-            for (let ci = 1; ci <= n; ci++) {
-              const t = (ci * CHEVRON_SPACING) / spokeDist
-              if (t < 1) spokeSamples.push({ x: bxLocal + spokeDx * t, y: byLocal + spokeDy * t, angle: spokeTangent })
-            }
-          }
-          const spokeChevronD = buildChevronPath(spokeSamples, chevronArm(3), CHEVRON_HALF_OPEN, portal.type === 'source')
-          const zoomSafe = Math.max(0.35, currentZoomScale)
-          const hitScale = Math.max(1, Math.min(2.4, 1 / zoomSafe))
-          const baseHitRadius = portal.isMinimal ? 24 : 28
-          const baseHoverStrokeWidth = portal.isMinimal ? 20 : 24
-          const portalHitRadius = Math.max(18, Math.min(72, baseHitRadius * hitScale))
-          const portalHoverStrokeWidth = Math.max(14, Math.min(64, baseHoverStrokeWidth * hitScale))
-          const portalHitWidth = Math.max(portalHitRadius, Math.min(88, (Math.max(labelName.length, 2) * 6 + 10) * hitScale))
-          const portalHitHeight = Math.max(portalHitRadius * 0.72, Math.min(42, (portal.isMinimal ? 16 : 20) * hitScale))
+          const portalView = getPortalViewModel({
+            portal,
+            nodeX: layoutNodesById.get(portal.nodeId)?.x ?? portal.x,
+            nodeY: layoutNodesById.get(portal.nodeId)?.y ?? portal.y,
+            nodeSize,
+            minimalNodeSize,
+            labelMode,
+            currentZoomScale,
+          })
           const portalHoverHandlers = {
             onPointerEnter: () => setPortalHover(portal.key),
             onPointerMove: () => setPortalHover(portal.key),
@@ -596,7 +490,11 @@ export function SkillTreeCanvas({
                 data-portal-node-id={portal.nodeId}
                 data-portal-source-id={portal.sourceId}
                 data-portal-target-id={portal.targetId}
-                transform={`translate(${portal.x} ${portal.y})`}
+                data-portal-type={portal.type}
+                data-portal-angle={portal.angle}
+                data-portal-orbit-ratio={portalView.orbitRatio}
+                data-portal-label={portal.otherLabel ?? ''}
+                transform={portalView.groupTransform}
                 onMouseDown={(event) => event.stopPropagation()}
                 onClick={(event) => {
                   event.stopPropagation()
@@ -607,70 +505,59 @@ export function SkillTreeCanvas({
                 {...portalHoverHandlers}
                 onPointerLeave={() => clearPortalHover(portal.key)}
               >
-                {!portal.isMinimal && (
-                  <>
-                    {/* wide, invisible spoke hit-path for forgiving hover */}
-                    <path
-                      d={spokeLinePath}
-                      className="skill-tree-portal__hoverline"
-                      style={{ strokeWidth: portalHoverStrokeWidth }}
-                      {...portalHoverHandlers}
-                    />
-                    {/* base spoke line */}
-                    <path
-                      d={spokeLinePath}
-                      className={`skill-tree-portal__spoke skill-tree-portal__spoke--${portal.type}`}
-                      {...portalHoverHandlers}
-                    />
-                    {/* directional chevrons overlay (Method 2: compound path) */}
-                    {spokeChevronD && (
-                      <path
-                        d={spokeChevronD}
-                        className={`skill-tree-portal__chevrons skill-tree-portal__chevrons--${portal.type}`}
-                      />
-                    )}
-                  </>
-                )}
+                {/* wide, invisible spoke hit-path for forgiving hover */}
+                <path
+                  d={portalView.spokeLinePath}
+                  className="skill-tree-portal__hoverline"
+                  style={{
+                    strokeWidth: portalView.portalHoverStrokeWidth,
+                    display: portalView.showSpoke ? '' : 'none',
+                  }}
+                  {...portalHoverHandlers}
+                />
+                {/* base spoke line */}
+                <path
+                  d={portalView.spokeLinePath}
+                  className={`skill-tree-portal__spoke skill-tree-portal__spoke--${portal.type}`}
+                  style={{ display: portalView.showSpoke ? '' : 'none' }}
+                  {...portalHoverHandlers}
+                />
+                {/* directional chevrons overlay (Method 2: compound path) */}
+                <path
+                  d={portalView.spokeChevronD}
+                  className={`skill-tree-portal__chevrons skill-tree-portal__chevrons--${portal.type}`}
+                  style={{ display: portalView.showSpoke && portalView.spokeChevronD ? '' : 'none' }}
+                />
                 {/* socket/plug icon at spoke tip:
                      source = requires (Buchse, inward-facing)
                      target = enables (Stecker, outward-facing) */}
-                {isSource ? (
-                  <path
-                    className={`skill-tree-portal__ring skill-tree-portal__ring--${portal.type}`}
-                    d={buildPortalSocketPath(portal.isMinimal ? 10 : 18)}
-                    transform={`translate(${extTipX} ${extTipY}) rotate(${(spokeTangent * 180) / Math.PI})`}
-                    {...portalHoverHandlers}
-                  />
-                ) : (
-                  <path
-                    className={`skill-tree-portal__ring skill-tree-portal__ring--${portal.type}`}
-                    d={buildPortalPlugPath(portal.isMinimal ? 14 : 28, portal.isMinimal ? 8 : 14, portal.isMinimal ? 4 : 7)}
-                    transform={`translate(${extTipX} ${extTipY}) rotate(${(spokeTangent * 180) / Math.PI})`}
-                    {...portalHoverHandlers}
-                  />
-                )}
+                <path
+                  className={`skill-tree-portal__ring skill-tree-portal__ring--${portal.type}`}
+                  d={portalView.ringPath}
+                  transform={portalView.ringTransform}
+                  {...portalHoverHandlers}
+                />
                 {/* invisible hit area (larger than ring for easy clicking) */}
                 <ellipse
                   className="skill-tree-portal__hit"
-                  rx={portalHitWidth}
-                  ry={portalHitHeight}
-                  cx={extTipX}
-                  cy={extTipY}
+                  rx={portalView.portalHitWidth}
+                  ry={portalView.portalHitHeight}
+                  cx={portalView.hitCx}
+                  cy={portalView.hitCy}
                   {...portalHoverHandlers}
                 />
                 {/* label inside the portal symbol at spoke tip */}
-                {!portal.isMinimal && (
-                  <text
-                    className="skill-tree-portal__label"
-                    x={extTipX}
-                    y={extTipY}
-                    textAnchor="middle"
-                    dominantBaseline="middle"
-                    {...portalHoverHandlers}
-                  >
-                    {labelName}
-                  </text>
-                )}
+                <text
+                  className="skill-tree-portal__label"
+                  x={portalView.hitCx}
+                  y={portalView.hitCy}
+                  textAnchor="middle"
+                  dominantBaseline="middle"
+                  style={{ display: portalView.showLabel ? '' : 'none' }}
+                  {...portalHoverHandlers}
+                >
+                  {portalView.labelName}
+                </text>
               </g>
             </Tooltip>
           )

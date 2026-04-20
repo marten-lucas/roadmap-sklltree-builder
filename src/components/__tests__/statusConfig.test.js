@@ -3,6 +3,7 @@ import { renderToString } from 'react-dom/server'
 import { MantineProvider } from '@mantine/core'
 import { describe, expect, it } from 'vitest'
 import { DEFAULT_STATUS_DESCRIPTIONS, STATUS_LABELS, STATUS_STYLES, normalizeStatusKey } from '../config'
+import { getTemporalLinkPriority } from '../utils/linkPresentation'
 import { SkillNode } from '../nodes/SkillNode'
 
 describe('someday status', () => {
@@ -12,6 +13,27 @@ describe('someday status', () => {
     expect(STATUS_LABELS.someday).toBe('Someday')
     expect(DEFAULT_STATUS_DESCRIPTIONS.someday).toBeTruthy()
     expect(STATUS_STYLES.someday).toBeTruthy()
+  })
+
+  it('keeps connection lines at a uniform width and uses dashes only for someday', () => {
+    const visibleStatuses = ['done', 'now', 'next', 'later', 'someday']
+    const widths = visibleStatuses.map((statusKey) => STATUS_STYLES[statusKey]?.linkStrokeWidth)
+
+    expect(new Set(widths).size).toBe(1)
+    expect(STATUS_STYLES.someday.linkStrokeDasharray).not.toBe('none')
+
+    visibleStatuses
+      .filter((statusKey) => statusKey !== 'someday')
+      .forEach((statusKey) => {
+        expect(STATUS_STYLES[statusKey].linkStrokeDasharray ?? 'none').toBe('none')
+      })
+  })
+
+  it('orders nearer roadmap statuses above distant ones', () => {
+    expect(getTemporalLinkPriority('now')).toBeGreaterThan(getTemporalLinkPriority('next'))
+    expect(getTemporalLinkPriority('next')).toBeGreaterThan(getTemporalLinkPriority('later'))
+    expect(getTemporalLinkPriority('later')).toBeGreaterThan(getTemporalLinkPriority('someday'))
+    expect(getTemporalLinkPriority('done')).toBeGreaterThan(getTemporalLinkPriority('later'))
   })
 
   it('renders a dashed level ring for a single someday level', () => {

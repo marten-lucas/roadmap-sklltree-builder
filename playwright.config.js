@@ -24,6 +24,8 @@ const sanitizeRunLabel = (value) => String(value ?? 'e2e')
 const runLabel = sanitizeRunLabel(process.env.SKILLTREE_TEST_RUN_LABEL)
 const runId = process.env.SKILLTREE_TEST_RUN_ID ?? `${formatRunStamp(new Date())}_${runLabel}`
 const runArtifactsRoot = resolve(artifactsRoot, 'runs', runId)
+const testPort = Number(process.env.SKILLTREE_TEST_PORT ?? 41731)
+const baseURL = `http://127.0.0.1:${testPort}`
 
 mkdirSync(resolve(runArtifactsRoot, 'reports'), { recursive: true })
 mkdirSync(resolve(runArtifactsRoot, 'playwright'), { recursive: true })
@@ -45,7 +47,7 @@ export default defineConfig({
     ['json', { outputFile: resolve(runArtifactsRoot, 'reports/playwright-results.json') }],
   ],
   use: {
-    baseURL: 'http://localhost:5173',
+    baseURL,
     trace: 'retain-on-failure',
     video: 'retain-on-failure',
   },
@@ -56,9 +58,9 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: 'npm run dev',
-    url: 'http://localhost:5173',
-    reuseExistingServer: true,
+    command: `npm run dev -- --host 127.0.0.1 --port ${testPort} --strictPort`,
+    url: baseURL,
+    reuseExistingServer: false,
     timeout: 60_000,
   },
 })

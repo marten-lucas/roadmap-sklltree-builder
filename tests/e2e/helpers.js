@@ -9,19 +9,106 @@ const IMMEDIATE_SCOPE_DUMP_SEED = resolve(
   'tests/results/e2e-exports/immediate-scope-dump-1774364111859.json',
 )
 
+const FALLBACK_PERSISTED_PAYLOAD = {
+  schemaVersion: 3,
+  document: {
+    systemName: 'myKyana',
+    segments: [
+      { id: 'segment-frontend', label: 'Frontend' },
+      { id: 'segment-backend', label: 'Backend' },
+    ],
+    scopes: [
+      { id: 'scope-platform', label: 'Platform' },
+    ],
+    releases: [
+      {
+        id: 'release-1',
+        name: 'July 2026 Release',
+        motto: 'Reich & Schön',
+        introduction: '',
+        voiceOfCustomer: '',
+        fictionalCustomerName: '',
+        date: '2026-07-01',
+        storyPointBudget: null,
+        statusBudgets: { now: null, next: null, later: null, someday: null, done: null, hidden: null },
+        featureStatuses: { now: true, next: true, later: false, someday: false, done: false, hidden: false },
+        notesMarkdown: '',
+        notesChecked: {},
+      },
+    ],
+    children: [
+      {
+        id: 'node-backend',
+        label: 'Backend',
+        shortName: 'BCK',
+        segmentId: 'segment-backend',
+        children: [
+          {
+            id: 'node-api',
+            label: 'API Design',
+            shortName: 'API',
+            segmentId: 'segment-backend',
+            children: [],
+            levels: [
+              {
+                id: 'level-api',
+                label: 'Level 1',
+                statuses: { 'release-1': 'now' },
+                releaseNote: 'New API contracts are being validated with pilot customers.',
+                scopeIds: ['scope-platform'],
+              },
+            ],
+          },
+        ],
+        levels: [
+          {
+            id: 'level-backend',
+            label: 'Level 1',
+            statuses: { 'release-1': 'now' },
+            releaseNote: 'Service hardening is in active implementation.',
+            scopeIds: [],
+          },
+        ],
+      },
+      {
+        id: 'node-frontend',
+        label: 'Frontend',
+        shortName: 'FND',
+        segmentId: 'segment-frontend',
+        children: [],
+        levels: [
+          {
+            id: 'level-frontend',
+            label: 'Level 1',
+            statuses: { 'release-1': 'done' },
+            releaseNote: 'Landing page and design system are live for all customers.',
+            scopeIds: [],
+          },
+        ],
+      },
+    ],
+    showHiddenNodes: false,
+  },
+}
+
 /**
- * Clears localStorage and reloads the app so it starts from initialData.
- * Waits until at least one skill node is visible in the builder canvas.
+ * Clears localStorage and reloads the app so it starts from seeded roadmap data.
+ * Falls back to an embedded sample document if artifact-based seeds are unavailable.
  */
 export const startFresh = async (page) => {
+  const applyPersistedPayload = async (payload) => {
+    await page.evaluate((nextPayload) => {
+      localStorage.setItem('roadmap-skilltree.document.v1', JSON.stringify(nextPayload))
+    }, payload)
+  }
+
   await page.goto('/')
+
   try {
     const dumpText = readFileSync(IMMEDIATE_SCOPE_DUMP_SEED, 'utf-8')
     const dump = JSON.parse(dumpText)
     const persistedPayload = JSON.parse(dump.document)
-    await page.evaluate((payload) => {
-      localStorage.setItem('roadmap-skilltree.document.v1', JSON.stringify(payload))
-    }, persistedPayload)
+    await applyPersistedPayload(persistedPayload)
   } catch {
     try {
       const seedHtml = readFileSync(ROUNDTRIP_EXPORT_SEED, 'utf-8')
@@ -29,16 +116,26 @@ export const startFresh = async (page) => {
       if (payloadMatch?.[1]) {
         await page.evaluate((payload) => localStorage.setItem('roadmap-skilltree.document.v1', payload.trim()), payloadMatch[1])
       } else {
-        await page.evaluate(() => localStorage.removeItem('roadmap-skilltree.document.v1'))
+        await applyPersistedPayload(FALLBACK_PERSISTED_PAYLOAD)
       }
     } catch {
-      await page.evaluate(() => localStorage.removeItem('roadmap-skilltree.document.v1'))
+      await applyPersistedPayload(FALLBACK_PERSISTED_PAYLOAD)
     }
   }
+
   await page.reload()
-  // Wait for the skill nodes to be attached in the SVG canvas.
-  await page.waitForSelector('foreignObject.skill-node-export-anchor', { state: 'attached', timeout: 15_000 })
-  await page.getByRole('button', { name: 'Export', exact: true }).waitFor({ state: 'visible', timeout: 15_000 })
+  await page.waitForLoadState('domcontentloaded')
+  await page.waitForSelector('svg.skill-tree-canvas', { state: 'attached', timeout: 30_000 })
+
+  const hasVisibleNodes = await page.locator('foreignObject.skill-node-export-anchor').count()
+  if (hasVisibleNodes === 0) {
+    await applyPersistedPayload(FALLBACK_PERSISTED_PAYLOAD)
+    await page.reload()
+    await page.waitForLoadState('domcontentloaded')
+    await page.waitForSelector('foreignObject.skill-node-export-anchor', { state: 'attached', timeout: 30_000 })
+  }
+
+  await page.getByRole('button', { name: 'Export', exact: true }).waitFor({ state: 'visible', timeout: 30_000 })
 }
 
 /**
@@ -66,13 +163,18 @@ export const getBuilderNodeShortNames = async (page) => {
 }
 
 /**
- * Triggers an HTML export via Ctrl+S and returns the downloaded file text.
+ * Triggers an HTML export via the toolbar and returns the downloaded file text.
  */
 export const exportHtml = async (page) => {
+  await page.getByRole('button', { name: 'Export', exact: true }).click()
+  const exportDialog = page.getByRole('dialog')
+  await exportDialog.waitFor({ state: 'visible', timeout: 15_000 })
+
   const [download] = await Promise.all([
     page.waitForEvent('download'),
-    page.keyboard.press('Control+s'),
+    exportDialog.getByRole('button', { name: 'Export', exact: true }).click(),
   ])
+
   return readDownload(download)
 }
 

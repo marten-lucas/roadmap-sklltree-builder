@@ -181,19 +181,22 @@
 
 .skill-tree-legend__tip {
     display: inline-flex;
-    align-items: center;
+    align-items: flex-start;
     gap: 0.45rem;
     flex: 0 1 16rem;
     min-width: 0;
     color: #94a3b8;
     font-size: 0.66rem;
-    white-space: nowrap;
+    white-space: normal;
 }
 
 .skill-tree-legend__tip-text {
+    display: block;
     min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    overflow: visible;
+    text-overflow: clip;
+    white-space: normal;
+    line-height: 1.25;
 }
 
 .skill-tree-legend__tip-icon {
@@ -337,8 +340,7 @@
 }
 
 .skill-tree-legend[data-legend-density="icons-only"] .skill-tree-legend__header,
-.skill-tree-legend[data-legend-density="icons-only"] .skill-tree-legend__symbol-title,
-.skill-tree-legend[data-legend-density="icons-only"] .skill-tree-legend__tip-text {
+.skill-tree-legend[data-legend-density="icons-only"] .skill-tree-legend__symbol-title {
     display: none;
 }
 

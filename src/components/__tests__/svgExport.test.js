@@ -173,6 +173,31 @@ describe('svgExport', () => {
     expect(normalized).toBe(raw)
   })
 
+  it('preserves connection line stroke styling in serialized exports', () => {
+    installSvgDomShim()
+
+    const svg = new MockElement('svg')
+    svg.setAttribute('viewBox', '0 0 100 100')
+
+    const path = new MockElement('path')
+    path.setAttribute('d', 'M 0 0 L 10 10')
+    path.setAttribute('data-link-source-id', 'parent')
+    path.setAttribute('data-link-target-id', 'child')
+    path.setAttribute('stroke', '#74849c')
+    path.setAttribute('stroke-width', '6')
+    path.setAttribute('stroke-opacity', '0.4')
+    path.setAttribute('stroke-dasharray', '2 10')
+
+    svg.appendChild(path)
+
+    const serialized = serializeSvgElementForExport(svg)
+
+    expect(serialized).toContain('stroke="#74849c"')
+    expect(serialized).toContain('stroke-width="6"')
+    expect(serialized).toContain('stroke-opacity="0.4"')
+    expect(serialized).toContain('stroke-dasharray="2 10"')
+  })
+
   it('splits long tooltip notes into capped lines', () => {
     const lines = splitIntoLines('Dies ist ein sehr langer Text fuer Tooltips im SVG Export und sollte auf mehrere Zeilen verteilt werden', 18, 3)
 
@@ -316,7 +341,7 @@ describe('svgExport', () => {
     expect(serialized).toContain('y="-78"')
     expect(serialized).toContain('width="156"')
     expect(serialized).toContain('height="156"')
-    expect(serialized).toContain('r="78"')
+    expect(serialized).toContain('r="86"')
   })
 
   it('sizes the export viewport from the root svg bounds', () => {
@@ -516,6 +541,43 @@ describe('svgExport', () => {
     expect((serialized.match(/skill-node-tooltip__scope/g) ?? []).length).toBeGreaterThanOrEqual(3)
   })
 
+  it('preserves the live center icon size from the builder in standalone svg exports', () => {
+    installSvgDomShim()
+
+    const svg = new MockElement('svg')
+
+    const centerIcon = new MockElement('g')
+    centerIcon.setAttribute('class', 'skill-tree-center-icon')
+    centerIcon.setAttribute('transform', 'translate(500, 500)')
+    centerIcon.setAttribute('data-center-icon-size', '173')
+
+    const foreignObject = new MockElement('foreignObject')
+    foreignObject.setAttribute('class', 'skill-tree-center-icon__foreign')
+    foreignObject.setAttribute('x', '-86.5')
+    foreignObject.setAttribute('y', '-86.5')
+    foreignObject.setAttribute('width', '173')
+    foreignObject.setAttribute('height', '173')
+
+    const image = new MockElement('img')
+    image.setAttribute('class', 'skill-tree-center-icon__image')
+    image.setAttribute('src', 'data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D"http://www.w3.org/2000/svg"%3E%3C/svg%3E')
+    foreignObject.appendChild(image)
+
+    const hitArea = new MockElement('circle')
+    hitArea.setAttribute('class', 'skill-tree-center-icon__hit-area')
+    hitArea.setAttribute('r', '94.5')
+
+    centerIcon.appendChild(foreignObject)
+    centerIcon.appendChild(hitArea)
+    svg.appendChild(centerIcon)
+
+    const serialized = serializeSvgElementForExport(svg)
+
+    expect(serialized).toContain('width="173"')
+    expect(serialized).toContain('height="173"')
+    expect(serialized).toContain('r="94.5"')
+  })
+
   it('embeds source styles when exporting a standalone svg', () => {
     installSvgDomShim()
 
@@ -565,6 +627,27 @@ describe('svgExport', () => {
     const serialized = serializeSvgElementForExport(svg, { includeTooltips: true })
 
     expect(serialized).toContain('"Space Grotesk", "Rajdhani", sans-serif')
+  })
+
+  it('embeds the shared interactive runtime for standalone svg exports', () => {
+    installSvgDomShim()
+
+    const svg = new MockElement('svg')
+    const foreignObject = new MockElement('foreignObject')
+
+    foreignObject.setAttribute('class', 'skill-node-export-anchor')
+    foreignObject.setAttribute('x', '10')
+    foreignObject.setAttribute('y', '20')
+    foreignObject.setAttribute('width', '120')
+    foreignObject.setAttribute('height', '120')
+    foreignObject.setAttribute('data-node-id', 'node-1')
+    svg.appendChild(foreignObject)
+
+    const serialized = serializeSvgElementForExport(svg, { includeRuntime: true })
+
+    expect(serialized).toContain('skill-tree-interactive-runtime-script')
+    expect(serialized).toContain('focusNodeInViewport')
+    expect(serialized).toContain('getPortalCounterpartNodeId')
   })
 
   it('places scope chips after the release note in the tooltip card', () => {

@@ -1,5 +1,19 @@
 export const SCOPE_FILTER_ALL = '__all__'
 
+export const normalizeScopeFilterIds = (scopeFilter) => {
+  if (Array.isArray(scopeFilter)) {
+    return Array.from(new Set(scopeFilter.filter((scopeId) => typeof scopeId === 'string' && scopeId && scopeId !== SCOPE_FILTER_ALL && scopeId !== 'all')))
+  }
+
+  if (typeof scopeFilter === 'string' && scopeFilter && scopeFilter !== SCOPE_FILTER_ALL && scopeFilter !== 'all') {
+    return [scopeFilter]
+  }
+
+  return []
+}
+
+export const isAllScopeFilter = (scopeFilter) => normalizeScopeFilterIds(scopeFilter).length === 0
+
 export const RELEASE_FILTER_OPTIONS = {
   all: 'all',
   now: 'now',
@@ -58,56 +72,68 @@ const getScopeGroupKey = (scope) => {
   return color ? `color:${color}` : `scope:${scopeId}`
 }
 
-const getSelectedGroupScopeIds = (selectedScopeId, scopeOptions = []) => {
-  if (!selectedScopeId || selectedScopeId === SCOPE_FILTER_ALL || selectedScopeId === 'all') {
-    return new Set()
-  }
-
+const getSelectedScopeGroups = (selectedScopeIds, scopeOptions = []) => {
   const options = Array.isArray(scopeOptions) ? scopeOptions : []
-  const selectedScope = options.find((scope) => getScopeOptionId(scope) === selectedScopeId)
-  const groupKey = getScopeGroupKey(selectedScope ?? { id: selectedScopeId })
-  const groupScopeIds = new Set([selectedScopeId])
-
-  if (!groupKey) {
-    return groupScopeIds
-  }
+  const groupScopeIdsByKey = new Map()
 
   options.forEach((scope) => {
     const scopeId = getScopeOptionId(scope)
-    if (scopeId && getScopeGroupKey(scope) === groupKey) {
-      groupScopeIds.add(scopeId)
+    const groupKey = getScopeGroupKey(scope)
+
+    if (!scopeId || !groupKey) {
+      return
     }
+
+    const existingGroupScopeIds = groupScopeIdsByKey.get(groupKey) ?? new Set()
+    existingGroupScopeIds.add(scopeId)
+    groupScopeIdsByKey.set(groupKey, existingGroupScopeIds)
   })
 
-  return groupScopeIds
+  const selectedGroups = new Map()
+
+  selectedScopeIds.forEach((selectedScopeId) => {
+    const selectedScope = options.find((scope) => getScopeOptionId(scope) === selectedScopeId)
+    const groupKey = getScopeGroupKey(selectedScope ?? { id: selectedScopeId }) ?? `scope:${selectedScopeId}`
+    const existingGroup = selectedGroups.get(groupKey) ?? {
+      selectedIds: new Set(),
+      groupScopeIds: new Set(groupScopeIdsByKey.get(groupKey) ?? [selectedScopeId]),
+    }
+
+    existingGroup.selectedIds.add(selectedScopeId)
+    existingGroup.groupScopeIds.add(selectedScopeId)
+    selectedGroups.set(groupKey, existingGroup)
+  })
+
+  return selectedGroups
 }
 
-export const scopeIdsMatchFilter = (scopeIds, scopeId, scopeOptions = []) => {
-  if (!scopeId || scopeId === SCOPE_FILTER_ALL || scopeId === 'all') {
+export const scopeIdsMatchFilter = (scopeIds, scopeFilter, scopeOptions = []) => {
+  const selectedScopeIds = normalizeScopeFilterIds(scopeFilter)
+
+  if (selectedScopeIds.length === 0) {
     return true
   }
 
   const assignedScopeIds = Array.isArray(scopeIds) ? scopeIds.filter(Boolean) : []
-  const selectedGroupScopeIds = getSelectedGroupScopeIds(scopeId, scopeOptions)
-  const hasAssignmentInSelectedGroup = assignedScopeIds.some((assignedId) => selectedGroupScopeIds.has(assignedId))
+  const selectedGroups = getSelectedScopeGroups(selectedScopeIds, scopeOptions)
 
-  if (!hasAssignmentInSelectedGroup) {
-    return true
-  }
+  return [...selectedGroups.values()].every(({ selectedIds, groupScopeIds }) => {
+    const hasAssignmentInSelectedGroup = assignedScopeIds.some((assignedId) => groupScopeIds.has(assignedId))
 
-  return assignedScopeIds.includes(scopeId)
+    if (!hasAssignmentInSelectedGroup) {
+      return true
+    }
+
+    return assignedScopeIds.some((assignedId) => selectedIds.has(assignedId))
+  })
 }
 
-export const nodeMatchesScopeFilter = (node, scopeId, scopeOptions = []) => {
+export const nodeMatchesScopeFilter = (node, scopeFilter, scopeOptions = []) => {
   const levels = Array.isArray(node?.levels) ? node.levels : []
 
-  if (!scopeId || scopeId === SCOPE_FILTER_ALL || scopeId === 'all') {
+  if (isAllScopeFilter(scopeFilter) || levels.length === 0) {
     return true
   }
 
-  if (levels.length === 0) {
-    return true
-  }
-
-  return levels.some((level) => scopeIdsMatchFilter(level?.scopeIds ?? [], scopeId, scopeOptions))
+  return levels.some((level) => scopeIdsMatchFilter(level?.scopeIds ?? [], scopeFilter, scopeOptions))
 }

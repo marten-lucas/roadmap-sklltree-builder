@@ -40,6 +40,7 @@ const ensureDocumentDefaults = (document) => {
   const hasShowHiddenNodes = 'showHiddenNodes' in document
   const hasReleases = Array.isArray(document.releases) && document.releases.length > 0
   const hasStatusDescriptions = !('statusDescriptions' in document) || isObject(document.statusDescriptions)
+  const hasStatusSummary = !('statusSummary' in document) || isObject(document.statusSummary)
 
   if (
     normalizeCenterIconSrc(document.centerIconSrc) === document.centerIconSrc
@@ -48,6 +49,7 @@ const ensureDocumentDefaults = (document) => {
     && hasSPMap
     && hasShowHiddenNodes
     && hasStatusDescriptions
+    && hasStatusSummary
   ) {
     return document
   }
@@ -62,6 +64,14 @@ const ensureDocumentDefaults = (document) => {
     statusDescriptions: {
       ...DEFAULT_STATUS_DESCRIPTIONS,
       ...(hasStatusDescriptions ? document.statusDescriptions : {}),
+    },
+    statusSummary: {
+      sortMode: hasStatusSummary && typeof document.statusSummary?.sortMode === 'string'
+        ? document.statusSummary.sortMode
+        : 'manual',
+      manualOrderByStatus: hasStatusSummary && document.statusSummary?.manualOrderByStatus && typeof document.statusSummary.manualOrderByStatus === 'object'
+        ? document.statusSummary.manualOrderByStatus
+        : {},
     },
   }
 }
@@ -83,6 +93,10 @@ export const createEmptyDocument = () => ({
   storyPointMap: { ...DEFAULT_STORY_POINT_MAP },
   showHiddenNodes: false,
   statusDescriptions: { ...DEFAULT_STATUS_DESCRIPTIONS },
+  statusSummary: {
+    sortMode: 'manual',
+    manualOrderByStatus: {},
+  },
 })
 
 export const cloneDocument = (document) => {

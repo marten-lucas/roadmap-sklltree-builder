@@ -7,6 +7,8 @@ const createDocument = () => ({
     name: 'July 2026 Release',
     motto: 'Reich & Schön',
     introduction: '# Release Overview\nIntro with **markdown**.',
+    voiceOfCustomer: '"This finally saves me hours every week."',
+    fictionalCustomerName: 'Alex Example',
     date: '2026-07-01',
   },
   segments: [
@@ -87,11 +89,63 @@ describe('pdfExport', () => {
     expect(html).toContain('<svg viewBox="0 0 100 100"></svg>')
     expect(html).toContain('React Platform')
     expect(html).toContain('<strong>markdown</strong>')
+    expect(html).toContain('printed.css')
+    expect(html).toContain('@page')
+    expect(html).toContain('pdf-export__note-layout')
+    expect(html).toContain('pdf-export__note-aside')
     expect(html).toContain('Frontend')
     expect(html).toContain('Platform')
     expect(html).toContain('<h1>Release Overview</h1>')
     expect(html).toContain('<h2>Release Impact</h2>')
+    expect(html).toContain('Voice of Customer')
+    expect(html).toContain('This finally saves me hours every week.')
+    expect(html).toContain('Alex Example')
     expect(html).toContain('window.print()')
+  })
+
+  it('renders the status summary in the selected order for PDF export', () => {
+    const document = {
+      ...createDocument(),
+      statusSummary: {
+        sortMode: 'manual',
+        manualOrderByStatus: {
+          next: ['node-2', 'node-1'],
+        },
+      },
+      children: [
+        {
+          id: 'node-1',
+          label: 'Zeta Feature',
+          shortName: 'ZET',
+          status: 'next',
+          segmentId: 'segment-frontend',
+          levels: [{ id: 'level-1', label: 'Level 1', status: 'next', releaseNote: 'A' }],
+          children: [],
+        },
+        {
+          id: 'node-2',
+          label: 'Alpha Feature',
+          shortName: 'ALP',
+          status: 'next',
+          segmentId: 'segment-backend',
+          levels: [{ id: 'level-2', label: 'Level 1', status: 'next', releaseNote: 'B' }],
+          children: [],
+        },
+      ],
+    }
+
+    const html = buildPdfExportHtml({
+      svgMarkup: '<svg viewBox="0 0 100 100"></svg>',
+      releaseNoteEntries: collectReleaseNoteEntries(document, null, ['next']),
+      introductionMarkdown: '',
+      styleText: '',
+      roadmapDocument: document,
+      releaseMeta: document.release,
+      statusSummarySortMode: 'manual',
+    })
+
+    expect(html).toContain('Status Summary')
+    expect(html.indexOf('Alpha Feature')).toBeLessThan(html.indexOf('Zeta Feature'))
   })
 
   it('opens the PDF export in a blob-backed popup instead of writing to a blank tab', () => {

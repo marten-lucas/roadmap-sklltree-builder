@@ -52,7 +52,7 @@ export const buildExportFileName = (roadmapDocument, extension, options = {}) =>
   const suffixPart = sanitizeFileNamePart(suffix, '', { allowEmpty: true })
   const normalizedExtension = String(extension ?? '')
     .trim()
-    .replace(/^\.+/, '')
+    .replace(/^[.]+/, '')
     .toLowerCase() || 'txt'
 
   return `${baseName}_${formatExportTimestamp(now)}${suffixPart ? `_${suffixPart}` : ''}.${normalizedExtension}`

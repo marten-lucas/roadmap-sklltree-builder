@@ -427,6 +427,39 @@ test.describe('Rendered export viewer', () => {
     }
   })
 
+  test('exported HTML stays clean and printable in print media', async ({ page, browser }) => {
+    const { exportPage, exportContext } = await openExportViewer(page, browser)
+    try {
+      await exportPage.setViewportSize({ width: 1280, height: 1700 })
+      await exportPage.emulateMedia({ media: 'print' })
+      await exportPage.waitForTimeout(250)
+
+      await expect(exportPage.locator('.html-export__actions')).toBeHidden()
+
+      const printMetrics = await exportPage.evaluate(() => {
+        const treeShell = document.querySelector('#html-export-tree-shell')
+        const styles = treeShell ? window.getComputedStyle(treeShell) : null
+        return {
+          hasPrintedCss: Boolean(document.querySelector('style[data-export-print="printed.css"]')),
+          overflowX: styles?.overflowX ?? '',
+          overflowY: styles?.overflowY ?? '',
+        }
+      })
+
+      expect(printMetrics.hasPrintedCss).toBe(true)
+      expect(printMetrics.overflowX).toBe('visible')
+      expect(printMetrics.overflowY).toBe('visible')
+
+      await expect(exportPage.locator('.html-export')).toHaveScreenshot('html-export-print-focused.png', {
+        animations: 'disabled',
+        maxDiffPixelRatio: 0.02,
+      })
+    } finally {
+      await exportPage.close()
+      await exportContext.close()
+    }
+  })
+
   test('minimal csv export viewer keeps roadmap controls and pan/zoom behavior', async ({ page, browser }) => {
     await importCsvFile(page, MINIMAL_CSV_PATH)
 

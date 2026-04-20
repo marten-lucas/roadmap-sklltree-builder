@@ -19,7 +19,7 @@ describe('SystemPanel status descriptions', () => {
             segments: [],
             scopes: [],
             children: [],
-            releases: [{ id: 'rel-1', name: 'Release 1', motto: '', introduction: '', date: '', storyPointBudget: null }],
+            releases: [{ id: 'rel-1', name: 'Release 1', motto: '', introduction: '', voiceOfCustomer: '', fictionalCustomerName: '', date: '', storyPointBudget: null }],
             storyPointMap: { xs: 1, s: 2, m: 3, l: 5, xl: 8 },
             showHiddenNodes: false,
           },
@@ -34,6 +34,8 @@ describe('SystemPanel status descriptions', () => {
     expect(html).toContain('Status descriptions')
     expect(html).toContain('Now description')
     expect(html).toContain('Next description')
+    expect(html).toContain('Voice of Customer')
+    expect(html).toContain('Fictional Customer')
   })
 
   it('renders per-status budget controls for the selected release', () => {

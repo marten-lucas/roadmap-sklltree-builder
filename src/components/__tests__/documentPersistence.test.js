@@ -100,6 +100,8 @@ describe('documentPersistence', () => {
         name: 'Release 1',
         motto: 'Ship it',
         introduction: 'Intro',
+        voiceOfCustomer: 'This helps my team move faster.',
+        fictionalCustomerName: 'Jamie Example',
         date: '2026-07-01',
         storyPointBudget: 42,
         notesMarkdown: '- Add nodes\n- Verify rollout',

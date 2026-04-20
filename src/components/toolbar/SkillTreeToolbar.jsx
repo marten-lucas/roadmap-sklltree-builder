@@ -68,6 +68,7 @@ export function SkillTreeToolbar({
   onOpenScopeManager,
   onOpenPriorityMatrix,
   onOpenListView,
+  onOpenStatusSummary,
   onOpenReleaseNotes,
   releaseFilter,
   setReleaseFilter,
@@ -100,6 +101,18 @@ export function SkillTreeToolbar({
   const [toolbarSearch, setToolbarSearch] = useState('')
   const [isZoomMenuOpen, setIsZoomMenuOpen] = useState(false)
 
+  const selectedScopeFilterIds = useMemo(() => {
+    if (Array.isArray(selectedScopeFilterId)) {
+      return Array.from(new Set(selectedScopeFilterId.filter((scopeId) => typeof scopeId === 'string' && scopeId && scopeId !== SCOPE_FILTER_ALL && scopeId !== 'all')))
+    }
+
+    if (typeof selectedScopeFilterId === 'string' && selectedScopeFilterId && selectedScopeFilterId !== SCOPE_FILTER_ALL && selectedScopeFilterId !== 'all') {
+      return [selectedScopeFilterId]
+    }
+
+    return []
+  }, [selectedScopeFilterId])
+
   const searchResults = useMemo(() => {
     const q = String(toolbarSearch ?? '').trim().toLowerCase()
     if (!q) return []
@@ -115,6 +128,20 @@ export function SkillTreeToolbar({
     }
     return results
   }, [allNodesById, toolbarSearch])
+
+  const handleToggleScopeFilter = (scopeId) => {
+    if (!setSelectedScopeFilterId || !scopeId) {
+      return
+    }
+
+    if (selectedScopeFilterIds.includes(scopeId)) {
+      const nextScopeFilterIds = selectedScopeFilterIds.filter((selectedId) => selectedId !== scopeId)
+      setSelectedScopeFilterId(nextScopeFilterIds.length > 0 ? nextScopeFilterIds : SCOPE_FILTER_ALL)
+      return
+    }
+
+    setSelectedScopeFilterId([...selectedScopeFilterIds, scopeId])
+  }
 
   const zoomPercentage = Math.round((currentZoomScale ?? 1) * 100)
   const zoomSliderValue = Math.round((currentZoomScale ?? 1) * 100)
@@ -376,6 +403,17 @@ export function SkillTreeToolbar({
               </ActionIcon>
             </Tooltip>
 
+            <Tooltip label="Status Summary" position="top" middlewares={TOOLBAR_TOOLTIP_MIDDLEWARES}>
+              <ActionIcon
+                size="md"
+                variant="default"
+                aria-label="Status Summary"
+                onClick={onOpenStatusSummary}
+              >
+                <IconInfoCircle {...TOOLBAR_ICON_PROPS} />
+              </ActionIcon>
+            </Tooltip>
+
             <Tooltip label="Internal notes" position="top" middlewares={TOOLBAR_TOOLTIP_MIDDLEWARES}>
               <ActionIcon
                 size="md"
@@ -411,7 +449,7 @@ export function SkillTreeToolbar({
               </ActionIcon>
             </Tooltip>
 
-            <Menu shadow="md" width={260} position="bottom-start" withArrow>
+            <Menu shadow="md" width={260} position="bottom-start" withArrow closeOnItemClick={false}>
               <Menu.Target>
                 <Tooltip label={`Filter: ${selectedReleaseFilterLabel}${scopeOptions.length > 0 ? ' · ' + selectedScopeFilterLabel : ''}`} position="top" middlewares={TOOLBAR_TOOLTIP_MIDDLEWARES}>
                   <ActionIcon
@@ -439,24 +477,28 @@ export function SkillTreeToolbar({
                 <Menu.Divider />
                 <Menu.Label>Scopes</Menu.Label>
                 <Menu.Item onClick={() => setSelectedScopeFilterId?.(SCOPE_FILTER_ALL)}>
-                  {selectedScopeFilterId === SCOPE_FILTER_ALL ? '● ' : ''}All Scopes
+                  {selectedScopeFilterIds.length === 0 ? '● ' : ''}All Scopes
                 </Menu.Item>
-                {scopeOptions.map((scope) => (
-                  <Menu.Item key={scope.value} onClick={() => setSelectedScopeFilterId?.(scope.value)}>
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                      {selectedScopeFilterId === scope.value ? '● ' : ''}
-                      <span
-                        className="skill-node-tooltip__scope"
-                        style={scope.color ? {
-                          borderColor: scope.color,
-                          color: scope.color,
-                        } : undefined}
-                      >
-                        {scope.label}
+                {scopeOptions.map((scope) => {
+                  const isSelected = selectedScopeFilterIds.includes(scope.value)
+
+                  return (
+                    <Menu.Item key={scope.value} onClick={() => handleToggleScopeFilter(scope.value)}>
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                        {isSelected ? '● ' : ''}
+                        <span
+                          className="skill-node-tooltip__scope"
+                          style={scope.color ? {
+                            borderColor: scope.color,
+                            color: scope.color,
+                          } : undefined}
+                        >
+                          {scope.label}
+                        </span>
                       </span>
-                    </span>
-                  </Menu.Item>
-                ))}
+                    </Menu.Item>
+                  )
+                })}
               </Menu.Dropdown>
             </Menu>
 

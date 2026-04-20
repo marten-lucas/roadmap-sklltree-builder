@@ -12,6 +12,8 @@ const createDocument = () => ({
     name: 'July 2026 Release',
     motto: 'Reich & Schön',
     introduction: '# Release Overview\nThe introduction uses **markdown** and a [link](https://example.com).',
+    voiceOfCustomer: '"This finally saves me hours every week."',
+    fictionalCustomerName: 'Alex Example',
     date: '2026-07-01',
   },
   segments: [
@@ -76,16 +78,29 @@ describe('htmlExport', () => {
     expect(html).toContain('position: absolute;')
     expect(html).toContain('left: 0;')
     expect(html).toContain('overflow: visible;')
-    expect(html).toContain('width: 156px;')
+    expect(html).toContain('width: 100%;')
+    expect(html).toContain('height: 100%;')
+    expect(html).not.toContain('width: 156px;')
     expect(html).toContain('max-width: none;')
     expect(html).toContain('aria-label="Filter"')
+    expect(html).toContain('id="html-export-filter-scope" multiple')
+    expect(html).toContain('Ctrl/Cmd-click for multi-select')
+    expect(html).toContain("scopeFilterSelect?.addEventListener('change', applyTreeFilters)")
+    expect(html).toContain("releaseFilterSelect?.addEventListener('change', applyTreeFilters)")
     expect(html).not.toContain('Visualisierung')
     expect(html).not.toContain('html-export__section-title')
     expect(html).toContain('The introduction uses <strong>markdown</strong>')
     expect(html).toContain('Rollout fuer die neue Plattform laeuft.')
+    expect(html).toContain('printed.css')
+    expect(html).toContain('@page')
     expect(html).toContain('<strong>Now</strong> is live')
+    expect(html).toContain('html-export__note-layout')
+    expect(html).toContain('html-export__note-aside')
     expect(html).toContain('<h1>Release Overview</h1>')
     expect(html).toContain('<h2>Release Impact</h2>')
+    expect(html).toContain('Voice of Customer')
+    expect(html).toContain('This finally saves me hours every week.')
+    expect(html).toContain('Alex Example')
     expect(html).toContain('origButtonWidth')
     expect(html).toContain('applyInnerSize')
     expect(html).toContain('const getOccupiedBounds = () =>')
@@ -104,6 +119,16 @@ describe('htmlExport', () => {
     expect(html).toContain('html-export__node--selected')
     expect(html).toContain('skill-tree-portal--selected')
     expect(html).toContain('const focusNodeInViewport = (nodeId, options = {}) =>')
+    expect(html).toContain('const injectInteractiveSvgRuntime = (svgElement) =>')
+    expect(html).toContain("anchor.classList.remove('html-export__node--minimal')")
+    expect(html).toContain('const getReleaseVisibilityMode = (statusKey, releaseFilter) =>')
+    expect(html).toContain('const getPortalViewModel = ({')
+    expect(html).toContain('const refreshPortalElement = (portalElement, labelMode = currentLabelMode ?? getLabelMode(panZoomState.scale)) =>')
+    expect(html).toContain("portalElement.setAttribute('data-portal-minimal'")
+    expect(html).toContain('refreshPortalElements(activeLabelMode)')
+    expect(html).toContain("treeShell?.addEventListener('pointerenter', () => {")
+    expect(html).toContain("pmExportContainer?.addEventListener('pointerenter', () => {")
+    expect(html).toContain('z-index:120')
   })
 
   it('filters rendered release notes by the selected statuses', () => {
@@ -204,6 +229,19 @@ describe('htmlExport', () => {
     expect(html).toContain('bindVeryCloseTabs')
   })
 
+  it('keeps the center icon image responsive to the builder-provided size in html exports', () => {
+    const document = createDocument()
+    const html = buildHtmlExportDocument({
+      svgMarkup: '<svg viewBox="0 0 100 100"><g class="skill-tree-center-icon" data-center-icon-size="173"><foreignObject class="skill-tree-center-icon__foreign" x="-86.5" y="-86.5" width="173" height="173"><img class="skill-tree-center-icon__image" src="/icon.svg" /></foreignObject></g></svg>',
+      roadmapDocument: document,
+      styleText: '',
+    })
+
+    expect(html).toContain('.html-export__tree-shell .skill-tree-center-icon__image {')
+    expect(html).toContain('width: 100%;')
+    expect(html).toContain('height: 100%;')
+  })
+
   it('keeps the export viewer crisp by resizing the svg instead of scaling the entire canvas layer', () => {
     const document = createDocument()
     const html = buildHtmlExportDocument({
@@ -218,6 +256,57 @@ describe('htmlExport', () => {
     expect(html).toContain("treeCanvas.style.transform = 'translate(' + snappedTranslateX + 'px, ' + snappedTranslateY + 'px)'")
     expect(html).toContain("svgRoot.style.width = String(baseWidth * panZoomState.scale) + 'px'")
     expect(html).toContain("svgRoot.style.height = String(baseHeight * panZoomState.scale) + 'px'")
+  })
+
+  it('renders a status summary ordered by the selected export sort mode', () => {
+    const document = {
+      ...createDocument(),
+      statusSummary: {
+        sortMode: 'manual',
+        manualOrderByStatus: {
+          now: ['node-b', 'node-a'],
+        },
+      },
+      children: [
+        {
+          id: 'node-a',
+          label: 'Alpha Feature',
+          shortName: 'ALP',
+          status: 'now',
+          segmentId: 'segment-frontend',
+          levels: [{ id: 'level-a', label: 'Level 1', status: 'now', releaseNote: '', scopeIds: [] }],
+          children: [],
+        },
+        {
+          id: 'node-b',
+          label: 'Beta Feature',
+          shortName: 'BET',
+          status: 'now',
+          segmentId: 'segment-frontend',
+          levels: [{ id: 'level-b', label: 'Level 1', status: 'now', releaseNote: '', scopeIds: [] }],
+          children: [],
+        },
+      ],
+    }
+
+    const manualHtml = buildHtmlExportDocument({
+      svgMarkup: '<svg viewBox="0 0 100 100"></svg>',
+      roadmapDocument: document,
+      styleText: '',
+      statusSummarySortMode: 'manual',
+    })
+
+    expect(manualHtml).toContain('Status Summary')
+    expect(manualHtml.indexOf('Beta Feature')).toBeLessThan(manualHtml.indexOf('Alpha Feature'))
+
+    const nameHtml = buildHtmlExportDocument({
+      svgMarkup: '<svg viewBox="0 0 100 100"></svg>',
+      roadmapDocument: document,
+      styleText: '',
+      statusSummarySortMode: 'name',
+    })
+
+    expect(nameHtml.indexOf('Alpha Feature')).toBeLessThan(nameHtml.indexOf('Beta Feature'))
   })
 
   it('extracts and reads embedded document payload from exported html', () => {

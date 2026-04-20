@@ -13,7 +13,7 @@ const createDoc = (suffix) => ({
   scopes: [],
   children: [{ id: `node-${suffix}`, label: `Node ${suffix}`, children: [] }],
   centerIconSrc: DEFAULT_CENTER_ICON_SRC,
-  releases: [{ id: `release-${suffix}`, name: `Release ${suffix}`, motto: `Motto ${suffix}`, introduction: `Intro ${suffix}`, date: `2026-07-${String(suffix).padStart(2, '0')}`, storyPointBudget: null }],
+  releases: [{ id: `release-${suffix}`, name: `Release ${suffix}`, motto: `Motto ${suffix}`, introduction: `Intro ${suffix}`, voiceOfCustomer: `VOC ${suffix}`, fictionalCustomerName: `Customer ${suffix}`, date: `2026-07-${String(suffix).padStart(2, '0')}`, storyPointBudget: null }],
   storyPointMap: { ...DEFAULT_STORY_POINT_MAP },
   showHiddenNodes: false,
 })
@@ -136,10 +136,16 @@ describe('documentState', () => {
     expect(doc.centerIconSrc).toBe(DEFAULT_CENTER_ICON_SRC)
     expect(doc.storyPointMap).toEqual(DEFAULT_STORY_POINT_MAP)
     expect(doc.showHiddenNodes).toBe(false)
+    expect(doc.statusSummary).toEqual({
+      sortMode: 'manual',
+      manualOrderByStatus: {},
+    })
     expect(Array.isArray(doc.releases)).toBe(true)
     expect(doc.releases).toHaveLength(1)
     expect(doc.releases[0].name).toBe('Release 1')
     expect(doc.releases[0].storyPointBudget).toBeNull()
+    expect(doc.releases[0].voiceOfCustomer).toBe('')
+    expect(doc.releases[0].fictionalCustomerName).toBe('')
   })
 
   it('defaults missing scopes without overriding existing center icon', () => {
@@ -165,7 +171,7 @@ describe('documentState', () => {
       segments: [],
       scopes: [],
       children: [],
-      releases: [{ id: 'r1', name: '', motto: '', introduction: '', date: '', storyPointBudget: null }],
+      releases: [{ id: 'r1', name: '', motto: '', introduction: '', voiceOfCustomer: '', fictionalCustomerName: '', date: '', storyPointBudget: null }],
     })
 
     expect(state.present.centerIconSrc).toBe(DEFAULT_CENTER_ICON_SRC)

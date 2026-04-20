@@ -49,6 +49,8 @@ export const SystemPanel = forwardRef(function SystemPanel(
   const [releaseMottoDraft, setReleaseMottoDraft] = useState('')
   const [releaseDateDraft, setReleaseDateDraft] = useState('')
   const [introductionDraft, setIntroductionDraft] = useState('')
+  const [voiceOfCustomerDraft, setVoiceOfCustomerDraft] = useState('')
+  const [fictionalCustomerNameDraft, setFictionalCustomerNameDraft] = useState('')
 
   const releases = roadmapData.releases ?? []
 
@@ -92,15 +94,17 @@ export const SystemPanel = forwardRef(function SystemPanel(
     setReleaseMottoDraft(activeRelease?.motto ?? '')
     setReleaseDateDraft(activeRelease?.date ?? '')
     setIntroductionDraft(activeRelease?.introduction ?? '')
-  }, [activeRelease?.id, activeRelease?.name, activeRelease?.motto, activeRelease?.date, activeRelease?.introduction])
-
-  useImperativeHandle(
-    forwardedRef,
-    () => ({
-      commitDrafts: () => commitTextDrafts(),
-    }),
-    [releaseDraftId],
-  )
+    setVoiceOfCustomerDraft(activeRelease?.voiceOfCustomer ?? '')
+    setFictionalCustomerNameDraft(activeRelease?.fictionalCustomerName ?? '')
+  }, [
+    activeRelease?.id,
+    activeRelease?.name,
+    activeRelease?.motto,
+    activeRelease?.date,
+    activeRelease?.introduction,
+    activeRelease?.voiceOfCustomer,
+    activeRelease?.fictionalCustomerName,
+  ])
 
   useEffect(() => {
     if (!onDraftChange) {
@@ -113,10 +117,21 @@ export const SystemPanel = forwardRef(function SystemPanel(
       motto: releaseMottoDraft,
       date: releaseDateDraft,
       introduction: introductionDraft,
+      voiceOfCustomer: voiceOfCustomerDraft,
+      fictionalCustomerName: fictionalCustomerNameDraft,
     }
 
     onDraftChange(draftRelease)
-  }, [releaseDraftId, releaseNameDraft, releaseMottoDraft, releaseDateDraft, introductionDraft, onDraftChange])
+  }, [
+    releaseDraftId,
+    releaseNameDraft,
+    releaseMottoDraft,
+    releaseDateDraft,
+    introductionDraft,
+    voiceOfCustomerDraft,
+    fictionalCustomerNameDraft,
+    onDraftChange,
+  ])
 
   const commitTextDrafts = (releaseId = releaseDraftId) => {
     let nextRoadmapData = roadmapData
@@ -166,6 +181,12 @@ export const SystemPanel = forwardRef(function SystemPanel(
         if (introductionDraft !== (release.introduction ?? '')) {
           releasePatch.introduction = introductionDraft
         }
+        if (voiceOfCustomerDraft !== (release.voiceOfCustomer ?? '')) {
+          releasePatch.voiceOfCustomer = voiceOfCustomerDraft
+        }
+        if (fictionalCustomerNameDraft !== (release.fictionalCustomerName ?? '')) {
+          releasePatch.fictionalCustomerName = fictionalCustomerNameDraft
+        }
 
         if (Object.keys(releasePatch).length > 0) {
           nextRoadmapData = {
@@ -187,7 +208,6 @@ export const SystemPanel = forwardRef(function SystemPanel(
     () => ({
       commitDrafts: () => commitTextDrafts(),
     }),
-    [releaseDraftId],
   )
 
   if (!isOpen) {
@@ -448,6 +468,33 @@ export const SystemPanel = forwardRef(function SystemPanel(
                     }}
                     onBlur={() => commitTextDrafts(release.id)}
                     minRows={8}
+                  />
+                </div>
+
+                <div className="skill-panel__compact-section">
+                  <TextInput
+                    size="xs"
+                    label="Fictional Customer's Name"
+                    value={releaseDraftId === release.id ? fictionalCustomerNameDraft : (release.fictionalCustomerName ?? '')}
+                    onChange={(e) => {
+                      setReleaseDraftId(release.id)
+                      setFictionalCustomerNameDraft(e.currentTarget.value)
+                    }}
+                    onBlur={() => commitTextDrafts(release.id)}
+                    classNames={{ input: 'mantine-dark-input', label: 'mantine-dark-label' }}
+                  />
+                </div>
+
+                <div className="skill-panel__release-note-fill">
+                  <MarkdownField
+                    label="Voice of Customer"
+                    value={releaseDraftId === release.id ? voiceOfCustomerDraft : (release.voiceOfCustomer ?? '')}
+                    onChange={(nextValue) => {
+                      setReleaseDraftId(release.id)
+                      setVoiceOfCustomerDraft(nextValue)
+                    }}
+                    onBlur={() => commitTextDrafts(release.id)}
+                    minRows={5}
                   />
                 </div>
 

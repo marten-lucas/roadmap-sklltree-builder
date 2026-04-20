@@ -10,6 +10,8 @@ import {
 } from '../tooltip/tooltipStyles'
 import { renderMarkdownToHtml } from './markdown'
 import { renderScopeLabelsMarkup } from './scopeDisplay'
+import { injectInteractiveSvgRuntime } from './interactiveSvgRuntime'
+import { getCenterIconExportMetrics } from './centerIconPresentation'
 
 const SVG_XML_PREFIX = '<?xml version="1.0" encoding="UTF-8"?>\n'
 import { buildExportFileName } from './exportFileName'
@@ -17,8 +19,6 @@ import { buildExportFileName } from './exportFileName'
 const SVG_NS = 'http://www.w3.org/2000/svg'
 const SVG_XLINK_NS = 'http://www.w3.org/1999/xlink'
 const EXPORT_VIEWPORT_PADDING = 96
-const CENTER_ICON_EXPORT_SIZE = 156
-const CENTER_ICON_EXPORT_HIT_RADIUS = 78
 const EXPORT_VIEWPORT_SELECTORS = [
   '.skill-tree-center-icon',
   'foreignObject.skill-node-export-anchor',
@@ -169,11 +169,7 @@ const replaceCenterIconForeignObject = (svgRoot) => {
     return
   }
 
-  // Always export at the canonical size so SVG and HTML exports are visually identical.
-  // The HTML export CSS also enforces 156px; using data-center-icon-size (live computed
-  // size, typically ~173px) would make the standalone SVG blob appear larger than HTML.
-  const exportSize = CENTER_ICON_EXPORT_SIZE
-  const exportHalf = exportSize / 2
+  const { size: exportSize, half: exportHalf, hitRadius } = getCenterIconExportMetrics(centerGroup)
 
   const image = createSvgElement('image')
   image.setAttribute('class', 'skill-tree-center-icon__image')
@@ -195,7 +191,7 @@ const replaceCenterIconForeignObject = (svgRoot) => {
 
   const hitArea = svgRoot.querySelector('.skill-tree-center-icon__hit-area')
   if (hitArea) {
-    hitArea.setAttribute('r', String(exportHalf))
+    hitArea.setAttribute('r', String(hitRadius))
   }
 }
 
@@ -975,6 +971,7 @@ export const serializeSvgElementForExport = (svgElement, options = {}) => {
 
   const {
     includeTooltips = true,
+    includeRuntime = false,
     embedStyles = false,
     styleText = '',
     sourceDocument = globalThis?.document,
@@ -997,6 +994,10 @@ export const serializeSvgElementForExport = (svgElement, options = {}) => {
   if (includeTooltips) {
     injectExportTooltipStyles(clone)
     appendAnimatedTooltips(clone)
+  }
+
+  if (includeRuntime) {
+    injectInteractiveSvgRuntime(clone)
   }
 
   const serialized = new XMLSerializer().serializeToString(clone)
@@ -1136,6 +1137,7 @@ export const exportSvgFromElement = (svgElement, options = {}) => {
 
   const markup = serializeSvgElementForExport(svgElement, {
     includeTooltips,
+    includeRuntime: true,
     embedStyles: true,
     sourceDocument,
     styleText,

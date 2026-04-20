@@ -1,0 +1,123 @@
+/* printed.css — print-focused styling for exported roadmap documents */
+
+@page {
+  size: A4 portrait;
+  margin: 12mm;
+}
+
+@media print {
+  :root {
+    color-scheme: light !important;
+  }
+
+  body {
+    margin: 0 !important;
+    background: #ffffff !important;
+    color: #111827 !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .html-export,
+  .pdf-export__page {
+    max-width: none !important;
+  }
+
+  .html-export__actions,
+  .html-export__roadmap-actions,
+  .html-export__menu-panel,
+  .html-export__menu,
+  .html-export__action,
+  .html-export__menu-button {
+    display: none !important;
+  }
+
+  .html-export__header,
+  .html-export__panel,
+  .html-export__release-block,
+  .html-export__intro,
+  .html-export__customer-quote {
+    color: #111827 !important;
+    background: #ffffff !important;
+    border-color: #dbe3ee !important;
+    box-shadow: none !important;
+    backdrop-filter: none !important;
+  }
+
+  .html-export__title,
+  .html-export__subtitle,
+  .html-export__eyebrow,
+  .html-export__note-card strong,
+  .html-export__note-header span,
+  .html-export__release-group-label,
+  .html-export__release-header h3,
+  .html-export__release-header p,
+  .html-export__customer-quote-body,
+  .html-export__customer-quote-body footer,
+  .pdf-export__title,
+  .pdf-export__subtitle,
+  .pdf-export__badge,
+  .pdf-export__note-meta,
+  .pdf-export__customer-quote-body,
+  .pdf-export__customer-quote-body footer {
+    color: #111827 !important;
+  }
+
+  .html-export__panel--roadmap {
+    break-after: page;
+    page-break-after: always;
+  }
+
+  .html-export__panel+.html-export__panel {
+    break-before: page;
+    page-break-before: always;
+  }
+
+  .html-export__tree-shell,
+  .pdf-export__tree-shell {
+    height: auto !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+    page-break-inside: avoid;
+    break-inside: avoid-page;
+  }
+
+  .html-export__tree-shell {
+    padding: 0 !important;
+    border-radius: 0 !important;
+    background: #020617 !important;
+  }
+
+  .html-export__tree-canvas {
+    position: relative !important;
+    top: auto !important;
+    left: auto !important;
+  }
+
+  .html-export__tree-canvas svg,
+  .pdf-export__tree-shell svg {
+    max-width: 100% !important;
+    height: auto !important;
+  }
+
+  .html-export__release-block,
+  .html-export__note-card,
+  .html-export__customer-quote,
+  .pdf-export__note-card,
+  .pdf-export__customer-quote,
+  .pdf-export__segment {
+    page-break-inside: avoid;
+    break-inside: avoid-page;
+  }
+
+  .skill-node-tooltip__scope {
+    color: #0f172a !important;
+    border-color: #94a3b8 !important;
+    background: #eff6ff !important;
+  }
+
+  a {
+    color: #0f766e !important;
+    text-decoration: underline;
+  }
+}

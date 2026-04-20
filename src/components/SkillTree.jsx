@@ -8,8 +8,10 @@ import './styles/skillTree.list-view.css'
 import './styles/skillTree.priority-matrix.css'
 import './styles/skillTree.layout.css'
 import './styles/skillTree.legend.css'
+import './styles/skillTree.status-summary.css'
 import { DEFAULT_STATUS_DESCRIPTIONS, TREE_CONFIG, STATUS_LABELS, STATUS_STYLES } from './config'
 import { getNodeLabelMode } from './utils/nodePresentation'
+import { computeCenterIconSize } from './utils/centerIconPresentation'
 import {
   saveDocumentToLocalStorage,
   downloadDocumentJson,
@@ -21,13 +23,21 @@ import {
   DEFAULT_CENTER_ICON_SRC,
   documentHistoryReducer,
 } from './utils/documentState'
-import { SystemPanel, InspectorPanel, SegmentPanel, ReleaseNotesPanel, ToolbarScopeManager } from './panels'
+import { SystemPanel, InspectorPanel, SegmentPanel, ReleaseNotesPanel, StatusSummaryPanel, ToolbarScopeManager } from './panels'
 import { PriorityMatrix } from './panels/PriorityMatrix'
 import { ListViewDrawer } from './panels/ListViewDrawer'
 import { solveSkillTreeLayout } from './utils/layoutSolver'
 import { UNASSIGNED_SEGMENT_ID } from './utils/layoutShared'
 import { getSkillTreeShortcutAction } from './utils/keyboardShortcuts'
-import { togglePanel, PANEL_INSPECTOR, PANEL_CENTER, PANEL_SCOPES, PANEL_SEGMENTS, PANEL_RELEASE_NOTES } from './utils/panelsState'
+import {
+  togglePanel,
+  PANEL_INSPECTOR,
+  PANEL_CENTER,
+  PANEL_SCOPES,
+  PANEL_SEGMENTS,
+  PANEL_RELEASE_NOTES,
+  PANEL_STATUS_SUMMARY,
+} from './utils/panelsState'
 import { getDisplayStatusKey } from './utils/nodeStatus'
 import {
   getAdditionalDependencyOptionsForLevel,
@@ -95,12 +105,14 @@ import {
   SCOPE_FILTER_ALL,
   getReleaseVisibilityMode,
   nodeMatchesScopeFilter,
+  normalizeScopeFilterIds,
 } from './utils/visibility'
 import { VIEWPORT_DEFAULTS, computeFitScale, computeFitTransform, getNextZoomStep, getViewportKeyboardAction } from './utils/viewport'
 import { getInitialRoadmapDocument } from './utils/document'
 import { getSelectedReleaseId } from './utils/releases'
 import { resolveInspectorSelectedNode } from './utils/selection'
 import { LEGEND_DENSITY_MODES, resolveLegendDensity } from './utils/legendDensity'
+import { DEFAULT_STATUS_SUMMARY_SETTINGS, normalizeStatusSummarySettings, STATUS_SUMMARY_SORT_OPTIONS } from './utils/statusSummary'
 
 // `resolveInspectorSelectedNode` is exported from `src/components/utils/selection.js`
 // Tests/importers should import from that module instead of re-exporting from here.
@@ -230,6 +242,7 @@ export function SkillTree() {
   const [exportLabelDialogKind, setExportLabelDialogKind] = useState('visual')
   const [exportLabelDialogMode, setExportLabelDialogMode] = useState('mid')
   const [exportReleaseNoteStatuses, setExportReleaseNoteStatuses] = useState(() => normalizeFeatureStatuses(null))
+  const [exportStatusSummarySortMode, setExportStatusSummarySortMode] = useState(DEFAULT_STATUS_SUMMARY_SETTINGS.sortMode)
   const exportLabelDialogResolveRef = useRef(null)
   const [lastSavedAt, setLastSavedAt] = useState(null)
   const [csvImportDialogOpen, setCsvImportDialogOpen] = useState(false)
@@ -388,27 +401,12 @@ export function SkillTree() {
     )
   }, [roadmapData?.segments])
 
-  const centerIconSize = useMemo(() => {
-    const firstLevelNode = nodes.find((node) => node.level === 1)
-    const firstLevelRadius = firstLevelNode?.radius ?? TREE_CONFIG.levelSpacing
-    const additionalDependencyPortalAllowance = TREE_CONFIG.nodeSize * 0.2
-    const levelOneNodeClearance = TREE_CONFIG.nodeSize * 0.5 + additionalDependencyPortalAllowance
-    const minRadius = TREE_CONFIG.nodeSize * 0.5
-    const preferredRadius = TREE_CONFIG.nodeSize * 0.72
-    const labelBandHeight = maxEstimatedSegmentLabelHeightPx
-    const maxAllowedRadius = Math.max(
-      minRadius,
-      firstLevelRadius - levelOneNodeClearance - LABEL_LEVEL_ONE_GAP_PX - labelBandHeight - CENTER_LABEL_GAP_PX,
-    )
-    const maxVisualRadius = Math.min(
-      TREE_CONFIG.nodeSize * 1.35,
-      firstLevelRadius * 0.42,
-    )
-    const targetRadius = Math.min(maxAllowedRadius, maxVisualRadius)
-    const radius = Math.max(minRadius, Math.max(preferredRadius, targetRadius))
-
-    return radius * 2
-  }, [maxEstimatedSegmentLabelHeightPx, nodes])
+  const centerIconSize = useMemo(() => computeCenterIconSize({
+    nodes,
+    maxEstimatedSegmentLabelHeightPx,
+    labelLevelOneGapPx: LABEL_LEVEL_ONE_GAP_PX,
+    centerLabelGapPx: CENTER_LABEL_GAP_PX,
+  }), [maxEstimatedSegmentLabelHeightPx, nodes])
 
   const selectedNode = useMemo(
     () => findNodeById(roadmapData, selectedNodeId),
@@ -429,6 +427,7 @@ export function SkillTree() {
     || rightPanel === PANEL_SCOPES
     || rightPanel === PANEL_SEGMENTS
     || rightPanel === PANEL_RELEASE_NOTES
+    || rightPanel === PANEL_STATUS_SUMMARY
 
   useEffect(() => {
     leftSidebarWidthRef.current = leftSidebarWidth
@@ -629,17 +628,22 @@ export function SkillTree() {
     }))
   }, [roadmapData.scopeGroups, roadmapData.scopes])
 
+  const selectedScopeFilterIds = useMemo(
+    () => normalizeScopeFilterIds(selectedScopeFilterId),
+    [selectedScopeFilterId],
+  )
+
   useEffect(() => {
-    if (selectedScopeFilterId === SCOPE_FILTER_ALL) {
+    if (selectedScopeFilterIds.length === 0) {
       return
     }
 
-    const scopeStillExists = scopeOptions.some((scope) => scope.value === selectedScopeFilterId)
-    if (!scopeStillExists) {
-      setSelectedScopeFilterId(SCOPE_FILTER_ALL)
+    const validScopeIds = selectedScopeFilterIds.filter((scopeId) => scopeOptions.some((scope) => scope.value === scopeId))
+
+    if (validScopeIds.length !== selectedScopeFilterIds.length) {
+      setSelectedScopeFilterId(validScopeIds.length > 0 ? validScopeIds : SCOPE_FILTER_ALL)
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [scopeOptions, selectedScopeFilterId])
+  }, [scopeOptions, selectedScopeFilterIds, setSelectedScopeFilterId])
 
   const activeReleaseId = useMemo(
     () => getSelectedReleaseId(roadmapData.releases ?? [], selectedReleaseId),
@@ -795,12 +799,24 @@ export function SkillTree() {
   )
 
   const selectedScopeFilterLabel = useMemo(() => {
-    if (selectedScopeFilterId === SCOPE_FILTER_ALL) {
+    if (selectedScopeFilterIds.length === 0) {
       return 'All Scopes'
     }
 
-    return scopeOptions.find((scope) => scope.value === selectedScopeFilterId)?.label ?? 'All Scopes'
-  }, [scopeOptions, selectedScopeFilterId])
+    const selectedLabels = selectedScopeFilterIds
+      .map((scopeId) => scopeOptions.find((scope) => scope.value === scopeId)?.label)
+      .filter(Boolean)
+
+    if (selectedLabels.length === 0) {
+      return 'All Scopes'
+    }
+
+    if (selectedLabels.length <= 2) {
+      return selectedLabels.join(', ')
+    }
+
+    return `${selectedLabels.length} Scopes`
+  }, [scopeOptions, selectedScopeFilterIds])
 
   const selectedReleaseFilterLabel = RELEASE_FILTER_LABELS[releaseFilter] ?? RELEASE_FILTER_LABELS.all
 
@@ -1776,6 +1792,7 @@ export function SkillTree() {
     setExportLabelDialogKind(kind)
     setExportLabelDialogMode('mid')
     setExportReleaseNoteStatuses(normalizeFeatureStatuses(initialReleaseNoteStatuses))
+    setExportStatusSummarySortMode(normalizeStatusSummarySettings(roadmapData?.statusSummary).sortMode)
     setExportLabelDialogOpen(true)
   })
 
@@ -1784,6 +1801,7 @@ export function SkillTree() {
     exportLabelDialogResolveRef.current?.({
       labelMode: exportLabelDialogMode,
       releaseNoteStatuses: exportReleaseNoteStatuses,
+      statusSummarySortMode: exportStatusSummarySortMode,
     })
     exportLabelDialogResolveRef.current = null
   }
@@ -1909,7 +1927,9 @@ export function SkillTree() {
       const exported = exportHtmlFromSkillTree({
         svgElement: canvasSvgRef.current,
         roadmapDocument: roadmapData,
+        selectedReleaseId: activeRelease?.id ?? null,
         selectedReleaseNoteStatuses,
+        statusSummarySortMode: selectedOptions.statusSummarySortMode,
       })
 
       if (!exported) {
@@ -1959,7 +1979,9 @@ export function SkillTree() {
       const exported = tryExportPdfFromSkillTree({
         svgElement: canvasSvgRef.current,
         roadmapDocument: roadmapData,
+        selectedReleaseId: activeRelease?.id ?? null,
         selectedReleaseNoteStatuses,
+        statusSummarySortMode: selectedOptions.statusSummarySortMode,
       })
 
       if (!exported.ok) {
@@ -3431,6 +3453,16 @@ export function SkillTree() {
       onReleaseChange={setSelectedReleaseId}
       onDraftChange={handleDraftChange}
     />
+  ) : rightPanel === PANEL_STATUS_SUMMARY ? (
+    <StatusSummaryPanel
+      roadmapData={roadmapData}
+      selectedReleaseId={activeReleaseId}
+      onClose={() => {
+        if (rightPanel === PANEL_STATUS_SUMMARY) setRightPanel(null)
+      }}
+      onCommitDocument={commitDocument}
+      onSelectNode={handleSelectNode}
+    />
   ) : rightPanel === PANEL_RELEASE_NOTES ? (
     <ReleaseNotesPanel
       isOpen={rightPanel === PANEL_RELEASE_NOTES}
@@ -3636,6 +3668,32 @@ export function SkillTree() {
             </div>
           )}
 
+          {(exportLabelDialogKind === 'html' || exportLabelDialogKind === 'pdf') && (
+            <div>
+              <Text size="sm" fw={600} mb={8}>Status summary sort order</Text>
+              <select
+                value={exportStatusSummarySortMode}
+                onChange={(event) => setExportStatusSummarySortMode(event.currentTarget.value)}
+                aria-label="Status summary sort order"
+                style={{
+                  width: '100%',
+                  padding: '10px 12px',
+                  borderRadius: 10,
+                  border: '1px solid rgba(71, 85, 105, 0.7)',
+                  background: 'rgba(15, 23, 42, 0.92)',
+                  color: '#e2e8f0',
+                }}
+              >
+                {STATUS_SUMMARY_SORT_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>{option.label}</option>
+                ))}
+              </select>
+              <Text size="xs" c="dimmed" mt={8}>
+                Applies to the export status summary and the ordering of release-note items.
+              </Text>
+            </div>
+          )}
+
           <Group justify="flex-end">
             <Button variant="default" onClick={cancelExportLabelDialog}>
               Cancel
@@ -3695,6 +3753,10 @@ export function SkillTree() {
         onOpenListView={() => {
           setListViewOpen((v) => !v)
           setPriorityMatrixOpen(false)
+        }}
+        onOpenStatusSummary={() => {
+          setRightPanel((current) => togglePanel(current, PANEL_STATUS_SUMMARY))
+          selectSegmentId(null)
         }}
         onOpenReleaseNotes={handleOpenReleaseNotes}
         releaseFilter={releaseFilter}

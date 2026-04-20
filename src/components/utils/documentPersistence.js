@@ -99,6 +99,8 @@ const migrateV2ToV3 = (document) => {
     name: firstReleaseName,
     motto: typeof oldRelease.motto === 'string' ? oldRelease.motto : '',
     introduction: typeof oldRelease.introduction === 'string' ? oldRelease.introduction : '',
+    voiceOfCustomer: typeof oldRelease.voiceOfCustomer === 'string' ? oldRelease.voiceOfCustomer : '',
+    fictionalCustomerName: typeof oldRelease.fictionalCustomerName === 'string' ? oldRelease.fictionalCustomerName : '',
     date: typeof oldRelease.date === 'string' ? oldRelease.date : '',
     storyPointBudget: document.storyPointBudget != null ? Number(document.storyPointBudget) : null,
   }

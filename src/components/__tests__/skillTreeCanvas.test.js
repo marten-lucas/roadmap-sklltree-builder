@@ -182,6 +182,8 @@ describe('SkillTreeCanvas', () => {
     expect(html).toContain('skill-tree-portal__ring--target')
     expect(html).toContain('data-portal-key="dep-a:source"')
     expect(html).toContain('data-portal-key="dep-a:target"')
+    expect(html).toContain('data-portal-angle="0"')
+    expect(html).toContain('data-portal-orbit-ratio=')
   })
 
   it('enlarges the portal hitbox when zoomed farther out', () => {
@@ -326,9 +328,12 @@ describe('SkillTreeCanvas', () => {
       ),
     )
 
-    expect(html).not.toContain('skill-tree-portal__hoverline')
-    expect(html).not.toContain('skill-tree-portal__spoke')
-    expect(html).not.toContain('skill-tree-portal__chevrons')
+    expect(html).toContain('skill-tree-portal__hoverline')
+    expect(html).toContain('skill-tree-portal__spoke')
+    expect(html).toContain('skill-tree-portal__chevrons')
+    expect(html).toMatch(/skill-tree-portal__hoverline[^>]*display:none/)
+    expect(html).toMatch(/skill-tree-portal__spoke[^>]*display:none/)
+    expect(html).toMatch(/skill-tree-portal__chevrons[^>]*display:none/)
     expect(html).toContain('skill-tree-portal__ring--source')
     expect(html).toContain('skill-tree-portal__ring--target')
     expect(extractRingRotation(html, 'source')).toBeCloseTo(0, 5)

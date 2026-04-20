@@ -24,6 +24,6 @@ test.describe('App smoke', () => {
     await notesButton.click()
 
     await expect(page.getByRole('button', { name: 'Close internal notes panel', exact: true })).toBeVisible()
-    await expect(page.getByText('Internal notes', { exact: true })).toBeVisible()
+    await expect(page.locator('.skill-panel__title').getByText('Internal notes', { exact: true })).toBeVisible()
   })
 })
