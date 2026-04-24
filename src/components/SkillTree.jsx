@@ -591,10 +591,9 @@ export function SkillTree() {
       return null
     }
 
-    const fallbackLevelId = selectedNodeLevels[0]?.id ?? null
     const stillExists = selectedNodeLevels.some((entry) => entry.id === selectedProgressLevelId)
 
-    return stillExists ? selectedProgressLevelId : fallbackLevelId
+    return stillExists ? selectedProgressLevelId : null
   }, [selectedNode, selectedNodeLevels, selectedProgressLevelId])
 
   const activeSelectedProgressLevel = useMemo(
@@ -3888,6 +3887,7 @@ export function SkillTree() {
                       onAddSegmentNear={handleAddSegmentNear}
                       onAddChild={handleAddChild}
                       onSelectNode={handleSelectNode}
+                      onSelectLevel={(nodeId, levelId) => handleSelectLevelFromListView(nodeId, levelId, { openInspector: true })}
                       onZoomToNode={handleZoomToNode}
                       storyPointMap={roadmapData.storyPointMap}
                       releaseId={activeReleaseId}

@@ -192,6 +192,7 @@ export function SkillTreeCanvas({
   onAddSegmentNear,
   onAddChild,
   onSelectNode,
+  onSelectLevel,
   onZoomToNode,
   storyPointMap,
   releaseId = null,
@@ -588,6 +589,7 @@ export function SkillTreeCanvas({
               isPortalPeerHovered={hoveredPeerNodeId === node.id}
               scopeOptions={scopeOptions}
               onSelect={onSelectNode}
+              onSelectLevel={onSelectLevel}
               onZoomToNode={onZoomToNode}
               storyPointMap={storyPointMap}
               releaseId={releaseId}

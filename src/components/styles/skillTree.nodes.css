@@ -106,6 +106,26 @@
     padding: 0;
 }
 
+.skill-node-click-hit {
+    position: absolute;
+    inset: 0;
+    background: transparent;
+    border: 0;
+    outline: none;
+    pointer-events: auto;
+}
+
+.skill-node-click-hit--ring {
+    z-index: 4;
+    border-radius: inherit;
+}
+
+.skill-node-click-hit--body {
+    inset: 18%;
+    z-index: 5;
+    border-radius: 999px;
+}
+
 .skill-node-button--ghost {
     opacity: 0.32;
     filter: grayscale(0.5);

@@ -1047,6 +1047,7 @@ export function InspectorPanel({
                     syncGeneratedShortNameDraft(nextValue, currentLabel)
                   }}
                   onKeyDown={handleTitleEditKeyDown}
+                    onBlur={handleSaveTitleEdit}
                   classNames={{ input: 'mantine-dark-input' }}
                 />
                 <TextInput
@@ -1059,6 +1060,7 @@ export function InspectorPanel({
                     setShortNameDraft(nextValue)
                   }}
                   onKeyDown={handleTitleEditKeyDown}
+                    onBlur={handleSaveTitleEdit}
                   error={shortNameDuplicateWarning ?? undefined}
                   rightSectionPointerEvents="all"
                   rightSectionWidth={34}
@@ -1078,10 +1080,10 @@ export function InspectorPanel({
                 />
               </div>
               <div className="skill-panel__title-editor-actions">
-                <ActionIcon variant="light" color="teal" onClick={handleSaveTitleEdit} aria-label="Save node title">
+                <ActionIcon variant="light" color="teal" onMouseDown={(event) => event.preventDefault()} onClick={handleSaveTitleEdit} aria-label="Save node title">
                   ✓
                 </ActionIcon>
-                <ActionIcon variant="light" color="gray" onClick={handleCancelTitleEdit} aria-label="Cancel node title edit">
+                <ActionIcon variant="light" color="gray" onMouseDown={(event) => event.preventDefault()} onClick={handleCancelTitleEdit} aria-label="Cancel node title edit">
                   ✕
                 </ActionIcon>
               </div>

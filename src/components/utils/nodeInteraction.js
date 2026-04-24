@@ -4,7 +4,7 @@ export const getNodeLevelIndexFromPointer = ({
   levelsLength,
   innerRadiusRatio = 0.5,
 }) => {
-  if (!event?.currentTarget || !Number.isFinite(nodeSize) || !Number.isInteger(levelsLength) || levelsLength <= 1) {
+  if (!event?.currentTarget || !Number.isFinite(nodeSize) || !Number.isInteger(levelsLength) || levelsLength <= 0) {
     return null
   }
 
@@ -17,6 +17,10 @@ export const getNodeLevelIndexFromPointer = ({
 
   if (dist < (nodeSize / 2) * innerRadiusRatio) {
     return null
+  }
+
+  if (levelsLength === 1) {
+    return 0
   }
 
   const angle = (Math.atan2(dy, dx) * 180 / Math.PI + 90 + 360) % 360

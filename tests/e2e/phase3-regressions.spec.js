@@ -236,6 +236,52 @@ test.describe('Inspector and layout regressions', () => {
     await expect(getNodeButton(page, 'RGR')).toBeVisible()
   })
 
+  test('persists the node title when the inline title editor loses focus', async ({ page }) => {
+    await selectNodeByShortName(page, 'FND')
+
+    const inspector = page.locator('.skill-panel--inspector')
+    await inspector.waitFor({ state: 'visible', timeout: 10_000 })
+
+    await inspector.getByLabel('Double-click to rename node title', { exact: true }).dblclick()
+
+    const titleInput = inspector.getByLabel('Node name', { exact: true })
+    await expect(titleInput).toBeVisible()
+    await titleInput.fill('Frontend via blur')
+
+    await blurActiveElement(page)
+
+    await waitForPersistedNodeLabel(page, 'Frontend via blur')
+
+    const document = await getPersistedDocument(page)
+    const node = getNodeByLabel(document, 'Frontend via blur')
+
+    expect(node).toBeTruthy()
+    expect(node.label).toBe('Frontend via blur')
+    expect(node.shortName).toBe('FND')
+  })
+
+  test('keeps canvas node clicks on Properties and ring clicks on the level tab', async ({ page }) => {
+    await selectNodeByShortName(page, 'FND')
+
+    const inspector = page.locator('.skill-panel--inspector')
+    await inspector.waitFor({ state: 'visible', timeout: 10_000 })
+    const selectedNodeId = await inspector.getAttribute('data-selected-node-id')
+    expect(selectedNodeId).toBeTruthy()
+
+    await expect(inspector.getByRole('tab', { name: 'Properties', exact: true })).toHaveAttribute('aria-selected', 'true')
+
+    const box = await page.evaluate((nodeId) => {
+      const nodeButton = document.querySelector(`foreignObject.skill-node-export-anchor[data-node-id="${nodeId}"] .skill-node-button`)
+      const rect = nodeButton?.getBoundingClientRect()
+      return rect ? { x: rect.x, y: rect.y, width: rect.width, height: rect.height } : null
+    }, selectedNodeId)
+    expect(box).toBeTruthy()
+
+    await page.mouse.click(Math.floor(box.x + box.width - 2), Math.floor(box.y + box.height / 2))
+
+    await expect(inspector.getByRole('tab', { name: /^Level 1$|^L1$/ })).toHaveAttribute('aria-selected', 'true')
+  })
+
   test('adds a level and selects it immediately in the inspector', async ({ page }) => {
     await selectNodeByShortName(page, 'FND')
 

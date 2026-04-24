@@ -31,6 +31,7 @@ export function useSkillTreeUiState() {
     setSelectedNodeId(nodeId)
     setSelectedNodeIds(nodeId ? [nodeId] : [])
     setSelectedLevelKeys([])
+    setSelectedProgressLevelId(null)
 
     if (nodeId) {
       selectSegmentId(null)
