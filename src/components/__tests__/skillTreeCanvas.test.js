@@ -224,6 +224,8 @@ describe('SkillTreeCanvas', () => {
     expect(html).toContain('data-portal-key="dep-a:target"')
     expect(html).toContain('data-portal-angle="0"')
     expect(html).toContain('data-portal-orbit-ratio=')
+    expect(html).toContain('data-export-label="BET·Rollout"')
+    expect(html).toContain('data-export-note="Requires Beta"')
   })
 
   it('enlarges the portal hitbox when zoomed farther out', () => {

@@ -107,6 +107,18 @@ class MockElement {
       return descendants.filter((child) => child.tagName === 'foreignObject' && child.attributes.has('class') && child.attributes.get('class').includes('skill-node-export-anchor'))
     }
 
+    if (selector === '[data-portal-node-id][data-portal-source-id][data-portal-target-id]') {
+      return descendants.filter((child) => (
+        child.attributes.has('data-portal-node-id')
+        && child.attributes.has('data-portal-source-id')
+        && child.attributes.has('data-portal-target-id')
+      ))
+    }
+
+    if (selector === '[data-tooltip-node-id]') {
+      return descendants.filter((child) => child.attributes.has('data-tooltip-node-id'))
+    }
+
     if (selector.startsWith('.')) {
       const className = selector.slice(1)
       return descendants.filter((child) => child.attributes.has('class') && child.attributes.get('class').includes(className))
@@ -245,6 +257,40 @@ describe('svgExport', () => {
     expect(serialized).toContain('skill-node-tooltip__note')
     expect(serialized).toContain('Frontend')
     expect(serialized).toContain('Platform')
+  })
+
+  it('injects portal tooltip markup with builder-like tooltip classes', () => {
+    installSvgDomShim()
+
+    const svg = new MockElement('svg')
+    const portal = new MockElement('g')
+    const hit = new MockElement('ellipse')
+
+    portal.setAttribute('class', 'skill-tree-portal')
+    portal.setAttribute('transform', 'translate(180 120)')
+    portal.setAttribute('data-portal-node-id', 'node-portal')
+    portal.setAttribute('data-portal-source-id', 'source-node')
+    portal.setAttribute('data-portal-target-id', 'target-node')
+    portal.setAttribute('data-portal-key', 'dep-a:source')
+    portal.setAttribute('data-portal-label', 'BET·Rollout')
+    portal.setAttribute('data-export-label', 'BET·Rollout')
+    portal.setAttribute('data-export-note', 'Requires the beta roll-out.')
+
+    hit.setAttribute('class', 'skill-tree-portal__hit')
+    hit.setAttribute('cx', '12')
+    hit.setAttribute('cy', '8')
+    portal.appendChild(hit)
+    svg.appendChild(portal)
+
+    const serialized = serializeSvgElementForExport(svg)
+
+    expect(serialized).toContain('skill-node-tooltip-layer')
+    expect(serialized).toContain('skill-node-tooltip-trigger')
+    expect(serialized).toContain('skill-node-tooltip__panel')
+    expect(serialized).toContain('skill-node-tooltip__title')
+    expect(serialized).toContain('BET·Rollout')
+    expect(serialized).toContain('Requires the beta roll-out.')
+    expect(serialized).toContain('data-tooltip-node-id="node-portal"')
   })
 
   it('uses builder-like tooltip colors, font and sizing', () => {

@@ -500,6 +500,8 @@ export function SkillTreeCanvas({
                 data-portal-angle={portal.angle}
                 data-portal-orbit-ratio={portalView.orbitRatio}
                 data-portal-label={portal.otherLabel ?? ''}
+                data-export-label={portal.otherLabel ?? ''}
+                data-export-note={portal.tooltip ?? ''}
                 transform={portalView.groupTransform}
                 onMouseDown={(event) => event.stopPropagation()}
                 onClick={(event) => {

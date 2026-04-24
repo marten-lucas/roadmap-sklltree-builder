@@ -37,6 +37,27 @@ const toNumber = (value, fallback = 0) => {
 
 const sanitizeText = (value) => String(value ?? '').replace(/\s+/g, ' ').trim()
 
+const addClassName = (element, className) => {
+  if (!element || !className) {
+    return
+  }
+
+  if (typeof element.classList?.add === 'function') {
+    element.classList.add(className)
+    return
+  }
+
+  const currentClassNames = String(element.getAttribute?.('class') ?? '')
+    .split(/\s+/)
+    .map((value) => value.trim())
+    .filter(Boolean)
+
+  if (!currentClassNames.includes(className)) {
+    currentClassNames.push(className)
+    element.setAttribute('class', currentClassNames.join(' '))
+  }
+}
+
 const normalizeLevelStatusKey = (value) => {
   const normalized = sanitizeText(value).toLowerCase()
   if (normalized === 'fertig') return 'done'
@@ -89,6 +110,20 @@ const parseLevelTooltipData = (anchor) => {
     status: 'later',
     statusLabel: 'Later',
     releaseNote: fallbackNote,
+    scopeLabels: [],
+  }]
+}
+
+const parsePortalTooltipData = (portalElement) => {
+  const title = sanitizeText(portalElement.getAttribute('data-export-label')) || sanitizeText(portalElement.getAttribute('data-portal-label')) || 'Skill'
+  const releaseNote = String(portalElement.getAttribute('data-export-note') ?? '').trim()
+
+  return [{
+    id: sanitizeText(portalElement.getAttribute('data-portal-key')) || 'portal',
+    label: title,
+    status: 'later',
+    statusLabel: '',
+    releaseNote,
     scopeLabels: [],
   }]
 }
@@ -154,6 +189,64 @@ const estimateTooltipCardHeight = (entry) => {
   const scopeHeight = estimateScopeBlockHeight(entry?.scopeLabels)
 
   return 40 + (blockCount * 18) + (listItemCount * 12) + scopeHeight
+}
+
+const estimatePortalTooltipHeight = (entry) => {
+  const rendered = renderMarkdownToHtml(entry?.releaseNote) || '<p>Keine Release Note hinterlegt.</p>'
+  const blockCount = Math.max(1, (rendered.match(/<(p|h[1-6]|ul)\b/gi) || []).length)
+  const listItemCount = (rendered.match(/<li\b/gi) || []).length
+
+  return 34 + (blockCount * 18) + (listItemCount * 12)
+}
+
+const parseTranslateTransform = (transformValue) => {
+  const match = String(transformValue ?? '').match(/translate\(([-\d.]+)(?:[ ,]+([-\d.]+))?\)/i)
+  if (!match) {
+    return null
+  }
+
+  const x = Number.parseFloat(match[1])
+  const y = Number.parseFloat(match[2] ?? '0')
+
+  if (!Number.isFinite(x) || !Number.isFinite(y)) {
+    return null
+  }
+
+  return { x, y }
+}
+
+const getPortalTooltipCenter = (portalElement) => {
+  if (!portalElement) {
+    return null
+  }
+
+  const transform = parseTranslateTransform(portalElement.getAttribute('transform'))
+  const hit = portalElement.querySelector?.('.skill-tree-portal__hit') ?? null
+  const hitCx = toNumber(hit?.getAttribute?.('cx'), Number.NaN)
+  const hitCy = toNumber(hit?.getAttribute?.('cy'), Number.NaN)
+
+  if (transform && Number.isFinite(hitCx) && Number.isFinite(hitCy)) {
+    return {
+      centerX: transform.x + hitCx,
+      centerY: transform.y + hitCy,
+    }
+  }
+
+  if (typeof portalElement.getBBox === 'function') {
+    try {
+      const box = portalElement.getBBox()
+      if (box && isFiniteNumber(box.x) && isFiniteNumber(box.y) && isFiniteNumber(box.width) && isFiniteNumber(box.height)) {
+        return {
+          centerX: box.x + box.width / 2,
+          centerY: box.y + box.height / 2,
+        }
+      }
+    } catch {
+      // Detached elements or limited DOM shims can throw here.
+    }
+  }
+
+  return null
 }
 
 const replaceCenterIconForeignObject = (svgRoot) => {
@@ -848,9 +941,48 @@ const buildLevelTooltipGroup = ({ id, centerX, centerY, title, entry }) => build
   entries: [entry],
 })
 
+const buildPortalTooltipGroup = ({ id, centerX, centerY, title, entry }) => {
+  const group = createSvgElement('g')
+  group.setAttribute('class', 'skill-node-tooltip-group')
+  group.setAttribute('opacity', '0')
+  group.setAttribute('pointer-events', 'none')
+
+  const tooltipWidth = TOOLTIP_SVG_LAYOUT.width
+  const tooltipHeight = TOOLTIP_SVG_LAYOUT.heightBase + estimatePortalTooltipHeight(entry)
+  const tooltipHeightSafety = 6
+  const boxX = centerX - tooltipWidth / 2
+  const boxY = centerY - TOOLTIP_SVG_LAYOUT.centerGap - tooltipHeight
+
+  const foreignObject = createSvgElement('foreignObject')
+  foreignObject.setAttribute('x', String(boxX))
+  foreignObject.setAttribute('y', String(boxY))
+  foreignObject.setAttribute('width', String(tooltipWidth))
+  foreignObject.setAttribute('height', String(tooltipHeight + tooltipHeightSafety))
+
+  const wrapper = document.createElementNS('http://www.w3.org/1999/xhtml', 'div')
+  wrapper.setAttribute('xmlns', 'http://www.w3.org/1999/xhtml')
+  wrapper.setAttribute('class', 'skill-node-tooltip__panel')
+
+  const titleText = document.createElementNS('http://www.w3.org/1999/xhtml', 'div')
+  titleText.setAttribute('class', 'skill-node-tooltip__title')
+  titleText.textContent = title || 'Skill'
+  wrapper.appendChild(titleText)
+
+  const noteWrapper = document.createElementNS('http://www.w3.org/1999/xhtml', 'div')
+  noteWrapper.setAttribute('class', 'skill-node-tooltip__note skill-node-tooltip__note--markdown')
+  noteWrapper.innerHTML = renderMarkdownToHtml(entry.releaseNote) || '<p>Keine Release Note hinterlegt.</p>'
+  wrapper.appendChild(noteWrapper)
+
+  foreignObject.appendChild(wrapper)
+  group.appendChild(foreignObject)
+
+  return group
+}
+
 const appendAnimatedTooltips = (svgRoot) => {
   const anchors = Array.from(svgRoot.querySelectorAll('foreignObject.skill-node-export-anchor'))
-  if (anchors.length === 0) {
+  const portals = Array.from(svgRoot.querySelectorAll('[data-portal-node-id][data-portal-source-id][data-portal-target-id]'))
+  if (anchors.length === 0 && portals.length === 0) {
     return
   }
 
@@ -932,6 +1064,43 @@ const appendAnimatedTooltips = (svgRoot) => {
         overlayLayer.appendChild(sector)
         overlayLayer.appendChild(sectorGroup)
       })
+    }
+  })
+
+  portals.forEach((portalElement, index) => {
+    const center = getPortalTooltipCenter(portalElement)
+    if (!center) {
+      return
+    }
+
+    const nodeId = sanitizeText(portalElement.getAttribute('data-portal-node-id'))
+    const portalLabel = sanitizeText(portalElement.getAttribute('data-export-label')) || sanitizeText(portalElement.getAttribute('data-portal-label')) || 'Skill'
+    const portalEntries = parsePortalTooltipData(portalElement)
+    const trigger = portalElement
+    const tooltipId = `export-tooltip-trigger-portal-${index + 1}`
+
+    trigger.setAttribute('id', trigger.getAttribute('id') || tooltipId)
+    addClassName(trigger, 'skill-node-tooltip-trigger')
+    if (nodeId) {
+      trigger.setAttribute('data-tooltip-node-id', nodeId)
+    }
+
+    const tooltipGroup = buildPortalTooltipGroup({
+      id: tooltipId,
+      centerX: center.centerX,
+      centerY: center.centerY,
+      title: portalLabel,
+      entry: portalEntries[0],
+    })
+    if (nodeId) {
+      tooltipGroup.setAttribute('data-tooltip-node-id', nodeId)
+    }
+
+    const parentNode = portalElement.parentNode
+    if (parentNode && typeof parentNode.insertBefore === 'function') {
+      parentNode.insertBefore(tooltipGroup, portalElement.nextSibling)
+    } else {
+      overlayLayer.appendChild(tooltipGroup)
     }
   })
 

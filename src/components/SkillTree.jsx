@@ -1452,13 +1452,6 @@ export function SkillTree() {
       bounds.maxY = Math.max(bounds.maxY, y + height)
     }
 
-    includeRect(
-      canvas.origin.x - centerIconSize / 2 - 8,
-      canvas.origin.y - centerIconSize / 2 - 8,
-      centerIconSize + 16,
-      centerIconSize + 16,
-    )
-
     for (const node of renderedNodes) {
       const visibilityMode = nodeVisibilityModeById.get(node.id) ?? 'full'
       const glowPadding = visibilityMode === 'minimal' ? 8 : 18
@@ -1472,44 +1465,6 @@ export function SkillTree() {
       )
     }
 
-    for (const segmentLabel of filteredSegmentLabels) {
-      const labelWidth = Math.max(88, String(segmentLabel.text ?? '').length * 10)
-      includeRect(segmentLabel.x - (labelWidth / 2) - 10, segmentLabel.y - 12, labelWidth + 20, 24)
-    }
-
-    for (const separator of filteredSegmentSeparators) {
-      const path = String(separator.path ?? '')
-      const matches = [...path.matchAll(/[-0-9.]+/g)].map((match) => Number.parseFloat(match[0]))
-      if (matches.length >= 4) {
-        const xs = matches.filter((_, index) => index % 2 === 0)
-        const ys = matches.filter((_, index) => index % 2 === 1)
-        includeRect(Math.min(...xs), Math.min(...ys), Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys))
-      }
-    }
-
-    for (const portal of visibleDependencyPortals) {
-      includeRect(portal.x - 30, portal.y - 30, 60, 60)
-    }
-
-    if (emptyStateAddControl) {
-      includeRect(emptyStateAddControl.x - 22, emptyStateAddControl.y - 22, 44, 82)
-    }
-
-    if (emptySegmentAddControl) {
-      includeRect(emptySegmentAddControl.x - 18, emptySegmentAddControl.y - 18, 36, 68)
-    }
-
-    if (selectedControlGeometry) {
-      includeRect(selectedControlGeometry.child.x - 18, selectedControlGeometry.child.y - 18, 36, 36)
-      includeRect(selectedControlGeometry.left.x - 18, selectedControlGeometry.left.y - 18, 36, 36)
-      includeRect(selectedControlGeometry.right.x - 18, selectedControlGeometry.right.y - 18, 36, 36)
-    }
-
-    if (selectedSegmentControlGeometry) {
-      includeRect(selectedSegmentControlGeometry.left.x - 16, selectedSegmentControlGeometry.left.y - 16, 32, 32)
-      includeRect(selectedSegmentControlGeometry.right.x - 16, selectedSegmentControlGeometry.right.y - 16, 32, 32)
-    }
-
     if (!Number.isFinite(bounds.minX) || !Number.isFinite(bounds.minY) || !Number.isFinite(bounds.maxX) || !Number.isFinite(bounds.maxY)) {
       return {
         x: canvas.origin.x - centerIconSize / 2 - 8,
@@ -1519,30 +1474,18 @@ export function SkillTree() {
       }
     }
 
-    const centerX = canvas.origin.x
-    const centerY = canvas.origin.y
-    const halfWidth = Math.max(centerX - bounds.minX, bounds.maxX - centerX)
-    const halfHeight = Math.max(centerY - bounds.minY, bounds.maxY - centerY)
-
     return {
-      x: centerX - halfWidth,
-      y: centerY - halfHeight,
-      width: halfWidth * 2,
-      height: halfHeight * 2,
+      x: bounds.minX,
+      y: bounds.minY,
+      width: Math.max(1, bounds.maxX - bounds.minX),
+      height: Math.max(1, bounds.maxY - bounds.minY),
     }
   }, [
     canvas.origin.x,
     canvas.origin.y,
     centerIconSize,
-    emptySegmentAddControl,
-    emptyStateAddControl,
-    filteredSegmentLabels,
-    filteredSegmentSeparators,
-    nodeVisibilityModeById,
     renderedNodes,
-    selectedControlGeometry,
-    selectedSegmentControlGeometry,
-    visibleDependencyPortals,
+    nodeVisibilityModeById,
   ])
 
   const handleOpenCenterIconPanel = (event) => {

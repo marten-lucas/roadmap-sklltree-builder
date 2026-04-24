@@ -522,6 +522,8 @@ const buildViewerScript = (exportBaseName = 'skilltree-roadmap') => `
       const INTERACTIVE_SVG_RUNTIME_SCRIPT = ${stringifyForInlineScript(INTERACTIVE_SVG_RUNTIME_SCRIPT)}
       const INTERACTIVE_SVG_RUNTIME_STYLE_TEXT = ${stringifyForInlineScript(INTERACTIVE_SVG_RUNTIME_STYLE_TEXT)}
 
+      const STATUS_STYLES = ${JSON.stringify(STATUS_STYLES)}
+
       const STATUS_TEXT_COLORS = {
         done: '#5a6576',
         now: '#ffffff',
@@ -634,6 +636,7 @@ const buildViewerScript = (exportBaseName = 'skilltree-roadmap') => `
       const nodeInfoById = new Map()
       const allScopeIds = new Set()
       const scopeColorById = new Map()
+      const scopeLabelById = new Map()
 
       const getSelectedScopeIds = () => {
         const options = Array.from(scopeFilterSelect?.options ?? [])
@@ -712,6 +715,7 @@ const buildViewerScript = (exportBaseName = 'skilltree-roadmap') => `
                 scope.id,
                 typeof scope.color === 'string' && scope.color.trim() ? scope.color.trim().toLowerCase() : null,
               )
+              scopeLabelById.set(scope.id, String(scope.label ?? '').trim() || String(scope.id))
             }
           })
 
@@ -732,12 +736,41 @@ const buildViewerScript = (exportBaseName = 'skilltree-roadmap') => `
               })
             })
 
+            const resolvedLevels = levels.map((level, index) => {
+              const scopeLabels = (Array.isArray(level?.scopeIds) ? level.scopeIds : [])
+                .map((scopeId) => {
+                  const label = scopeLabelById.get(scopeId)
+                  if (!label) {
+                    return null
+                  }
+                  const color = scopeColorById.get(scopeId)
+                  return {
+                    label,
+                    color: color || null,
+                  }
+                })
+                .filter(Boolean)
+
+              const rawLevelLabel = String(level?.label ?? '').trim()
+              return {
+                id: level?.id ?? ('level-' + String(index + 1)),
+                label: rawLevelLabel || ('L' + String(index + 1)),
+                status: normalizeStatusKey(level?.status),
+                releaseNote: String(level?.releaseNote ?? ''),
+                releaseNoteHtml: '',
+                scopeLabels,
+                effort: level?.effort ?? null,
+                benefit: level?.benefit ?? null,
+              }
+            })
+
             nodeInfoById.set(node.id, {
               id: node.id,
               status: getDisplayStatusKey(node),
               segmentId: node.segmentId ?? null,
               scopeIds,
               levelScopeIds: levels.map((level) => Array.isArray(level?.scopeIds) ? level.scopeIds.filter(Boolean) : []),
+              levels: resolvedLevels,
             })
           })
         } catch {
@@ -1047,7 +1080,6 @@ const buildViewerScript = (exportBaseName = 'skilltree-roadmap') => `
       }
 
       const applyLabelMode = (mode) => {
-        if (mode === currentLabelMode) return
         currentLabelMode = mode
         nodeAnchors.forEach((anchor) => {
           if (anchor.style.display === 'none') return
@@ -1065,7 +1097,10 @@ const buildViewerScript = (exportBaseName = 'skilltree-roadmap') => `
           const content = anchor.querySelector('.skill-node-button__content')
           if (!content) return
 
-          const levels = parseExportLevels(anchor.getAttribute('data-export-levels'))
+          const parsedLevels = parseExportLevels(anchor.getAttribute('data-export-levels'))
+          const levels = parsedLevels.length > 0
+            ? parsedLevels
+            : (Array.isArray(nodeInfo?.levels) ? nodeInfo.levels : [])
           const fallbackNote = anchor.getAttribute('data-export-note') || ''
           const preferredLevel = getPreferredVeryCloseLevel(levels, fallbackNote)
 
@@ -1095,9 +1130,31 @@ const buildViewerScript = (exportBaseName = 'skilltree-roadmap') => `
               wrapper.classList.add('skill-node-foreign--veryclose')
             }
 
+            const fallbackLevels = (Array.isArray(levels) && levels.length > 0)
+              ? levels
+              : parseExportLevels(anchor.getAttribute('data-export-levels'))
+
             content.className = 'skill-node-button__content skill-node-button__content--veryclose'
-            content.innerHTML = renderVeryCloseContent({ anchor, label, levels, fallbackNote })
-            bindVeryCloseTabs(anchor, label, levels, fallbackNote)
+            content.innerHTML = renderVeryCloseContent({ anchor, label, levels: fallbackLevels, fallbackNote })
+
+            if (Array.isArray(fallbackLevels) && fallbackLevels.length > 1 && !content.querySelector('.skill-node-vc__tabs')) {
+              const activeLevel = fallbackLevels[0] ?? null
+              const tabsHtml = '<div class="skill-node-vc__tabs">' + fallbackLevels.map((level, index) => {
+                const tabLabel = escapeLabelHtml(level?.label ?? ('L' + String(index + 1)))
+                const tabColor = STATUS_STYLES[level?.status ?? 'later']?.ringBand ?? STATUS_STYLES.later.ringBand
+                const activeClass = index === 0 ? ' skill-node-vc__tab--active' : ''
+                return '<button type="button" class="skill-node-vc__tab' + activeClass + '" data-level-index="' + index + '" style="--tab-color:' + tabColor + '">' + tabLabel + '</button>'
+              }).join('') + '</div>'
+              const noteHtml = String(activeLevel?.releaseNoteHtml ?? '').trim() || renderSimpleMarkdown(activeLevel?.releaseNote || fallbackNote || EMPTY_RELEASE_NOTE)
+              content.innerHTML = '<p class="skill-node-vc__headline">' + escapeLabelHtml(label) + '</p>' + tabsHtml + '<div class="skill-node-vc__body skill-node-vc__body--markdown">' + noteHtml + '</div>' + buildNodeChipsHtml(activeLevel)
+            }
+
+            bindVeryCloseTabs(anchor, label, fallbackLevels, fallbackNote)
+
+            const vcBodyEl = content.querySelector('.skill-node-vc__body')
+            if (vcBodyEl) vcBodyEl.style.fontSize = (26 / panZoomState.scale) + 'px'
+            const vcChipsEl = content.querySelector('.skill-node-vc__chips')
+            if (vcChipsEl) vcChipsEl.style.fontSize = (26 / panZoomState.scale) + 'px'
 
             const btn = anchor.querySelector('.skill-node-button')
             if (btn) {
@@ -1235,20 +1292,6 @@ const buildViewerScript = (exportBaseName = 'skilltree-roadmap') => `
       }
 
       const getOccupiedBounds = () => {
-        const contentGroup = svgRoot?.querySelector('.skill-tree-canvas__content')
-        let contentGroupBounds = null
-
-        if (contentGroup && typeof contentGroup.getBBox === 'function') {
-          try {
-            const bounds = contentGroup.getBBox()
-            if (Number.isFinite(bounds.x) && Number.isFinite(bounds.y) && Number.isFinite(bounds.width) && Number.isFinite(bounds.height)) {
-              contentGroupBounds = bounds
-            }
-          } catch {
-            // Fall back to manual bounds collection below.
-          }
-        }
-
         const bounds = {
           minX: Number.POSITIVE_INFINITY,
           minY: Number.POSITIVE_INFINITY,
@@ -1267,15 +1310,6 @@ const buildViewerScript = (exportBaseName = 'skilltree-roadmap') => `
           bounds.maxY = Math.max(bounds.maxY, y + height)
         }
 
-        if (contentGroupBounds) {
-          includeRect(
-            contentGroupBounds.x,
-            contentGroupBounds.y,
-            contentGroupBounds.width,
-            contentGroupBounds.height,
-          )
-        }
-
         nodeAnchors.forEach((anchor) => {
           if (anchor.style.display === 'none') {
             return
@@ -1287,45 +1321,6 @@ const buildViewerScript = (exportBaseName = 'skilltree-roadmap') => `
             Number.parseFloat(anchor.getAttribute('width') ?? ''),
             Number.parseFloat(anchor.getAttribute('height') ?? ''),
           )
-        })
-
-        const centerGroups = svgRoot?.querySelectorAll('.skill-tree-center-icon') ?? []
-        centerGroups.forEach((centerGroup) => {
-          const transform = centerGroup.getAttribute('transform') ?? ''
-          const match = transform.match(/translate[(] *([-0-9.]+)(?:[, ]+)([-0-9.]+) *[)]/)
-          const centerX = match ? Number.parseFloat(match[1]) : Number.NaN
-          const centerY = match ? Number.parseFloat(match[2]) : Number.NaN
-
-          if (!Number.isFinite(centerX) || !Number.isFinite(centerY)) {
-            return
-          }
-
-          const centerImage = centerGroup.querySelector('.skill-tree-center-icon__image')
-          const centerForeign = centerGroup.querySelector('.skill-tree-center-icon__foreign')
-          const centerHitArea = centerGroup.querySelector('.skill-tree-center-icon__hit-area')
-
-          if (centerImage) {
-            includeRect(
-              centerX + Number.parseFloat(centerImage.getAttribute('x') ?? '0'),
-              centerY + Number.parseFloat(centerImage.getAttribute('y') ?? '0'),
-              Number.parseFloat(centerImage.getAttribute('width') ?? '0'),
-              Number.parseFloat(centerImage.getAttribute('height') ?? '0'),
-            )
-          }
-
-          if (centerForeign) {
-            includeRect(
-              centerX + Number.parseFloat(centerForeign.getAttribute('x') ?? '0'),
-              centerY + Number.parseFloat(centerForeign.getAttribute('y') ?? '0'),
-              Number.parseFloat(centerForeign.getAttribute('width') ?? '0'),
-              Number.parseFloat(centerForeign.getAttribute('height') ?? '0'),
-            )
-          }
-
-          if (centerHitArea) {
-            const radius = Number.parseFloat(centerHitArea.getAttribute('r') ?? '0')
-            includeRect(centerX - radius, centerY - radius, radius * 2, radius * 2)
-          }
         })
 
         if (!Number.isFinite(bounds.minX) || !Number.isFinite(bounds.minY) || !Number.isFinite(bounds.maxX) || !Number.isFinite(bounds.maxY)) {

@@ -307,6 +307,7 @@ const _SkillNode = ({ node, nodeSize, isSelected, isPortalPeerHovered = false, o
                     {levels.map((_, i) => {
                       const lsKey = levelStatusKeys[i] ?? 'later'
                       const lsStyle = STATUS_STYLES[lsKey] ?? STATUS_STYLES.later
+                      const levelLabel = exportLevelEntries[i]?.label ?? `L${i + 1}`
                       return (
                         <div
                           key={i}
@@ -323,7 +324,7 @@ const _SkillNode = ({ node, nodeSize, isSelected, isPortalPeerHovered = false, o
                             }
                           }}
                         >
-                          L{i + 1}
+                          {levelLabel}
                         </div>
                       )
                     })}
