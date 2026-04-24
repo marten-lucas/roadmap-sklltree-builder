@@ -1998,13 +1998,6 @@ export const solveSkillTreeLayout = (data, config) => {
 
     const rootChildren = [...(root.children ?? [])]
     if (rootChildren.length > 1) {
-      const getAbsAngularDelta = (leftAngle, rightAngle) => {
-        const left = normalizeAngleDeg(leftAngle)
-        const right = normalizeAngleDeg(rightAngle)
-        const delta = Math.abs(left - right)
-        return Math.min(delta, 360 - delta)
-      }
-
       let best = evaluateCurrentRootOrderScore()
       let improved = true
       let safety = 0

@@ -66,10 +66,11 @@ describe('gap per row', () => {
         const result = solveSkillTreeLayout(doc, TREE_CONFIG)
         const angles = result.layout.nodes.map(n => n.angle)
         const g = maxGap(angles)
-        const boundaryNode = result.layout.nodes.find(n => n.angle < -210 || n.angle > 35)
         const r1 = result.layout.nodes[0]?.radius
         console.log(`row ${rowN} (${bfsRows[rowN-1].shortName}): gap=${g.toFixed(1)} r1=${r1?.toFixed(0)} ${g >= 120 ? '*** FAIL ***' : ''}`)
-      } catch {}
+      } catch (error) {
+        void error
+      }
     }
   })
 })

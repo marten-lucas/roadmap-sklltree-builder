@@ -91,7 +91,6 @@ export function SkillTreeToolbar({
   releases = [],
   selectedReleaseId = null,
   onReleaseChange,
-  releaseBudgetSummaries = new Map(),
   isLegendVisible = false,
   onToggleLegend,
   isBudgetOverviewVisible = false,

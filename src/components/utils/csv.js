@@ -5,7 +5,6 @@ import { normalizeEffort, normalizeBenefit } from './effortBenefit'
 import { ensureNodeLevels, findAdditionalDependencyCycles } from './treeData'
 import { generateUUID } from './uuid'
 import { getLevelStatus } from './nodeStatus'
-import { createRelease } from './releases'
 
 export const CSV_EXPORT_FILE_NAME = `${DEFAULT_EXPORT_BASE_NAME}.csv`
 
@@ -734,7 +733,6 @@ export const serializeDocumentToCsv = (document, releaseId = null) => {
   const scopeLabelById = new Map((document?.scopes ?? []).map((scope) => [scope.id, String(scope.label ?? '').trim()]))
   const nodeOrderMap = buildNodeOrderMap(document)
   const flattenedNodes = collectTreeNodes(document?.children ?? [])
-  const nodeById = new Map(flattenedNodes.map((entry) => [entry.node?.id, entry.node]))
 
   // Build levelId → { shortName, progressLevel } for dep serialization
   const levelRefById = new Map()

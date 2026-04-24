@@ -127,7 +127,6 @@ const fixtureRows = fixtureRecordLines.map((recordLine) => {
 })
 
 const buildBfsRows = (rows) => {
-  const rowByShortName = new Map(rows.map((row) => [row.shortName, row]))
   const shortNameSet = new Set(rows.map((row) => row.shortName))
   const result = []
   const visited = new Set()

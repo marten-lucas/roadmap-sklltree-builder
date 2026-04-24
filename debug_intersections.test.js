@@ -76,7 +76,9 @@ describe('link intersection debug', () => {
           console.log(`row ${rowN} (${bfsRows[rowN-1].shortName}): links=${totalLinks} cross=${crossLinks} nodes=${result.layout.nodes.length}`)
           console.log('  angles:', result.layout.nodes.map(n => `${n.id.slice(-4)}@${n.angle.toFixed(0)}`).join(' '))
         }
-      } catch {}
+      } catch (error) {
+        void error
+      }
     }
   })
 })

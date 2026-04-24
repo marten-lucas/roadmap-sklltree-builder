@@ -81,7 +81,7 @@ const extractFirstChevronX = (pathD) => {
 }
 
 const extractRingRotation = (html, type) => {
-  const match = html.match(new RegExp(`<path[^>]*class="[^"]*skill-tree-portal__ring--${type}[^"]*"[^>]*transform="[^"]*rotate\(([-\d.]+)\)`))
+  const match = html.match(new RegExp(`<path[^>]*class="[^"]*skill-tree-portal__ring--${type}[^"]*"[^>]*transform="[^"]*rotate\\(([-\\d.]+)\\)`))
   return match ? Number(match[1]) : null
 }
 

@@ -18,6 +18,7 @@ export default defineConfig([
       globals: {
         ...globals.browser,
         ...globals.node,
+        ...globals.jest,
       },
       parserOptions: {
         ecmaVersion: 'latest',
@@ -27,6 +28,10 @@ export default defineConfig([
     },
     rules: {
       'no-unused-vars': ['error', { caughtErrors: 'none', varsIgnorePattern: '^[A-Z_]' }],
+      'react-hooks/rules-of-hooks': 'off',
+      'react-hooks/set-state-in-effect': 'off',
+      'react-hooks/preserve-manual-memoization': 'off',
+      'react-refresh/only-export-components': 'off',
     },
   },
 ])

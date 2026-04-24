@@ -38,7 +38,6 @@ export const computeCenterIconSize = ({
 export const getCenterIconExportMetrics = (centerGroup) => {
   const centerForeign = centerGroup?.querySelector?.('.skill-tree-center-icon__foreign') ?? null
   const centerImage = centerGroup?.querySelector?.('.skill-tree-center-icon__image') ?? null
-  const centerHitArea = centerGroup?.querySelector?.('.skill-tree-center-icon__hit-area') ?? null
   const size = resolveCenterIconSize(
     centerGroup?.getAttribute?.('data-center-icon-size')
       ?? centerForeign?.getAttribute?.('width')

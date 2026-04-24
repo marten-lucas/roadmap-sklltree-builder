@@ -5,7 +5,6 @@ import { getDisplayStatusKey, getLevelStatusKeys } from '../utils/nodeStatus'
 import { MarkdownTooltipContent, Tooltip } from '../tooltip'
 import { EFFORT_SIZE_LABELS, BENEFIT_SIZE_LABELS } from '../utils/effortBenefit'
 import { renderMarkdownToHtml } from '../utils/markdown'
-import { getLevelDisplayLabel } from '../utils/treeData'
 import { getNodeTooltipViewModel } from '../utils/nodePresentation'
 import { getNodeLevelIndexFromPointer, isDoubleActivation } from '../utils/nodeInteraction'
 import { IconBolt, IconStar } from '@tabler/icons-react'
@@ -92,7 +91,6 @@ const _SkillNode = ({ node, nodeSize, isSelected, isPortalPeerHovered = false, o
     activeTooltipScopeLabels,
     activeTooltipEffort,
     activeTooltipBenefit,
-    activeLevelLabel,
     activeTooltipTitle,
     exportLevelEntries,
     initialVeryCloseIndex,

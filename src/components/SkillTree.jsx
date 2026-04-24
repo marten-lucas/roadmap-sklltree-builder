@@ -10,6 +10,7 @@ import './styles/skillTree.layout.css'
 import './styles/skillTree.legend.css'
 import './styles/skillTree.status-summary.css'
 import { DEFAULT_STATUS_DESCRIPTIONS, TREE_CONFIG, STATUS_LABELS, STATUS_STYLES } from './config'
+import { renderLegendMarkup, LEGEND_STATUS_ORDER } from './utils/LegendShared'
 import { getNodeLabelMode } from './utils/nodePresentation'
 import { computeCenterIconSize } from './utils/centerIconPresentation'
 import {
@@ -141,28 +142,7 @@ const DEFAULT_CSV_IMPORT_PROCESS_OPTIONS = {
   processManualLevels: true,
 }
 const DIRECT_IMPORT_ACCEPT = 'text/html,.html,text/csv,.csv,application/json,.json'
-const LEGEND_STATUS_ORDER = ['done', 'now', 'next', 'later', 'someday']
-const LEGEND_PORTAL_SOCKET_PATH = 'M 0 -9 A 9 9 0 0 1 0 9'
-const LEGEND_PORTAL_PLUG_PATH = 'M -14 -7 L 7 -7 L 14 0 L 7 7 L -14 7 Z'
 
-const getLegendNodePreviewStyle = (statusKey) => {
-  const style = STATUS_STYLES[statusKey] ?? STATUS_STYLES.later
-  const isLowPriority = statusKey === 'later' || statusKey === 'someday'
-  const fill = isLowPriority
-    ? 'linear-gradient(180deg, rgb(7, 14, 30) 0%, rgb(2, 6, 23) 100%)'
-    : statusKey === 'done'
-      ? 'radial-gradient(circle at 32% 28%, rgb(83, 96, 117), rgb(29, 40, 60) 58%, rgb(10, 16, 31) 100%)'
-      : 'radial-gradient(circle at 32% 28%, rgb(21, 45, 94), rgb(15, 23, 42) 58%, rgb(2, 6, 23) 100%)'
-  const ring = statusKey === 'someday'
-    ? `repeating-conic-gradient(from 0deg, ${style.ringBand} 0deg 16deg, transparent 16deg 25deg)`
-    : `conic-gradient(${style.ringBand} 0deg 360deg)`
-
-  return {
-    '--legend-node-fill': fill,
-    '--legend-node-ring': ring,
-    '--legend-node-glow': style.glow === 'none' ? 'none' : style.glow,
-  }
-}
 
 const collectAllNodes = (document) => {
   const all = []
@@ -255,7 +235,7 @@ export function SkillTree() {
   const [draftRelease, setDraftRelease] = useState(null)
   const [leftSidebarWidth, setLeftSidebarWidth] = useState(LEFT_SIDEBAR_DEFAULT_WIDTH)
   const [rightSidebarWidth, setRightSidebarWidth] = useState(RIGHT_SIDEBAR_DEFAULT_WIDTH)
-  const [legendDensity, setLegendDensity] = useState(LEGEND_DENSITY_MODES.full)
+  const [, setLegendDensity] = useState(LEGEND_DENSITY_MODES.full)
   const bulkApplyActionRef = useRef(null)
   const [bulkApplyConfirmState, setBulkApplyConfirmState] = useState({
     opened: false,
@@ -455,7 +435,7 @@ export function SkillTree() {
       return undefined
     }
 
-    const legendElement = legendRef.current
+    const legendWrapper = legendRef.current
     let frameId = null
 
     const syncLegendDensity = () => {
@@ -465,14 +445,19 @@ export function SkillTree() {
         return
       }
 
-      const availableWidth = legendElement.clientWidth
+      const legendSurface = legendRef.current.querySelector('.skill-tree-legend')
+      if (!legendSurface) {
+        return
+      }
+
+      const availableWidth = legendWrapper.clientWidth
       if (!availableWidth) {
         return
       }
 
       const measureWidthForMode = (mode) => {
-        legendElement.dataset.legendDensity = mode
-        return legendElement.scrollWidth
+        legendSurface.dataset.legendDensity = mode
+        return legendSurface.scrollWidth
       }
 
       const nextDensity = resolveLegendDensity({
@@ -483,7 +468,7 @@ export function SkillTree() {
         iconOnlyWidth: measureWidthForMode(LEGEND_DENSITY_MODES.iconsOnly),
       })
 
-      legendElement.dataset.legendDensity = nextDensity
+      legendSurface.dataset.legendDensity = nextDensity
       setLegendDensity((current) => (current === nextDensity ? current : nextDensity))
     }
 
@@ -494,10 +479,10 @@ export function SkillTree() {
         frameId = window.requestAnimationFrame(syncLegendDensity)
       }
     })
-    observer.observe(legendElement)
+    observer.observe(legendWrapper)
 
-    if (legendElement.parentElement) {
-      observer.observe(legendElement.parentElement)
+    if (legendWrapper.parentElement) {
+      observer.observe(legendWrapper.parentElement)
     }
 
     return () => {
@@ -697,12 +682,66 @@ export function SkillTree() {
     [roadmapData, activeReleaseId],
   )
 
+
   const legendStatusDescriptions = useMemo(
     () => ({
       ...DEFAULT_STATUS_DESCRIPTIONS,
       ...(roadmapData?.statusDescriptions ?? {}),
     }),
     [roadmapData?.statusDescriptions],
+  )
+
+  // Render the legend using the shared markup
+  const legendFooter = isLegendVisible && (
+    <div className="skill-tree-legend-footer">
+      <aside
+        ref={legendRef}
+        className="skill-tree-legend-wrapper"
+        aria-label="Status legend"
+        dangerouslySetInnerHTML={{
+          __html: renderLegendMarkup({ legendStatusDescriptions, showPortals: true }),
+        }}
+      />
+      {isBudgetOverviewVisible && activeRelease && activeStatusBudgetEntries.length > 0 && (
+        <div className="skill-tree-budget-overview" aria-label="Budget overview">
+          <div className="skill-tree-budget-overview__grid">
+            {activeStatusBudgetEntries.map((entry) => {
+              const accent = STATUS_STYLES[entry.statusKey]?.ringBand ?? '#94a3b8'
+              const budgetStateClass = entry.budget == null
+                ? ''
+                : entry.isOverBudget
+                  ? ' skill-tree-budget-overview__card--over'
+                  : (entry.utilization ?? 0) >= 80
+                    ? ' skill-tree-budget-overview__card--warn'
+                    : ' skill-tree-budget-overview__card--good'
+              const cardClassName = entry.budget != null
+                ? `skill-tree-budget-overview__card skill-tree-budget-overview__card--budgeted${budgetStateClass}`
+                : 'skill-tree-budget-overview__card'
+              const valueClassName = entry.budget == null
+                ? 'skill-tree-budget-overview__value'
+                : entry.isOverBudget
+                  ? 'skill-tree-budget-overview__value skill-tree-budget-overview__value--over'
+                  : (entry.utilization ?? 0) >= 80
+                    ? 'skill-tree-budget-overview__value skill-tree-budget-overview__value--warn'
+                    : 'skill-tree-budget-overview__value skill-tree-budget-overview__value--good'
+
+              return (
+                <div
+                  key={entry.statusKey}
+                  className={cardClassName}
+                  style={{ '--budget-accent': accent }}
+                >
+                  <div className="skill-tree-budget-overview__label">{STATUS_LABELS[entry.statusKey]}</div>
+                  <div className={valueClassName}>
+                    {entry.budget != null ? `${entry.total}/${entry.budget}` : `${entry.total} SP`}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+    </div>
   )
 
   const nodeVisibilityModeById = useMemo(() => {
@@ -1264,8 +1303,6 @@ export function SkillTree() {
 
       // Radial axis: inward = toward canvas center, outward = away from center.
       const inwardAngle = toDegrees(Math.atan2(canvas.origin.y - layoutNode.y, canvas.origin.x - layoutNode.x))
-      const outwardAngle = inwardAngle + 180
-
       const sourceEndpoints = nodeEndpoints.filter((ep) => ep.type === 'source')
         .sort((a, b) => a.key.localeCompare(b.key))
       const targetEndpoints = nodeEndpoints.filter((ep) => ep.type === 'target')
@@ -1539,10 +1576,6 @@ export function SkillTree() {
 
   const handleCloseScopeManager = () => {
     if (rightPanel === PANEL_SCOPES) setRightPanel(null)
-  }
-
-  const handleCloseSegmentManager = () => {
-    if (rightPanel === PANEL_SEGMENTS) setRightPanel(null)
   }
 
   const handleResetCenterIcon = () => {
@@ -3921,127 +3954,7 @@ export function SkillTree() {
               </div>
             </section>
 
-            {isLegendVisible && (
-              <div className="skill-tree-legend-footer">
-                <aside
-                  ref={legendRef}
-                  className="skill-tree-legend"
-                  aria-label="Status legend"
-                  data-legend-density={legendDensity}
-                >
-                  <div className="skill-tree-legend__header">
-                    <div className="skill-tree-legend__title">Legend</div>
-                  </div>
-
-                  <div className="skill-tree-legend__section">
-                    <div className="skill-tree-legend__symbol-grid">
-                      {LEGEND_STATUS_ORDER.map((statusKey) => (
-                        <div
-                          key={statusKey}
-                          className="skill-tree-legend__symbol-item skill-tree-legend__symbol-item--status"
-                          title={STATUS_LABELS[statusKey]}
-                        >
-                          <span
-                            className="skill-tree-legend__node-preview"
-                            style={getLegendNodePreviewStyle(statusKey)}
-                            aria-hidden="true"
-                          >
-                            <span className="skill-tree-legend__node-ring" />
-                            <span className="skill-tree-legend__node-core" />
-                          </span>
-                          <span className="skill-tree-legend__symbol-labels">
-                            <strong className="skill-tree-legend__symbol-title">{STATUS_LABELS[statusKey]}</strong>
-                            <span className="skill-tree-legend__symbol-copy">{legendStatusDescriptions[statusKey]}</span>
-                          </span>
-                        </div>
-                      ))}
-
-                      <div
-                        className="skill-tree-legend__symbol-item skill-tree-legend__symbol-item--portal"
-                        title="Incoming portal"
-                      >
-                        <span className="skill-tree-legend__portal-symbol" aria-hidden="true">
-                          <svg viewBox="-12 -12 24 24" className="skill-tree-legend__portal-svg">
-                            <path
-                              className="skill-tree-portal__ring skill-tree-portal__ring--source"
-                              d={LEGEND_PORTAL_SOCKET_PATH}
-                              transform="rotate(180)"
-                            />
-                          </svg>
-                        </span>
-                        <span className="skill-tree-legend__symbol-labels">
-                          <strong className="skill-tree-legend__symbol-title">Incoming portal</strong>
-                          <span className="skill-tree-legend__symbol-copy">This node depends on another skill.</span>
-                        </span>
-                      </div>
-
-                      <div
-                        className="skill-tree-legend__symbol-item skill-tree-legend__symbol-item--portal"
-                        title="Outgoing portal"
-                      >
-                        <span className="skill-tree-legend__portal-symbol" aria-hidden="true">
-                          <svg viewBox="-16 -10 32 20" className="skill-tree-legend__portal-svg">
-                            <path
-                              className="skill-tree-portal__ring skill-tree-portal__ring--target"
-                              d={LEGEND_PORTAL_PLUG_PATH}
-                            />
-                          </svg>
-                        </span>
-                        <span className="skill-tree-legend__symbol-labels">
-                          <strong className="skill-tree-legend__symbol-title">Outgoing portal</strong>
-                          <span className="skill-tree-legend__symbol-copy">This node enables or links to another skill.</span>
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="skill-tree-legend__tip skill-tree-legend__tip--footer">
-                    <span className="skill-tree-legend__tip-icon" aria-hidden="true">ⓘ</span>
-                    <span className="skill-tree-legend__tip-text">Tip: Zooming in or hovering reveals more node details.</span>
-                  </div>
-                </aside>
-
-                {isBudgetOverviewVisible && activeRelease && activeStatusBudgetEntries.length > 0 && (
-                  <div className="skill-tree-budget-overview" aria-label="Budget overview">
-                    <div className="skill-tree-budget-overview__grid">
-                      {activeStatusBudgetEntries.map((entry) => {
-                        const accent = STATUS_STYLES[entry.statusKey]?.ringBand ?? '#94a3b8'
-                        const budgetStateClass = entry.budget == null
-                          ? ''
-                          : entry.isOverBudget
-                            ? ' skill-tree-budget-overview__card--over'
-                            : (entry.utilization ?? 0) >= 80
-                              ? ' skill-tree-budget-overview__card--warn'
-                              : ' skill-tree-budget-overview__card--good'
-                        const cardClassName = entry.budget != null
-                          ? `skill-tree-budget-overview__card skill-tree-budget-overview__card--budgeted${budgetStateClass}`
-                          : 'skill-tree-budget-overview__card'
-                        const valueClassName = entry.budget == null
-                          ? 'skill-tree-budget-overview__value'
-                          : entry.isOverBudget
-                            ? 'skill-tree-budget-overview__value skill-tree-budget-overview__value--over'
-                            : (entry.utilization ?? 0) >= 80
-                              ? 'skill-tree-budget-overview__value skill-tree-budget-overview__value--warn'
-                              : 'skill-tree-budget-overview__value skill-tree-budget-overview__value--good'
-
-                        return (
-                          <div
-                            key={entry.statusKey}
-                            className={cardClassName}
-                            style={{ '--budget-accent': accent }}
-                          >
-                            <div className="skill-tree-budget-overview__label">{STATUS_LABELS[entry.statusKey]}</div>
-                            <div className={valueClassName}>
-                              {entry.budget != null ? `${entry.total}/${entry.budget}` : `${entry.total} SP`}
-                            </div>
-                          </div>
-                        )
-                      })}
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
+            {legendFooter}
           </div>
 
           {isRightSidebarVisible && (

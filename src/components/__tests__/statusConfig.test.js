@@ -65,6 +65,6 @@ describe('someday status', () => {
     )
 
     expect(html).toContain('skill-node-button--status-someday')
-    expect(html).toMatch(/skill-node-level-ring[^>]*conic-gradient\([^\"]*transparent/)
+    expect(html).toMatch(/skill-node-level-ring[^>]*conic-gradient\([^"]*transparent/)
   })
 })

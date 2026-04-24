@@ -69,13 +69,4 @@ describe('visibility', () => {
     expect(getReleaseVisibilityMode('done', RELEASE_FILTER_OPTIONS.all)).toBe('full')
     expect(getReleaseVisibilityMode('later', RELEASE_FILTER_OPTIONS.all)).toBe('full')
   })
-
-  it('correctly handles hidden status by returning ghost or hidden depending on document state', () => {
-    // This is mostly logic in SkillTree.jsx, but we can test the status mapper
-    const nodeHidden = { levels: [{ status: 'hidden' }] }
-    const nodeMixed = { levels: [{ status: 'hidden' }, { status: 'now' }] }
-    
-    // Testing the getDisplayStatusKey from nodeStatus.js (used by visibility logic)
-    // We should move this to a nodeStatus test ideally, but let's check it works
-  })
 })

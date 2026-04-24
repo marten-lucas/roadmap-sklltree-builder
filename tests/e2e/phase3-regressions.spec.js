@@ -82,30 +82,6 @@ const waitForPersistedNodeLabel = async (page, label) => {
   }, { key: DOCUMENT_KEY, value: label })
 }
 
-const waitForPersistedNodeShortName = async (page, shortName) => {
-  await page.waitForFunction(({ key, value }) => {
-    const raw = localStorage.getItem(key)
-    if (!raw) {
-      return false
-    }
-
-    const parsed = JSON.parse(raw)
-    const document = parsed.document ?? parsed
-    const stack = [...(document.children ?? [])]
-
-    while (stack.length > 0) {
-      const node = stack.shift()
-      if (String(node.shortName ?? '').trim() === value) {
-        return true
-      }
-
-      stack.push(...(node.children ?? []))
-    }
-
-    return false
-  }, { key: DOCUMENT_KEY, value: shortName })
-}
-
 const waitForPersistedSegmentLabel = async (page, label) => {
   await page.waitForFunction(({ key, value }) => {
     const raw = localStorage.getItem(key)

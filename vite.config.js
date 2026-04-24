@@ -41,7 +41,7 @@ function singleFileHtmlPlugin(outputFileName) {
       for (const item of Object.values(bundle)) {
         if (item.type === 'chunk' && item.fileName.endsWith('.js')) {
           const scriptPattern = new RegExp(
-            `<script\\b[^>]*\\bsrc=(['\"])(?:\\.\\/|\\/)?${escapeRegExp(item.fileName)}\\1[^>]*><\\/script>`,
+              `<script\\b[^>]*\\bsrc=(['"])(?:\\.\\/|\\/)?${escapeRegExp(item.fileName)}\\1[^>]*><\\/script>`,
             'g',
           )
           html = html.replace(
@@ -53,7 +53,7 @@ function singleFileHtmlPlugin(outputFileName) {
         if (item.type === 'asset' && item.fileName.endsWith('.css')) {
           const css = typeof item.source === 'string' ? item.source : item.source.toString()
           const stylesheetPattern = new RegExp(
-            `<link\\b[^>]*\\bhref=(['\"])(?:\\.\\/|\\/)?${escapeRegExp(item.fileName)}\\1[^>]*>`,
+              `<link\\b[^>]*\\bhref=(['"])(?:\\.\\/|\\/)?${escapeRegExp(item.fileName)}\\1[^>]*>`,
             'g',
           )
           html = html.replace(stylesheetPattern, () => `<style>${escapeInlineStyle(css)}</style>`)
@@ -61,7 +61,7 @@ function singleFileHtmlPlugin(outputFileName) {
       }
 
       html = minifySingleFileHtml(
-        html.replace(/<link\\b[^>]*\\brel=(['\"])modulepreload\\1[^>]*>/g, ''),
+          html.replace(/<link\\b[^>]*\\brel=(['"])modulepreload\\1[^>]*>/g, ''),
       )
 
       await writeFile(targetHtmlPath, html)

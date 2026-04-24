@@ -1,6 +1,5 @@
 import { useState, useMemo, memo } from 'react'
 import { TREE_CONFIG, STATUS_STYLES } from '../config'
-import { getDisplayStatusKey } from '../utils/nodeStatus'
 import { getConnectionStatusStyle, getConnectionZOrder } from '../utils/linkPresentation'
 import { SkillTreeNode } from '../nodes/SkillTreeNode'
 import { MarkdownTooltipContent, Tooltip } from '../tooltip'
@@ -216,6 +215,8 @@ export function SkillTreeCanvas({
             x: link.splitPoint.x,
             y: link.splitPoint.y,
             fill: statusStyle.linkStroke,
+            sourceId: link.sourceId ?? '',
+            targetId: link.targetId ?? '',
           })
         }
         return acc
@@ -444,6 +445,8 @@ export function SkillTreeCanvas({
           <circle
             key={`split-dot-${dot.key}`}
             data-split-dot-key={dot.key}
+            data-split-dot-source-id={dot.sourceId}
+            data-split-dot-target-id={dot.targetId}
             cx={dot.x}
             cy={dot.y}
             r={8}

@@ -1,7 +1,7 @@
 import { ActionIcon, Alert, Badge, Button, Divider, Group, Menu, MultiSelect, NumberInput, Paper, SegmentedControl, Select, Slider, Stack, Tabs, Text, TextInput, Textarea } from '@mantine/core'
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { IconChecklist, IconCheck, IconPercentage20 } from '@tabler/icons-react'
-import { normalizeStatusKey, STATUS_LABELS, STATUS_STYLES, SCOPE_COLORS } from '../config'
+import { STATUS_LABELS, STATUS_STYLES, SCOPE_COLORS } from '../config'
 import { getLevelStatus } from '../utils/nodeStatus'
 import { UNASSIGNED_SEGMENT_ID } from '../utils/layoutShared'
 import { commitInspectorDrafts } from '../utils/inspectorCommit'
@@ -249,7 +249,6 @@ export function InspectorPanel({
   onOpenPointsChange,
   onOpenPointsLabelChange,
   onOpenPointTagChange,
-  onOpenPointsDialogForLevel,
   onReleaseNoteChange,
   onLevelLabelChange,
   onScopeIdsChange,
@@ -272,7 +271,6 @@ export function InspectorPanel({
   selectedParentId,
   levelDependencyOptions,
   onLevelAdditionalDependenciesChange,
-  incomingDependencyLabels,
   dependencyRequires = [],
   dependencyEnables = [],
   validationMessage,
@@ -332,7 +330,6 @@ export function InspectorPanel({
     shortNameDraftRef.current = nextShortName
     releaseNoteDraftRef.current = nextReleaseNote
 
-    /* eslint-disable react-hooks/set-state-in-effect */
     setNameDraft(nextName)
     setShortNameDraft(nextShortName)
     setReleaseNoteDraft(nextReleaseNote)
@@ -342,7 +339,6 @@ export function InspectorPanel({
     levelLabelDraftsRef.current = nextLevelDrafts
     setLevelLabelDrafts(nextLevelDrafts)
     setIsTitleEditing(false)
-    /* eslint-enable react-hooks/set-state-in-effect */
   }, [selectedNode])
 
   useEffect(() => {
@@ -566,10 +562,6 @@ export function InspectorPanel({
     const parentData = allNodes
       .filter((node) => !selectedNodeIds.includes(node.id))
       .map((node) => ({ value: node.id, label: node.shortName ? `${node.label} (${node.shortName})` : node.label }))
-    const additionalDependencyData = allNodes
-      .filter((node) => !selectedNodeIds.includes(node.id))
-      .map((node) => ({ id: node.id, label: node.label, shortName: node.shortName }))
-
     const visibleNames = selectedNodes.slice(0, 3).map((node) => node.label).filter(Boolean).join(', ')
     const hasMore = selectedNodes.length > 3
     const headerNames = hasMore ? `${visibleNames} (...)` : visibleNames
@@ -682,19 +674,6 @@ export function InspectorPanel({
     })
     : [{ id: 'level-1', label: 'Level 1', customLabel: '', displayLabel: 'Level 1', ordinalLabel: 'Level 1', status: getLevelStatus({ statuses: {}, status: selectedNode?.status }, selectedReleaseId), releaseNote: '', openPointsLabel: '', hasOpenPoints: false, scopeIds: [], additionalDependencyLevelIds: [] }]
 
-  const activeProgressLevelId = selectedProgressLevelId ?? nodeLevels[0]?.id ?? 'level-1'
-  const activeProgressLevel = nodeLevels.find((level) => level.id === activeProgressLevelId) ?? nodeLevels[0] ?? {
-    id: activeProgressLevelId,
-    label: 'Level 1',
-    customLabel: '',
-    displayLabel: 'Level 1',
-    ordinalLabel: 'Level 1',
-    status: getLevelStatus({ statuses: {}, status: selectedNode?.status }, selectedReleaseId),
-    releaseNote: '',
-    openPointsLabel: '',
-    hasOpenPoints: false,
-    scopeIds: [],
-  }
   const scopeSelectData = (scopeOptions ?? []).map((scope) => ({
     value: scope.value,
     label: scope.label,

@@ -1435,18 +1435,6 @@ export function ListViewDrawer({
 
   const sortFieldOptions = SORT_FIELD_OPTIONS
 
-  const sortSummaryLabel = useMemo(() => {
-    if (sortSelection.field === 'roadmap' || sortSelection.direction === 'roadmap') {
-      return 'Roadmap order'
-    }
-
-    const fieldLabel = sortFieldOptions.find((option) => option.value === sortSelection.field)?.label
-      ?? SORT_FIELD_LABELS[sortSelection.field]
-      ?? 'Name'
-
-    return `${fieldLabel} ${sortSelection.direction === 'desc' ? 'Z → A' : 'A → Z'}`
-  }, [sortFieldOptions, sortSelection])
-
   const handleResizePointerDown = useCallback((e) => {
     e.preventDefault()
     const startX = e.clientX

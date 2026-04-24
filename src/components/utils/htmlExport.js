@@ -8,11 +8,12 @@ import { VIEWPORT_DEFAULTS, VIEWPORT_ZOOM_STEPS } from './viewport'
 import { EMPTY_RELEASE_NOTE, getNodeLabelMode } from './nodePresentation'
 import { getPortalCounterpartNodeIdFromData, isDoubleActivation } from './nodeInteraction'
 import { INTERACTIVE_SVG_RUNTIME_SCRIPT, INTERACTIVE_SVG_RUNTIME_STYLE_TEXT } from './interactiveSvgRuntime'
-import { DEFAULT_STATUS_DESCRIPTIONS, NODE_LABEL_ZOOM, STATUS_LABELS, STATUS_STYLES } from '../config'
+import { NODE_LABEL_ZOOM, STATUS_STYLES } from '../config'
+import { renderLegendMarkup } from './LegendShared'
 import { AXIS_SIZES, AXIS_COUNT, MATRIX_PADDING, NODE_RADIUS, computeMatrixLayout } from './matrixLayout'
 import { getNodeDisplayEffort, getNodeDisplayBenefit, EFFORT_SIZE_LABELS, BENEFIT_SIZE_LABELS } from './effortBenefit'
 import { getDisplayStatusKey } from './nodeStatus'
-import { buildStatusSummaryGroups, getOrderedNodeRankMap, getStatusSummarySortLabel } from './statusSummary'
+import { buildStatusSummaryGroups, getOrderedNodeRankMap } from './statusSummary'
 import { RELEASE_FILTER_OPTIONS, SCOPE_FILTER_ALL } from './visibility'
 import { getPortalViewModel } from './portalPresentation'
 import htmlToImageBundle from 'html-to-image/dist/html-to-image.js?raw'
@@ -214,65 +215,18 @@ const formatDisplayDate = (value) => {
   return parsed.toLocaleDateString()
 }
 
-const HTML_EXPORT_LEGEND_STATUS_ORDER = ['done', 'now', 'next', 'later', 'someday']
-const HTML_EXPORT_PORTAL_LEGEND = [
-  {
-    className: 'html-export__roadmap-legend-portal--incoming',
-    glyph: '◌',
-    title: 'Incoming portal',
-    copy: 'This node depends on another skill.',
-  },
-  {
-    className: 'html-export__roadmap-legend-portal--outgoing',
-    glyph: '◆',
-    title: 'Outgoing portal',
-    copy: 'This node enables or links to another skill.',
-  },
-]
-
 const buildRoadmapLegendMarkup = (roadmapDocument) => {
-  const statusDescriptions = {
-    ...DEFAULT_STATUS_DESCRIPTIONS,
+  const legendStatusDescriptions = {
     ...(roadmapDocument?.statusDescriptions ?? {}),
   }
 
-  const statusMarkup = HTML_EXPORT_LEGEND_STATUS_ORDER.map((statusKey) => {
-    const dotColor = STATUS_STYLES[statusKey]?.ringBand ?? STATUS_STYLES[statusKey]?.base ?? '#94a3b8'
-    const statusTitle = STATUS_LABELS[statusKey] ?? statusKey
-    const statusCopy = statusDescriptions[statusKey] ?? ''
-
-    return `
-      <span class="html-export__roadmap-legend-item html-export__roadmap-legend-item--status">
-        <span class="html-export__roadmap-legend-dot" style="background: ${escapeHtml(dotColor)};"></span>
-        <span class="html-export__roadmap-legend-copy">
-          <strong>${escapeHtml(statusTitle)}</strong>
-          <span>${escapeHtml(statusCopy)}</span>
-        </span>
-      </span>
-    `
-  }).join('')
-
-  const portalMarkup = HTML_EXPORT_PORTAL_LEGEND.map((item) => `
-    <span class="html-export__roadmap-legend-item html-export__roadmap-legend-item--portal">
-      <span class="html-export__roadmap-legend-portal ${item.className}" aria-hidden="true">${item.glyph}</span>
-      <span class="html-export__roadmap-legend-copy">
-        <strong>${escapeHtml(item.title)}</strong>
-        <span>${escapeHtml(item.copy)}</span>
-      </span>
-    </span>
-  `).join('')
-
   return `
     <div class="html-export__roadmap-legend" aria-label="Status legend">
-      <div class="html-export__roadmap-legend-title">Status legend</div>
-      <div class="html-export__roadmap-legend-grid">
-        ${statusMarkup}
-        ${portalMarkup}
-      </div>
-      <div class="html-export__roadmap-legend-tip">
-        <span class="html-export__roadmap-legend-tip-icon" aria-hidden="true">ⓘ</span>
-        <span>Tip: Zooming in or hovering reveals more node details.</span>
-      </div>
+      ${renderLegendMarkup({
+    legendStatusDescriptions,
+    showPortals: true,
+    className: 'html-export__roadmap-legend-surface',
+  })}
     </div>
   `
 }
@@ -793,6 +747,7 @@ const buildViewerScript = (exportBaseName = 'skilltree-roadmap') => `
 
       const nodeAnchors = Array.from(document.querySelectorAll('foreignObject.skill-node-export-anchor[data-node-id]'))
       const linkElements = Array.from(document.querySelectorAll('[data-link-source-id][data-link-target-id]'))
+      const splitDotElements = Array.from(document.querySelectorAll('[data-split-dot-key]'))
       const segmentLabels = Array.from(document.querySelectorAll('[data-segment-id]'))
       const segmentSeparators = Array.from(document.querySelectorAll('[data-segment-left][data-segment-right]'))
       const portalElements = Array.from(document.querySelectorAll('[data-portal-node-id][data-portal-source-id][data-portal-target-id]'))
@@ -2029,6 +1984,13 @@ const buildViewerScript = (exportBaseName = 'skilltree-roadmap') => `
           const targetId = link.getAttribute('data-link-target-id')
           const isVisible = (!sourceId || visibleNodeIds.has(sourceId)) && (!targetId || visibleNodeIds.has(targetId))
           link.style.display = isVisible ? '' : 'none'
+        })
+
+        splitDotElements.forEach((dot) => {
+          const sourceId = dot.getAttribute('data-split-dot-source-id')
+          const targetId = dot.getAttribute('data-split-dot-target-id')
+          const isVisible = (!sourceId || visibleNodeIds.has(sourceId)) && (!targetId || visibleNodeIds.has(targetId))
+          dot.style.display = isVisible ? '' : 'none'
         })
 
         portalElements.forEach((portal) => {

@@ -1,6 +1,6 @@
 import { readFileSync } from 'fs'
 import { resolve } from 'path'
-import { describe, it, expect } from 'vitest'
+import { describe, it } from 'vitest'
 import { solveSkillTreeLayout } from './src/components/utils/layoutSolver.js'
 import { TREE_CONFIG } from './src/components/config.js'
 import { readDocumentFromCsvText } from './src/components/utils/csv.js'

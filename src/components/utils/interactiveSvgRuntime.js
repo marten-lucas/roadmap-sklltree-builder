@@ -52,7 +52,7 @@ export const buildInteractiveSvgRuntimeScript = () => `
   })
 
   const parseViewBox = (rawValue) => {
-    const parts = String(rawValue ?? '').trim().split(/[\s,]+/).map((part) => Number.parseFloat(part))
+    const parts = String(rawValue ?? '').trim().split(/[,\t\r\n\f ]+/).map((part) => Number.parseFloat(part))
     if (parts.length !== 4 || parts.some((part) => !Number.isFinite(part))) {
       return null
     }

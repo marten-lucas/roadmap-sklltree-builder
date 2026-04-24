@@ -213,7 +213,6 @@ describe('csv', () => {
   it('rejects cyclic additional dependencies during import and export roundtrip validation', () => {
     const document = createDocument()
     const frontendChild = document.children[0].children[0]  // BRA
-    const backendChild = document.children[1].children[0]   // SIE
 
     // BRA depends on SIE (creates cycle since SIE already depends on BRA)
     frontendChild.levels[0].additionalDependencyLevelIds = ['level-sierra-1']
