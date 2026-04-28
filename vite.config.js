@@ -89,6 +89,7 @@ export default defineConfig({
   },
   build: {
     assetsInlineLimit: Number.MAX_SAFE_INTEGER,
+    chunkSizeWarningLimit: 2000,
     cssCodeSplit: false,
     modulePreload: false,
     minify: 'esbuild',
