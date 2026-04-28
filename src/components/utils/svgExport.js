@@ -66,6 +66,18 @@ const normalizeLevelStatusKey = (value) => {
   return normalized || 'later'
 }
 
+const normalizeSelectedStatusKeySet = (selectedStatusKeys) => {
+  if (selectedStatusKeys == null) {
+    return null
+  }
+
+  return new Set(
+    (Array.isArray(selectedStatusKeys) ? selectedStatusKeys : [selectedStatusKeys])
+      .map((statusKey) => normalizeLevelStatusKey(statusKey))
+      .filter(Boolean),
+  )
+}
+
 const formatStatusLabel = (value) => {
   const statusKey = normalizeLevelStatusKey(value)
   const labels = {
@@ -595,6 +607,96 @@ export const getExportViewportBounds = (svgElement) => {
   }
 
   return expandBounds(getFallbackViewportBounds(svgElement), EXPORT_VIEWPORT_PADDING)
+}
+
+export const filterSvgTreeByStatusKeys = (svgElement, selectedStatusKeys = null) => {
+  const allowedStatusKeys = normalizeSelectedStatusKeySet(selectedStatusKeys)
+
+  if (!svgElement || typeof svgElement.querySelectorAll !== 'function' || allowedStatusKeys === null) {
+    return svgElement
+  }
+
+  const nodeAnchors = Array.from(svgElement.querySelectorAll('foreignObject.skill-node-export-anchor[data-node-id]'))
+  const visibleNodeIds = new Set()
+  const visibleSegmentIds = new Set()
+
+  nodeAnchors.forEach((anchor) => {
+    const nodeId = sanitizeText(anchor.getAttribute('data-node-id'))
+    const statusKey = normalizeLevelStatusKey(anchor.getAttribute('data-export-status'))
+    const segmentLabel = anchor.closest?.('[data-segment-id]')
+    const segmentId = sanitizeText(segmentLabel?.getAttribute?.('data-segment-id'))
+
+    if (!allowedStatusKeys.has(statusKey)) {
+      anchor.remove()
+      return
+    }
+
+    if (nodeId) {
+      visibleNodeIds.add(nodeId)
+    }
+
+    if (segmentId) {
+      visibleSegmentIds.add(segmentId)
+    }
+  })
+
+  Array.from(svgElement.querySelectorAll('[data-link-source-id][data-link-target-id]')).forEach((link) => {
+    const sourceId = sanitizeText(link.getAttribute('data-link-source-id'))
+    const targetId = sanitizeText(link.getAttribute('data-link-target-id'))
+    const isVisible = (!sourceId || visibleNodeIds.has(sourceId)) && (!targetId || visibleNodeIds.has(targetId))
+
+    if (!isVisible) {
+      link.remove()
+    }
+  })
+
+  Array.from(svgElement.querySelectorAll('[data-split-dot-key]')).forEach((dot) => {
+    const sourceId = sanitizeText(dot.getAttribute('data-split-dot-source-id'))
+    const targetId = sanitizeText(dot.getAttribute('data-split-dot-target-id'))
+    const isVisible = (!sourceId || visibleNodeIds.has(sourceId)) && (!targetId || visibleNodeIds.has(targetId))
+
+    if (!isVisible) {
+      dot.remove()
+    }
+  })
+
+  Array.from(svgElement.querySelectorAll('[data-portal-node-id][data-portal-source-id][data-portal-target-id]')).forEach((portal) => {
+    const nodeId = sanitizeText(portal.getAttribute('data-portal-node-id'))
+    const sourceId = sanitizeText(portal.getAttribute('data-portal-source-id'))
+    const targetId = sanitizeText(portal.getAttribute('data-portal-target-id'))
+    const isVisible = visibleNodeIds.has(nodeId) && visibleNodeIds.has(sourceId) && visibleNodeIds.has(targetId)
+
+    if (!isVisible) {
+      portal.remove()
+    }
+  })
+
+  Array.from(svgElement.querySelectorAll('[data-tooltip-node-id]')).forEach((tooltipNode) => {
+    const nodeId = sanitizeText(tooltipNode.getAttribute('data-tooltip-node-id'))
+    if (nodeId && !visibleNodeIds.has(nodeId)) {
+      tooltipNode.remove()
+    }
+  })
+
+  Array.from(svgElement.querySelectorAll('[data-segment-id]')).forEach((segmentLabel) => {
+    const segmentId = sanitizeText(segmentLabel.getAttribute('data-segment-id'))
+    if (segmentId && !visibleSegmentIds.has(segmentId)) {
+      segmentLabel.remove()
+    }
+  })
+
+  Array.from(svgElement.querySelectorAll('[data-segment-left][data-segment-right]')).forEach((separator) => {
+    const leftSegmentId = sanitizeText(separator.getAttribute('data-segment-left'))
+    const rightSegmentId = sanitizeText(separator.getAttribute('data-segment-right'))
+    const isVisible = (!leftSegmentId || visibleSegmentIds.has(leftSegmentId))
+      && (!rightSegmentId || visibleSegmentIds.has(rightSegmentId))
+
+    if (!isVisible) {
+      separator.remove()
+    }
+  })
+
+  return svgElement
 }
 
 const applyExportViewport = (svgRoot, bounds) => {
@@ -1144,6 +1246,7 @@ export const serializeSvgElementForExport = (svgElement, options = {}) => {
     includeRuntime = false,
     embedStyles = false,
     styleText = '',
+    selectedStatusKeys = null,
     sourceDocument = globalThis?.document,
   } = options
 
@@ -1152,7 +1255,9 @@ export const serializeSvgElementForExport = (svgElement, options = {}) => {
   clone.setAttribute('xmlns', SVG_NS)
   clone.setAttribute('xmlns:xlink', SVG_XLINK_NS)
 
-  applyExportViewport(clone, getExportViewportBounds(svgElement))
+  filterSvgTreeByStatusKeys(clone, selectedStatusKeys)
+  const viewportSource = selectedStatusKeys == null ? svgElement : clone
+  applyExportViewport(clone, getExportViewportBounds(viewportSource))
   replaceCenterIconForeignObject(clone)
 
   if (embedStyles) {
@@ -1240,6 +1345,7 @@ export const exportPngFromElement = async (svgElement, options = {}) => {
   const {
     fileName = buildExportFileName(null, 'png'),
     includeTooltips = false,
+    selectedStatusKeys = null,
     sourceDocument = globalThis?.document,
     styleText = '',
     scale = 1,
@@ -1252,6 +1358,7 @@ export const exportPngFromElement = async (svgElement, options = {}) => {
   const markup = serializeSvgElementForExport(svgElement, {
     includeTooltips,
     embedStyles: true,
+    selectedStatusKeys,
     sourceDocument,
     styleText,
   })
@@ -1301,6 +1408,7 @@ export const exportSvgFromElement = (svgElement, options = {}) => {
   const {
     fileName = buildExportFileName(null, 'svg'),
     includeTooltips = true,
+    selectedStatusKeys = null,
     sourceDocument = globalThis?.document,
     styleText = '',
   } = options
@@ -1309,6 +1417,7 @@ export const exportSvgFromElement = (svgElement, options = {}) => {
     includeTooltips,
     includeRuntime: true,
     embedStyles: true,
+    selectedStatusKeys,
     sourceDocument,
     styleText,
   })

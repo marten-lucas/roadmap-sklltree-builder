@@ -38,6 +38,19 @@ class MockElement {
     return child
   }
 
+  remove() {
+    if (!this.parentNode) {
+      return
+    }
+
+    const index = this.parentNode.children.indexOf(this)
+    if (index >= 0) {
+      this.parentNode.children.splice(index, 1)
+    }
+
+    this.parentNode = null
+  }
+
   insertBefore(child, beforeChild) {
     child.parentNode = this
     if (!beforeChild) {
@@ -88,6 +101,19 @@ class MockElement {
     return matches[0] ?? null
   }
 
+  closest(selector) {
+    let current = this.parentNode
+
+    while (current) {
+      if (selector === '[data-segment-id]' && current.attributes.has('data-segment-id')) {
+        return current
+      }
+      current = current.parentNode
+    }
+
+    return null
+  }
+
   querySelectorAll(selector) {
     const walk = (node, visitor) => {
       for (const child of node.children ?? []) {
@@ -103,8 +129,24 @@ class MockElement {
       return descendants.filter((child) => child.tagName === 'defs')
     }
 
-    if (selector === 'foreignObject.skill-node-export-anchor') {
+    if (selector === 'foreignObject.skill-node-export-anchor' || selector === 'foreignObject.skill-node-export-anchor[data-node-id]') {
       return descendants.filter((child) => child.tagName === 'foreignObject' && child.attributes.has('class') && child.attributes.get('class').includes('skill-node-export-anchor'))
+    }
+
+    if (selector === '[data-link-source-id][data-link-target-id]') {
+      return descendants.filter((child) => child.attributes.has('data-link-source-id') && child.attributes.has('data-link-target-id'))
+    }
+
+    if (selector === '[data-split-dot-key]') {
+      return descendants.filter((child) => child.attributes.has('data-split-dot-key'))
+    }
+
+    if (selector === '[data-segment-id]') {
+      return descendants.filter((child) => child.attributes.has('data-segment-id'))
+    }
+
+    if (selector === '[data-segment-left][data-segment-right]') {
+      return descendants.filter((child) => child.attributes.has('data-segment-left') && child.attributes.has('data-segment-right'))
     }
 
     if (selector === '[data-portal-node-id][data-portal-source-id][data-portal-target-id]') {
@@ -208,6 +250,55 @@ describe('svgExport', () => {
     expect(serialized).toContain('stroke-width="6"')
     expect(serialized).toContain('stroke-opacity="0.4"')
     expect(serialized).toContain('stroke-dasharray="2 10"')
+  })
+
+  it('filters exported tree nodes and connections by selected statuses', () => {
+    installSvgDomShim()
+
+    const svg = new MockElement('svg')
+
+    const nowSegment = new MockElement('g')
+    nowSegment.setAttribute('data-segment-id', 'segment-now')
+    const nowNode = new MockElement('foreignObject')
+    nowNode.setAttribute('class', 'skill-node-export-anchor')
+    nowNode.setAttribute('data-node-id', 'node-now')
+    nowNode.setAttribute('data-export-status', 'now')
+    nowNode.setAttribute('x', '10')
+    nowNode.setAttribute('y', '10')
+    nowNode.setAttribute('width', '120')
+    nowNode.setAttribute('height', '120')
+    nowSegment.appendChild(nowNode)
+
+    const laterSegment = new MockElement('g')
+    laterSegment.setAttribute('data-segment-id', 'segment-later')
+    const laterNode = new MockElement('foreignObject')
+    laterNode.setAttribute('class', 'skill-node-export-anchor')
+    laterNode.setAttribute('data-node-id', 'node-later')
+    laterNode.setAttribute('data-export-status', 'later')
+    laterNode.setAttribute('x', '240')
+    laterNode.setAttribute('y', '10')
+    laterNode.setAttribute('width', '120')
+    laterNode.setAttribute('height', '120')
+    laterSegment.appendChild(laterNode)
+
+    const connection = new MockElement('path')
+    connection.setAttribute('data-link-source-id', 'node-now')
+    connection.setAttribute('data-link-target-id', 'node-later')
+
+    svg.appendChild(nowSegment)
+    svg.appendChild(laterSegment)
+    svg.appendChild(connection)
+
+    const serialized = serializeSvgElementForExport(svg, {
+      includeTooltips: false,
+      selectedStatusKeys: ['now'],
+    })
+
+    expect(serialized).toContain('data-node-id="node-now"')
+    expect(serialized).not.toContain('data-node-id="node-later"')
+    expect(serialized).not.toContain('data-link-target-id="node-later"')
+    expect(serialized).toContain('data-segment-id="segment-now"')
+    expect(serialized).not.toContain('data-segment-id="segment-later"')
   })
 
   it('splits long tooltip notes into capped lines', () => {

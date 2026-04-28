@@ -10,6 +10,7 @@ export function useSkillTreeUiState() {
   const [selectedSegmentId, setSelectedSegmentId] = useState(null)
   const [selectedPortalKey, setSelectedPortalKey] = useState(null)
   const [rightPanel, setRightPanel] = useState(null)
+  const [isReleaseNotesPanelOpen, setIsReleaseNotesPanelOpen] = useState(false)
   const [isToolbarCollapsed, setIsToolbarCollapsed] = useState(false)
   const [isLegendVisible, setIsLegendVisible] = useState(true)
   const [isBudgetOverviewVisible, setIsBudgetOverviewVisible] = useState(false)
@@ -84,6 +85,8 @@ export function useSkillTreeUiState() {
     setSelectedPortalKey,
     rightPanel,
     setRightPanel,
+    isReleaseNotesPanelOpen,
+    setIsReleaseNotesPanelOpen,
     isToolbarCollapsed,
     setIsToolbarCollapsed,
     isLegendVisible,

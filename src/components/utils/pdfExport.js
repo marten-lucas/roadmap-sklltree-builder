@@ -2,7 +2,7 @@ import { STATUS_LABELS, normalizeStatusKey } from '../config'
 import { renderMarkdownToHtml } from './markdown'
 import { buildExportFileName } from './exportFileName'
 import { resolveScopeEntries, renderScopeLabelsMarkup } from './scopeDisplay'
-import { getExportViewportBounds } from './svgExport'
+import { filterSvgTreeByStatusKeys, getExportViewportBounds } from './svgExport'
 import { getLevelStatus } from './nodeStatus'
 import { getLevelDisplayLabel } from './treeData'
 import printFocusedCssText from './printed.css?raw'
@@ -53,7 +53,7 @@ const collectStyleText = (sourceDocument) => {
   return styleChunks.filter(Boolean).join('\n')
 }
 
-const sanitizeSvgCloneForPrint = (svgElement) => {
+const sanitizeSvgCloneForPrint = (svgElement, selectedStatusKeys = null) => {
   if (!svgElement) {
     return null
   }
@@ -61,8 +61,10 @@ const sanitizeSvgCloneForPrint = (svgElement) => {
   const clone = svgElement.cloneNode(true)
 
   clone.querySelectorAll('.skill-tree-export-exclude').forEach((node) => node.remove())
+  filterSvgTreeByStatusKeys(clone, selectedStatusKeys)
 
-  const bounds = getExportViewportBounds(svgElement)
+  const viewportSource = selectedStatusKeys == null ? svgElement : clone
+  const bounds = getExportViewportBounds(viewportSource)
   clone.setAttribute('viewBox', `${bounds.x} ${bounds.y} ${bounds.width} ${bounds.height}`)
   clone.setAttribute('width', String(bounds.width))
   clone.setAttribute('height', String(bounds.height))
@@ -234,8 +236,10 @@ const buildReleaseNotesMarkup = (entries, releaseMeta = {}) => {
   return parts.join('\n')
 }
 
-const buildStatusSummaryMarkup = (roadmapDocument, { sortMode = 'manual', selectedReleaseId = null } = {}) => {
+const buildStatusSummaryMarkup = (roadmapDocument, { sortMode = 'manual', selectedReleaseId = null, selectedTreeStatuses = null } = {}) => {
+  const allowedTreeStatuses = selectedTreeStatuses == null ? null : new Set(selectedTreeStatuses)
   const groups = buildStatusSummaryGroups(roadmapDocument, { sortMode, selectedReleaseId })
+    .filter((group) => allowedTreeStatuses == null || allowedTreeStatuses.has(group.statusKey))
     .filter((group) => group.nodes.length > 0)
 
   if (groups.length === 0) {
@@ -273,6 +277,7 @@ export const buildPdfExportHtml = ({
   releaseMeta = null,
   statusSummarySortMode = 'manual',
   selectedReleaseId = null,
+  selectedTreeStatuses = null,
 }) => {
   const exportDate = new Date().toLocaleDateString()
   const systemName = String(roadmapDocument?.systemName ?? '').trim() || 'Roadmap'
@@ -670,6 +675,7 @@ export const buildPdfExportHtml = ({
     ${buildStatusSummaryMarkup(roadmapDocument, {
       sortMode: statusSummarySortMode,
       selectedReleaseId,
+      selectedTreeStatuses,
     })}
     <div class="pdf-export__notes">${buildReleaseNotesMarkup(releaseNoteEntries, {
       introduction: introductionMarkdown,
@@ -692,6 +698,7 @@ export const tryExportPdfFromSkillTree = ({
   svgElement,
   roadmapDocument,
   selectedReleaseId = null,
+  selectedTreeStatuses = null,
   selectedReleaseNoteStatuses = null,
   statusSummarySortMode = 'manual',
 }) => {
@@ -702,7 +709,7 @@ export const tryExportPdfFromSkillTree = ({
     }
   }
 
-  const svgMarkup = sanitizeSvgCloneForPrint(svgElement)
+  const svgMarkup = sanitizeSvgCloneForPrint(svgElement, selectedTreeStatuses)
   if (!svgMarkup) {
     return {
       ok: false,
@@ -733,6 +740,7 @@ export const tryExportPdfFromSkillTree = ({
     releaseMeta,
     statusSummarySortMode,
     selectedReleaseId: releaseMeta?.id ?? selectedReleaseId,
+    selectedTreeStatuses,
   })
 
   const blob = new Blob([html], { type: 'text/html;charset=utf-8' })

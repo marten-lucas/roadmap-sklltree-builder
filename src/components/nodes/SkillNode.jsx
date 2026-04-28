@@ -266,6 +266,7 @@ const _SkillNode = ({ node, nodeSize, isSelected, isPortalPeerHovered = false, o
       height={fwHeight}
       className="skill-node-export-anchor"
       data-node-id={node.id}
+      data-export-status={statusKey}
       data-export-label={node.label}
       data-short-name={shortName}
       data-label-mode={labelMode}

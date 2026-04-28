@@ -1,5 +1,5 @@
 import { Alert, Button, Checkbox, Group, Modal, Radio, Stack, Text } from '@mantine/core'
-import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react'
+import { Fragment, useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react'
 import { flushSync } from 'react-dom'
 import { TransformComponent, TransformWrapper } from 'react-zoom-pan-pinch'
 import './styles/skillTree.base.css'
@@ -222,6 +222,13 @@ export function SkillTree() {
   const [exportLabelDialogOpen, setExportLabelDialogOpen] = useState(false)
   const [exportLabelDialogKind, setExportLabelDialogKind] = useState('visual')
   const [exportLabelDialogMode, setExportLabelDialogMode] = useState('mid')
+  const [exportTreeStatuses, setExportTreeStatuses] = useState(() => normalizeFeatureStatuses({
+    done: true,
+    now: true,
+    next: true,
+    later: true,
+    someday: true,
+  }))
   const [exportReleaseNoteStatuses, setExportReleaseNoteStatuses] = useState(() => normalizeFeatureStatuses(null))
   const [exportStatusSummarySortMode, setExportStatusSummarySortMode] = useState(DEFAULT_STATUS_SUMMARY_SETTINGS.sortMode)
   const [includePriorityMatrixInExport, setIncludePriorityMatrixInExport] = useState(false)
@@ -258,6 +265,8 @@ export function SkillTree() {
     setSelectedPortalKey,
     rightPanel,
     setRightPanel,
+    isReleaseNotesPanelOpen,
+    setIsReleaseNotesPanelOpen,
     isToolbarCollapsed,
     setIsToolbarCollapsed,
     isLegendVisible,
@@ -308,7 +317,7 @@ export function SkillTree() {
       const delta = moveEvent.clientX - startX
       const totalWidth = shellRef.current?.getBoundingClientRect().width ?? (typeof window !== 'undefined' ? window.innerWidth : 0)
       const otherWidth = side === 'left'
-        ? (rightPanel != null || selectedSegmentId ? rightSidebarWidthRef.current : 0)
+        ? (rightPanel != null || selectedSegmentId || isReleaseNotesPanelOpen ? rightSidebarWidthRef.current : 0)
         : (listViewOpen || priorityMatrixOpen ? leftSidebarWidthRef.current : 0)
       const minWidth = side === 'left' ? LEFT_SIDEBAR_MIN_WIDTH : RIGHT_SIDEBAR_MIN_WIDTH
       const signedDelta = side === 'left' ? delta : -delta
@@ -403,13 +412,14 @@ export function SkillTree() {
   )
 
   const isLeftSidebarVisible = listViewOpen || priorityMatrixOpen
+  const releaseNotesPanelVisible = isReleaseNotesPanelOpen || rightPanel === PANEL_RELEASE_NOTES
   const isRightSidebarVisible = Boolean(selectedSegment)
     || rightPanel === PANEL_INSPECTOR
     || rightPanel === PANEL_CENTER
     || rightPanel === PANEL_SCOPES
     || rightPanel === PANEL_SEGMENTS
-    || rightPanel === PANEL_RELEASE_NOTES
     || rightPanel === PANEL_STATUS_SUMMARY
+    || releaseNotesPanelVisible
 
   useEffect(() => {
     leftSidebarWidthRef.current = leftSidebarWidth
@@ -1511,9 +1521,7 @@ export function SkillTree() {
 
   const handleOpenReleaseNotes = (event) => {
     event?.stopPropagation()
-    selectNodeId(null)
-    selectSegmentId(null)
-    setRightPanel((prev) => togglePanel(prev, PANEL_RELEASE_NOTES))
+    setIsReleaseNotesPanelOpen((current) => !current)
   }
 
   const handleCloseScopeManager = () => {
@@ -1768,6 +1776,13 @@ export function SkillTree() {
     exportLabelDialogResolveRef.current = resolve
     setExportLabelDialogKind(kind)
     setExportLabelDialogMode('mid')
+    setExportTreeStatuses(normalizeFeatureStatuses({
+      done: true,
+      now: true,
+      next: true,
+      later: true,
+      someday: true,
+    }))
     setExportReleaseNoteStatuses(normalizeFeatureStatuses(initialReleaseNoteStatuses))
     setExportStatusSummarySortMode(normalizeStatusSummarySettings(roadmapData?.statusSummary).sortMode)
     setExportLabelDialogOpen(true)
@@ -1777,6 +1792,7 @@ export function SkillTree() {
     setExportLabelDialogOpen(false)
     exportLabelDialogResolveRef.current?.({
       labelMode: exportLabelDialogMode,
+      treeStatuses: exportTreeStatuses,
       releaseNoteStatuses: exportReleaseNoteStatuses,
       statusSummarySortMode: exportStatusSummarySortMode,
       includePriorityMatrix: includePriorityMatrixInExport,
@@ -1801,10 +1817,12 @@ export function SkillTree() {
       const selectedOptions = await openExportLabelDialog({ kind: 'visual' })
       if (selectedOptions === null) return
       flushSync(() => setExportLabelModeOverride(selectedOptions.labelMode))
+      const selectedTreeStatuses = LEGEND_STATUS_ORDER.filter((statusKey) => selectedOptions.treeStatuses?.[statusKey])
       const { exportSvgFromElement } = await import('./utils/svgExport')
       const exported = exportSvgFromElement(canvasSvgRef.current, {
         fileName: buildExportFileName(roadmapData, 'svg'),
         includeTooltips: true,
+        selectedStatusKeys: selectedTreeStatuses,
         sourceDocument: window.document,
       })
       if (!exported) {
@@ -1831,10 +1849,12 @@ export function SkillTree() {
       const selectedOptions = await openExportLabelDialog({ kind: 'visual' })
       if (selectedOptions === null) return
       flushSync(() => setExportLabelModeOverride(selectedOptions.labelMode))
+      const selectedTreeStatuses = LEGEND_STATUS_ORDER.filter((statusKey) => selectedOptions.treeStatuses?.[statusKey])
       const { exportPngFromElement } = await import('./utils/svgExport')
       const exported = await exportPngFromElement(canvasSvgRef.current, {
         fileName: buildExportFileName(roadmapData, 'png'),
         includeTooltips: false,
+        selectedStatusKeys: selectedTreeStatuses,
         sourceDocument: window.document,
       })
 
@@ -1861,10 +1881,12 @@ export function SkillTree() {
       const selectedOptions = await openExportLabelDialog({ kind: 'visual' })
       if (selectedOptions === null) return
       flushSync(() => setExportLabelModeOverride(selectedOptions.labelMode))
+      const selectedTreeStatuses = LEGEND_STATUS_ORDER.filter((statusKey) => selectedOptions.treeStatuses?.[statusKey])
       const { exportSvgFromElement } = await import('./utils/svgExport')
       const exported = exportSvgFromElement(canvasSvgRef.current, {
         fileName: buildExportFileName(roadmapData, 'svg', { suffix: 'clean' }),
         includeTooltips: false,
+        selectedStatusKeys: selectedTreeStatuses,
         sourceDocument: window.document,
       })
       if (!exported) {
@@ -1894,6 +1916,9 @@ export function SkillTree() {
       })
       if (selectedOptions === null) return
 
+      const selectedTreeStatuses = LEGEND_STATUS_ORDER.filter(
+        (statusKey) => selectedOptions.treeStatuses?.[statusKey],
+      )
       const selectedReleaseNoteStatuses = LEGEND_STATUS_ORDER.filter(
         (statusKey) => statusKey !== 'hidden' && selectedOptions.releaseNoteStatuses?.[statusKey],
       )
@@ -1906,6 +1931,7 @@ export function SkillTree() {
         svgElement: canvasSvgRef.current,
         roadmapDocument: roadmapData,
         selectedReleaseId: activeRelease?.id ?? null,
+        selectedTreeStatuses,
         selectedReleaseNoteStatuses,
         statusSummarySortMode: selectedOptions.statusSummarySortMode,
         includePriorityMatrix: selectedOptions.includePriorityMatrix,
@@ -1951,6 +1977,9 @@ export function SkillTree() {
       })
       if (selectedOptions === null) return
       flushSync(() => setExportLabelModeOverride(selectedOptions.labelMode))
+      const selectedTreeStatuses = LEGEND_STATUS_ORDER.filter(
+        (statusKey) => selectedOptions.treeStatuses?.[statusKey],
+      )
       const selectedReleaseNoteStatuses = LEGEND_STATUS_ORDER.filter(
         (statusKey) => statusKey !== 'hidden' && selectedOptions.releaseNoteStatuses?.[statusKey],
       )
@@ -1959,6 +1988,7 @@ export function SkillTree() {
         svgElement: canvasSvgRef.current,
         roadmapDocument: roadmapData,
         selectedReleaseId: activeRelease?.id ?? null,
+        selectedTreeStatuses,
         selectedReleaseNoteStatuses,
         statusSummarySortMode: selectedOptions.statusSummarySortMode,
       })
@@ -3369,7 +3399,7 @@ export function SkillTree() {
     />
   ) : null
 
-  const rightSidebarContent = rightPanel === PANEL_INSPECTOR ? (
+  const primaryRightSidebarContent = rightPanel === PANEL_INSPECTOR ? (
     <InspectorPanel
       selectedNode={resolveInspectorSelectedNode(selectedNode, selectedNodeIds)}
       selectedNodeIds={selectedNodeIds}
@@ -3472,22 +3502,6 @@ export function SkillTree() {
       onCommitDocument={commitDocument}
       onSelectNode={handleSelectNode}
     />
-  ) : rightPanel === PANEL_RELEASE_NOTES ? (
-    <ReleaseNotesPanel
-      isOpen={rightPanel === PANEL_RELEASE_NOTES}
-      release={activeRelease}
-      onClose={() => {
-        if (rightPanel === PANEL_RELEASE_NOTES) setRightPanel(null)
-      }}
-      onCommitReleaseNotes={(releaseId, updates) => {
-        commitDocument({
-          ...roadmapData,
-          releases: (roadmapData.releases ?? []).map((release) => (
-            release.id === releaseId ? { ...release, ...updates } : release
-          )),
-        })
-      }}
-    />
   ) : isRightSidebarVisible ? (
     <SegmentPanel
       selectedSegment={selectedSegment}
@@ -3502,6 +3516,27 @@ export function SkillTree() {
       onCreateSegment={handleCreateSegmentForManager}
       onRenameSegment={handleRenameSegmentForManager}
       onDeleteSegment={handleDeleteSegmentForManager}
+    />
+  ) : null
+
+  const releaseNotesSidebarContent = releaseNotesPanelVisible ? (
+    <ReleaseNotesPanel
+      isOpen={releaseNotesPanelVisible}
+      release={activeRelease}
+      onClose={() => {
+        setIsReleaseNotesPanelOpen(false)
+        if (rightPanel === PANEL_RELEASE_NOTES) {
+          setRightPanel(null)
+        }
+      }}
+      onCommitReleaseNotes={(releaseId, updates) => {
+        commitDocument({
+          ...roadmapData,
+          releases: (roadmapData.releases ?? []).map((release) => (
+            release.id === releaseId ? { ...release, ...updates } : release
+          )),
+        })
+      }}
     />
   ) : null
 
@@ -3651,33 +3686,62 @@ export function SkillTree() {
               </Stack>
             </Radio.Group>
           )}
-
-          {(exportLabelDialogKind === 'html' || exportLabelDialogKind === 'pdf') && (
             <div>
-              <Text size="sm" fw={600} mb={8}>Release notes status filter</Text>
-              <Stack gap="xs">
-                {LEGEND_STATUS_ORDER.filter((statusKey) => statusKey !== 'hidden').map((statusKey) => (
-                  <Checkbox
-                    key={`export-status-${statusKey}`}
-                    checked={Boolean(exportReleaseNoteStatuses[statusKey])}
-                    onChange={(event) => {
-                      const checked = event.currentTarget.checked
-                      setExportReleaseNoteStatuses((current) => ({
-                        ...current,
-                        [statusKey]: checked,
-                      }))
-                    }}
-                    label={STATUS_LABELS[statusKey]}
-                  />
+              <Text size="sm" fw={600} mb={8}>Status filter per export section</Text>
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: exportLabelDialogKind === 'html' || exportLabelDialogKind === 'pdf' ? 'minmax(0, 1fr) auto auto' : 'minmax(0, 1fr) auto',
+                  gap: '10px 12px',
+                  alignItems: 'center',
+                }}
+              >
+                <Text size="xs" c="dimmed">Status</Text>
+                <Text size="xs" c="dimmed" ta="center">Baum</Text>
+                {(exportLabelDialogKind === 'html' || exportLabelDialogKind === 'pdf') && (
+                  <Text size="xs" c="dimmed" ta="center">Release Notes</Text>
+                )}
+                {LEGEND_STATUS_ORDER.map((statusKey) => (
+                  <Fragment key={`export-status-row-${statusKey}`}>
+                    <Text size="sm">{STATUS_LABELS[statusKey]}</Text>
+                    <Checkbox
+                      checked={Boolean(exportTreeStatuses[statusKey])}
+                      onChange={(event) => {
+                        const checked = event.currentTarget.checked
+                        setExportTreeStatuses((current) => ({
+                          ...current,
+                          [statusKey]: checked,
+                        }))
+                      }}
+                      aria-label={`${STATUS_LABELS[statusKey]} in tree export`}
+                    />
+                    {(exportLabelDialogKind === 'html' || exportLabelDialogKind === 'pdf') && (
+                      <Checkbox
+                        checked={Boolean(exportReleaseNoteStatuses[statusKey])}
+                        onChange={(event) => {
+                          const checked = event.currentTarget.checked
+                          setExportReleaseNoteStatuses((current) => ({
+                            ...current,
+                            [statusKey]: checked,
+                          }))
+                        }}
+                        aria-label={`${STATUS_LABELS[statusKey]} in release notes export`}
+                      />
+                    )}
+                  </Fragment>
                 ))}
-              </Stack>
+              </div>
               <Text size="xs" c="dimmed" mt={8}>
-                Vorbelegung kommt aus dem Inscope-Setup des System-Panels und gilt nur für diesen Export.
+                Baum filtert den exportierten Skilltree. Release Notes filtert nur die Notizsektion in HTML und PDF.
               </Text>
+              {(exportLabelDialogKind === 'html' || exportLabelDialogKind === 'pdf') && (
+                <Text size="xs" c="dimmed" mt={4}>
+                  Die Vorbelegung der Release Notes kommt aus dem Inscope-Setup des System-Panels und gilt nur fuer diesen Export.
+                </Text>
+              )}
             </div>
-          )}
 
-          {(exportLabelDialogKind === 'html' || exportLabelDialogKind === 'pdf') && (
+            {(exportLabelDialogKind === 'html' || exportLabelDialogKind === 'pdf') && (
             <div>
               <Text size="sm" fw={600} mb={8}>Status summary sort order</Text>
               <select
@@ -3909,7 +3973,16 @@ export function SkillTree() {
               onPointerDown={handleSidebarResizeStart('right')}
             />
             <aside ref={rightSidebarRef} className="skill-tree-sidebar skill-tree-sidebar--right" style={{ width: `${rightSidebarWidth}px` }}>
-              {rightSidebarContent}
+              {primaryRightSidebarContent && releaseNotesSidebarContent ? (
+                <div className="skill-tree-sidebar-stack">
+                  <div className="skill-tree-sidebar__section skill-tree-sidebar__section--primary">
+                    {primaryRightSidebarContent}
+                  </div>
+                  <div className="skill-tree-sidebar__section skill-tree-sidebar__section--secondary">
+                    {releaseNotesSidebarContent}
+                  </div>
+                </div>
+              ) : primaryRightSidebarContent ?? releaseNotesSidebarContent}
             </aside>
           </>
         )}

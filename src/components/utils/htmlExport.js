@@ -319,8 +319,10 @@ const buildReleaseNotesMarkup = (entries, releaseMeta = {}) => {
   return parts.join('\n')
 }
 
-const buildStatusSummaryMarkup = (roadmapDocument, { sortMode = 'manual', selectedReleaseId = null } = {}) => {
+const buildStatusSummaryMarkup = (roadmapDocument, { sortMode = 'manual', selectedReleaseId = null, selectedTreeStatuses = null } = {}) => {
+  const allowedTreeStatuses = selectedTreeStatuses == null ? null : new Set(selectedTreeStatuses)
   const groups = buildStatusSummaryGroups(roadmapDocument, { sortMode, selectedReleaseId })
+    .filter((group) => allowedTreeStatuses == null || allowedTreeStatuses.has(group.statusKey))
     .filter((group) => group.nodes.length > 0)
 
   if (groups.length === 0) {
@@ -373,12 +375,16 @@ const collectMatrixNodes = (document) => {
   return result
 }
 
-const buildPriorityMatrixSvgMarkup = (roadmapDocument, releaseId = null) => {
+const buildPriorityMatrixSvgMarkup = (roadmapDocument, releaseId = null, selectedTreeStatuses = null) => {
+  const allowedTreeStatuses = selectedTreeStatuses == null ? null : new Set(selectedTreeStatuses)
   const allNodes = collectMatrixNodes(roadmapDocument)
   const plottable = allNodes.filter((n) => {
     const effort = getNodeDisplayEffort(n)
     const benefit = getNodeDisplayBenefit(n)
-    return AXIS_SIZES.includes(effort?.size) && AXIS_SIZES.includes(benefit?.size)
+    const statusKey = resolveMatrixStatusKey(n, releaseId)
+    return AXIS_SIZES.includes(effort?.size)
+      && AXIS_SIZES.includes(benefit?.size)
+      && (allowedTreeStatuses == null || allowedTreeStatuses.has(statusKey))
   })
 
   const positioned = computeMatrixLayout(plottable, MATRIX_CELL_SIZE)
@@ -432,6 +438,7 @@ const buildReleaseSectionsMarkup = ({
   roadmapDocument,
   releaseIds,
   releaseNoteStatusKeys = null,
+  selectedTreeStatuses = null,
   statusSummarySortMode = 'manual',
   selectedReleaseId = null,
 }) => {
@@ -451,7 +458,7 @@ const buildReleaseSectionsMarkup = ({
     if (releaseNoteEntries.length === 0) {
       return `
         <h2 class="html-export__status-summary-title">Status Summary</h2>
-        ${buildStatusSummaryMarkup(roadmapDocument, { sortMode: statusSummarySortMode, selectedReleaseId })}
+        ${buildStatusSummaryMarkup(roadmapDocument, { sortMode: statusSummarySortMode, selectedReleaseId, selectedTreeStatuses })}
       `
     }
     
@@ -2399,6 +2406,7 @@ export const buildHtmlExportDocument = ({
   styleText,
   selectedReleaseIds = null,
   selectedReleaseId = null,
+  selectedTreeStatuses = null,
   selectedReleaseNoteStatuses = null,
   statusSummarySortMode = 'manual',
   includePriorityMatrix = true,
@@ -3547,6 +3555,7 @@ export const buildHtmlExportDocument = ({
         roadmapDocument: canonicalDoc,
         releaseIds: resolvedReleaseIds,
         releaseNoteStatusKeys: selectedReleaseNoteStatuses,
+        selectedTreeStatuses,
         statusSummarySortMode,
         selectedReleaseId: selectedReleaseId ?? resolvedReleaseIds[0] ?? null,
       })}</div>
@@ -3557,7 +3566,7 @@ export const buildHtmlExportDocument = ({
         <p class="html-export__eyebrow">Priority Matrix</p>
       </header>
       <div id="pm-export-container" class="html-export__priority-matrix-svg" style="position:relative">
-        ${buildPriorityMatrixSvgMarkup(canonicalDoc, resolvedReleaseIds[0] ?? null)}
+        ${buildPriorityMatrixSvgMarkup(canonicalDoc, resolvedReleaseIds[0] ?? null, selectedTreeStatuses)}
         <div id="pm-export-tooltip" style="display:none;position:absolute;pointer-events:none;z-index:120;min-width:160px;padding:10px 14px;border-radius:12px;border:1px solid rgba(71,85,105,0.55);background:rgba(2,6,23,0.97);color:#e2e8f0;font-size:0.82rem;line-height:1.5;box-shadow:0 8px 24px rgba(0,0,0,0.45)"></div>
       </div>
       <div class="html-export__matrix-legend">
@@ -3628,6 +3637,7 @@ export const exportHtmlFromSkillTree = ({
   roadmapDocument,
   selectedReleaseIds = null,
   selectedReleaseId = null,
+  selectedTreeStatuses = null,
   selectedReleaseNoteStatuses = null,
   statusSummarySortMode = 'manual',
   includePriorityMatrix = true,
@@ -3639,6 +3649,7 @@ export const exportHtmlFromSkillTree = ({
 
   const serializedSvg = serializeSvgElementForExport(svgElement, {
     includeRuntime: false,
+    selectedStatusKeys: selectedTreeStatuses,
   })
   if (!serializedSvg) {
     return false
@@ -3651,6 +3662,7 @@ export const exportHtmlFromSkillTree = ({
     styleText: collectStyleText(sourceDocument),
     selectedReleaseIds,
     selectedReleaseId,
+    selectedTreeStatuses,
     selectedReleaseNoteStatuses,
     statusSummarySortMode,
     includePriorityMatrix,

@@ -165,10 +165,25 @@ export const getBuilderNodeShortNames = async (page) => {
 /**
  * Triggers an HTML export via the toolbar and returns the downloaded file text.
  */
-export const exportHtml = async (page) => {
+export const exportHtml = async (page, options = {}) => {
+  const { treeStatuses = null, releaseNoteStatuses = null } = options
   await page.getByRole('button', { name: 'Export', exact: true }).click()
   const exportDialog = page.getByRole('dialog')
   await exportDialog.waitFor({ state: 'visible', timeout: 15_000 })
+
+  const applyStatusGroup = async (statuses, suffix) => {
+    if (!statuses || typeof statuses !== 'object') {
+      return
+    }
+
+    for (const [statusKey, isChecked] of Object.entries(statuses)) {
+      const label = new RegExp(`^${statusKey}\\s+in\\s+${suffix}$`, 'i')
+      await exportDialog.getByRole('checkbox', { name: label }).setChecked(Boolean(isChecked))
+    }
+  }
+
+  await applyStatusGroup(treeStatuses, 'tree export')
+  await applyStatusGroup(releaseNoteStatuses, 'release notes export')
 
   const [download] = await Promise.all([
     page.waitForEvent('download'),

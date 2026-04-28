@@ -104,7 +104,7 @@ describe('htmlExport', () => {
     expect(html).toContain('origButtonWidth')
     expect(html).toContain('applyInnerSize')
     expect(html).toContain('const getOccupiedBounds = () =>')
-    expect(html).toContain('let contentGroupBounds = null')
+    expect(html).toContain('minX: Number.POSITIVE_INFINITY')
     expect(html).toContain('const getVisibleViewportBounds = () =>')
     expect(html).toContain('const adaptiveStep = 0.0018 * Math.sqrt(panZoomState.scale)')
     expect(html).toContain('const ratio = Math.exp(adaptiveStep * delta * direction)')
@@ -237,7 +237,7 @@ describe('htmlExport', () => {
       styleText: '',
     })
 
-    expect(html).toContain('.html-export__tree-shell .skill-tree-center-icon__image {')
+    expect(html).toContain('.html-export__tree-shell img.skill-tree-center-icon__image {')
     expect(html).toContain('width: 100%;')
     expect(html).toContain('height: 100%;')
   })
