@@ -64,9 +64,9 @@ const REGRESSION_TOLERANCE_DEG = 3
 
 /** Frozen ourSpread° baselines – update after intentional algorithm improvements. */
 const SPREAD_BASELINES = {
-  simple: 94.2,
+  simple: 73.3,
   crossSegment: 241.3,
-  dense: 187.7,
+  dense: 200.9,
   smallCsv: 48.3,
   mediumCsv: 186.8,
 }

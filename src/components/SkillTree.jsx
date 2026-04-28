@@ -392,12 +392,17 @@ export function SkillTree() {
     )
   }, [roadmapData?.segments])
 
+  const hasSegmentLabels = useMemo(() => {
+    return (roadmapData?.segments ?? []).some((segment) => String(segment?.label ?? '').trim().length > 0)
+  }, [roadmapData?.segments])
+
   const centerIconSize = useMemo(() => computeCenterIconSize({
     nodes,
     maxEstimatedSegmentLabelHeightPx,
     labelLevelOneGapPx: LABEL_LEVEL_ONE_GAP_PX,
     centerLabelGapPx: CENTER_LABEL_GAP_PX,
-  }), [maxEstimatedSegmentLabelHeightPx, nodes])
+    hasSegmentLabels,
+  }), [hasSegmentLabels, maxEstimatedSegmentLabelHeightPx, nodes])
 
   const selectedNode = useMemo(
     () => findNodeById(roadmapData, selectedNodeId),

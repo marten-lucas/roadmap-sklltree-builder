@@ -777,13 +777,31 @@ export const solveSkillTreeLayout = (data, config) => {
     + LABEL_LEVEL_ONE_GAP_PX
     + levelOneNodeClearancePx
 
+  const getSmoothedLevelSpacing = (level, spacingScale = 1) => {
+    const baseSpacing = config.levelSpacing * spacingScale * deepTreeSpacingCompression
+    const depthIndex = level - firstNodeLevel
+    const totalDepthSpan = Math.max(1, maxNodeLevel - firstNodeLevel)
+    const isFourRingLayout = totalDepthSpan === 3
+    // For exactly 4-ring trees, start smoothing early and stronger.
+    const taperStartDepth = isFourRingLayout ? 1 : 5
+    if (depthIndex <= taperStartDepth) {
+      return baseSpacing
+    }
+
+    const outerSpan = Math.max(1, totalDepthSpan - taperStartDepth)
+    const normalizedOuterDepth = clamp((depthIndex - taperStartDepth) / outerSpan, 0, 1)
+    const maxReduction = isFourRingLayout ? 0.4 : 0.3
+    const taper = 1 - maxReduction * Math.pow(normalizedOuterDepth, 0.82)
+    return baseSpacing * taper
+  }
+
   const buildRadiusByLevel = (spacingScale = 1) => {
     const radiusByLevel = new Map()
     let previousRadius = 0
 
     for (const level of sortedLevels) {
       const count = levelCounts.get(level)
-      const spacing = config.levelSpacing * spacingScale * deepTreeSpacingCompression
+      const spacing = getSmoothedLevelSpacing(level, spacingScale)
       const baseRadius = Math.max(level * spacing, previousRadius + spacing)
       const minimumRadiusForSpread =
         count <= 1
@@ -1407,7 +1425,11 @@ export const solveSkillTreeLayout = (data, config) => {
       const curr = sortedLevels[i]
       const prevRadius = radiusByLevel.get(prev) ?? prev * config.levelSpacing
       const currRadius = radiusByLevel.get(curr) ?? curr * config.levelSpacing
-      const minRequired = prevRadius + config.levelSpacing
+      const monotonicSpacingFloorFactor = (maxNodeLevel - firstNodeLevel) === 3 ? 0.52 : 0.68
+      const minRequired = prevRadius + Math.max(
+        config.levelSpacing * monotonicSpacingFloorFactor,
+        getSmoothedLevelSpacing(curr, spacingScale),
+      )
 
       if (currRadius < minRequired) {
         radiusByLevel.set(curr, minRequired)
@@ -1996,9 +2018,37 @@ export const solveSkillTreeLayout = (data, config) => {
       }
     }
 
+    // Helper: count ring-2+ adjacent pairs whose angular gap is below the
+    // minimum required spacing.  Used to reject swaps that create new overlaps.
+    const countDeepOverlaps = () => {
+      let count = 0
+      const lvlMap = new Map()
+      for (const node of allNodes) {
+        const level = getEffectiveLevel(node)
+        if (level <= 1) continue
+        if (!lvlMap.has(level)) lvlMap.set(level, [])
+        lvlMap.get(level).push(node)
+      }
+      for (const [lvl, lvlNodes] of lvlMap) {
+        const lvlRadius = getRadiusForLevel(lvl)
+        const minGapDeg = toDegrees((nodeAngularWidthPx + minimumArcGap) / Math.max(lvlRadius, 1))
+        const sortedLvl = [...lvlNodes].sort(
+          (a, b) => (packedAngleByNodeId.get(a.data.id) ?? centerAngle) - (packedAngleByNodeId.get(b.data.id) ?? centerAngle),
+        )
+        for (let k = 1; k < sortedLvl.length; k++) {
+          const gap =
+            (packedAngleByNodeId.get(sortedLvl[k].data.id) ?? centerAngle) -
+            (packedAngleByNodeId.get(sortedLvl[k - 1].data.id) ?? centerAngle)
+          if (gap < minGapDeg) count++
+        }
+      }
+      return count
+    }
+
     const rootChildren = [...(root.children ?? [])]
     if (rootChildren.length > 1) {
       let best = evaluateCurrentRootOrderScore()
+      const initialDeepOverlaps = countDeepOverlaps()
       let improved = true
       let safety = 0
 
@@ -2048,6 +2098,11 @@ export const solveSkillTreeLayout = (data, config) => {
             }
           }
 
+          // Never accept a swap that creates new ring-2+ spacing violations.
+          if (isBetter && countDeepOverlaps() > initialDeepOverlaps) {
+            isBetter = false
+          }
+
           if (isBetter) {
             best = candidate
             improved = true
@@ -2068,6 +2123,7 @@ export const solveSkillTreeLayout = (data, config) => {
   }
 
   // Keep enough outer radius so controls anchored beyond segment labels stay inside the SVG.
+    // Keep enough outer radius so controls anchored beyond segment labels stay inside the SVG.
   // This is especially important when there are no segments yet and the "add segment" button
   // sits at ~1.32x segmentLabelRadius.
   const emptySegmentAddControlRadius = finalOrderedSegments.length === 0
