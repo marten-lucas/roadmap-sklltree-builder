@@ -78,6 +78,30 @@ const normalizeSelectedStatusKeySet = (selectedStatusKeys) => {
   )
 }
 
+const getExportStatusKeysForAnchor = (anchor) => {
+  const rawLevels = String(anchor?.getAttribute?.('data-export-levels') ?? '').trim()
+  if (rawLevels) {
+    try {
+      const parsedLevels = JSON.parse(rawLevels)
+      if (Array.isArray(parsedLevels)) {
+        const levelStatusKeys = new Set(
+          parsedLevels
+            .map((entry) => normalizeLevelStatusKey(entry?.status))
+            .filter(Boolean),
+        )
+
+        if (levelStatusKeys.size > 0) {
+          return levelStatusKeys
+        }
+      }
+    } catch {
+      // Fall back to single status attribute below.
+    }
+  }
+
+  return new Set([normalizeLevelStatusKey(anchor.getAttribute('data-export-status'))])
+}
+
 const formatStatusLabel = (value) => {
   const statusKey = normalizeLevelStatusKey(value)
   const labels = {
@@ -622,11 +646,13 @@ export const filterSvgTreeByStatusKeys = (svgElement, selectedStatusKeys = null)
 
   nodeAnchors.forEach((anchor) => {
     const nodeId = sanitizeText(anchor.getAttribute('data-node-id'))
-    const statusKey = normalizeLevelStatusKey(anchor.getAttribute('data-export-status'))
+    const nodeStatusKeys = getExportStatusKeysForAnchor(anchor)
     const segmentLabel = anchor.closest?.('[data-segment-id]')
     const segmentId = sanitizeText(segmentLabel?.getAttribute?.('data-segment-id'))
 
-    if (!allowedStatusKeys.has(statusKey)) {
+    const isVisibleForSelection = [...nodeStatusKeys].some((statusKey) => allowedStatusKeys.has(statusKey))
+
+    if (!isVisibleForSelection) {
       anchor.remove()
       return
     }

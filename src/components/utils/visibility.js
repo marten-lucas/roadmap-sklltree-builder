@@ -26,9 +26,15 @@ export const RELEASE_FILTER_LABELS = {
   next: 'Next',
 }
 
-export const getReleaseVisibilityMode = (statusKey, releaseFilter) => {
+export const getReleaseVisibilityModeForStatuses = (statusKeys, releaseFilter) => {
+  const normalizedKeys = new Set(
+    (Array.isArray(statusKeys) ? statusKeys : [statusKeys])
+      .map((statusKey) => String(statusKey ?? '').trim().toLowerCase())
+      .filter(Boolean),
+  )
+
   if (releaseFilter === RELEASE_FILTER_OPTIONS.now) {
-    if (statusKey === 'now') {
+    if (normalizedKeys.has('now')) {
       return 'full'
     }
 
@@ -36,7 +42,7 @@ export const getReleaseVisibilityMode = (statusKey, releaseFilter) => {
   }
 
   if (releaseFilter === RELEASE_FILTER_OPTIONS.next) {
-    if (statusKey === 'now' || statusKey === 'next') {
+    if (normalizedKeys.has('now') || normalizedKeys.has('next')) {
       return 'full'
     }
 
@@ -44,6 +50,10 @@ export const getReleaseVisibilityMode = (statusKey, releaseFilter) => {
   }
 
   return 'full'
+}
+
+export const getReleaseVisibilityMode = (statusKey, releaseFilter) => {
+  return getReleaseVisibilityModeForStatuses([statusKey], releaseFilter)
 }
 
 const getScopeOptionId = (scope) => {

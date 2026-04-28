@@ -39,7 +39,7 @@ import {
   PANEL_RELEASE_NOTES,
   PANEL_STATUS_SUMMARY,
 } from './utils/panelsState'
-import { getDisplayStatusKey } from './utils/nodeStatus'
+import { getVisibleLevelStatusKeys } from './utils/nodeStatus'
 import {
   getAdditionalDependencyOptionsForLevel,
   getParentOptionsForNode,
@@ -104,7 +104,7 @@ import {
   RELEASE_FILTER_LABELS,
   RELEASE_FILTER_OPTIONS,
   SCOPE_FILTER_ALL,
-  getReleaseVisibilityMode,
+  getReleaseVisibilityModeForStatuses,
   nodeMatchesScopeFilter,
   normalizeScopeFilterIds,
 } from './utils/visibility'
@@ -775,8 +775,8 @@ export function SkillTree() {
         continue
       }
 
-      const statusKey = getDisplayStatusKey(node, activeReleaseId)
-      byId.set(node.id, getReleaseVisibilityMode(statusKey, releaseFilter))
+      const statusKeys = getVisibleLevelStatusKeys(node, activeReleaseId)
+      byId.set(node.id, getReleaseVisibilityModeForStatuses(statusKeys, releaseFilter))
     }
 
     return byId

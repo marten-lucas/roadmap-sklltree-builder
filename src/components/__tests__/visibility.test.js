@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { RELEASE_FILTER_OPTIONS, SCOPE_FILTER_ALL, getReleaseVisibilityMode, nodeMatchesScopeFilter } from '../utils/visibility'
+import {
+  RELEASE_FILTER_OPTIONS,
+  SCOPE_FILTER_ALL,
+  getReleaseVisibilityMode,
+  getReleaseVisibilityModeForStatuses,
+  nodeMatchesScopeFilter,
+} from '../utils/visibility'
 
 describe('visibility', () => {
   it('treats nodes without scope assignments as visible for every scope filter', () => {
@@ -68,5 +74,13 @@ describe('visibility', () => {
     expect(getReleaseVisibilityMode('next', RELEASE_FILTER_OPTIONS.all)).toBe('full')
     expect(getReleaseVisibilityMode('done', RELEASE_FILTER_OPTIONS.all)).toBe('full')
     expect(getReleaseVisibilityMode('later', RELEASE_FILTER_OPTIONS.all)).toBe('full')
+  })
+
+  it('treats nodes with mixed level statuses as full when any level matches the release filter', () => {
+    expect(getReleaseVisibilityModeForStatuses(['later', 'now'], RELEASE_FILTER_OPTIONS.now)).toBe('full')
+    expect(getReleaseVisibilityModeForStatuses(['later', 'next'], RELEASE_FILTER_OPTIONS.now)).toBe('minimal')
+
+    expect(getReleaseVisibilityModeForStatuses(['later', 'next'], RELEASE_FILTER_OPTIONS.next)).toBe('full')
+    expect(getReleaseVisibilityModeForStatuses(['done', 'someday'], RELEASE_FILTER_OPTIONS.next)).toBe('minimal')
   })
 })

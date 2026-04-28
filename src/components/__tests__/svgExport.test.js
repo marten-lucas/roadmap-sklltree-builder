@@ -301,6 +301,63 @@ describe('svgExport', () => {
     expect(serialized).not.toContain('data-segment-id="segment-later"')
   })
 
+  it('keeps connections for nodes that include the selected status in data-export-levels', () => {
+    installSvgDomShim()
+
+    const svg = new MockElement('svg')
+
+    const nowSegment = new MockElement('g')
+    nowSegment.setAttribute('data-segment-id', 'segment-now')
+    const nowNode = new MockElement('foreignObject')
+    nowNode.setAttribute('class', 'skill-node-export-anchor')
+    nowNode.setAttribute('data-node-id', 'node-now')
+    nowNode.setAttribute('data-export-status', 'now')
+    nowNode.setAttribute('data-export-levels', JSON.stringify([
+      { id: 'lvl-now', label: 'L1', status: 'now', statusLabel: 'Now', releaseNote: '', scopeLabels: [] },
+    ]))
+    nowNode.setAttribute('x', '10')
+    nowNode.setAttribute('y', '10')
+    nowNode.setAttribute('width', '120')
+    nowNode.setAttribute('height', '120')
+    nowSegment.appendChild(nowNode)
+
+    const mixedSegment = new MockElement('g')
+    mixedSegment.setAttribute('data-segment-id', 'segment-mixed')
+    const mixedNode = new MockElement('foreignObject')
+    mixedNode.setAttribute('class', 'skill-node-export-anchor')
+    mixedNode.setAttribute('data-node-id', 'node-mixed')
+    // Current visible status might be later, but export levels include now.
+    mixedNode.setAttribute('data-export-status', 'later')
+    mixedNode.setAttribute('data-export-levels', JSON.stringify([
+      { id: 'lvl-later', label: 'L1', status: 'later', statusLabel: 'Later', releaseNote: '', scopeLabels: [] },
+      { id: 'lvl-now', label: 'L2', status: 'now', statusLabel: 'Now', releaseNote: '', scopeLabels: [] },
+    ]))
+    mixedNode.setAttribute('x', '240')
+    mixedNode.setAttribute('y', '10')
+    mixedNode.setAttribute('width', '120')
+    mixedNode.setAttribute('height', '120')
+    mixedSegment.appendChild(mixedNode)
+
+    const connection = new MockElement('path')
+    connection.setAttribute('data-link-source-id', 'node-now')
+    connection.setAttribute('data-link-target-id', 'node-mixed')
+
+    svg.appendChild(nowSegment)
+    svg.appendChild(mixedSegment)
+    svg.appendChild(connection)
+
+    const serialized = serializeSvgElementForExport(svg, {
+      includeTooltips: false,
+      selectedStatusKeys: ['now'],
+    })
+
+    expect(serialized).toContain('data-node-id="node-now"')
+    expect(serialized).toContain('data-node-id="node-mixed"')
+    expect(serialized).toContain('data-link-target-id="node-mixed"')
+    expect(serialized).toContain('data-segment-id="segment-now"')
+    expect(serialized).toContain('data-segment-id="segment-mixed"')
+  })
+
   it('splits long tooltip notes into capped lines', () => {
     const lines = splitIntoLines('Dies ist ein sehr langer Text fuer Tooltips im SVG Export und sollte auf mehrere Zeilen verteilt werden', 18, 3)
 
