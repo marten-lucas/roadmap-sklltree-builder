@@ -5,7 +5,7 @@ import { renderScopeLabelsMarkup } from './scopeDisplay'
 import { buildExportFileName, sanitizeFileNamePart } from './exportFileName'
 import { serializeSvgElementForExport } from './svgExport'
 import { VIEWPORT_DEFAULTS, VIEWPORT_ZOOM_STEPS } from './viewport'
-import { EMPTY_RELEASE_NOTE, getNodeLabelMode } from './nodePresentation'
+import { EMPTY_RELEASE_NOTE } from './nodePresentation'
 import { getPortalCounterpartNodeIdFromData, isDoubleActivation } from './nodeInteraction'
 import { INTERACTIVE_SVG_RUNTIME_SCRIPT, INTERACTIVE_SVG_RUNTIME_STYLE_TEXT } from './interactiveSvgRuntime'
 import { NODE_LABEL_ZOOM, STATUS_STYLES } from '../config'
@@ -47,6 +47,15 @@ const PRINT_FOCUSED_CSS_TEXT = (() => {
 })()
 
 const XML_PREFIX_PATTERN = /^<\?xml[^>]*\?>\s*/i
+
+const INLINE_GET_LABEL_MODE_SOURCE = `
+(scale) => {
+  if (scale < NODE_LABEL_ZOOM.farToMid) return 'far'
+  if (scale >= NODE_LABEL_ZOOM.closeToVeryClose) return 'very-close'
+  if (scale >= NODE_LABEL_ZOOM.midToClose) return 'close'
+  return 'mid'
+}
+`.trim()
 
 const normalizeScopeKey = (label) => String(label ?? '').trim().toLowerCase()
 
@@ -852,7 +861,7 @@ const buildViewerScript = (exportBaseName = 'skilltree-roadmap') => `
 
       const EFFORT_LABELS = ${JSON.stringify(EFFORT_SIZE_LABELS)}
       const BENEFIT_LABELS = ${JSON.stringify(BENEFIT_SIZE_LABELS)}
-      const getLabelMode = ${getNodeLabelMode.toString()}
+      const getLabelMode = ${INLINE_GET_LABEL_MODE_SOURCE}
       const isDoubleActivation = ${isDoubleActivation.toString()}
       const getPortalCounterpartNodeId = ${getPortalCounterpartNodeIdFromData.toString()}
       const readonlySelectionState = {
