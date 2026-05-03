@@ -9,7 +9,7 @@ import './styles/skillTree.priority-matrix.css'
 import './styles/skillTree.layout.css'
 import './styles/skillTree.legend.css'
 import './styles/skillTree.status-summary.css'
-import { DEFAULT_STATUS_DESCRIPTIONS, TREE_CONFIG, STATUS_LABELS, STATUS_STYLES } from './config'
+import { DEFAULT_STATUS_DESCRIPTIONS, TREE_CONFIG, STATUS_LABELS } from './config'
 import { renderLegendMarkup, LEGEND_STATUS_ORDER } from './utils/LegendShared'
 import { getNodeLabelMode } from './utils/nodePresentation'
 import { computeCenterIconSize } from './utils/centerIconPresentation'
@@ -88,6 +88,7 @@ import {
   normalizeBenefit,
   normalizeFeatureStatuses,
 } from './utils/effortBenefit'
+import { applyInspectorIdentityChange } from './utils/inspectorCommit'
 import { toDegrees, toRadians } from './utils/layoutMath'
 import { SkillTreeCanvas } from './canvas'
 import { SkillTreeToolbar } from './toolbar'
@@ -102,10 +103,11 @@ import { getCsvExportErrorMessage, getCsvImportErrorMessage, getHtmlImportErrorM
 import { readFileAsText, readFileAsDataUrl, isValidSvgMarkup } from './utils/file'
 import {
   RELEASE_FILTER_LABELS,
-  RELEASE_FILTER_OPTIONS,
   SCOPE_FILTER_ALL,
   getReleaseVisibilityModeForStatuses,
+  hasActiveStatusFilterModes,
   nodeMatchesScopeFilter,
+  normalizeStatusFilterModeMap,
   normalizeScopeFilterIds,
 } from './utils/visibility'
 import { VIEWPORT_DEFAULTS, computeFitScale, computeFitTransform, computeCenterTransform, getNextZoomStep, getViewportKeyboardAction } from './utils/viewport'
@@ -114,6 +116,7 @@ import { getSelectedReleaseId } from './utils/releases'
 import { resolveInspectorSelectedNode } from './utils/selection'
 import { LEGEND_DENSITY_MODES, resolveLegendDensity } from './utils/legendDensity'
 import { DEFAULT_STATUS_SUMMARY_SETTINGS, normalizeStatusSummarySettings, STATUS_SUMMARY_SORT_OPTIONS } from './utils/statusSummary'
+import { resolveStatusStyles } from './utils/statusStyles'
 
 // `resolveInspectorSelectedNode` is exported from `src/components/utils/selection.js`
 // Tests/importers should import from that module instead of re-exporting from here.
@@ -155,6 +158,30 @@ const collectAllNodes = (document) => {
   }
 
   return all
+}
+
+const collectVisibleNodeTree = (nodes, visibleNodeIds) => {
+  const sourceNodes = Array.isArray(nodes) ? nodes : []
+
+  const visit = (node) => {
+    if (!node || typeof node !== 'object') {
+      return []
+    }
+
+    const nextChildren = (Array.isArray(node.children) ? node.children : []).flatMap(visit)
+
+    if (visibleNodeIds.has(node.id)) {
+      return [{
+        ...node,
+        children: nextChildren,
+      }]
+    }
+
+    // Promote visible descendants when a filtered parent is hidden.
+    return nextChildren
+  }
+
+  return sourceNodes.flatMap(visit)
 }
 
 const estimateWrappedLineCount = (text) => {
@@ -286,6 +313,23 @@ export function SkillTree() {
     setSelectedReleaseId,
   } = useSkillTreeUiState()
 
+  const statusFilterModeByKey = useMemo(
+    () => normalizeStatusFilterModeMap(releaseFilter),
+    [releaseFilter],
+  )
+
+  const hasActiveStatusFilters = useMemo(
+    () => hasActiveStatusFilterModes(statusFilterModeByKey),
+    [statusFilterModeByKey],
+  )
+
+  const selectedScopeFilterIds = useMemo(
+    () => normalizeScopeFilterIds(selectedScopeFilterId),
+    [selectedScopeFilterId],
+  )
+
+  const hasActiveLayoutFilters = hasActiveStatusFilters || selectedScopeFilterIds.length > 0
+
   const getCanvasViewportMetrics = useCallback(() => {
     const rect = canvasAreaRef.current?.getBoundingClientRect()
     if (rect && rect.width > 0 && rect.height > 0) {
@@ -351,29 +395,32 @@ export function SkillTree() {
 
   const addControlOffset = TREE_CONFIG.nodeSize * 0.82
 
-  const { layout, diagnostics } = useMemo(
+  const { layout: fullLayout, diagnostics } = useMemo(
     () => solveSkillTreeLayout(roadmapData, TREE_CONFIG),
     [roadmapData],
   )
-  const { nodes, links, crossingEdges = [], segments, canvas } = layout
-  const viewportWidth = typeof window !== 'undefined' ? window.innerWidth : canvas.width
-  const viewportHeight = typeof window !== 'undefined' ? window.innerHeight : canvas.height
+  const {
+    nodes: fullNodes,
+    canvas: fullCanvas,
+  } = fullLayout
+  const viewportWidth = typeof window !== 'undefined' ? window.innerWidth : fullCanvas.width
+  const viewportHeight = typeof window !== 'undefined' ? window.innerHeight : fullCanvas.height
   const initialViewScale = useMemo(() => {
-    if (!canvas.width || !canvas.height || !viewportWidth || !viewportHeight) {
+    if (!fullCanvas.width || !fullCanvas.height || !viewportWidth || !viewportHeight) {
       return 0.7
     }
 
     return computeFitScale({
-      contentWidth: canvas.width,
-      contentHeight: canvas.height,
+      contentWidth: fullCanvas.width,
+      contentHeight: fullCanvas.height,
       viewportWidth,
       viewportHeight,
       minScale: VIEWPORT_DEFAULTS.minScale,
       maxScale: VIEWPORT_DEFAULTS.maxScale,
     })
-  }, [canvas.height, canvas.width, viewportHeight, viewportWidth])
-  const initialPositionX = viewportWidth / 2 - canvas.origin.x * initialViewScale
-  const initialPositionY = viewportHeight / 2 - canvas.origin.y * initialViewScale
+  }, [fullCanvas.height, fullCanvas.width, viewportHeight, viewportWidth])
+  const initialPositionX = viewportWidth / 2 - fullCanvas.origin.x * initialViewScale
+  const initialPositionY = viewportHeight / 2 - fullCanvas.origin.y * initialViewScale
 
   // Responsive label mode: derived from live zoom scale (or overridden for exports)
   const zoomLabelMode = useMemo(() => getNodeLabelMode(currentZoomScale), [currentZoomScale])
@@ -397,17 +444,48 @@ export function SkillTree() {
   }, [roadmapData?.segments])
 
   const centerIconSize = useMemo(() => computeCenterIconSize({
-    nodes,
+    nodes: fullNodes,
     maxEstimatedSegmentLabelHeightPx,
     labelLevelOneGapPx: LABEL_LEVEL_ONE_GAP_PX,
     centerLabelGapPx: CENTER_LABEL_GAP_PX,
     hasSegmentLabels,
-  }), [hasSegmentLabels, maxEstimatedSegmentLabelHeightPx, nodes])
+  }), [hasSegmentLabels, maxEstimatedSegmentLabelHeightPx, fullNodes])
+
+  const allNodesById = useMemo(() => {
+    const map = new Map()
+    const queue = [...(roadmapData.children ?? [])]
+
+    while (queue.length > 0) {
+      const current = queue.shift()
+      map.set(current.id, current)
+      queue.push(...(current.children ?? []))
+    }
+
+    return map
+  }, [roadmapData])
 
   const selectedNode = useMemo(
-    () => findNodeById(roadmapData, selectedNodeId),
-    [roadmapData, selectedNodeId],
+    () => (selectedNodeId ? allNodesById.get(selectedNodeId) ?? null : null),
+    [allNodesById, selectedNodeId],
   )
+
+  const [isInspectorHeavyDataReady, setIsInspectorHeavyDataReady] = useState(false)
+
+  useEffect(() => {
+    if (rightPanel !== PANEL_INSPECTOR || !selectedNodeId) {
+      setIsInspectorHeavyDataReady(false)
+      return
+    }
+
+    setIsInspectorHeavyDataReady(false)
+    const rafId = window.requestAnimationFrame(() => {
+      setIsInspectorHeavyDataReady(true)
+    })
+
+    return () => {
+      window.cancelAnimationFrame(rafId)
+    }
+  }, [rightPanel, selectedNodeId])
 
   // Use exported helper above to decide inspector node resolution.
 
@@ -506,7 +584,7 @@ export function SkillTree() {
       }
       observer.disconnect()
     }
-  }, [isLegendVisible, roadmapData?.statusDescriptions])
+  }, [isLegendVisible, roadmapData?.statusDescriptions, roadmapData?.statusStyles])
 
   useEffect(() => {
     if (typeof ResizeObserver === 'undefined' || !canvasAreaRef.current) {
@@ -629,11 +707,6 @@ export function SkillTree() {
     }))
   }, [roadmapData.scopeGroups, roadmapData.scopes])
 
-  const selectedScopeFilterIds = useMemo(
-    () => normalizeScopeFilterIds(selectedScopeFilterId),
-    [selectedScopeFilterId],
-  )
-
   useEffect(() => {
     if (selectedScopeFilterIds.length === 0) {
       return
@@ -705,6 +778,11 @@ export function SkillTree() {
     [roadmapData?.statusDescriptions],
   )
 
+  const resolvedStatusStyles = useMemo(
+    () => resolveStatusStyles(roadmapData?.statusStyles ?? {}),
+    [roadmapData?.statusStyles],
+  )
+
   // Render the legend using the shared markup
   const legendFooter = isLegendVisible && (
     <div className="skill-tree-legend-footer">
@@ -713,14 +791,14 @@ export function SkillTree() {
         className="skill-tree-legend-wrapper"
         aria-label="Status legend"
         dangerouslySetInnerHTML={{
-          __html: renderLegendMarkup({ legendStatusDescriptions, showPortals: true }),
+          __html: renderLegendMarkup({ legendStatusDescriptions, showPortals: true, statusStyles: resolvedStatusStyles }),
         }}
       />
       {isBudgetOverviewVisible && activeRelease && activeStatusBudgetEntries.length > 0 && (
         <div className="skill-tree-budget-overview" aria-label="Budget overview">
           <div className="skill-tree-budget-overview__grid">
             {activeStatusBudgetEntries.map((entry) => {
-              const accent = STATUS_STYLES[entry.statusKey]?.ringBand ?? '#94a3b8'
+              const accent = resolvedStatusStyles[entry.statusKey]?.ringBand ?? '#94a3b8'
               const budgetStateClass = entry.budget == null
                 ? ''
                 : entry.isOverBudget
@@ -762,7 +840,7 @@ export function SkillTree() {
     const byId = new Map()
     const showHiddenNodes = roadmapData.showHiddenNodes ?? false
 
-    for (const node of nodes) {
+    for (const node of fullNodes) {
       if (hiddenNodeIdSet.has(node.id)) {
         byId.set(node.id, showHiddenNodes ? 'ghost' : 'hidden')
         continue
@@ -780,7 +858,40 @@ export function SkillTree() {
     }
 
     return byId
-  }, [nodes, hiddenNodeIdSet, selectedScopeFilterId, scopeOptions, releaseFilter, roadmapData.showHiddenNodes, activeReleaseId])
+  }, [fullNodes, hiddenNodeIdSet, selectedScopeFilterId, scopeOptions, releaseFilter, roadmapData.showHiddenNodes, activeReleaseId])
+
+  const filteredRoadmapData = useMemo(() => {
+    if (!hasActiveLayoutFilters) {
+      return roadmapData
+    }
+
+    const visibleNodeIds = new Set(
+      [...nodeVisibilityModeById.entries()]
+        .filter(([, mode]) => mode !== 'hidden')
+        .map(([nodeId]) => nodeId),
+    )
+
+    return {
+      ...roadmapData,
+      children: collectVisibleNodeTree(roadmapData.children, visibleNodeIds),
+    }
+  }, [hasActiveLayoutFilters, nodeVisibilityModeById, roadmapData])
+
+  const layoutForRender = useMemo(() => {
+    if (!hasActiveLayoutFilters) {
+      return fullLayout
+    }
+
+    return solveSkillTreeLayout(filteredRoadmapData, TREE_CONFIG).layout
+  }, [filteredRoadmapData, fullLayout, hasActiveLayoutFilters])
+
+  const {
+    nodes,
+    links,
+    crossingEdges = [],
+    segments,
+    canvas,
+  } = layoutForRender
 
   const renderedNodes = useMemo(
     () => nodes.filter((node) => (nodeVisibilityModeById.get(node.id) ?? 'full') !== 'hidden'),
@@ -873,7 +984,25 @@ export function SkillTree() {
     return `${selectedLabels.length} Scopes`
   }, [scopeOptions, selectedScopeFilterIds])
 
-  const selectedReleaseFilterLabel = RELEASE_FILTER_LABELS[releaseFilter] ?? RELEASE_FILTER_LABELS.all
+  const selectedReleaseFilterLabel = useMemo(() => {
+    if (!hasActiveStatusFilters) {
+      return RELEASE_FILTER_LABELS.all
+    }
+
+    const counts = {
+      visible: 0,
+      minimized: 0,
+      hidden: 0,
+    }
+
+    for (const visibilityMode of Object.values(statusFilterModeByKey)) {
+      if (visibilityMode === 'visible') counts.visible += 1
+      if (visibilityMode === 'minimized') counts.minimized += 1
+      if (visibilityMode === 'hidden') counts.hidden += 1
+    }
+
+    return `${counts.visible} visible · ${counts.minimized} min · ${counts.hidden} hidden`
+  }, [hasActiveStatusFilters, statusFilterModeByKey])
 
   useEffect(() => {
     if (!selectedNodeId) {
@@ -918,38 +1047,47 @@ export function SkillTree() {
   }, [roadmapData, selectedNodeId])
 
   const selectedNodeLevelOptions = useMemo(
-    () => (selectedNodeId ? getLevelOptionsForNode(roadmapData, selectedNodeId, TREE_CONFIG) : []),
-    [roadmapData, selectedNodeId],
+    () => (selectedNodeId && isInspectorHeavyDataReady ? getLevelOptionsForNode(roadmapData, selectedNodeId, TREE_CONFIG) : []),
+    [isInspectorHeavyDataReady, roadmapData, selectedNodeId],
   )
 
   const selectedNodeSegmentOptions = useMemo(
-    () => (selectedNodeId ? getSegmentOptionsForNode(roadmapData, selectedNodeId, TREE_CONFIG) : []),
-    [roadmapData, selectedNodeId],
+    () => (selectedNodeId && isInspectorHeavyDataReady ? getSegmentOptionsForNode(roadmapData, selectedNodeId, TREE_CONFIG) : []),
+    [isInspectorHeavyDataReady, roadmapData, selectedNodeId],
   )
 
   const selectedNodeParentOptions = useMemo(
-    () => (selectedNodeId ? getParentOptionsForNode(roadmapData, selectedNodeId) : []),
-    [roadmapData, selectedNodeId],
+    () => (selectedNodeId && isInspectorHeavyDataReady ? getParentOptionsForNode(roadmapData, selectedNodeId) : []),
+    [isInspectorHeavyDataReady, roadmapData, selectedNodeId],
   )
 
   const selectedNodeParentId = useMemo(
-    () => (selectedNodeId ? findParentNodeId(roadmapData, selectedNodeId) : null),
-    [roadmapData, selectedNodeId],
+    () => (selectedNodeId && isInspectorHeavyDataReady ? findParentNodeId(roadmapData, selectedNodeId) : null),
+    [isInspectorHeavyDataReady, roadmapData, selectedNodeId],
   )
 
   const selectedNodeLevelDependencyOptions = useMemo(() => {
-    if (!selectedNodeId) return {}
+    if (!selectedNodeId || !selectedProgressLevelId || !isInspectorHeavyDataReady) return {}
     const selectedNode = findNodeById(roadmapData, selectedNodeId)
     if (!selectedNode) return {}
+
+    const levels = Array.isArray(selectedNode.levels) ? selectedNode.levels : []
+    if (levels.length === 0) {
+      return {}
+    }
+
+    // Dependency candidates are level-agnostic; only the selected values differ per level.
+    // Compute once to avoid repeated full-graph cycle checks on every node selection.
+    const baseOptions = getAdditionalDependencyOptionsForLevel(roadmapData, selectedNodeId, levels[0]?.id)
     const result = {}
-    for (const level of (selectedNode.levels ?? [])) {
-      result[level.id] = getAdditionalDependencyOptionsForLevel(roadmapData, selectedNodeId, level.id)
+    for (const level of levels) {
+      result[level.id] = baseOptions
     }
     return result
-  }, [roadmapData, selectedNodeId])
+  }, [isInspectorHeavyDataReady, roadmapData, selectedNodeId, selectedProgressLevelId])
 
   const selectedNodeAdditionalDependencies = useMemo(() => {
-    if (!selectedNodeId) {
+    if (!selectedNodeId || !isInspectorHeavyDataReady) {
       return {
         outgoingIds: [],
         incomingIds: [],
@@ -957,20 +1095,7 @@ export function SkillTree() {
     }
 
     return getNodeAdditionalDependencies(roadmapData, selectedNodeId)
-  }, [roadmapData, selectedNodeId])
-
-  const allNodesById = useMemo(() => {
-    const map = new Map()
-    const queue = [...(roadmapData.children ?? [])]
-
-    while (queue.length > 0) {
-      const current = queue.shift()
-      map.set(current.id, current)
-      queue.push(...(current.children ?? []))
-    }
-
-    return map
-  }, [roadmapData])
+  }, [isInspectorHeavyDataReady, roadmapData, selectedNodeId])
 
   const [_toolbarSearch, _setToolbarSearch] = useState('')
   const _searchResults = useMemo(() => {
@@ -989,6 +1114,10 @@ export function SkillTree() {
   }, [_toolbarSearch, allNodesById])
 
   const selectedNodeIncomingDependencyLabels = useMemo(() => {
+    if (!isInspectorHeavyDataReady) {
+      return []
+    }
+
     const incomingIds = selectedNodeAdditionalDependencies.incomingIds ?? []
     return incomingIds
       .map((id) => allNodesById.get(id))
@@ -998,10 +1127,10 @@ export function SkillTree() {
         label: node.label,
         shortName: node.shortName ?? '',
       }))
-  }, [allNodesById, selectedNodeAdditionalDependencies])
+  }, [allNodesById, isInspectorHeavyDataReady, selectedNodeAdditionalDependencies])
 
   const selectedNodeDependencySummary = useMemo(() => {
-    if (!selectedNodeId) {
+    if (!selectedNodeId || !isInspectorHeavyDataReady) {
       return {
         requires: [],
         enables: [],
@@ -1092,7 +1221,7 @@ export function SkillTree() {
       requires: toSortedList(requiresById),
       enables: toSortedList(enablesById),
     }
-  }, [allNodesById, roadmapData.scopes, selectedNode, selectedNodeAdditionalDependencies, selectedNodeId, selectedNodeParentId])
+  }, [allNodesById, isInspectorHeavyDataReady, roadmapData.scopes, selectedNode, selectedNodeAdditionalDependencies, selectedNodeId, selectedNodeParentId])
 
   const selectedNodeValidationMessage = useMemo(() => {
     if (!selectedNodeId || diagnostics.isValid) {
@@ -1940,6 +2069,7 @@ export function SkillTree() {
         selectedReleaseNoteStatuses,
         statusSummarySortMode: selectedOptions.statusSummarySortMode,
         includePriorityMatrix: selectedOptions.includePriorityMatrix,
+        statusStyles: resolvedStatusStyles,
       })
 
       if (!exported) {
@@ -2230,6 +2360,20 @@ export function SkillTree() {
     })
     transformApiRef.current.setTransform(positionX, positionY, scale, 300, 'easeOut')
   }, [fitContentBounds, getCanvasViewportMetrics])
+
+  useEffect(() => {
+    if (!transformApiRef.current) {
+      return
+    }
+
+    const rafId = window.requestAnimationFrame(() => {
+      handleFitToScreen()
+    })
+
+    return () => {
+      window.cancelAnimationFrame(rafId)
+    }
+  }, [handleFitToScreen, hasActiveLayoutFilters, hasActiveStatusFilters, selectedScopeFilterIds, statusFilterModeByKey])
 
   const handleZoomToNode = (nodeX, nodeY) => {
     if (!transformApiRef.current || !canvasAreaRef.current) return
@@ -2619,7 +2763,9 @@ export function SkillTree() {
       // update last focused selected node id
       setSelectedNodeId((prev) => (prev === nodeId ? null : nodeId))
     } else {
-      selectNodeId(nodeId)
+      flushSync(() => {
+        selectNodeId(nodeId)
+      })
     }
 
     setSelectedPortalKey(null)
@@ -2836,6 +2982,20 @@ export function SkillTree() {
     }
 
     commitDocument(updateNodeShortName(roadmapData, targetId, newShortName))
+  }
+
+  const handleInspectorIdentityChange = (nodeId, { name, shortName }) => {
+    const targetId = nodeId || selectedNodeId
+
+    if (!targetId) {
+      return
+    }
+
+    if (Array.isArray(selectedNodeIds) && selectedNodeIds.length > 1) {
+      return
+    }
+
+    commitDocument(applyInspectorIdentityChange(roadmapData, targetId, { name, shortName }))
   }
 
   const handleStatusChange = (newStatus, levelId = activeSelectedProgressLevelId) => {
@@ -3373,6 +3533,7 @@ export function SkillTree() {
       onSelectNode={handleSelectNodeFromMatrix}
       onMoveNode={handleMoveNodeFromMatrix}
       selectedReleaseId={activeReleaseId}
+      statusStyles={resolvedStatusStyles}
     />
   ) : listViewOpen ? (
     <ListViewDrawer
@@ -3401,6 +3562,7 @@ export function SkillTree() {
         setSelectedProgressLevelId(null)
       }}
       onWidthChange={handleListViewWidthChange}
+      statusStyles={resolvedStatusStyles}
     />
   ) : null
 
@@ -3418,6 +3580,7 @@ export function SkillTree() {
       onSelectAllNodes={handleSelectAllNodes}
       onLabelChange={handleLabelChange}
       onShortNameChange={handleShortNameChange}
+      onIdentityChange={handleInspectorIdentityChange}
       onStatusChange={handleStatusChange}
       onOpenPointsChange={handleOpenPointsChange}
       onReleaseNoteChange={handleReleaseNoteChange}
@@ -3471,6 +3634,7 @@ export function SkillTree() {
       onEffortChange={handleEffortChange}
       onBenefitChange={handleBenefitChange}
       selectedReleaseId={activeReleaseId}
+      statusStyles={resolvedStatusStyles}
     />
   ) : rightPanel === PANEL_SCOPES ? (
     <ToolbarScopeManager
@@ -3544,6 +3708,10 @@ export function SkillTree() {
       }}
     />
   ) : null
+
+  const showInspectorWithInternalNotes = rightPanel === PANEL_INSPECTOR
+    && Boolean(primaryRightSidebarContent)
+    && Boolean(releaseNotesSidebarContent)
 
   return (
     <main ref={shellRef} className="skill-tree-shell">
@@ -3866,6 +4034,7 @@ export function SkillTree() {
         releases={roadmapData.releases ?? []}
         selectedReleaseId={activeReleaseId}
         onReleaseChange={setSelectedReleaseId}
+        statusStyles={resolvedStatusStyles}
       />
 
       <div className="skill-tree-workspace">
@@ -3960,6 +4129,7 @@ export function SkillTree() {
                       onZoomToNode={handleZoomToNode}
                       storyPointMap={roadmapData.storyPointMap}
                       releaseId={activeReleaseId}
+                      statusStyles={resolvedStatusStyles}
                     />
                   </TransformComponent>
                 </TransformWrapper>
@@ -3978,7 +4148,7 @@ export function SkillTree() {
               onPointerDown={handleSidebarResizeStart('right')}
             />
             <aside ref={rightSidebarRef} className="skill-tree-sidebar skill-tree-sidebar--right" style={{ width: `${rightSidebarWidth}px` }}>
-              {primaryRightSidebarContent && releaseNotesSidebarContent ? (
+              {showInspectorWithInternalNotes ? (
                 <div className="skill-tree-sidebar-stack">
                   <div className="skill-tree-sidebar__section skill-tree-sidebar__section--primary">
                     {primaryRightSidebarContent}
@@ -3987,7 +4157,7 @@ export function SkillTree() {
                     {releaseNotesSidebarContent}
                   </div>
                 </div>
-              ) : primaryRightSidebarContent ?? releaseNotesSidebarContent}
+              ) : releaseNotesSidebarContent ?? primaryRightSidebarContent}
             </aside>
           </>
         )}

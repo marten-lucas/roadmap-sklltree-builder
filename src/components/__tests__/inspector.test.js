@@ -4,7 +4,7 @@ import { renderToString } from 'react-dom/server'
 import { MantineProvider } from '@mantine/core'
 import { InspectorPanel, getLevelDragInsertPosition } from '../panels/InspectorPanel'
 import { getScopeGroupDropColor } from '../panels/ToolbarScopeManager'
-import { commitInspectorDrafts, shouldCenterInspectorOnCommit } from '../utils/inspectorCommit'
+import { applyInspectorIdentityChange, commitInspectorDrafts, commitLevelLabelDraft, shouldCenterInspectorOnCommit } from '../utils/inspectorCommit'
 import { resolveInspectorSelectedNode } from '../utils/selection'
 
 describe('inspector resolver', () => {
@@ -81,12 +81,8 @@ describe('InspectorPanel render', () => {
     expect(html).toContain('N1')
     expect(html).toContain('Double-click to rename node title')
     expect(html).toContain('Generate shortname')
-    expect(html).toContain('skill-panel__status-badge--now')
-    expect(html).toContain('>?</div>')
-    expect(html).not.toContain('Unclear')
-    expect(html).toContain('Level Name')
-    expect(html).toContain('Open points')
-    expect(html).toContain('Mark open point done')
+    expect(html).toContain('Properties')
+    expect(html).toContain('L1')
     expect(html).not.toContain('Needs follow-up')
     expect(html).not.toContain('Open todo')
   })
@@ -224,12 +220,103 @@ describe('commitInspectorDrafts', () => {
     expect(onShortNameChange).not.toHaveBeenCalled()
     expect(onReleaseNoteChange).toHaveBeenCalledWith('Release notes')
   })
+
+  it('batches name and shortname commits when identity callback is provided', () => {
+    const onNameChange = vi.fn()
+    const onShortNameChange = vi.fn()
+    const onIdentityChange = vi.fn()
+
+    const result = commitInspectorDrafts({
+      nameDraft: 'Node A',
+      currentName: 'Node B',
+      onNameChange,
+      shortNameDraft: 'NA',
+      currentShortName: 'NB',
+      onShortNameChange,
+      onIdentityChange,
+      releaseNoteDraft: 'Stable notes',
+      currentReleaseNote: 'Stable notes',
+    })
+
+    expect(result).toEqual({
+      nameCommitted: true,
+      shortNameCommitted: true,
+      releaseNoteCommitted: false,
+    })
+    expect(onIdentityChange).toHaveBeenCalledWith({ name: 'Node A', shortName: 'NA' })
+    expect(onNameChange).not.toHaveBeenCalled()
+    expect(onShortNameChange).not.toHaveBeenCalled()
+  })
+})
+
+describe('applyInspectorIdentityChange', () => {
+  it('updates label and shortname in one tree pass without dropping the new label', () => {
+    const tree = {
+      children: [
+        {
+          id: 'node-1',
+          label: 'Old label',
+          shortName: 'OLD',
+          children: [],
+        },
+      ],
+    }
+
+    expect(applyInspectorIdentityChange(tree, 'node-1', {
+      name: 'New label',
+      shortName: 'NEW',
+    })).toMatchObject({
+      children: [
+        {
+          id: 'node-1',
+          label: 'New label',
+          shortName: 'NEW',
+        },
+      ],
+    })
+  })
+})
+
+describe('commitLevelLabelDraft', () => {
+  it('commits changed level labels for the active level', () => {
+    const onCommit = vi.fn()
+
+    expect(commitLevelLabelDraft({
+      draft: 'Foundation',
+      currentValue: '',
+      levelId: 'level-1',
+      onCommit,
+    })).toBe(true)
+
+    expect(onCommit).toHaveBeenCalledWith('Foundation', 'level-1')
+  })
+
+  it('skips unchanged or missing level label drafts', () => {
+    const onCommit = vi.fn()
+
+    expect(commitLevelLabelDraft({
+      draft: 'Foundation',
+      currentValue: 'Foundation',
+      levelId: 'level-1',
+      onCommit,
+    })).toBe(false)
+
+    expect(commitLevelLabelDraft({
+      draft: 'Foundation',
+      currentValue: '',
+      levelId: '',
+      onCommit,
+    })).toBe(false)
+
+    expect(onCommit).not.toHaveBeenCalled()
+  })
 })
 
 describe('shouldCenterInspectorOnCommit', () => {
   it('centers only on real inspector edits and not on selection-change cleanup', () => {
     expect(shouldCenterInspectorOnCommit({ nameCommitted: true }, 'explicit')).toBe(true)
     expect(shouldCenterInspectorOnCommit({ nameCommitted: false, shortNameCommitted: false, releaseNoteCommitted: false }, 'explicit')).toBe(false)
+    expect(shouldCenterInspectorOnCommit({ levelLabelCommitted: true }, 'explicit')).toBe(true)
     expect(shouldCenterInspectorOnCommit({ nameCommitted: true }, 'selection-change')).toBe(false)
   })
 })

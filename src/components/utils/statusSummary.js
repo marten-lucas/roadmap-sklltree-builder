@@ -6,6 +6,7 @@ import { buildLevelIdToNodeIdMap } from './treeData'
 export const STATUS_SUMMARY_GROUP_ORDER = ['now', 'next', 'later', 'someday', 'done']
 export const STATUS_SUMMARY_SORT_OPTIONS = [
   { value: 'manual', label: 'Manual delivery order' },
+  { value: 'created', label: 'Created' },
   { value: 'scope', label: 'Scope' },
   { value: 'status', label: 'Status' },
   { value: 'value', label: 'Value' },
@@ -100,6 +101,16 @@ const getNodeName = (node) => String(node?.label ?? node?.shortName ?? '').trim(
 const getNodeBenefitRank = (node) => {
   const size = getNodeDisplayBenefit(node)?.size ?? 'unclear'
   return BENEFIT_RANK[size] ?? 0
+}
+
+const getNodeCreatedTimestamp = (node) => {
+  const raw = String(node?.createdAt ?? '').trim()
+  if (!raw) {
+    return Number.NEGATIVE_INFINITY
+  }
+
+  const timestamp = Date.parse(raw)
+  return Number.isFinite(timestamp) ? timestamp : Number.NEGATIVE_INFINITY
 }
 
 const buildTopologicalRankByNodeId = (document) => {
@@ -225,6 +236,15 @@ export const sortNodesForStatusSummary = (nodes = [], document, {
     return compareManual(left, right)
   }
 
+  const compareCreated = (left, right) => {
+    const timestampDelta = getNodeCreatedTimestamp(right) - getNodeCreatedTimestamp(left)
+    if (timestampDelta !== 0) {
+      return timestampDelta
+    }
+
+    return compareManual(left, right)
+  }
+
   const compareTopological = (left, right) => {
     const topologyDelta = (topologyRank.get(left.id) ?? Number.MAX_SAFE_INTEGER)
       - (topologyRank.get(right.id) ?? Number.MAX_SAFE_INTEGER)
@@ -290,6 +310,10 @@ export const sortNodesForStatusSummary = (nodes = [], document, {
 
   if (sortMode === 'name') {
     return rawNodes.sort(compareName)
+  }
+
+  if (sortMode === 'created') {
+    return rawNodes.sort(compareCreated)
   }
 
   if (sortMode === 'topological') {

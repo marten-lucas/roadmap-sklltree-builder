@@ -1234,6 +1234,7 @@ export const updateNodeLevel = (tree, nodeId, newLevel) => {
 
 const createNewNode = (level, segmentId = null) => ({
   id: generateUUID(),
+  createdAt: new Date().toISOString(),
   label: DEFAULT_NODE_LABEL,
   shortName: generateShortNameFromLabel(DEFAULT_NODE_LABEL),
   levels: [

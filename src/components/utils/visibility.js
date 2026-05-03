@@ -26,30 +26,153 @@ export const RELEASE_FILTER_LABELS = {
   next: 'Next',
 }
 
+export const STATUS_FILTER_ORDER = ['done', 'now', 'next', 'later', 'someday']
+
+const STATUS_FILTER_SET = new Set(STATUS_FILTER_ORDER)
+
+export const STATUS_VISIBILITY_MODES = {
+  visible: 'visible',
+  minimized: 'minimized',
+  hidden: 'hidden',
+}
+
+const STATUS_VISIBILITY_MODE_SET = new Set(Object.values(STATUS_VISIBILITY_MODES))
+
+const normalizeStatusVisibilityMode = (mode) => {
+  const normalized = String(mode ?? '').trim().toLowerCase()
+  return STATUS_VISIBILITY_MODE_SET.has(normalized)
+    ? normalized
+    : STATUS_VISIBILITY_MODES.visible
+}
+
+export const buildDefaultStatusFilterModeMap = () => (
+  Object.fromEntries(STATUS_FILTER_ORDER.map((statusKey) => [statusKey, STATUS_VISIBILITY_MODES.visible]))
+)
+
+export const normalizeStatusFilterModeMap = (statusFilter) => {
+  const fallback = buildDefaultStatusFilterModeMap()
+
+  if (statusFilter && typeof statusFilter === 'object' && !Array.isArray(statusFilter)) {
+    const next = { ...fallback }
+    for (const statusKey of STATUS_FILTER_ORDER) {
+      if (Object.hasOwn(statusFilter, statusKey)) {
+        next[statusKey] = normalizeStatusVisibilityMode(statusFilter[statusKey])
+      }
+    }
+    return next
+  }
+
+  const selectedStatusKeys = normalizeStatusFilterKeys(statusFilter)
+  if (selectedStatusKeys.length === 0) {
+    return fallback
+  }
+
+  const selectedCutoff = Math.max(
+    ...selectedStatusKeys
+      .map((statusKey) => STATUS_FILTER_ORDER.indexOf(statusKey))
+      .filter((index) => index >= 0),
+  )
+
+  if (!Number.isFinite(selectedCutoff)) {
+    return fallback
+  }
+
+  const next = { ...fallback }
+  for (const statusKey of STATUS_FILTER_ORDER) {
+    const statusIndex = STATUS_FILTER_ORDER.indexOf(statusKey)
+    next[statusKey] = statusIndex <= selectedCutoff
+      ? STATUS_VISIBILITY_MODES.visible
+      : STATUS_VISIBILITY_MODES.minimized
+  }
+
+  return next
+}
+
+export const hasActiveStatusFilterModes = (statusModeByKey) => {
+  const normalized = normalizeStatusFilterModeMap(statusModeByKey)
+  return STATUS_FILTER_ORDER.some((statusKey) => normalized[statusKey] !== STATUS_VISIBILITY_MODES.visible)
+}
+
+export const normalizeStatusFilterKeys = (statusFilter) => {
+  if (statusFilter && typeof statusFilter === 'object' && !Array.isArray(statusFilter)) {
+    const normalizedStatusModeByKey = normalizeStatusFilterModeMap(statusFilter)
+    if (!hasActiveStatusFilterModes(normalizedStatusModeByKey)) {
+      return []
+    }
+
+    return STATUS_FILTER_ORDER.filter(
+      (statusKey) => normalizedStatusModeByKey[statusKey] === STATUS_VISIBILITY_MODES.visible,
+    )
+  }
+
+  if (Array.isArray(statusFilter)) {
+    return STATUS_FILTER_ORDER.filter((statusKey) => statusFilter.includes(statusKey))
+  }
+
+  const normalized = String(statusFilter ?? '').trim().toLowerCase()
+  if (!normalized || normalized === RELEASE_FILTER_OPTIONS.all) {
+    return []
+  }
+
+  if (normalized === RELEASE_FILTER_OPTIONS.now) {
+    return ['now']
+  }
+
+  if (normalized === RELEASE_FILTER_OPTIONS.next) {
+    return ['next']
+  }
+
+  if (STATUS_FILTER_SET.has(normalized)) {
+    return [normalized]
+  }
+
+  return []
+}
+
 export const getReleaseVisibilityModeForStatuses = (statusKeys, releaseFilter) => {
-  const normalizedKeys = new Set(
+  const normalizedStatusSet = new Set(
     (Array.isArray(statusKeys) ? statusKeys : [statusKeys])
       .map((statusKey) => String(statusKey ?? '').trim().toLowerCase())
       .filter(Boolean),
   )
 
-  if (releaseFilter === RELEASE_FILTER_OPTIONS.now) {
-    if (normalizedKeys.has('now')) {
-      return 'full'
+  if (normalizedStatusSet.size === 0) {
+    return 'full'
+  }
+
+  const statusModeByKey = normalizeStatusFilterModeMap(releaseFilter)
+
+  let hasVisibleStatus = false
+  let hasMinimizedStatus = false
+
+  for (const statusKey of normalizedStatusSet) {
+    const visibilityMode = statusModeByKey[statusKey] ?? STATUS_VISIBILITY_MODES.visible
+
+    if (visibilityMode === STATUS_VISIBILITY_MODES.visible) {
+      hasVisibleStatus = true
+      break
     }
 
+    if (visibilityMode === STATUS_VISIBILITY_MODES.minimized) {
+      hasMinimizedStatus = true
+    }
+  }
+
+  if (hasVisibleStatus) {
+    return 'full'
+  }
+
+  if (hasMinimizedStatus) {
     return 'minimal'
   }
 
-  if (releaseFilter === RELEASE_FILTER_OPTIONS.next) {
-    if (normalizedKeys.has('now') || normalizedKeys.has('next')) {
-      return 'full'
-    }
-
-    return 'minimal'
+  // Unknown statuses default to visible behavior so legacy/custom values do not vanish.
+  const hasUnknownStatus = [...normalizedStatusSet].some((statusKey) => !STATUS_FILTER_SET.has(statusKey))
+  if (hasUnknownStatus) {
+    return 'full'
   }
 
-  return 'full'
+  return 'hidden'
 }
 
 export const getReleaseVisibilityMode = (statusKey, releaseFilter) => {

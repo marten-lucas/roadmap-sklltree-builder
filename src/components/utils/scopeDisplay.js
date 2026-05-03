@@ -14,6 +14,44 @@ const sanitizeScopeColor = (color) => {
   return /^#[0-9a-fA-F]{6}$/.test(color) ? color : null
 }
 
+const getScopeGroupLabel = (scope) => {
+  const explicitGroupLabel = String(scope?.groupLabel ?? '').trim()
+  if (explicitGroupLabel) {
+    return explicitGroupLabel
+  }
+
+  const color = sanitizeScopeColor(scope?.color)
+  return color ? color.toUpperCase() : 'Uncolored'
+}
+
+export const buildGroupedScopeSelectData = (scopes) => {
+  const groups = []
+  const groupByLabel = new Map()
+
+  for (const scope of Array.isArray(scopes) ? scopes : []) {
+    const value = normalizeScopeId(scope?.value ?? scope?.id)
+    const label = normalizeScopeLabel(scope?.label)
+    if (!value || !label) {
+      continue
+    }
+
+    const group = getScopeGroupLabel(scope)
+    if (!groupByLabel.has(group)) {
+      const nextGroup = { group, items: [] }
+      groupByLabel.set(group, nextGroup)
+      groups.push(nextGroup)
+    }
+
+    groupByLabel.get(group).items.push({
+      value,
+      label,
+      color: sanitizeScopeColor(scope?.color),
+    })
+  }
+
+  return groups
+}
+
 export const resolveScopeLabels = (scopeIds, scopes) => {
   const scopeLabelById = new Map()
 

@@ -31,11 +31,11 @@ const EffortBenefitChips = ({ effort, benefit, storyPointMap }) => {
   )
 }
 
-const LevelTabBar = ({ levels, activeIndex, onTabChange }) => (
+const LevelTabBar = ({ levels, activeIndex, onTabChange, statusStyles = STATUS_STYLES }) => (
   <div className="skill-node-level-tab-bar">
     {levels.map((level, i) => {
       const statusKey = level.status ?? 'later'
-      const dotColor = STATUS_STYLES[statusKey]?.ringBand ?? STATUS_STYLES.later.ringBand
+      const dotColor = statusStyles[statusKey]?.ringBand ?? statusStyles.later?.ringBand ?? STATUS_STYLES.later.ringBand
       const levelLabel = getLevelDisplayLabel(level?.label, i)
       const levelName = getExplicitLevelLabel(level?.label)
       return (
@@ -56,7 +56,7 @@ const LevelTabBar = ({ levels, activeIndex, onTabChange }) => (
   </div>
 )
 
-export function MarkdownTooltipContent({ title, markdown, scopeLabels = [], effort, benefit, storyPointMap, levels, activeLevelIndex = 0, onTabChange }) {
+export function MarkdownTooltipContent({ title, markdown, scopeLabels = [], effort, benefit, storyPointMap, levels, activeLevelIndex = 0, onTabChange, statusStyles = STATUS_STYLES }) {
   const multiLevel = Array.isArray(levels) && levels.length > 1
   const activeLevel = Array.isArray(levels) && levels.length > 0 ? (levels[activeLevelIndex] ?? levels[0]) : null
   const resolvedMarkdown = activeLevel ? activeLevel.releaseNote : markdown
@@ -68,7 +68,7 @@ export function MarkdownTooltipContent({ title, markdown, scopeLabels = [], effo
   return (
     <div>
       {title && <Text className="skill-node-tooltip__title">{title}</Text>}
-      {multiLevel && <LevelTabBar levels={levels} activeIndex={activeLevelIndex} onTabChange={onTabChange ?? (() => {})} />}
+      {multiLevel && <LevelTabBar levels={levels} activeIndex={activeLevelIndex} onTabChange={onTabChange ?? (() => {})} statusStyles={statusStyles} />}
       <EffortBenefitChips effort={effort} benefit={benefit} storyPointMap={storyPointMap} />
       <div
         className="skill-node-tooltip__note skill-node-tooltip__note--markdown"

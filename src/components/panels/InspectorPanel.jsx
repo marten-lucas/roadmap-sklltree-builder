@@ -4,7 +4,8 @@ import { IconChecklist, IconCheck, IconPercentage20 } from '@tabler/icons-react'
 import { STATUS_LABELS, STATUS_STYLES, SCOPE_COLORS } from '../config'
 import { getLevelStatus } from '../utils/nodeStatus'
 import { UNASSIGNED_SEGMENT_ID } from '../utils/layoutShared'
-import { commitInspectorDrafts } from '../utils/inspectorCommit'
+import { commitInspectorDrafts, commitLevelLabelDraft } from '../utils/inspectorCommit'
+import { buildGroupedScopeSelectData } from '../utils/scopeDisplay'
 import { EFFORT_SIZE_LABELS, BENEFIT_SIZE_LABELS, EFFORT_SIZES, BENEFIT_SIZES } from '../utils/effortBenefit'
 import { MarkdownField } from './MarkdownField'
 import { Tooltip } from '../tooltip'
@@ -133,7 +134,7 @@ const getStatusTextColor = (statusKey, statusStyle) => {
   return statusStyle?.textColor ?? '#ffffff'
 }
 
-const STATUS_OPTIONS = [
+const buildStatusOptions = (statusStyles) => [
   { value: 'done', label: STATUS_LABELS.done },
   { value: 'now', label: STATUS_LABELS.now },
   { value: 'next', label: STATUS_LABELS.next },
@@ -141,7 +142,7 @@ const STATUS_OPTIONS = [
   { value: 'someday', label: STATUS_LABELS.someday },
   { value: 'hidden', label: STATUS_LABELS.hidden },
 ].map((option) => {
-  const statusStyle = STATUS_STYLES[option.value] ?? STATUS_STYLES.later
+  const statusStyle = statusStyles[option.value] ?? statusStyles.later ?? STATUS_STYLES.later
   return {
     ...option,
     label: (
@@ -245,6 +246,7 @@ export function InspectorPanel({
   onClose,
   onLabelChange,
   onShortNameChange,
+  onIdentityChange,
   onStatusChange,
   onOpenPointsChange,
   onOpenPointsLabelChange,
@@ -284,7 +286,10 @@ export function InspectorPanel({
   onEffortChange,
   onBenefitChange,
   selectedReleaseId = null,
+  statusStyles = STATUS_STYLES,
 }) {
+  const statusStyleMap = statusStyles && typeof statusStyles === 'object' ? statusStyles : STATUS_STYLES
+  const statusOptions = useMemo(() => buildStatusOptions(statusStyleMap), [statusStyleMap])
   const [scopeManagerOpen, setScopeManagerOpen] = useState(false)
   const [scopeDraft, setScopeDraft] = useState('')
   const [scopeError, setScopeError] = useState(null)
@@ -311,6 +316,7 @@ export function InspectorPanel({
   const [editingSegmentId, setEditingSegmentId] = useState(null)
   const [editingSegmentLabel, setEditingSegmentLabel] = useState('')
   const [levelLabelDrafts, setLevelLabelDrafts] = useState({})
+  const [activeTab, setActiveTab] = useState('properties')
   const [isTitleEditing, setIsTitleEditing] = useState(false)
   const [draggedLevelId, setDraggedLevelId] = useState(null)
   const [dragOverLevelId, setDragOverLevelId] = useState(null)
@@ -374,7 +380,7 @@ export function InspectorPanel({
 
   const commitCurrentDrafts = useCallback((showToast = false, commitSource = 'explicit') => {
     if (!selectedNode) {
-      return { nameCommitted: false, shortNameCommitted: false, releaseNoteCommitted: false }
+      return { nameCommitted: false, shortNameCommitted: false, releaseNoteCommitted: false, levelLabelCommitted: false }
     }
 
     const commitResult = commitInspectorDrafts({
@@ -389,6 +395,11 @@ export function InspectorPanel({
       onShortNameChange: (nextShortName) => {
         committedShortNameRef.current = nextShortName
         onShortNameChange?.(nextShortName, selectedNode.id)
+      },
+      onIdentityChange: ({ name, shortName }) => {
+        committedNameRef.current = name
+        committedShortNameRef.current = shortName
+        onIdentityChange?.(selectedNode.id, { name, shortName })
       },
       releaseNoteDraft: releaseNoteDraftRef.current,
       currentReleaseNote: committedReleaseNoteRef.current,
@@ -425,6 +436,26 @@ export function InspectorPanel({
       }
     }
 
+    const activeLevel = activeTab === 'properties'
+      ? null
+      : (selectedNode.levels ?? []).find((level) => level.id === activeTab)
+    const levelLabelCommitted = commitLevelLabelDraft({
+      draft: activeLevel ? levelLabelDraftsRef.current[activeLevel.id] : null,
+      currentValue: activeLevel ? getExplicitLevelLabel(activeLevel.label) : null,
+      levelId: activeLevel?.id,
+      onCommit: (nextValue, levelId) => {
+        levelLabelDraftsRef.current = {
+          ...levelLabelDraftsRef.current,
+          [levelId]: nextValue,
+        }
+        setLevelLabelDrafts((prev) => ({
+          ...prev,
+          [levelId]: nextValue,
+        }))
+        onLevelLabelChange?.(nextValue, levelId)
+      },
+    })
+
     if (showToast && commitResult.releaseNoteCommitted) {
       setSaveToast({ visible: true, message: 'Release Note gespeichert' })
       setTimeout(() => setSaveToast({ visible: false, message: '' }), 1400)
@@ -435,16 +466,15 @@ export function InspectorPanel({
       }
     }
 
-    onInspectorCommit?.(commitResult, commitSource)
-
-    return commitResult
-  }, [onInspectorCommit, onLabelChange, onReleaseNoteChange, onShortNameChange, selectedNode])
-
-  useEffect(() => {
-    return () => {
-      commitCurrentDrafts(false, 'selection-change')
+    const nextCommitResult = {
+      ...commitResult,
+      levelLabelCommitted,
     }
-  }, [commitCurrentDrafts])
+
+    onInspectorCommit?.(nextCommitResult, commitSource)
+
+    return nextCommitResult
+  }, [activeTab, onIdentityChange, onInspectorCommit, onLabelChange, onLevelLabelChange, onReleaseNoteChange, onShortNameChange, selectedNode])
 
   useEffect(() => {
     const handleCommitTextDrafts = () => {
@@ -562,6 +592,7 @@ export function InspectorPanel({
     const parentData = allNodes
       .filter((node) => !selectedNodeIds.includes(node.id))
       .map((node) => ({ value: node.id, label: node.shortName ? `${node.label} (${node.shortName})` : node.label }))
+    const groupedScopeSelectData = buildGroupedScopeSelectData(scopeOptions)
     const visibleNames = selectedNodes.slice(0, 3).map((node) => node.label).filter(Boolean).join(', ')
     const hasMore = selectedNodes.length > 3
     const headerNames = hasMore ? `${visibleNames} (...)` : visibleNames
@@ -609,6 +640,8 @@ export function InspectorPanel({
               data={parentData}
               onChange={(value) => value && onParentChange(value)}
               allowDeselect={false}
+              searchable
+              nothingFoundMessage="No parents found"
               classNames={{ input: 'mantine-dark-input', label: 'mantine-dark-label', dropdown: 'mantine-dark-dropdown', option: 'mantine-dark-option' }}
               comboboxProps={{ withinPortal: true, zIndex: 450 }}
             />
@@ -628,7 +661,7 @@ export function InspectorPanel({
 
             <MultiSelect
               label="Scopes (for all)"
-              data={(scopeOptions ?? []).map((scope) => ({ value: scope.value, label: scope.label }))}
+              data={groupedScopeSelectData}
               onChange={(values) => onScopeIdsChange(values)}
               searchable
               clearable
@@ -674,7 +707,8 @@ export function InspectorPanel({
     })
     : [{ id: 'level-1', label: 'Level 1', customLabel: '', displayLabel: 'Level 1', ordinalLabel: 'Level 1', status: getLevelStatus({ statuses: {}, status: selectedNode?.status }, selectedReleaseId), releaseNote: '', openPointsLabel: '', hasOpenPoints: false, scopeIds: [], additionalDependencyLevelIds: [] }]
 
-  const scopeSelectData = (scopeOptions ?? []).map((scope) => ({
+  const groupedScopeSelectData = buildGroupedScopeSelectData(scopeOptions)
+  const flatScopeOptions = (scopeOptions ?? []).map((scope) => ({
     value: scope.value,
     label: scope.label,
     color: scope.color ?? null,
@@ -895,7 +929,6 @@ export function InspectorPanel({
     </Stack>
   )
 
-  const [activeTab, setActiveTab] = useState('properties')
   const [openPointTagDraft, setOpenPointTagDraft] = useState('')
   const lastSyncedProgressLevelIdRef = useRef(null)
 
@@ -1116,6 +1149,7 @@ export function InspectorPanel({
         <Tabs
           value={activeTab}
           onChange={handleTabChange}
+          keepMounted={false}
           classNames={{
             root: 'skill-panel__tabs-root',
             panel: 'skill-panel__tab-panel',
@@ -1224,6 +1258,8 @@ export function InspectorPanel({
                       value={selectedParentKey}
                       onChange={(value) => value && onParentChange(value)}
                       allowDeselect={false}
+                      searchable
+                      nothingFoundMessage="No parents found"
                       classNames={{
                         input: 'mantine-dark-input',
                         label: 'mantine-dark-label',
@@ -1468,7 +1504,7 @@ export function InspectorPanel({
                       size="xs"
                       value={level.status}
                       onChange={(value) => value && onStatusChange(value)}
-                      data={STATUS_OPTIONS}
+                      data={statusOptions}
                       classNames={{
                         root: 'skill-panel__status-segmented',
                         control: 'skill-panel__status-segmented-control',
@@ -1525,12 +1561,13 @@ export function InspectorPanel({
 
                     <Group gap="xs" align="center" wrap="nowrap">
                       <MultiSelect
-                        data={scopeSelectData}
+                        data={groupedScopeSelectData}
                         value={level.scopeIds ?? []}
                         onChange={handleScopeIdsChange}
                         placeholder="Scopes"
                         searchable
                         clearable
+                        nothingFoundMessage="No scopes"
                         flex={1}
                         classNames={{
                           input: 'mantine-dark-input',
@@ -1566,8 +1603,8 @@ export function InspectorPanel({
                         </Group>
                         <Divider />
                         <Stack gap={8}>
-                          {scopeSelectData.length === 0 && <Text size="sm" c="dimmed">Noch keine Scopes vorhanden.</Text>}
-                          {scopeSelectData.map((scope) => (
+                          {flatScopeOptions.length === 0 && <Text size="sm" c="dimmed">Noch keine Scopes vorhanden.</Text>}
+                          {flatScopeOptions.map((scope) => (
                             <Paper key={scope.value} withBorder radius="md" p="xs">
                               {editingScopeId === scope.value ? (
                                 <Stack gap={8}>

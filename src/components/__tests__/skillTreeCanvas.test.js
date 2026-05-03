@@ -380,4 +380,52 @@ describe('SkillTreeCanvas', () => {
     expect(html).toContain('skill-tree-portal__ring--target')
     expect(extractRingRotation(html, 'source')).toBeCloseTo(0, 5)
   })
+
+  it('keeps portal icon orientation stable when nodes switch between full and minimal modes', () => {
+    const makeProps = (isMinimal) => {
+      const props = createBaseProps()
+      props.layoutNodesById = new Map([
+        ['node-a', { id: 'node-a', x: 100, y: 100 }],
+        ['node-b', { id: 'node-b', x: 260, y: 100 }],
+      ])
+      props.renderedNodes = [
+        { id: 'node-a', x: 100, y: 100, label: 'Alpha' },
+        { id: 'node-b', x: 260, y: 100, label: 'Beta' },
+      ]
+      props.visibleDependencyPortals = [
+        { key: 'dep-a:source', nodeId: 'node-a', sourceId: 'node-a', targetId: 'node-b', type: 'source', otherLabel: 'BET·Rollout', tooltip: 'Requires Beta', x: 180, y: 100, angle: 0, isMinimal, isInteractive: true },
+        { key: 'dep-a:target', nodeId: 'node-b', sourceId: 'node-a', targetId: 'node-b', type: 'target', otherLabel: 'ALP·Foundation', tooltip: 'Enables Alpha', x: 180, y: 100, angle: 180, isMinimal, isInteractive: true },
+      ]
+      return props
+    }
+
+    const fullHtml = renderToString(
+      createElement(
+        MantineProvider,
+        null,
+        createElement(SkillTreeCanvas, makeProps(false)),
+      ),
+    )
+
+    const minimalHtml = renderToString(
+      createElement(
+        MantineProvider,
+        null,
+        createElement(SkillTreeCanvas, makeProps(true)),
+      ),
+    )
+
+    const fullSourceRotation = extractRingRotation(fullHtml, 'source')
+    const fullTargetRotation = extractRingRotation(fullHtml, 'target')
+    const minimalSourceRotation = extractRingRotation(minimalHtml, 'source')
+    const minimalTargetRotation = extractRingRotation(minimalHtml, 'target')
+
+    expect(fullSourceRotation).not.toBeNull()
+    expect(fullTargetRotation).not.toBeNull()
+    expect(minimalSourceRotation).not.toBeNull()
+    expect(minimalTargetRotation).not.toBeNull()
+
+    expect(minimalAngleDelta(fullSourceRotation, minimalSourceRotation)).toBeLessThan(20)
+    expect(minimalAngleDelta(fullTargetRotation, minimalTargetRotation)).toBeLessThan(20)
+  })
 })

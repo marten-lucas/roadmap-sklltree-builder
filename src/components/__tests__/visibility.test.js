@@ -2,8 +2,11 @@ import { describe, expect, it } from 'vitest'
 import {
   RELEASE_FILTER_OPTIONS,
   SCOPE_FILTER_ALL,
+  STATUS_VISIBILITY_MODES,
+  buildDefaultStatusFilterModeMap,
   getReleaseVisibilityMode,
   getReleaseVisibilityModeForStatuses,
+  hasActiveStatusFilterModes,
   nodeMatchesScopeFilter,
 } from '../utils/visibility'
 
@@ -60,12 +63,12 @@ describe('visibility', () => {
   it('maps release filters to full and minimal visibility as expected', () => {
     expect(getReleaseVisibilityMode('now', RELEASE_FILTER_OPTIONS.now)).toBe('full')
     expect(getReleaseVisibilityMode('next', RELEASE_FILTER_OPTIONS.now)).toBe('minimal')
-    expect(getReleaseVisibilityMode('done', RELEASE_FILTER_OPTIONS.now)).toBe('minimal')
+    expect(getReleaseVisibilityMode('done', RELEASE_FILTER_OPTIONS.now)).toBe('full')
     expect(getReleaseVisibilityMode('later', RELEASE_FILTER_OPTIONS.now)).toBe('minimal')
 
     expect(getReleaseVisibilityMode('now', RELEASE_FILTER_OPTIONS.next)).toBe('full')
     expect(getReleaseVisibilityMode('next', RELEASE_FILTER_OPTIONS.next)).toBe('full')
-    expect(getReleaseVisibilityMode('done', RELEASE_FILTER_OPTIONS.next)).toBe('minimal')
+    expect(getReleaseVisibilityMode('done', RELEASE_FILTER_OPTIONS.next)).toBe('full')
     expect(getReleaseVisibilityMode('later', RELEASE_FILTER_OPTIONS.next)).toBe('minimal')
   })
 
@@ -81,6 +84,32 @@ describe('visibility', () => {
     expect(getReleaseVisibilityModeForStatuses(['later', 'next'], RELEASE_FILTER_OPTIONS.now)).toBe('minimal')
 
     expect(getReleaseVisibilityModeForStatuses(['later', 'next'], RELEASE_FILTER_OPTIONS.next)).toBe('full')
-    expect(getReleaseVisibilityModeForStatuses(['done', 'someday'], RELEASE_FILTER_OPTIONS.next)).toBe('minimal')
+    expect(getReleaseVisibilityModeForStatuses(['done', 'someday'], RELEASE_FILTER_OPTIONS.next)).toBe('full')
+  })
+
+  it('supports ordered multiselect status filters with furthest-selected cutoff', () => {
+    expect(getReleaseVisibilityModeForStatuses(['someday'], ['now'])).toBe('minimal')
+    expect(getReleaseVisibilityModeForStatuses(['done'], ['now'])).toBe('full')
+
+    expect(getReleaseVisibilityModeForStatuses(['later'], ['next', 'later'])).toBe('full')
+    expect(getReleaseVisibilityModeForStatuses(['someday'], ['next', 'later'])).toBe('minimal')
+
+    expect(getReleaseVisibilityModeForStatuses(['now', 'someday'], ['done', 'next'])).toBe('full')
+  })
+
+  it('supports explicit per-status mode maps (visible/minimized/hidden)', () => {
+    const filterModes = {
+      ...buildDefaultStatusFilterModeMap(),
+      next: STATUS_VISIBILITY_MODES.hidden,
+      later: STATUS_VISIBILITY_MODES.minimized,
+    }
+
+    expect(hasActiveStatusFilterModes(filterModes)).toBe(true)
+    expect(getReleaseVisibilityMode('next', filterModes)).toBe('hidden')
+    expect(getReleaseVisibilityMode('later', filterModes)).toBe('minimal')
+    expect(getReleaseVisibilityMode('done', filterModes)).toBe('full')
+
+    const defaultModes = buildDefaultStatusFilterModeMap()
+    expect(hasActiveStatusFilterModes(defaultModes)).toBe(false)
   })
 })

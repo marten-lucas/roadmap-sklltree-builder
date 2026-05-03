@@ -1,4 +1,4 @@
-import { ActionIcon, Button, Checkbox, NumberInput, Paper, Stack, Tabs, Text, TextInput } from '@mantine/core'
+import { ActionIcon, Button, Checkbox, NumberInput, Paper, Select, Stack, Tabs, Text, TextInput } from '@mantine/core'
 import { useCallback, useEffect, useImperativeHandle, useRef, useState, forwardRef } from 'react'
 import { MarkdownField } from './MarkdownField'
 import {
@@ -9,10 +9,21 @@ import {
   normalizeStatusBudgets,
 } from '../utils/effortBenefit'
 import { addRelease, deleteRelease, updateRelease } from '../utils/releases'
-import { DEFAULT_STATUS_DESCRIPTIONS, STATUS_LABELS } from '../config'
+import { DEFAULT_STATUS_DESCRIPTIONS, STATUS_LABELS, STATUS_STYLES } from '../config'
+import {
+  LINE_STYLE_PRESETS,
+  STATUS_STYLE_KEYS,
+  TEXT_COLOR_MODES,
+  normalizeStatusStyleOverrides,
+} from '../utils/statusStyles'
 
 const T_SHIRT_KEYS = ['xs', 's', 'm', 'l', 'xl']
-const STATUS_DESCRIPTION_KEYS = ['now', 'next', 'later', 'someday', 'done', 'hidden']
+const STATUS_DESCRIPTION_KEYS = [...STATUS_STYLE_KEYS]
+const LINE_STYLE_OPTIONS = Object.entries(LINE_STYLE_PRESETS).map(([value, entry]) => ({ value, label: entry.label }))
+const TEXT_COLOR_MODE_OPTIONS = [
+  { value: TEXT_COLOR_MODES.auto, label: 'Auto contrast' },
+  { value: TEXT_COLOR_MODES.manual, label: 'Manual' },
+]
 
 const collectAllNodes = (document) => {
   const all = []
@@ -44,6 +55,7 @@ export const SystemPanel = forwardRef(function SystemPanel(
   const [activeTabValue, setActiveTabValue] = useState(selectedReleaseId ?? 'system')
   const [systemNameDraft, setSystemNameDraft] = useState('')
   const [statusDescriptionsDraft, setStatusDescriptionsDraft] = useState({ ...DEFAULT_STATUS_DESCRIPTIONS })
+  const [statusStylesDraft, setStatusStylesDraft] = useState(() => normalizeStatusStyleOverrides({}))
   const [releaseDraftId, setReleaseDraftId] = useState(null)
   const [releaseNameDraft, setReleaseNameDraft] = useState('')
   const [releaseMottoDraft, setReleaseMottoDraft] = useState('')
@@ -86,6 +98,10 @@ export const SystemPanel = forwardRef(function SystemPanel(
       ...(roadmapData?.statusDescriptions ?? {}),
     })
   }, [roadmapData?.statusDescriptions])
+
+  useEffect(() => {
+    setStatusStylesDraft(normalizeStatusStyleOverrides(roadmapData?.statusStyles ?? {}))
+  }, [roadmapData?.statusStyles])
 
   useEffect(() => {
     const nextReleaseId = activeRelease?.id ?? null
@@ -160,6 +176,28 @@ export const SystemPanel = forwardRef(function SystemPanel(
           ...currentStatusDescriptions,
           ...statusDescriptionsDraft,
         },
+      }
+      hasChanges = true
+    }
+
+    const currentStatusStyles = normalizeStatusStyleOverrides(roadmapData?.statusStyles ?? {})
+    const normalizedDraftStyles = normalizeStatusStyleOverrides(statusStylesDraft)
+    const hasStatusStyleChanges = STATUS_STYLE_KEYS.some((statusKey) => {
+      const currentStyle = currentStatusStyles[statusKey]
+      const nextStyle = normalizedDraftStyles[statusKey]
+      return (
+        currentStyle.ringColor !== nextStyle.ringColor
+        || currentStyle.lineColor !== nextStyle.lineColor
+        || currentStyle.lineStyle !== nextStyle.lineStyle
+        || currentStyle.textColorMode !== nextStyle.textColorMode
+        || currentStyle.textColor !== nextStyle.textColor
+      )
+    })
+
+    if (hasStatusStyleChanges) {
+      nextRoadmapData = {
+        ...nextRoadmapData,
+        statusStyles: normalizedDraftStyles,
       }
       hasChanges = true
     }
@@ -346,6 +384,7 @@ export const SystemPanel = forwardRef(function SystemPanel(
               +
             </Tabs.Tab>
             <Tabs.Tab value="system">System</Tabs.Tab>
+            <Tabs.Tab value="status">Status</Tabs.Tab>
             <Tabs.Tab value="icon">Icon</Tabs.Tab>
           </Tabs.List>
 
@@ -527,6 +566,33 @@ export const SystemPanel = forwardRef(function SystemPanel(
                   classNames={{ input: 'mantine-dark-input', label: 'mantine-dark-label' }}
                 />
 
+                <Text size="xs" fw={600} tt="uppercase" c="dimmed" lts="0.1em">Story Point Scale</Text>
+                <div className="skill-panel__compact-grid skill-panel__compact-grid--sp">
+                  {T_SHIRT_KEYS.map((key) => (
+                    <NumberInput
+                      key={key}
+                      size="xs"
+                      label={`SP for ${key.toUpperCase()}`}
+                      value={roadmapData?.storyPointMap?.[key] ?? DEFAULT_STORY_POINT_MAP[key]}
+                      onChange={(val) => {
+                        const v = val === '' ? DEFAULT_STORY_POINT_MAP[key] : Number(val)
+                        const next = { ...(roadmapData?.storyPointMap ?? DEFAULT_STORY_POINT_MAP), [key]: v }
+                        commitDocument({ ...roadmapData, storyPointMap: next })
+                      }}
+                      min={0}
+                      allowDecimal={false}
+                      rightSection={<Text size="xs" c="dimmed">SP</Text>}
+                      classNames={{ input: 'mantine-dark-input', label: 'mantine-dark-label' }}
+                    />
+                  ))}
+                </div>
+              </Stack>
+            </div>
+          </Tabs.Panel>
+
+          <Tabs.Panel value="status">
+            <div className="skill-panel__tab-scroll">
+              <Stack gap="xs">
                 <Text size="xs" fw={600} tt="uppercase" c="dimmed" lts="0.1em">Status descriptions</Text>
                 <div className="skill-panel__compact-grid">
                   {STATUS_DESCRIPTION_KEYS.map((key) => (
@@ -549,25 +615,132 @@ export const SystemPanel = forwardRef(function SystemPanel(
                   ))}
                 </div>
 
-                <Text size="xs" fw={600} tt="uppercase" c="dimmed" lts="0.1em">Story Point Scale</Text>
-                <div className="skill-panel__compact-grid skill-panel__compact-grid--sp">
-                  {T_SHIRT_KEYS.map((key) => (
-                    <NumberInput
-                      key={key}
-                      size="xs"
-                      label={`SP for ${key.toUpperCase()}`}
-                      value={roadmapData?.storyPointMap?.[key] ?? DEFAULT_STORY_POINT_MAP[key]}
-                      onChange={(val) => {
-                        const v = val === '' ? DEFAULT_STORY_POINT_MAP[key] : Number(val)
-                        const next = { ...(roadmapData?.storyPointMap ?? DEFAULT_STORY_POINT_MAP), [key]: v }
-                        commitDocument({ ...roadmapData, storyPointMap: next })
-                      }}
-                      min={0}
-                      allowDecimal={false}
-                      rightSection={<Text size="xs" c="dimmed">SP</Text>}
-                      classNames={{ input: 'mantine-dark-input', label: 'mantine-dark-label' }}
-                    />
-                  ))}
+                <Text size="xs" fw={600} tt="uppercase" c="dimmed" lts="0.1em">Status style</Text>
+                <div className="skill-panel__compact-grid" style={{ gap: 10 }}>
+                  {STATUS_STYLE_KEYS.map((statusKey) => {
+                    const baseStyle = STATUS_STYLES[statusKey] ?? STATUS_STYLES.later
+                    const draft = statusStylesDraft[statusKey] ?? normalizeStatusStyleOverrides({})[statusKey]
+                    const textColorDisabled = draft.textColorMode !== TEXT_COLOR_MODES.manual
+                    return (
+                      <div key={statusKey} style={{ border: '1px solid rgba(71, 85, 105, 0.45)', borderRadius: 10, padding: 10, background: 'rgba(2, 6, 23, 0.45)' }}>
+                        <Text size="xs" fw={700} mb={6}>{STATUS_LABELS[statusKey]}</Text>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 8 }}>
+                          <TextInput
+                            size="xs"
+                            type="color"
+                            label="Node ring color"
+                            value={draft.ringColor}
+                            onChange={(e) => {
+                              const ringColor = e.currentTarget.value
+                              setStatusStylesDraft((current) => ({
+                                ...current,
+                                [statusKey]: {
+                                  ...current[statusKey],
+                                  ringColor,
+                                },
+                              }))
+                            }}
+                            onBlur={() => commitTextDrafts()}
+                            classNames={{ input: 'mantine-dark-input', label: 'mantine-dark-label' }}
+                          />
+                          <TextInput
+                            size="xs"
+                            type="color"
+                            label="Line color"
+                            value={draft.lineColor}
+                            onChange={(e) => {
+                              const lineColor = e.currentTarget.value
+                              setStatusStylesDraft((current) => ({
+                                ...current,
+                                [statusKey]: {
+                                  ...current[statusKey],
+                                  lineColor,
+                                },
+                              }))
+                            }}
+                            onBlur={() => commitTextDrafts()}
+                            classNames={{ input: 'mantine-dark-input', label: 'mantine-dark-label' }}
+                          />
+                          <Select
+                            size="xs"
+                            label="Text color"
+                            value={draft.textColorMode}
+                            data={TEXT_COLOR_MODE_OPTIONS}
+                            onChange={(value) => {
+                              if (!value) {
+                                return
+                              }
+                              setStatusStylesDraft((current) => ({
+                                ...current,
+                                [statusKey]: {
+                                  ...current[statusKey],
+                                  textColorMode: value,
+                                },
+                              }))
+                            }}
+                            onBlur={() => commitTextDrafts()}
+                            classNames={{ input: 'mantine-dark-input', label: 'mantine-dark-label' }}
+                          />
+                          <TextInput
+                            size="xs"
+                            type="color"
+                            label="Text color override"
+                            value={draft.textColor}
+                            disabled={textColorDisabled}
+                            onChange={(e) => {
+                              const textColor = e.currentTarget.value
+                              setStatusStylesDraft((current) => ({
+                                ...current,
+                                [statusKey]: {
+                                  ...current[statusKey],
+                                  textColor,
+                                },
+                              }))
+                            }}
+                            onBlur={() => commitTextDrafts()}
+                            classNames={{ input: 'mantine-dark-input', label: 'mantine-dark-label' }}
+                          />
+                          <Select
+                            size="xs"
+                            label="Line style"
+                            value={draft.lineStyle}
+                            data={LINE_STYLE_OPTIONS}
+                            onChange={(value) => {
+                              if (!value) {
+                                return
+                              }
+                              setStatusStylesDraft((current) => ({
+                                ...current,
+                                [statusKey]: {
+                                  ...current[statusKey],
+                                  lineStyle: value,
+                                },
+                              }))
+                            }}
+                            onBlur={() => commitTextDrafts()}
+                            classNames={{ input: 'mantine-dark-input', label: 'mantine-dark-label' }}
+                          />
+                          <Button
+                            size="xs"
+                            variant="default"
+                            onClick={() => {
+                              setStatusStylesDraft((current) => ({
+                                ...current,
+                                [statusKey]: normalizeStatusStyleOverrides({ [statusKey]: {} })[statusKey],
+                              }))
+                            }}
+                            onBlur={() => commitTextDrafts()}
+                            style={{ alignSelf: 'end' }}
+                          >
+                            Reset
+                          </Button>
+                        </div>
+                        <Text size="xs" c="dimmed" mt={6}>
+                          Default ring: {baseStyle.ringBand} · default line: {baseStyle.linkStroke}
+                        </Text>
+                      </div>
+                    )
+                  })}
                 </div>
               </Stack>
             </div>

@@ -33,7 +33,7 @@ describe('someday status', () => {
     expect(getTemporalLinkPriority('now')).toBeGreaterThan(getTemporalLinkPriority('next'))
     expect(getTemporalLinkPriority('next')).toBeGreaterThan(getTemporalLinkPriority('later'))
     expect(getTemporalLinkPriority('later')).toBeGreaterThan(getTemporalLinkPriority('someday'))
-    expect(getTemporalLinkPriority('done')).toBeGreaterThan(getTemporalLinkPriority('later'))
+    expect(getTemporalLinkPriority('done')).toBeLessThan(getTemporalLinkPriority('later'))
   })
 
   it('renders a dashed level ring for a single someday level', () => {

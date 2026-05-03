@@ -13,6 +13,7 @@ import {
   IconFilters,
   IconInfoCircle,
   IconList,
+  IconArrowsMinimize,
   IconNotes,
   IconPercentage20,
   IconRefresh,
@@ -23,6 +24,13 @@ import {
   IconUpload,
   IconX,
 } from '@tabler/icons-react'
+import { STATUS_LABELS, STATUS_STYLES } from '../config'
+import {
+  STATUS_VISIBILITY_MODES,
+  buildDefaultStatusFilterModeMap,
+  hasActiveStatusFilterModes,
+  normalizeStatusFilterModeMap,
+} from '../utils/visibility'
 import { VIEWPORT_ZOOM_STEPS } from '../utils/viewport'
 import { Tooltip } from '../tooltip'
 
@@ -37,11 +45,7 @@ const TOOLBAR_TOOLTIP_MIDDLEWARES = {
   inline: false,
 }
 
-const RELEASE_FILTER_OPTIONS = {
-  all: 'all',
-  now: 'now',
-  next: 'next',
-}
+const STATUS_FILTER_ORDER = ['done', 'now', 'next', 'later', 'someday']
 
 const SCOPE_FILTER_ALL = '__all__'
 
@@ -96,6 +100,7 @@ export function SkillTreeToolbar({
   isBudgetOverviewVisible = false,
   onToggleBudgetOverview,
   hasBudgetAlert = false,
+  statusStyles = STATUS_STYLES,
 }) {
   const [toolbarSearch, setToolbarSearch] = useState('')
   const [isZoomMenuOpen, setIsZoomMenuOpen] = useState(false)
@@ -111,6 +116,10 @@ export function SkillTreeToolbar({
 
     return []
   }, [selectedScopeFilterId])
+
+  const statusFilterModeByKey = useMemo(() => {
+    return normalizeStatusFilterModeMap(releaseFilter)
+  }, [releaseFilter])
 
   const searchResults = useMemo(() => {
     const q = String(toolbarSearch ?? '').trim().toLowerCase()
@@ -142,12 +151,47 @@ export function SkillTreeToolbar({
     setSelectedScopeFilterId([...selectedScopeFilterIds, scopeId])
   }
 
+  const handleSetStatusFilterMode = (statusKey, nextMode) => {
+    if (!setReleaseFilter || !STATUS_FILTER_ORDER.includes(statusKey)) {
+      return
+    }
+
+    if (statusFilterModeByKey[statusKey] === nextMode) {
+      return
+    }
+
+    setReleaseFilter({
+      ...statusFilterModeByKey,
+      [statusKey]: nextMode,
+    })
+  }
+
+  const handleSetAllStatusFilterModes = (nextMode) => {
+    if (!setReleaseFilter) {
+      return
+    }
+
+    setReleaseFilter(
+      Object.fromEntries(STATUS_FILTER_ORDER.map((statusKey) => [statusKey, nextMode])),
+    )
+  }
+
+  const handleResetStatusFilterModes = () => {
+    if (!setReleaseFilter) {
+      return
+    }
+
+    setReleaseFilter(buildDefaultStatusFilterModeMap())
+  }
+
   const zoomPercentage = Math.round((currentZoomScale ?? 1) * 100)
   const zoomSliderValue = Math.round((currentZoomScale ?? 1) * 100)
   const zoomMarks = VIEWPORT_ZOOM_STEPS.map((step) => ({
     value: Math.round(step * 100),
     label: '',
   }))
+  const hasActiveFilters = hasActiveStatusFilterModes(statusFilterModeByKey) || selectedScopeFilterIds.length > 0
+
   return (
     <Paper
       className={isCollapsed ? 'skill-tree-toolbar skill-tree-toolbar--collapsed' : 'skill-tree-toolbar'}
@@ -453,8 +497,9 @@ export function SkillTreeToolbar({
                 <Tooltip label={`Filter: ${selectedReleaseFilterLabel}${scopeOptions.length > 0 ? ' · ' + selectedScopeFilterLabel : ''}`} position="top" middlewares={TOOLBAR_TOOLTIP_MIDDLEWARES}>
                   <ActionIcon
                     size="md"
-                    variant="default"
-                    aria-label="Filter"
+                    variant={hasActiveFilters ? 'filled' : 'default'}
+                    color={hasActiveFilters ? 'yellow' : undefined}
+                    aria-label={hasActiveFilters ? 'Filter (active)' : 'Filter'}
                     disabled={false}
                   >
                     <IconFilter {...TOOLBAR_ICON_PROPS} />
@@ -464,40 +509,156 @@ export function SkillTreeToolbar({
 
               <Menu.Dropdown>
                 <Menu.Label>Filter</Menu.Label>
-                <Menu.Item onClick={() => setReleaseFilter?.(RELEASE_FILTER_OPTIONS.all)}>
-                  {releaseFilter === RELEASE_FILTER_OPTIONS.all ? '● ' : ''}All
+                <Menu.Label>Statuses</Menu.Label>
+                <Menu.Item onClick={handleResetStatusFilterModes}>
+                  {hasActiveStatusFilterModes(statusFilterModeByKey) ? '' : '● '}All Statuses
                 </Menu.Item>
-                <Menu.Item onClick={() => setReleaseFilter?.(RELEASE_FILTER_OPTIONS.now)}>
-                  {releaseFilter === RELEASE_FILTER_OPTIONS.now ? '● ' : ''}Now
+                <Menu.Item onClick={() => handleSetAllStatusFilterModes(STATUS_VISIBILITY_MODES.visible)}>
+                  Show all
                 </Menu.Item>
-                <Menu.Item onClick={() => setReleaseFilter?.(RELEASE_FILTER_OPTIONS.next)}>
-                  {releaseFilter === RELEASE_FILTER_OPTIONS.next ? '● ' : ''}Next
+                <Menu.Item onClick={() => handleSetAllStatusFilterModes(STATUS_VISIBILITY_MODES.minimized)}>
+                  Minimize all
                 </Menu.Item>
-                <Menu.Divider />
-                <Menu.Label>Scopes</Menu.Label>
-                <Menu.Item onClick={() => setSelectedScopeFilterId?.(SCOPE_FILTER_ALL)}>
-                  {selectedScopeFilterIds.length === 0 ? '● ' : ''}All Scopes
+                <Menu.Item onClick={() => handleSetAllStatusFilterModes(STATUS_VISIBILITY_MODES.hidden)}>
+                  Hide all
                 </Menu.Item>
-                {scopeOptions.map((scope) => {
-                  const isSelected = selectedScopeFilterIds.includes(scope.value)
-
+                {STATUS_FILTER_ORDER.map((statusKey) => {
+                  const statusStyle = statusStyles[statusKey] ?? statusStyles.later ?? STATUS_STYLES.later
+                  const usesDashedLine = statusStyle.linkStrokeDasharray && statusStyle.linkStrokeDasharray !== 'none'
+                  const visibilityMode = statusFilterModeByKey[statusKey] ?? STATUS_VISIBILITY_MODES.visible
                   return (
-                    <Menu.Item key={scope.value} onClick={() => handleToggleScopeFilter(scope.value)}>
-                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                        {isSelected ? '● ' : ''}
+                    <Menu.Item key={statusKey} onClick={() => handleSetStatusFilterMode(statusKey, STATUS_VISIBILITY_MODES.visible)}>
+                      <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', gap: 8 }}>
                         <span
                           className="skill-node-tooltip__scope"
-                          style={scope.color ? {
-                            borderColor: scope.color,
-                            color: scope.color,
-                          } : undefined}
+                          style={{
+                            borderColor: statusStyle.badge,
+                            color: statusStyle.badge,
+                            borderStyle: usesDashedLine ? 'dashed' : 'solid',
+                          }}
                         >
-                          {scope.label}
+                          {STATUS_LABELS[statusKey] ?? statusKey}
+                        </span>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                          <ActionIcon
+                            size="xs"
+                            variant={visibilityMode === STATUS_VISIBILITY_MODES.visible ? 'filled' : 'default'}
+                            color={statusStyle.badge}
+                            aria-label={`${STATUS_LABELS[statusKey] ?? statusKey}: visible`}
+                            onClick={(event) => {
+                              event.preventDefault()
+                              event.stopPropagation()
+                              handleSetStatusFilterMode(statusKey, STATUS_VISIBILITY_MODES.visible)
+                            }}
+                          >
+                            <IconEye size={14} stroke={1.8} />
+                          </ActionIcon>
+                          <ActionIcon
+                            size="xs"
+                            variant={visibilityMode === STATUS_VISIBILITY_MODES.minimized ? 'filled' : 'default'}
+                            color={statusStyle.badge}
+                            aria-label={`${STATUS_LABELS[statusKey] ?? statusKey}: minimized`}
+                            onClick={(event) => {
+                              event.preventDefault()
+                              event.stopPropagation()
+                              handleSetStatusFilterMode(statusKey, STATUS_VISIBILITY_MODES.minimized)
+                            }}
+                          >
+                            <IconArrowsMinimize size={14} stroke={1.8} />
+                          </ActionIcon>
+                          <ActionIcon
+                            size="xs"
+                            variant={visibilityMode === STATUS_VISIBILITY_MODES.hidden ? 'filled' : 'default'}
+                            color={statusStyle.badge}
+                            aria-label={`${STATUS_LABELS[statusKey] ?? statusKey}: hidden`}
+                            onClick={(event) => {
+                              event.preventDefault()
+                              event.stopPropagation()
+                              handleSetStatusFilterMode(statusKey, STATUS_VISIBILITY_MODES.hidden)
+                            }}
+                          >
+                            <IconEyeOff size={14} stroke={1.8} />
+                          </ActionIcon>
                         </span>
                       </span>
                     </Menu.Item>
                   )
                 })}
+                <Menu.Divider />
+                <Menu.Label>Scopes</Menu.Label>
+                <Menu.Item onClick={() => setSelectedScopeFilterId?.(SCOPE_FILTER_ALL)}>
+                  {selectedScopeFilterIds.length === 0 ? '● ' : ''}All Scopes
+                </Menu.Item>
+                {(() => {
+                  const normalizedGroupKey = (color) => (
+                    typeof color === 'string' && color.trim().length > 0
+                      ? color.trim().toLowerCase()
+                      : '__none__'
+                  )
+
+                  const groups = []
+                  const groupByKey = new Map()
+
+                  for (const scope of scopeOptions) {
+                    const groupKey = normalizedGroupKey(scope.color)
+                    if (!groupByKey.has(groupKey)) {
+                      const group = {
+                        key: groupKey,
+                        color: scope.color ?? null,
+                        label: scope.groupLabel || (scope.color ? scope.color.toUpperCase() : null),
+                        scopes: [],
+                      }
+                      groupByKey.set(groupKey, group)
+                      groups.push(group)
+                    }
+
+                    groupByKey.get(groupKey).scopes.push(scope)
+                  }
+
+                  return groups.flatMap((group) => {
+                    const renderedItems = []
+
+                    if (group.label) {
+                      renderedItems.push(
+                        <Menu.Label key={`group-${group.key}`} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          {group.color && (
+                            <span style={{
+                              display: 'inline-block',
+                              width: 8,
+                              height: 8,
+                              borderRadius: '50%',
+                              background: group.color,
+                              flexShrink: 0,
+                            }} />
+                          )}
+                          {group.label}
+                        </Menu.Label>
+                      )
+                    }
+
+                    for (const scope of group.scopes) {
+                      const isSelected = selectedScopeFilterIds.includes(scope.value)
+                      renderedItems.push(
+                        <Menu.Item key={scope.value} onClick={() => handleToggleScopeFilter(scope.value)}>
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                            {isSelected ? '● ' : ''}
+                            <span
+                              className="skill-node-tooltip__scope"
+                              style={scope.color ? {
+                                borderColor: scope.color,
+                                color: scope.color,
+                              } : undefined}
+                            >
+                              {scope.label}
+                            </span>
+                          </span>
+                        </Menu.Item>
+                      )
+                    }
+
+                    return renderedItems
+                  })
+                })()}
               </Menu.Dropdown>
             </Menu>
 

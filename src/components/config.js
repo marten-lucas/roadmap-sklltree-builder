@@ -49,7 +49,7 @@ export const STATUS_STYLES = {
     glowSegment: 'transparent',
     linkStroke: '#94a3b8',
     linkStrokeWidth: '6',
-    linkOpacity: '1',
+    linkOpacity: '0.32',
     linkStrokeDasharray: 'none',
   },
   now: {
@@ -61,7 +61,7 @@ export const STATUS_STYLES = {
     glowSegment: 'rgba(239, 68, 68, 0.55)',
     linkStroke: '#dc2626',
     linkStrokeWidth: '6',
-    linkOpacity: '1',
+    linkOpacity: '0.92',
     linkStrokeDasharray: 'none',
   },
   next: {
@@ -73,7 +73,7 @@ export const STATUS_STYLES = {
     glowSegment: 'rgba(6, 182, 212, 0.28)',
     linkStroke: '#06b6d4',
     linkStrokeWidth: '6',
-    linkOpacity: '1',
+    linkOpacity: '0.74',
     linkStrokeDasharray: 'none',
   },
   later: {

@@ -48,7 +48,7 @@ const getNodeByLabel = (document, label) => (
 )
 
 const getNodeAnchor = (page, shortName) => (
-  page.locator(`foreignObject.skill-node-export-anchor[data-short-name="${shortName}"]`).first()
+  page.locator(`foreignObject.skill-node-export-anchor[data-short-name="${String(shortName).toLowerCase()}"]`).first()
 )
 
 const getNodeButton = (page, shortName) => (
@@ -178,7 +178,7 @@ const openToolbarMenuIfNeeded = async (page) => {
 }
 
 const openFilterMenu = async (page) => {
-  await page.getByRole('button', { name: 'Filter' }).click()
+  await page.getByRole('button', { name: /Filter/ }).click()
 }
 
 const createToolbarSegment = async (page, label) => {
@@ -414,26 +414,28 @@ test.describe('Inspector and layout regressions', () => {
   })
 
   test('filters the canvas by release status', async ({ page }) => {
+    // Seed data: FND=done, BCK=now, TWD=next (child of FND), DBM=later (child of BCK)
+    // Hide "Next" status completely and verify TWD disappears.
     await openFilterMenu(page)
-    await page.getByRole('menuitem', { name: 'Now', exact: true }).click()
+    await page.getByRole('button', { name: 'Next: hidden', exact: true }).click()
 
     await expect(getNodeAnchor(page, 'FND')).toBeVisible()
     await expect(getNodeAnchor(page, 'BCK')).toBeVisible()
-    await expect(getNodeAnchor(page, 'DBM')).toBeVisible()
+    await expect(getNodeAnchor(page, 'TWD')).toHaveCount(0)
 
-    await expect(getNodeButton(page, 'FND')).toHaveClass(/skill-node-button--minimal/)
-    await expect(getNodeButton(page, 'BCK')).not.toHaveClass(/skill-node-button--minimal/)
-    await expect(getNodeButton(page, 'DBM')).toHaveClass(/skill-node-button--minimal/)
-
+    // Set "Next" to minimized and verify TWD returns in minimal mode.
     await openFilterMenu(page)
-    await page.getByRole('menuitem', { name: 'Next', exact: true }).click()
+    await page.getByRole('button', { name: 'Next: minimized', exact: true }).click()
 
-    await expect(getNodeAnchor(page, 'FND')).toBeVisible()
-    await expect(getNodeAnchor(page, 'BCK')).toBeVisible()
-    await expect(getNodeAnchor(page, 'DBM')).toBeVisible()
-    await expect(getNodeButton(page, 'FND')).toHaveClass(/skill-node-button--minimal/)
-    await expect(getNodeButton(page, 'BCK')).not.toHaveClass(/skill-node-button--minimal/)
-    await expect(getNodeButton(page, 'DBM')).toHaveClass(/skill-node-button--minimal/)
+    await expect(getNodeAnchor(page, 'TWD')).toBeVisible()
+    await expect(getNodeButton(page, 'TWD')).toHaveClass(/skill-node-button--minimal/)
+
+    // Set "Next" back to visible and verify full rendering.
+    await openFilterMenu(page)
+    await page.getByRole('button', { name: 'Next: visible', exact: true }).click()
+
+    await expect(getNodeAnchor(page, 'TWD')).toBeVisible()
+    await expect(getNodeButton(page, 'TWD')).not.toHaveClass(/skill-node-button--minimal/)
   })
 
   test('renders additional dependency portals after assigning a dependency', async ({ page }) => {

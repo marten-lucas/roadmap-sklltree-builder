@@ -224,7 +224,7 @@ const formatDisplayDate = (value) => {
   return parsed.toLocaleDateString()
 }
 
-const buildRoadmapLegendMarkup = (roadmapDocument) => {
+const buildRoadmapLegendMarkup = (roadmapDocument, statusStyles = STATUS_STYLES) => {
   const legendStatusDescriptions = {
     ...(roadmapDocument?.statusDescriptions ?? {}),
   }
@@ -235,6 +235,7 @@ const buildRoadmapLegendMarkup = (roadmapDocument) => {
     legendStatusDescriptions,
     showPortals: true,
     className: 'html-export__roadmap-legend-surface',
+    statusStyles,
   })}
     </div>
   `
@@ -384,7 +385,7 @@ const collectMatrixNodes = (document) => {
   return result
 }
 
-const buildPriorityMatrixSvgMarkup = (roadmapDocument, releaseId = null, selectedTreeStatuses = null) => {
+const buildPriorityMatrixSvgMarkup = (roadmapDocument, releaseId = null, selectedTreeStatuses = null, statusStyles = STATUS_STYLES) => {
   const allowedTreeStatuses = selectedTreeStatuses == null ? null : new Set(selectedTreeStatuses)
   const allNodes = collectMatrixNodes(roadmapDocument)
   const plottable = allNodes.filter((n) => {
@@ -427,7 +428,7 @@ const buildPriorityMatrixSvgMarkup = (roadmapDocument, releaseId = null, selecte
 
   const nodeCircles = entries.map((entry) => {
     const { node, x, y, radius = NODE_RADIUS, statusKey } = entry
-    const style = STATUS_STYLES[statusKey] ?? STATUS_STYLES.later
+    const style = statusStyles[statusKey] ?? statusStyles.later ?? STATUS_STYLES.later
     const shortName = escapeHtml(String(node.shortName ?? node.label ?? '').slice(0, 3).toUpperCase())
     const effortLabel = escapeHtml(EFFORT_SIZE_LABELS[getNodeDisplayEffort(node).size] ?? getNodeDisplayEffort(node).size ?? '–')
     const benefitLabel = escapeHtml(BENEFIT_SIZE_LABELS[getNodeDisplayBenefit(node).size] ?? getNodeDisplayBenefit(node).size ?? '–')
@@ -510,7 +511,7 @@ const buildReleaseSectionsMarkup = ({
   }).join('\n')
 }
 
-const buildViewerScript = (exportBaseName = 'skilltree-roadmap') => `
+const buildViewerScript = (exportBaseName = 'skilltree-roadmap', statusStyles = STATUS_STYLES) => `
     (() => {
   window.__skilltreeExportViewerReady = true
       const RELEASE_FILTER = ${JSON.stringify(RELEASE_FILTER_OPTIONS)}
@@ -538,7 +539,7 @@ const buildViewerScript = (exportBaseName = 'skilltree-roadmap') => `
       const INTERACTIVE_SVG_RUNTIME_SCRIPT = ${stringifyForInlineScript(INTERACTIVE_SVG_RUNTIME_SCRIPT)}
       const INTERACTIVE_SVG_RUNTIME_STYLE_TEXT = ${stringifyForInlineScript(INTERACTIVE_SVG_RUNTIME_STYLE_TEXT)}
 
-      const STATUS_STYLES = ${JSON.stringify(STATUS_STYLES)}
+      const STATUS_STYLES = ${JSON.stringify(statusStyles)}
 
       const STATUS_TEXT_COLORS = {
         done: '#5a6576',
@@ -625,6 +626,9 @@ const buildViewerScript = (exportBaseName = 'skilltree-roadmap') => `
       const fullscreenButton = document.getElementById('html-export-fullscreen')
       const scopeFilterSelect = document.getElementById('html-export-filter-scope')
       const releaseFilterSelect = document.getElementById('html-export-filter-release')
+      const filterMenuButton = document.getElementById('html-export-filter-toggle')
+      const releaseFilterButtons = Array.from(document.querySelectorAll('[data-html-export-release-filter]'))
+      const scopeFilterButtons = Array.from(document.querySelectorAll('[data-html-export-scope-filter]'))
       const printButton = document.getElementById('html-export-print')
       const pngButton = document.getElementById('html-export-png')
       const svgButton = document.getElementById('html-export-svg')
@@ -674,6 +678,62 @@ const buildViewerScript = (exportBaseName = 'skilltree-roadmap') => `
         }
 
         return filteredScopeIds
+      }
+
+      const getSelectedReleaseFilter = () => releaseFilterSelect?.value || RELEASE_FILTER.all
+
+      const syncFilterButtonState = () => {
+        const selectedScopeIds = getSelectedScopeIds()
+        const selectedReleaseFilter = getSelectedReleaseFilter()
+        const hasActiveFilters = selectedReleaseFilter !== RELEASE_FILTER.all || selectedScopeIds.length > 0
+
+        filterMenuButton?.classList.toggle('html-export__menu-button--active', hasActiveFilters)
+        filterMenuButton?.setAttribute('aria-label', hasActiveFilters ? 'Filter (active)' : 'Filter')
+
+        releaseFilterButtons.forEach((button) => {
+          const isSelected = button.getAttribute('data-html-export-release-filter') === selectedReleaseFilter
+          button.classList.toggle('html-export__menu-action--selected', isSelected)
+          button.setAttribute('aria-pressed', String(isSelected))
+        })
+
+        scopeFilterButtons.forEach((button) => {
+          const scopeId = button.getAttribute('data-html-export-scope-filter') ?? ''
+          const isSelected = scopeId === SCOPE_FILTER_ALL
+            ? selectedScopeIds.length === 0
+            : selectedScopeIds.includes(scopeId)
+          button.classList.toggle('html-export__menu-action--selected', isSelected)
+          button.setAttribute('aria-pressed', String(isSelected))
+        })
+      }
+
+      const setSelectedReleaseFilter = (nextValue) => {
+        if (!releaseFilterSelect) {
+          return
+        }
+
+        releaseFilterSelect.value = nextValue || RELEASE_FILTER.all
+        releaseFilterSelect.dispatchEvent(new Event('change', { bubbles: true }))
+      }
+
+      const setSelectedScopeIds = (nextScopeIds) => {
+        if (!scopeFilterSelect) {
+          return
+        }
+
+        const normalizedScopeIds = Array.isArray(nextScopeIds)
+          ? nextScopeIds.filter((scopeId) => scopeId && scopeId !== SCOPE_FILTER_ALL && scopeId !== 'all')
+          : []
+
+        Array.from(scopeFilterSelect.options).forEach((option) => {
+          if (option.value === SCOPE_FILTER_ALL || option.value === 'all') {
+            option.selected = normalizedScopeIds.length === 0
+            return
+          }
+
+          option.selected = normalizedScopeIds.includes(option.value)
+        })
+
+        scopeFilterSelect.dispatchEvent(new Event('change', { bubbles: true }))
       }
 
       const scopeIdsMatchFilter = (scopeIds, selectedScopeIds) => {
@@ -1954,7 +2014,7 @@ const buildViewerScript = (exportBaseName = 'skilltree-roadmap') => `
 
       const applyTreeFilters = () => {
         const selectedScopeIds = getSelectedScopeIds()
-        const selectedReleaseFilter = releaseFilterSelect?.value || RELEASE_FILTER.all
+        const selectedReleaseFilter = getSelectedReleaseFilter()
         const visibleNodeIds = new Set()
         const visibleSegmentIds = new Set()
 
@@ -2036,6 +2096,7 @@ const buildViewerScript = (exportBaseName = 'skilltree-roadmap') => `
         setTooltipMode(activeLabelMode)
         refreshPortalElements(activeLabelMode)
         syncReadonlySelection()
+        syncFilterButtonState()
       }
 
       let hoveredPortalElement = null
@@ -2402,6 +2463,32 @@ const buildViewerScript = (exportBaseName = 'skilltree-roadmap') => `
         downloadSvg(svgRoot, buildViewerExportFileName('svg', 'clean'), { clean: true })
       })
 
+      releaseFilterButtons.forEach((button) => {
+        button.addEventListener('click', () => {
+          const nextValue = button.getAttribute('data-html-export-release-filter') || RELEASE_FILTER.all
+          setSelectedReleaseFilter(nextValue)
+        })
+      })
+
+      scopeFilterButtons.forEach((button) => {
+        button.addEventListener('click', () => {
+          const scopeId = button.getAttribute('data-html-export-scope-filter') || SCOPE_FILTER_ALL
+
+          if (scopeId === SCOPE_FILTER_ALL) {
+            setSelectedScopeIds([])
+            return
+          }
+
+          const selectedScopeIds = getSelectedScopeIds()
+          if (selectedScopeIds.includes(scopeId)) {
+            setSelectedScopeIds(selectedScopeIds.filter((selectedId) => selectedId !== scopeId))
+            return
+          }
+
+          setSelectedScopeIds([...selectedScopeIds, scopeId])
+        })
+      })
+
       scopeFilterSelect?.addEventListener('change', applyTreeFilters)
       releaseFilterSelect?.addEventListener('change', applyTreeFilters)
 
@@ -2419,6 +2506,7 @@ export const buildHtmlExportDocument = ({
   selectedReleaseNoteStatuses = null,
   statusSummarySortMode = 'manual',
   includePriorityMatrix = true,
+  statusStyles = STATUS_STYLES,
 }) => {
   const resolvedReleaseIds = getResolvedReleaseIds(roadmapDocument, selectedReleaseIds)
   const releaseFilteredDocument = filterDocumentByReleaseIds(roadmapDocument, resolvedReleaseIds)
@@ -2570,6 +2658,12 @@ export const buildHtmlExportDocument = ({
       background: rgba(8, 47, 73, 0.52);
     }
 
+    .html-export__menu-button--active {
+      border-color: rgba(250, 204, 21, 0.42);
+      background: rgba(120, 53, 15, 0.78);
+      color: #fef3c7;
+    }
+
     .html-export__menu-icon {
       width: 16px;
       height: 16px;
@@ -2661,39 +2755,69 @@ export const buildHtmlExportDocument = ({
       background: rgba(8, 47, 73, 0.55);
     }
 
+    .html-export__menu-action--selected {
+      border-color: rgba(103, 232, 249, 0.38);
+      background: rgba(14, 116, 144, 0.34);
+      color: #ecfeff;
+    }
+
     .html-export__menu-filter {
       display: flex;
       flex-direction: column;
-      gap: 8px;
-      margin-bottom: 10px;
+      gap: 14px;
     }
 
-    .html-export__menu-filter label {
+    .html-export__menu-filter-section {
       display: flex;
       flex-direction: column;
-      gap: 5px;
+      gap: 8px;
+    }
+
+    .html-export__menu-filter-label {
+      margin: 0;
       color: #cbd5e1;
       font-size: 0.82rem;
+      font-weight: 600;
+      letter-spacing: 0.03em;
+      text-transform: uppercase;
     }
 
-    .html-export__menu-filter select {
-      appearance: none;
-      border: 1px solid rgba(103, 232, 249, 0.25);
-      border-radius: 10px;
-      padding: 7px 10px;
-      background: rgba(8, 47, 73, 0.35);
-      color: #ecfeff;
-      font-size: 0.88rem;
+    .html-export__menu-filter-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
     }
 
-    .html-export__menu-filter select[multiple] {
-      min-height: 116px;
-      padding-block: 6px;
+    .html-export__menu-filter-native {
+      display: none;
     }
 
-    .html-export__menu-filter-hint {
-      color: #94a3b8;
-      font-size: 0.72rem;
+    .html-export__menu-filter-scope {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      min-width: 0;
+    }
+
+    .html-export__menu-filter-all {
+      font-weight: 600;
+    }
+
+    .html-export__menu-filter-bullet {
+      opacity: 0;
+      width: 0.8rem;
+      flex-shrink: 0;
+      color: currentColor;
+    }
+
+    .html-export__menu-action--selected .html-export__menu-filter-bullet {
+      opacity: 1;
+    }
+
+    .html-export__menu-filter-badge {
+      display: inline-flex;
+      align-items: center;
+      min-width: 0;
     }
 
     .html-export__action,
@@ -3518,7 +3642,7 @@ export const buildHtmlExportDocument = ({
             </div>
           </details>
           <details class="html-export__menu">
-            <summary class="html-export__menu-button" aria-label="Filter">
+            <summary id="html-export-filter-toggle" class="html-export__menu-button" aria-label="Filter">
               <span class="html-export__menu-icon" aria-hidden="true">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                   <path d="M3 5h18l-7 8v5l-4 2v-7L3 5z" />
@@ -3527,30 +3651,57 @@ export const buildHtmlExportDocument = ({
             </summary>
             <div class="html-export__menu-panel html-export__menu-panel--filters">
               <div class="html-export__menu-filter">
-                <label>
-                  <span>Scope</span>
-                  <select id="html-export-filter-scope" multiple size="${Math.min(Math.max((roadmapDocument.scopes ?? []).length + 1, 4), 8)}">
-                    <option value="__all__" selected>All Scopes</option>
+                <div class="html-export__menu-filter-section">
+                  <p class="html-export__menu-filter-label">Levels</p>
+                  <div class="html-export__menu-filter-list">
+                    <button class="html-export__menu-action html-export__menu-action--selected" type="button" data-html-export-release-filter="all" aria-pressed="true">
+                      <span class="html-export__menu-filter-bullet" aria-hidden="true">●</span>
+                      <span>All</span>
+                    </button>
+                    <button class="html-export__menu-action" type="button" data-html-export-release-filter="now" aria-pressed="false">
+                      <span class="html-export__menu-filter-bullet" aria-hidden="true">●</span>
+                      <span>Now</span>
+                    </button>
+                    <button class="html-export__menu-action" type="button" data-html-export-release-filter="next" aria-pressed="false">
+                      <span class="html-export__menu-filter-bullet" aria-hidden="true">●</span>
+                      <span>Next</span>
+                    </button>
+                  </div>
+                </div>
+                <div class="html-export__menu-filter-section">
+                  <p class="html-export__menu-filter-label">Scopes</p>
+                  <div class="html-export__menu-filter-list">
+                    <button class="html-export__menu-action html-export__menu-action--selected" type="button" data-html-export-scope-filter="__all__" aria-pressed="true">
+                      <span class="html-export__menu-filter-bullet" aria-hidden="true">●</span>
+                      <span class="html-export__menu-filter-all">All Scopes</span>
+                    </button>
                     ${(roadmapDocument.scopes ?? []).map((scope) => (`
-                      <option value="${escapeHtml(scope.id)}">${escapeHtml(scope.label)}</option>
+                      <button class="html-export__menu-action" type="button" data-html-export-scope-filter="${escapeHtml(scope.id)}" aria-pressed="false">
+                        <span class="html-export__menu-filter-bullet" aria-hidden="true">●</span>
+                        <span class="html-export__menu-filter-scope">
+                          <span class="html-export__menu-filter-badge skill-node-tooltip__scope"${scope.color ? ` style="border-color: ${escapeHtml(scope.color)}; color: ${escapeHtml(scope.color)};"` : ''}>${escapeHtml(scope.label)}</span>
+                        </span>
+                      </button>
                     `)).join('')}
-                  </select>
-                  <span class="html-export__menu-filter-hint">Ctrl/Cmd-click for multi-select</span>
-                </label>
-                <label>
-                  <span>Release</span>
-                  <select id="html-export-filter-release">
-                    <option value="all">All</option>
-                    <option value="now">Now</option>
-                    <option value="next">Next</option>
-                  </select>
-                </label>
+                  </div>
+                </div>
+                <select id="html-export-filter-scope" class="html-export__menu-filter-native" multiple size="${Math.min(Math.max((roadmapDocument.scopes ?? []).length + 1, 4), 8)}">
+                  <option value="__all__" selected>All Scopes</option>
+                  ${(roadmapDocument.scopes ?? []).map((scope) => (`
+                    <option value="${escapeHtml(scope.id)}">${escapeHtml(scope.label)}</option>
+                  `)).join('')}
+                </select>
+                <select id="html-export-filter-release" class="html-export__menu-filter-native">
+                  <option value="all">All</option>
+                  <option value="now">Now</option>
+                  <option value="next">Next</option>
+                </select>
               </div>
             </div>
           </details>
         </div>
       </header>
-      ${buildRoadmapLegendMarkup(roadmapDocument)}
+      ${buildRoadmapLegendMarkup(roadmapDocument, statusStyles)}
       <div id="html-export-tree-shell" class="html-export__tree-shell">
         <div id="html-export-tree-canvas" class="html-export__tree-canvas">${svgMarkup}</div>
       </div>
@@ -3575,12 +3726,12 @@ export const buildHtmlExportDocument = ({
         <p class="html-export__eyebrow">Priority Matrix</p>
       </header>
       <div id="pm-export-container" class="html-export__priority-matrix-svg" style="position:relative">
-        ${buildPriorityMatrixSvgMarkup(canonicalDoc, resolvedReleaseIds[0] ?? null, selectedTreeStatuses)}
+        ${buildPriorityMatrixSvgMarkup(canonicalDoc, resolvedReleaseIds[0] ?? null, selectedTreeStatuses, statusStyles)}
         <div id="pm-export-tooltip" style="display:none;position:absolute;pointer-events:none;z-index:120;min-width:160px;padding:10px 14px;border-radius:12px;border:1px solid rgba(71,85,105,0.55);background:rgba(2,6,23,0.97);color:#e2e8f0;font-size:0.82rem;line-height:1.5;box-shadow:0 8px 24px rgba(0,0,0,0.45)"></div>
       </div>
       <div class="html-export__matrix-legend">
         ${['done', 'now', 'next', 'later'].map((s) => {
-          const style = STATUS_STYLES[s] ?? STATUS_STYLES.later
+          const style = statusStyles[s] ?? statusStyles.later ?? STATUS_STYLES.later
           return `<div class="html-export__matrix-legend-item"><div class="html-export__matrix-legend-dot" style="background:${style.glowSegment === 'transparent' ? style.ringBand : style.glowSegment};border:1.5px solid ${style.ringBand}"></div><span>${s.charAt(0).toUpperCase() + s.slice(1)}</span></div>`
         }).join('')}
       </div>
@@ -3590,7 +3741,7 @@ export const buildHtmlExportDocument = ({
 
   <script id="${HTML_EXPORT_DATA_SCRIPT_ID}" type="application/json">${canonicalPayloadJson}</script>
   <script>${HTML_TO_IMAGE_BUNDLE}</script>
-  <script>${buildViewerScript(exportBaseName)}</script>
+  <script>${buildViewerScript(exportBaseName, statusStyles)}</script>
 </body>
 </html>`
 }
@@ -3650,6 +3801,7 @@ export const exportHtmlFromSkillTree = ({
   selectedReleaseNoteStatuses = null,
   statusSummarySortMode = 'manual',
   includePriorityMatrix = true,
+  statusStyles = STATUS_STYLES,
   sourceDocument = globalThis?.document,
 }) => {
   if (typeof window === 'undefined' || typeof window.document === 'undefined') {
@@ -3675,6 +3827,7 @@ export const exportHtmlFromSkillTree = ({
     selectedReleaseNoteStatuses,
     statusSummarySortMode,
     includePriorityMatrix,
+    statusStyles,
   })
 
   const blob = new Blob([html], { type: 'text/html;charset=utf-8' })

@@ -79,13 +79,12 @@ test.describe('Portal direction under release filtering', () => {
     expect(before.portals.length).toBeGreaterThan(0)
 
     await page.getByRole('button', { name: 'Filter' }).click()
-    await page.getByRole('menuitem', { name: /Now$/ }).click()
-
-    await expect(mmNode.locator('.skill-node-button--minimal')).toBeVisible({ timeout: 10_000 })
+    await page.getByRole('textbox', { name: 'Statuses' }).click()
+    await page.getByRole('option', { name: 'Now', exact: true }).click()
 
     const after = await getPortalSnapshotForShortName(page, 'mm')
     expect(after).toBeTruthy()
-    expect(after.isMinimal).toBe(true)
+    expect(after.isMinimal).toBe(false)
     expect(after.portals.map((portal) => portal.key)).toEqual(before.portals.map((portal) => portal.key))
 
     for (const beforePortal of before.portals) {

@@ -2,7 +2,41 @@ import React, { createElement } from 'react'
 import { renderToString } from 'react-dom/server'
 import { MantineProvider } from '@mantine/core'
 import { describe, expect, it, vi } from 'vitest'
-import { PANEL_INSPECTOR } from '../utils/panelsState'
+import { PANEL_CENTER, PANEL_INSPECTOR } from '../utils/panelsState'
+
+const mockUiState = {
+  selectedNodeId: null,
+  setSelectedNodeId: () => {},
+  selectedNodeIds: ['node-backend', 'node-frontend'],
+  setSelectedNodeIds: () => {},
+  selectedLevelKeys: [],
+  setSelectedLevelKeys: () => {},
+  selectedProgressLevelId: null,
+  setSelectedProgressLevelId: () => {},
+  selectedSegmentId: null,
+  _setSelectedSegmentId: () => {},
+  selectedPortalKey: null,
+  setSelectedPortalKey: () => {},
+  rightPanel: PANEL_INSPECTOR,
+  setRightPanel: () => {},
+  isReleaseNotesPanelOpen: true,
+  setIsReleaseNotesPanelOpen: () => {},
+  isToolbarCollapsed: false,
+  setIsToolbarCollapsed: () => {},
+  isLegendVisible: false,
+  setIsLegendVisible: () => {},
+  selectedScopeFilterId: '__all__',
+  setSelectedScopeFilterId: () => {},
+  releaseFilter: 'all',
+  setReleaseFilter: () => {},
+  transformKey: 0,
+  setTransformKey: () => {},
+  selectNodeId: () => {},
+  selectSegmentId: () => {},
+  resetSelections: () => {},
+  selectedReleaseId: null,
+  setSelectedReleaseId: () => {},
+}
 
 vi.mock('../utils/documentState', async (importOriginal) => {
   const actual = await importOriginal()
@@ -60,45 +94,16 @@ vi.mock('../utils/documentState', async (importOriginal) => {
 })
 
 vi.mock('../../hooks/useSkillTreeUiState', () => ({
-  useSkillTreeUiState: () => ({
-    selectedNodeId: null,
-    setSelectedNodeId: () => {},
-    selectedNodeIds: ['node-backend', 'node-frontend'],
-    setSelectedNodeIds: () => {},
-    selectedLevelKeys: [],
-    setSelectedLevelKeys: () => {},
-    selectedProgressLevelId: null,
-    setSelectedProgressLevelId: () => {},
-    selectedSegmentId: null,
-    _setSelectedSegmentId: () => {},
-    selectedPortalKey: null,
-    setSelectedPortalKey: () => {},
-    rightPanel: PANEL_INSPECTOR,
-    setRightPanel: () => {},
-    isReleaseNotesPanelOpen: true,
-    setIsReleaseNotesPanelOpen: () => {},
-    isToolbarCollapsed: false,
-    setIsToolbarCollapsed: () => {},
-    isLegendVisible: false,
-    setIsLegendVisible: () => {},
-    selectedScopeFilterId: '__all__',
-    setSelectedScopeFilterId: () => {},
-    releaseFilter: 'all',
-    setReleaseFilter: () => {},
-    transformKey: 0,
-    setTransformKey: () => {},
-    selectNodeId: () => {},
-    selectSegmentId: () => {},
-    resetSelections: () => {},
-    selectedReleaseId: null,
-    setSelectedReleaseId: () => {},
-  }),
+  useSkillTreeUiState: () => mockUiState,
 }))
 
 import { SkillTree } from '../SkillTree'
 
 describe('SkillTree internal notes integration', () => {
   it('renders inspector and internal notes together in the right sidebar', () => {
+    mockUiState.rightPanel = PANEL_INSPECTOR
+    mockUiState.isReleaseNotesPanelOpen = true
+
     const html = renderToString(
       createElement(MantineProvider, null,
         createElement(SkillTree),
@@ -109,5 +114,20 @@ describe('SkillTree internal notes integration', () => {
     expect(html).toContain('2 selected')
     expect(html).toContain('Internal notes')
     expect(html).toContain('Close internal notes panel')
+    expect(html).toContain('skill-tree-sidebar-stack')
+  })
+
+  it('renders internal notes as the full right panel when inspector is not visible', () => {
+    mockUiState.rightPanel = PANEL_CENTER
+    mockUiState.isReleaseNotesPanelOpen = true
+
+    const html = renderToString(
+      createElement(MantineProvider, null,
+        createElement(SkillTree),
+      ),
+    )
+
+    expect(html).toContain('Internal notes')
+    expect(html).not.toContain('skill-tree-sidebar-stack')
   })
 })

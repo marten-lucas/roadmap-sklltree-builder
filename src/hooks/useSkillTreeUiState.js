@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { PANEL_INSPECTOR } from '../components/utils/panelsState'
-import { RELEASE_FILTER_OPTIONS, SCOPE_FILTER_ALL } from '../components/utils/visibility'
+import { SCOPE_FILTER_ALL, buildDefaultStatusFilterModeMap } from '../components/utils/visibility'
 
 export function useSkillTreeUiState() {
   const [selectedNodeId, setSelectedNodeId] = useState(null)
@@ -15,7 +15,7 @@ export function useSkillTreeUiState() {
   const [isLegendVisible, setIsLegendVisible] = useState(true)
   const [isBudgetOverviewVisible, setIsBudgetOverviewVisible] = useState(false)
   const [selectedScopeFilterId, setSelectedScopeFilterId] = useState(SCOPE_FILTER_ALL)
-  const [releaseFilter, setReleaseFilter] = useState(RELEASE_FILTER_OPTIONS.all)
+  const [releaseFilter, setReleaseFilter] = useState(() => buildDefaultStatusFilterModeMap())
   const [selectedReleaseId, setSelectedReleaseId] = useState(null)
   const [transformKey, setTransformKey] = useState(0)
 

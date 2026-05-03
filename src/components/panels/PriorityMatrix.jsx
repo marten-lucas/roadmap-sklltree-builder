@@ -72,11 +72,11 @@ const resolveMatrixStatusKey = (node, releaseId = null) => {
 
 // computeMatrixLayout is imported from ../utils/matrixLayout
 
-const NodeCircle = ({ entry, onHover, onSelectNode, onDragStart, editMode, isHovered }) => {
+const NodeCircle = ({ entry, onHover, onSelectNode, onDragStart, editMode, isHovered, statusStyles = STATUS_STYLES }) => {
   const { node, x, y } = entry
   const nodeRadius = entry.radius ?? NODE_RADIUS
   const statusKey = entry.statusKey ?? node.status ?? 'later'
-  const statusStyles = STATUS_STYLES[statusKey] ?? STATUS_STYLES.later
+  const nodeStatusStyles = statusStyles[statusKey] ?? statusStyles.later ?? STATUS_STYLES.later
   const shortName = String(node.shortName ?? node.label ?? '').slice(0, 3).toUpperCase()
 
   const handleMouseDown = (event) => {
@@ -117,8 +117,8 @@ const NodeCircle = ({ entry, onHover, onSelectNode, onDragStart, editMode, isHov
         cx={x}
         cy={y}
         r={nodeRadius}
-        fill={statusStyles.glowSegment ?? '#1e3a5f'}
-        stroke={statusStyles.ringBand ?? '#3b82f6'}
+        fill={nodeStatusStyles.glowSegment ?? '#1e3a5f'}
+        stroke={nodeStatusStyles.ringBand ?? '#3b82f6'}
         strokeWidth={isHovered ? 2.5 : 1.5}
       />
       {entry.showLabel !== false && (
@@ -127,7 +127,7 @@ const NodeCircle = ({ entry, onHover, onSelectNode, onDragStart, editMode, isHov
           y={y + 1}
           textAnchor="middle"
           dominantBaseline="middle"
-          fill={statusStyles.textColor ?? '#e2e8f0'}
+          fill={nodeStatusStyles.textColor ?? '#e2e8f0'}
           fontSize={10}
           fontWeight={700}
           fontFamily="inherit"
@@ -206,7 +206,8 @@ const OverflowTooltip = ({ hoveredOverflow }) => {
  * PriorityMatrix — an effort/benefit scatter chart of nodes by Effort (X) vs Benefit (Y).
  * Supports tooltips, node selection, and collision-free node placement.
  */
-export function PriorityMatrix({ opened, onClose, document, onSelectNode, onMoveNode, selectedReleaseId = null, embedded = false }) {
+export function PriorityMatrix({ opened, onClose, document, onSelectNode, onMoveNode, selectedReleaseId = null, embedded = false, statusStyles = STATUS_STYLES }) {
+  const statusStyleMap = statusStyles && typeof statusStyles === 'object' ? statusStyles : STATUS_STYLES
   const containerRef = useRef(null)
   const svgRef = useRef(null)
   const drawerRef = useRef(null)
@@ -498,7 +499,7 @@ export function PriorityMatrix({ opened, onClose, document, onSelectNode, onMove
         {/* Legend */}
         <div style={{ position: 'absolute', bottom: 8, right: 8, zIndex: 10, display: 'flex', gap: 10 }}>
           {['done', 'now', 'next', 'later'].map((s) => {
-            const style = STATUS_STYLES[s] ?? STATUS_STYLES.later
+            const style = statusStyleMap[s] ?? statusStyleMap.later ?? STATUS_STYLES.later
             return (
               <div key={s} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                 <div style={{ width: 10, height: 10, borderRadius: '50%', background: style.glowSegment, border: `1.5px solid ${style.ringBand}` }} />
@@ -635,6 +636,7 @@ export function PriorityMatrix({ opened, onClose, document, onSelectNode, onMove
                 onDragStart={handleNodeDragStart}
                 editMode={editMode}
                 isHovered={hoveredEntry?.entry?.node.id === entry.node.id}
+                statusStyles={statusStyleMap}
               />
             ))}
 

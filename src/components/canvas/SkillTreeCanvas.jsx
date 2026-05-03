@@ -196,13 +196,14 @@ export function SkillTreeCanvas({
   onZoomToNode,
   storyPointMap,
   releaseId = null,
+  statusStyles = STATUS_STYLES,
 }) {
   const [hoveredPortalKey, setHoveredPortalKey] = useState(null)
   const hoveredPortal = hoveredPortalKey
     ? visibleDependencyPortals.find((portal) => portal.key === hoveredPortalKey) ?? null
     : null
 
-  const getLinkStatusStyle = (link) => getConnectionStatusStyle(link, layoutNodesById, releaseId)
+  const getLinkStatusStyle = (link) => getConnectionStatusStyle(link, layoutNodesById, releaseId, statusStyles)
 
   const splitDots = useMemo(() => {
     return Array.from(
@@ -223,7 +224,7 @@ export function SkillTreeCanvas({
         return acc
       }, new Map()),
     ).map(([, dot]) => dot)
-  }, [filteredLinks, layoutNodesById, releaseId])
+  }, [filteredLinks, layoutNodesById, releaseId, statusStyles])
 
   const hoveredPeerNodeId = hoveredPortal
     ? (hoveredPortal.type === 'source' ? hoveredPortal.targetId : hoveredPortal.sourceId)
@@ -391,6 +392,7 @@ export function SkillTreeCanvas({
             strokeWidth="9"
             strokeOpacity="1"
             strokeLinecap="round"
+            strokeLinejoin="round"
             fill="none"
           />
         ))}
@@ -410,7 +412,8 @@ export function SkillTreeCanvas({
               strokeWidth={statusStyle.linkStrokeWidth}
               strokeOpacity={statusStyle.linkOpacity}
               strokeDasharray={statusStyle.linkStrokeDasharray || 'none'}
-              strokeLinecap="round"
+              strokeLinecap="butt"
+              strokeLinejoin="round"
               fill="none"
             />
           )
@@ -593,6 +596,7 @@ export function SkillTreeCanvas({
               onZoomToNode={onZoomToNode}
               storyPointMap={storyPointMap}
               releaseId={releaseId}
+              statusStyles={statusStyles}
               canvasOriginX={canvas.origin.x}
               nodeDeps={depSummaryByNodeId.get(node.id) ?? null}
             />

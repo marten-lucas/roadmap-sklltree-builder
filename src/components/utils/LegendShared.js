@@ -11,6 +11,7 @@ export function renderLegendMarkup({
   legendStatusDescriptions = DEFAULT_STATUS_DESCRIPTIONS,
   showPortals = true,
   className = '',
+  statusStyles = STATUS_STYLES,
 } = {}) {
   return `
     <div class="skill-tree-legend ${className}" aria-label="Status legend">
@@ -20,7 +21,7 @@ export function renderLegendMarkup({
       <div class="skill-tree-legend__section">
         <div class="skill-tree-legend__symbol-grid">
           ${LEGEND_STATUS_ORDER.map((statusKey) => {
-            const style = STATUS_STYLES[statusKey] ?? STATUS_STYLES.later
+            const style = statusStyles[statusKey] ?? statusStyles.later ?? STATUS_STYLES.later
             return `
               <div class="skill-tree-legend__symbol-item skill-tree-legend__symbol-item--status" title="${STATUS_LABELS[statusKey]}">
                 <span class="skill-tree-legend__node-preview" aria-hidden="true">

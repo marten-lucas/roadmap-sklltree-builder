@@ -5,9 +5,11 @@ import { BENEFIT_SIZE_LABELS, BENEFIT_SIZES, EFFORT_SIZE_LABELS, EFFORT_SIZES } 
 import { commitReleaseNoteDraft } from '../utils/releaseNoteDraft'
 import { convertRichTextHtmlToMarkdown, insertMarkdownText } from '../utils/markdown'
 import { getDisplayStatusKey, getLevelStatus } from '../utils/nodeStatus'
+import { getOrderedNodeRankMap } from '../utils/statusSummary'
 import { SCOPE_FILTER_ALL, scopeIdsMatchFilter } from '../utils/visibility'
 import { getLevelDisplayLabel } from '../utils/treeData'
 import { UNASSIGNED_SEGMENT_ID } from '../utils/layoutShared'
+import { buildGroupedScopeSelectData } from '../utils/scopeDisplay'
 
 // ── Icons ─────────────────────────────────────────────────────────────────────
 
@@ -134,9 +136,9 @@ const OpenPointsToggle = ({ checked = false, onChange = () => {} }) => (
   </button>
 )
 
-const getStatusBorderColor = (status) => {
+const getStatusBorderColor = (status, statusStyles = STATUS_STYLES) => {
   const key = status ?? 'later'
-  return (STATUS_STYLES[key] ?? STATUS_STYLES.later).ringBand
+  return (statusStyles[key] ?? statusStyles.later ?? STATUS_STYLES.later).ringBand
 }
 
 const getNodeScopeIds = (node) => {
@@ -178,7 +180,7 @@ const getStatusTextColor = (statusKey, statusStyle) => {
 
 const EFFORT_LABELS = { ...EFFORT_SIZE_LABELS }
 const BENEFIT_LABELS = { ...BENEFIT_SIZE_LABELS }
-const STATUS_RADIO_OPTIONS = [
+const buildStatusRadioOptions = (statusStyles) => [
   { value: 'done', label: 'Done' },
   { value: 'now', label: 'Now' },
   { value: 'next', label: 'Next' },
@@ -186,7 +188,7 @@ const STATUS_RADIO_OPTIONS = [
   { value: 'someday', label: 'Someday' },
   { value: 'hidden', label: 'Hide' },
 ].map((option) => {
-  const style = STATUS_STYLES[option.value] ?? STATUS_STYLES.later
+  const style = statusStyles[option.value] ?? statusStyles.later ?? STATUS_STYLES.later
   return {
     ...option,
     pillStyle: {
@@ -225,10 +227,12 @@ const MIN_COLUMN_WIDTHS = {
 }
 const SORT_FIELD_LABELS = {
   name: 'Name',
+  created: 'Created',
+  topological: 'Topological',
   value: 'Value',
   effort: 'Effort',
   status: 'Status',
-  scopes: 'Scopes',
+  scopes: 'Scope',
   segments: 'Segments',
   notes: 'Release Notes',
 }
@@ -448,7 +452,7 @@ const MetricSlider = ({ sizes, activeValue, onChange, kind, customPoints, onCust
 
 // ── Status group ──────────────────────────────────────────────────────────────
 
-const StatusRadioGroup = ({ value, onChange, groupName, isSelected = false, width = null }) => (
+const StatusRadioGroup = ({ value, onChange, groupName, statusOptions, isSelected = false, width = null }) => (
   <div
     className={`list-view-drawer__status-group${isSelected ? ' list-view-drawer__status-group--selected' : ''}`}
     style={width ? { width: `${width}px` } : undefined}
@@ -456,7 +460,7 @@ const StatusRadioGroup = ({ value, onChange, groupName, isSelected = false, widt
     aria-label="Status"
     onClick={(e) => e.stopPropagation()}
   >
-    {STATUS_RADIO_OPTIONS.map((option) => (
+    {statusOptions.map((option) => (
       <label
         key={option.value}
         className={`list-view-drawer__status-option${value === option.value ? ' list-view-drawer__status-option--active' : ''}`}
@@ -485,11 +489,14 @@ const StatusRadioGroup = ({ value, onChange, groupName, isSelected = false, widt
 )
 
 const ScopeAssignGroup = ({ scopeOptions, selectedScopeIds = [], onChange, isSelected = false, width = null }) => {
-  const scopeSelectData = scopeOptions.map((scope) => ({
-    value: scope.id,
-    label: scope.label,
-    color: scope.color ?? null,
-  }))
+  const scopeSelectData = buildGroupedScopeSelectData(
+    scopeOptions.map((scope) => ({
+      value: scope.id,
+      label: scope.label,
+      color: scope.color ?? null,
+      groupLabel: scope.groupLabel ?? null,
+    })),
+  )
 
   const selectedLabels = selectedScopeIds
     .map((id) => scopeOptions.find((scope) => scope.id === id)?.label)
@@ -789,10 +796,12 @@ const LevelRow = ({
   resolvedColumnWidths = {},
   listMode,
   selectionMode = false,
+  statusStyles,
+  statusOptions,
 }) => {
   const statusKey = normalizeStatusKey(getLevelStatus(level, selectedReleaseId))
   const isHidden = statusKey === 'hidden'
-  const borderColor = getStatusBorderColor(statusKey)
+  const borderColor = getStatusBorderColor(statusKey, statusStyles)
   const scopeEntries = (level.scopeIds ?? []).map((id) => scopeMap.get(id)).filter(Boolean)
   const allScopeOptions = [...scopeMap.values()].filter(Boolean)
   const benefitValue = level.benefit?.size ?? 'unclear'
@@ -842,6 +851,7 @@ const LevelRow = ({
             width={width}
             onChange={(status) => onSetStatus(status, { applyToSelection: shouldApplyToSelection })}
             groupName={`status-${nodeId}-${level.id}`}
+            statusOptions={statusOptions}
             isSelected={isSelected}
           />
         )
@@ -960,6 +970,7 @@ const LevelRow = ({
                 value={statusKey}
                 onChange={onSetStatus}
                 groupName={`status-${nodeId}-${level.id}`}
+                statusOptions={statusOptions}
                 isSelected={isSelected}
               />
             )}
@@ -1009,13 +1020,15 @@ const TreeNode = ({
   onSetLevelReleaseNote,
   selectedNodeId,
   selectedProgressLevelId,
+  statusStyles,
+  statusOptions,
 }) => {
   const hasChildren = (node.children ?? []).length > 0
   const levels = node.levels ?? []
   const filteredLevels = showLevels ? levels.filter(matchesLevelFilters) : []
   const hasLevels = showLevels && filteredLevels.length > 0
   const isCollapsed = collapsedIds.has(node.id)
-  const borderColor = getStatusBorderColor(getDisplayStatusKey(node, selectedReleaseId))
+  const borderColor = getStatusBorderColor(getDisplayStatusKey(node, selectedReleaseId), statusStyles)
   const hasExpandable = hasChildren || hasLevels
   const isExpanded = !isCollapsed
   const isNodeSelected = selectedNodeId === node.id && !selectedProgressLevelId
@@ -1090,6 +1103,8 @@ const TreeNode = ({
           showScopeColumn={false}
           showReleaseNotesColumn={false}
           listMode={false}
+          statusStyles={statusStyles}
+          statusOptions={statusOptions}
         />
       ))}
 
@@ -1115,6 +1130,8 @@ const TreeNode = ({
           onSetLevelReleaseNote={onSetLevelReleaseNote}
           selectedNodeId={selectedNodeId}
           selectedProgressLevelId={selectedProgressLevelId}
+          statusStyles={statusStyles}
+          statusOptions={statusOptions}
         />
       ))}
     </>
@@ -1179,6 +1196,32 @@ const compareSortText = (left, right) => {
   })
 }
 
+const getNodeCreatedTimestamp = (node) => {
+  const raw = String(node?.createdAt ?? '').trim()
+  if (!raw) {
+    return Number.NEGATIVE_INFINITY
+  }
+
+  const timestamp = Date.parse(raw)
+  return Number.isFinite(timestamp) ? timestamp : Number.NEGATIVE_INFINITY
+}
+
+const compareNodeByCreated = (left, right) => {
+  return getNodeCreatedTimestamp(left) - getNodeCreatedTimestamp(right)
+}
+
+const compareLevelEntryByCreated = (left, right) => {
+  return compareNodeByCreated(left?.node, right?.node)
+}
+
+const getTopologicalRankByNodeId = (document, sortMode) => {
+  if (!document || sortMode !== 'topological') {
+    return null
+  }
+
+  return getOrderedNodeRankMap(document, { sortMode: 'topological' })
+}
+
 const getLevelSortText = ({ node, level, levelIndex }, field, scopeMap, selectedReleaseId = null, segmentMap = new Map()) => {
   switch (field) {
     case 'value':
@@ -1195,6 +1238,8 @@ const getLevelSortText = ({ node, level, levelIndex }, field, scopeMap, selected
       return getSegmentSortText(node?.segmentId ?? null, segmentMap)
     case 'notes':
       return level?.releaseNote ?? ''
+    case 'created':
+    case 'topological':
     case 'roadmap':
       return ''
     case 'name':
@@ -1213,6 +1258,8 @@ const getNodeSortText = (node, field, scopeMap, selectedReleaseId = null, segmen
       return getScopeSortText(getNodeScopeIds(node), scopeMap)
     case 'segments':
       return getSegmentSortText(node?.segmentId ?? null, segmentMap)
+    case 'created':
+    case 'topological':
     case 'roadmap':
       return ''
     case 'name':
@@ -1228,6 +1275,7 @@ export const sortFlatLevelEntries = (entries = [], selection = {}) => {
     scopeMap = new Map(),
     segmentMap = new Map(),
     selectedReleaseId = null,
+    document = null,
   } = selection
 
   if (field === 'roadmap' || direction === 'roadmap') {
@@ -1235,10 +1283,36 @@ export const sortFlatLevelEntries = (entries = [], selection = {}) => {
   }
 
   const directionFactor = direction === 'desc' ? -1 : 1
+  const topologicalRankByNodeId = getTopologicalRankByNodeId(document, field)
 
   return entries
     .map((entry, index) => ({ entry, index }))
     .sort((left, right) => {
+      if (field === 'created') {
+        const createdDelta = compareLevelEntryByCreated(left.entry, right.entry)
+        if (createdDelta !== 0) {
+          return createdDelta * directionFactor
+        }
+
+        const levelIndexDelta = (left.entry?.levelIndex ?? 0) - (right.entry?.levelIndex ?? 0)
+        if (levelIndexDelta !== 0) {
+          return levelIndexDelta
+        }
+      }
+
+      if (field === 'topological') {
+        const leftRank = topologicalRankByNodeId?.get(left.entry?.node?.id) ?? Number.MAX_SAFE_INTEGER
+        const rightRank = topologicalRankByNodeId?.get(right.entry?.node?.id) ?? Number.MAX_SAFE_INTEGER
+        if (leftRank !== rightRank) {
+          return (leftRank - rightRank) * directionFactor
+        }
+
+        const levelIndexDelta = (left.entry?.levelIndex ?? 0) - (right.entry?.levelIndex ?? 0)
+        if (levelIndexDelta !== 0) {
+          return levelIndexDelta
+        }
+      }
+
       const valueCompare = compareSortText(
         getLevelSortText(left.entry, field, scopeMap, selectedReleaseId, segmentMap),
         getLevelSortText(right.entry, field, scopeMap, selectedReleaseId, segmentMap),
@@ -1260,6 +1334,7 @@ export const sortFlatNodesBySelection = (nodes = [], selection = {}) => {
     scopeMap = new Map(),
     segmentMap = new Map(),
     selectedReleaseId = null,
+    document = null,
   } = selection
 
   if (field === 'roadmap' || direction === 'roadmap') {
@@ -1267,10 +1342,26 @@ export const sortFlatNodesBySelection = (nodes = [], selection = {}) => {
   }
 
   const directionFactor = direction === 'desc' ? -1 : 1
+  const topologicalRankByNodeId = getTopologicalRankByNodeId(document, field)
 
   return nodes
     .map((node, index) => ({ node, index }))
     .sort((left, right) => {
+      if (field === 'created') {
+        const createdDelta = compareNodeByCreated(left.node, right.node)
+        if (createdDelta !== 0) {
+          return createdDelta * directionFactor
+        }
+      }
+
+      if (field === 'topological') {
+        const leftRank = topologicalRankByNodeId?.get(left.node?.id) ?? Number.MAX_SAFE_INTEGER
+        const rightRank = topologicalRankByNodeId?.get(right.node?.id) ?? Number.MAX_SAFE_INTEGER
+        if (leftRank !== rightRank) {
+          return (leftRank - rightRank) * directionFactor
+        }
+      }
+
       const valueCompare = compareSortText(
         getNodeSortText(left.node, field, scopeMap, selectedReleaseId, segmentMap),
         getNodeSortText(right.node, field, scopeMap, selectedReleaseId, segmentMap),
@@ -1310,7 +1401,10 @@ export function ListViewDrawer({
   embedded = false,
   onClearLevelSelection = () => {},
   onWidthChange = null,
+  statusStyles = STATUS_STYLES,
 }) {
+  const statusStyleMap = statusStyles && typeof statusStyles === 'object' ? statusStyles : STATUS_STYLES
+  const statusRadioOptions = useMemo(() => buildStatusRadioOptions(statusStyleMap), [statusStyleMap])
   const drawerRef = useRef(null)
   const columnsMenuRef = useRef(null)
   const sortMenuRef = useRef(null)
@@ -1377,7 +1471,7 @@ export function ListViewDrawer({
     )
 
     const hasCustomEffort = levelEntriesForSizing.some(({ level }) => level?.effort?.size === 'custom')
-    const statusWidth = 26 + STATUS_RADIO_OPTIONS.reduce((sum, option) => {
+    const statusWidth = 26 + statusRadioOptions.reduce((sum, option) => {
       return sum + Math.max(42, option.label.length * 6 + 18)
     }, 0)
 
@@ -1393,7 +1487,7 @@ export function ListViewDrawer({
         notes: clampColumnWidth('notes', longestNoteWidth),
       },
     }
-  }, [document])
+  }, [document, statusRadioOptions])
 
   const resolvedLabelColumnWidth = useMemo(
     () => clampLabelColumnWidth(autoLabelColumnWidth),
@@ -1735,13 +1829,13 @@ export function ListViewDrawer({
   )
 
   const sortedFlatLevelEntries = useMemo(
-    () => sortFlatLevelEntries(flatLevelEntries, { ...sortSelection, scopeMap, segmentMap, selectedReleaseId }),
-    [flatLevelEntries, scopeMap, segmentMap, selectedReleaseId, sortSelection],
+    () => sortFlatLevelEntries(flatLevelEntries, { ...sortSelection, document, scopeMap, segmentMap, selectedReleaseId }),
+    [document, flatLevelEntries, scopeMap, segmentMap, selectedReleaseId, sortSelection],
   )
 
   const sortedFlatNodes = useMemo(
-    () => sortFlatNodesBySelection(flatNodes, { ...sortSelection, scopeMap, segmentMap, selectedReleaseId }),
-    [flatNodes, scopeMap, segmentMap, selectedReleaseId, sortSelection],
+    () => sortFlatNodesBySelection(flatNodes, { ...sortSelection, document, scopeMap, segmentMap, selectedReleaseId }),
+    [document, flatNodes, scopeMap, segmentMap, selectedReleaseId, sortSelection],
   )
 
   if (!opened) return null
@@ -2136,6 +2230,8 @@ export function ListViewDrawer({
                 resolvedColumnWidths={resolvedColumnWidths}
                 listMode
                 selectionMode={selectionMode}
+                statusStyles={statusStyleMap}
+                statusOptions={statusRadioOptions}
               />
             ))}
           </ul>
@@ -2143,7 +2239,7 @@ export function ListViewDrawer({
           /* flat node list */
           <ul className="list-view-drawer__list">
             {sortedFlatNodes.map((node) => {
-              const borderColor = getStatusBorderColor(getDisplayStatusKey(node, selectedReleaseId))
+              const borderColor = getStatusBorderColor(getDisplayStatusKey(node, selectedReleaseId), statusStyleMap)
               const scopeIds = getNodeScopeIds(node)
               const scopeEntries = [...scopeIds].map((id) => scopeMap.get(id)).filter(Boolean)
               const isNodeSelected = selectedNodeId === node.id && !selectedProgressLevelId
@@ -2213,6 +2309,8 @@ export function ListViewDrawer({
                 onSetLevelOpenPoints={onSetLevelOpenPoints}
                 selectedNodeId={selectedNodeId}
                 selectedProgressLevelId={selectedProgressLevelId}
+                statusStyles={statusStyleMap}
+                statusOptions={statusRadioOptions}
               />
             ))}
           </ul>

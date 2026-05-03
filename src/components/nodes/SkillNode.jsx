@@ -70,7 +70,7 @@ const buildSegmentConicStyle = (statusKeys, colorGetter, options = {}) => {
 
 const clamp = (value, min, max) => Math.min(max, Math.max(min, value))
 
-const _SkillNode = ({ node, nodeSize, isSelected, isPortalPeerHovered = false, onSelect, onSelectLevel, onZoomToNode, displayMode = 'full', labelMode = 'far', zoomScale = 1, scopeOptions = [], storyPointMap, releaseId = null }) => {
+const _SkillNode = ({ node, nodeSize, isSelected, isPortalPeerHovered = false, onSelect, onSelectLevel, onZoomToNode, displayMode = 'full', labelMode = 'far', zoomScale = 1, scopeOptions = [], storyPointMap, releaseId = null, statusStyles = STATUS_STYLES }) => {
   const [hoveredLevelIndex, setHoveredLevelIndex] = useState(null)
   const lastRightClickRef = useRef(0)
   const isMinimal = displayMode === 'minimal'
@@ -109,25 +109,26 @@ const _SkillNode = ({ node, nodeSize, isSelected, isPortalPeerHovered = false, o
   const fwY = node.y - nodeSize / 2 - glowPadding
   const statusKey = getDisplayStatusKey(node, releaseId)
   const isGhost = displayMode === 'ghost'
-  const statusStyles = STATUS_STYLES[statusKey] ?? STATUS_STYLES.later
+  const statusStyleMap = statusStyles && typeof statusStyles === 'object' ? statusStyles : STATUS_STYLES
+  const statusStylesResolved = statusStyleMap[statusKey] ?? statusStyleMap.later ?? STATUS_STYLES.later
   const labelTextColor = statusKey === 'later' || statusKey === 'someday'
-    ? statusStyles.textColor
+    ? statusStylesResolved.textColor
     : '#f8fafc'
   const levelStatusKeys = getLevelStatusKeys(node, releaseId)
   const hasOpenPoints = levels.some((level) => Boolean(level?.hasOpenPoints))
   const openPointsTitle = String(levels.find((level) => level?.hasOpenPoints)?.openPointsLabel ?? '').trim() || 'Open point'
   const levelRingStyle = buildSegmentConicStyle(
     levelStatusKeys,
-    (key) => STATUS_STYLES[key]?.ringBand ?? STATUS_STYLES.later.ringBand,
+    (key) => statusStyleMap[key]?.ringBand ?? statusStyleMap.later?.ringBand ?? STATUS_STYLES.later.ringBand,
     { dashedStatuses: new Set(['someday']) },
   )
   const levelGlowStyle = buildSegmentConicStyle(
     levelStatusKeys,
-    (key) => STATUS_STYLES[key]?.glowSegment ?? 'transparent',
+    (key) => statusStyleMap[key]?.glowSegment ?? 'transparent',
   )
   const nowLevelGlowStyle = buildSegmentConicStyle(
     levelStatusKeys,
-    (key) => (key === 'now' ? STATUS_STYLES.now.glowSegment : 'transparent'),
+    (key) => (key === 'now' ? (statusStyleMap.now?.glowSegment ?? STATUS_STYLES.now.glowSegment) : 'transparent'),
   )
   const zoomGlowProgress = clamp(
     (zoomScale - NODE_LABEL_ZOOM.farToMid) / ((NODE_LABEL_ZOOM.closeToVeryClose + 1) - NODE_LABEL_ZOOM.farToMid),
@@ -290,7 +291,7 @@ const _SkillNode = ({ node, nodeSize, isSelected, isPortalPeerHovered = false, o
           closeDelay={40}
           transitionProps={{ transition: 'fade', duration: 120 }}
           classNames={{ tooltip: 'skill-node-tooltip', arrow: 'skill-node-tooltip__arrow' }}
-          label={<MarkdownTooltipContent title={activeTooltipTitle} markdown={activeTooltipReleaseNote} scopeLabels={activeTooltipScopeLabels} effort={activeTooltipEffort} benefit={activeTooltipBenefit} storyPointMap={storyPointMap} />}
+          label={<MarkdownTooltipContent title={activeTooltipTitle} markdown={activeTooltipReleaseNote} scopeLabels={activeTooltipScopeLabels} effort={activeTooltipEffort} benefit={activeTooltipBenefit} storyPointMap={storyPointMap} statusStyles={statusStyleMap} />}
         >
           <Paper
             component="button"
@@ -306,7 +307,7 @@ const _SkillNode = ({ node, nodeSize, isSelected, isPortalPeerHovered = false, o
               background: nodeBackground,
               width: `${nodeSize}px`,
               height: `${nodeSize}px`,
-              '--node-ring-color': statusStyles.ring,
+              '--node-ring-color': statusStylesResolved.ring,
               '--portal-peer-pulse-scale': peerPulseScale,
               '--portal-peer-pulse-far': `${peerPulseFar}px`,
               '--portal-peer-pulse-near': `${peerPulseNear}px`,
@@ -326,7 +327,7 @@ const _SkillNode = ({ node, nodeSize, isSelected, isPortalPeerHovered = false, o
                     <div className="skill-node-vc__tabs">
                       {levels.map((_, i) => {
                         const lsKey = levelStatusKeys[i] ?? 'later'
-                        const lsStyle = STATUS_STYLES[lsKey] ?? STATUS_STYLES.later
+                        const lsStyle = statusStyleMap[lsKey] ?? statusStyleMap.later ?? STATUS_STYLES.later
                         const levelLabel = exportLevelEntries[i]?.label ?? `L${i + 1}`
                         return (
                           <div
@@ -401,7 +402,7 @@ const _SkillNode = ({ node, nodeSize, isSelected, isPortalPeerHovered = false, o
                     <Text
                       className="skill-node-button__shortname"
                       style={{
-                        color: statusStyles.textColor,
+                        color: statusStylesResolved.textColor,
                         fontWeight: statusKey === 'now' ? 900 : statusKey === 'next' ? 820 : 700,
                         ...minimalShortNameStyle,
                       }}

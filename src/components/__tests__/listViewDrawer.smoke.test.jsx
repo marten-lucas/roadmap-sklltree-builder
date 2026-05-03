@@ -166,26 +166,73 @@ test('sort helpers support roadmap order and alphabetical ordering for list view
 
   const levelEntries = [
     {
-      node: { id: 'node-b', label: 'Beta', shortName: 'B' },
+      node: { id: 'node-b', label: 'Beta', shortName: 'B', createdAt: '2026-04-29T10:00:00.000Z' },
       level: { id: 'level-z', label: 'Zebra', status: 'later', scopeIds: ['scope-2'], releaseNote: 'Zulu note' },
       levelIndex: 0,
     },
     {
-      node: { id: 'node-a', label: 'Alpha', shortName: 'A' },
+      node: { id: 'node-a', label: 'Alpha', shortName: 'A', createdAt: '2026-04-30T10:00:00.000Z' },
       level: { id: 'level-a', label: 'Alpha', status: 'done', scopeIds: ['scope-1'], releaseNote: 'Alpha note' },
       levelIndex: 0,
     },
   ]
 
+  const topologicalDocument = {
+    children: [
+      {
+        id: 'node-b',
+        label: 'Beta',
+        shortName: 'B',
+        createdAt: '2026-04-29T10:00:00.000Z',
+        children: [],
+        levels: [
+          {
+            id: 'level-z',
+            label: 'Zebra',
+            status: 'later',
+            scopeIds: ['scope-2'],
+            releaseNote: 'Zulu note',
+            additionalDependencyLevelIds: [],
+          },
+        ],
+      },
+      {
+        id: 'node-a',
+        label: 'Alpha',
+        shortName: 'A',
+        createdAt: '2026-04-30T10:00:00.000Z',
+        children: [],
+        levels: [
+          {
+            id: 'level-a',
+            label: 'Alpha',
+            status: 'done',
+            scopeIds: ['scope-1'],
+            releaseNote: 'Alpha note',
+            additionalDependencyLevelIds: ['level-z'],
+          },
+        ],
+      },
+    ],
+    scopes: [
+      { id: 'scope-1', label: 'Series A' },
+      { id: 'scope-2', label: 'Platform' },
+    ],
+  }
+
   expect(sortFlatLevelEntries(levelEntries, { field: 'roadmap', direction: 'roadmap', scopeMap }).map(({ node }) => node.label)).toEqual(['Beta', 'Alpha'])
   expect(sortFlatLevelEntries(levelEntries, { field: 'name', direction: 'asc', scopeMap }).map(({ node }) => node.label)).toEqual(['Alpha', 'Beta'])
   expect(sortFlatLevelEntries(levelEntries, { field: 'name', direction: 'desc', scopeMap }).map(({ node }) => node.label)).toEqual(['Beta', 'Alpha'])
   expect(sortFlatLevelEntries(levelEntries, { field: 'notes', direction: 'asc', scopeMap }).map(({ level }) => level.id)).toEqual(['level-a', 'level-z'])
+  expect(sortFlatLevelEntries(levelEntries, { field: 'created', direction: 'desc', scopeMap }).map(({ node }) => node.label)).toEqual(['Alpha', 'Beta'])
+  expect(sortFlatLevelEntries(levelEntries, { field: 'topological', direction: 'asc', scopeMap, document: topologicalDocument }).map(({ node }) => node.label)).toEqual(['Beta', 'Alpha'])
 
   const nodes = [
-    { id: 'node-b', label: 'Beta', shortName: 'B', levels: [{ status: 'later', scopeIds: ['scope-2'] }] },
-    { id: 'node-a', label: 'Alpha', shortName: 'A', levels: [{ status: 'done', scopeIds: ['scope-1'] }] },
+    { id: 'node-b', label: 'Beta', shortName: 'B', createdAt: '2026-04-29T10:00:00.000Z', levels: [{ status: 'later', scopeIds: ['scope-2'] }] },
+    { id: 'node-a', label: 'Alpha', shortName: 'A', createdAt: '2026-04-30T10:00:00.000Z', levels: [{ status: 'done', scopeIds: ['scope-1'] }] },
   ]
 
   expect(sortFlatNodesBySelection(nodes, { field: 'name', direction: 'asc', scopeMap }).map((node) => node.label)).toEqual(['Alpha', 'Beta'])
+  expect(sortFlatNodesBySelection(nodes, { field: 'created', direction: 'desc', scopeMap }).map((node) => node.label)).toEqual(['Alpha', 'Beta'])
+  expect(sortFlatNodesBySelection(nodes, { field: 'topological', direction: 'asc', scopeMap, document: topologicalDocument }).map((node) => node.label)).toEqual(['Beta', 'Alpha'])
 })

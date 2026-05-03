@@ -283,10 +283,28 @@ export const buildRoutedEdgeLinks = ({ edgeRouting, nodesById, origin, nodeSize 
   const { trunkGroups, edgePlans } = edgeRouting
   const trunkGroupById = new Map(trunkGroups.map((g) => [g.id, g]))
   const childCountByParentLevel = new Map()
+  const sharedGroupCorridorBiasByGroupId = new Map()
+
+  const getSharedCorridorBias = (segmentDistance) => {
+    if (segmentDistance > 1) return 0.62
+    if (segmentDistance > 0) return 0.54
+    return 0.48
+  }
 
   for (const plan of edgePlans) {
     const key = `${plan.parentId}|${plan.targetLevel}`
     childCountByParentLevel.set(key, (childCountByParentLevel.get(key) ?? 0) + 1)
+
+    const group = trunkGroupById.get(plan.groupId)
+    if (!group || group.childIds.length <= 1) {
+      continue
+    }
+
+    const bias = getSharedCorridorBias(plan.segmentDistance)
+    const existing = sharedGroupCorridorBiasByGroupId.get(plan.groupId) ?? 0
+    if (bias > existing) {
+      sharedGroupCorridorBiasByGroupId.set(plan.groupId, bias)
+    }
   }
 
   const links = []
@@ -371,9 +389,6 @@ export const buildRoutedEdgeLinks = ({ edgeRouting, nodesById, origin, nodeSize 
       } else {
         path = buildRadialArcPath(parent.angle, sourceRadius, childAngle, targetRadius, origin)
       }
-    } else if (Math.abs(childAngle - trunkAngle) < 0.5) {
-      path = buildRadialArcPath(parent.angle, sourceRadius, childAngle, targetRadius, origin)
-      linkKind = 'direct'
     } else {
       // Shared trunk with corridor routing:
       // source-ring arc → radial to mid-corridor → corridor arc (free space) → spoke to child.
@@ -384,7 +399,7 @@ export const buildRoutedEdgeLinks = ({ edgeRouting, nodesById, origin, nodeSize 
         const getSegIdx = (id) => (getSegmentOrderIndex ? getSegmentOrderIndex(id) : 0)
         const segmentDistance = (sourceNode && targetNode) ? Math.abs(getSegIdx(sourceNode.segmentId) - getSegIdx(targetNode.segmentId)) : 0
 
-        const corridorBias = segmentDistance > 1 ? 0.62 : (segmentDistance > 0 ? 0.54 : 0.48)
+        const corridorBias = sharedGroupCorridorBiasByGroupId.get(plan.groupId) ?? getSharedCorridorBias(segmentDistance)
         const corridorRadius = sourceRadius + levelGap * corridorBias
         const corridorParentPoint = toCartesian(parent.angle, corridorRadius, origin)
         const corridorTrunkPoint = toCartesian(trunkAngle, corridorRadius, origin)
@@ -419,6 +434,7 @@ export const buildRoutedEdgeLinks = ({ edgeRouting, nodesById, origin, nodeSize 
         parts.push(`L ${child.x} ${child.y}`)
 
         path = parts.join(' ')
+
       } else {
         // Level gap too small for a distinct corridor — fall back to classic routing.
         const sourceTrunkPoint = toCartesian(trunkAngle, sourceRadius, origin)

@@ -1,6 +1,7 @@
 import { DEFAULT_STORY_POINT_MAP, normalizeStoryPointMap } from './effortBenefit'
 import { createRelease, normalizeRelease } from './releases'
 import { DEFAULT_STATUS_DESCRIPTIONS } from '../config'
+import { normalizeStatusStyleOverrides } from './statusStyles'
 
 const HISTORY_LIMIT = 100
 const DEFAULT_CENTER_ICON_SVG = `<svg width="256" height="256" viewBox="0 0 256 256" xmlns="http://www.w3.org/2000/svg">
@@ -40,6 +41,7 @@ const ensureDocumentDefaults = (document) => {
   const hasShowHiddenNodes = 'showHiddenNodes' in document
   const hasReleases = Array.isArray(document.releases) && document.releases.length > 0
   const hasStatusDescriptions = !('statusDescriptions' in document) || isObject(document.statusDescriptions)
+  const hasStatusStyles = !('statusStyles' in document) || isObject(document.statusStyles)
   const hasStatusSummary = !('statusSummary' in document) || isObject(document.statusSummary)
 
   if (
@@ -49,6 +51,7 @@ const ensureDocumentDefaults = (document) => {
     && hasSPMap
     && hasShowHiddenNodes
     && hasStatusDescriptions
+    && hasStatusStyles
     && hasStatusSummary
   ) {
     return document
@@ -65,6 +68,7 @@ const ensureDocumentDefaults = (document) => {
       ...DEFAULT_STATUS_DESCRIPTIONS,
       ...(hasStatusDescriptions ? document.statusDescriptions : {}),
     },
+    statusStyles: normalizeStatusStyleOverrides(hasStatusStyles ? document.statusStyles : {}),
     statusSummary: {
       sortMode: hasStatusSummary && typeof document.statusSummary?.sortMode === 'string'
         ? document.statusSummary.sortMode
@@ -93,6 +97,7 @@ export const createEmptyDocument = () => ({
   storyPointMap: { ...DEFAULT_STORY_POINT_MAP },
   showHiddenNodes: false,
   statusDescriptions: { ...DEFAULT_STATUS_DESCRIPTIONS },
+  statusStyles: normalizeStatusStyleOverrides({}),
   statusSummary: {
     sortMode: 'manual',
     manualOrderByStatus: {},

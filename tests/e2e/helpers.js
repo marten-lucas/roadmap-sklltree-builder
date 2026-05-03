@@ -59,6 +59,22 @@ const FALLBACK_PERSISTED_PAYLOAD = {
               },
             ],
           },
+          {
+            id: 'node-dbm',
+            label: 'Database Manager',
+            shortName: 'DBM',
+            segmentId: 'segment-backend',
+            children: [],
+            levels: [
+              {
+                id: 'level-dbm',
+                label: 'Level 1',
+                statuses: { 'release-1': 'next' },
+                releaseNote: '',
+                scopeIds: [],
+              },
+            ],
+          },
         ],
         levels: [
           {
