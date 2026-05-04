@@ -1,4 +1,4 @@
-import { ActionIcon, Button, Checkbox, NumberInput, Paper, Select, Stack, Tabs, Text, TextInput } from '@mantine/core'
+import { ActionIcon, Button, Checkbox, ColorInput, NumberInput, Paper, Stack, Tabs, Text, TextInput } from '@mantine/core'
 import { useCallback, useEffect, useImperativeHandle, useRef, useState, forwardRef } from 'react'
 import { MarkdownField } from './MarkdownField'
 import {
@@ -9,7 +9,7 @@ import {
   normalizeStatusBudgets,
 } from '../utils/effortBenefit'
 import { addRelease, deleteRelease, updateRelease } from '../utils/releases'
-import { DEFAULT_STATUS_DESCRIPTIONS, STATUS_LABELS, STATUS_STYLES } from '../config'
+import { DEFAULT_STATUS_DESCRIPTIONS, STATUS_LABELS } from '../config'
 import {
   LINE_STYLE_PRESETS,
   STATUS_STYLE_KEYS,
@@ -19,11 +19,233 @@ import {
 
 const T_SHIRT_KEYS = ['xs', 's', 'm', 'l', 'xl']
 const STATUS_DESCRIPTION_KEYS = [...STATUS_STYLE_KEYS]
-const LINE_STYLE_OPTIONS = Object.entries(LINE_STYLE_PRESETS).map(([value, entry]) => ({ value, label: entry.label }))
-const TEXT_COLOR_MODE_OPTIONS = [
-  { value: TEXT_COLOR_MODES.auto, label: 'Auto contrast' },
-  { value: TEXT_COLOR_MODES.manual, label: 'Manual' },
-]
+
+// ─── Hex / RGB helpers ───────────────────────────────────────────────────────
+
+const hexToRgb = (hex) => {
+  const h = hex && hex.startsWith('#') ? hex : '#74849c'
+  const full = h.length === 4
+    ? `#${h[1]}${h[1]}${h[2]}${h[2]}${h[3]}${h[3]}`
+    : h
+  return {
+    r: Number.parseInt(full.slice(1, 3), 16) || 0,
+    g: Number.parseInt(full.slice(3, 5), 16) || 0,
+    b: Number.parseInt(full.slice(5, 7), 16) || 0,
+  }
+}
+
+const rgbToHex = (r, g, b) => {
+  const clamp = (v) => Math.max(0, Math.min(255, Math.round(v || 0)))
+  return `#${clamp(r).toString(16).padStart(2, '0')}${clamp(g).toString(16).padStart(2, '0')}${clamp(b).toString(16).padStart(2, '0')}`
+}
+
+// ─── RgbColorInput ───────────────────────────────────────────────────────────
+
+function RgbColorInput({ label, value, onChange, onBlur }) {
+  const { r, g, b } = hexToRgb(value)
+  return (
+    <div>
+      <Text size="xs" c="dimmed" mb={4}>{label}</Text>
+      <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+        <ColorInput
+          size="xs"
+          value={value}
+          onChange={onChange}
+          onBlur={onBlur}
+          format="hex"
+          withPicker
+          withEyeDropper={false}
+          aria-label={`${label} color picker`}
+          style={{ minWidth: 128 }}
+          classNames={{ input: 'mantine-dark-input' }}
+        />
+        <TextInput
+          size="xs"
+          value={value}
+          onChange={(e) => {
+            const v = e.currentTarget.value
+            if (/^#[0-9a-fA-F]{0,6}$/.test(v)) {
+              onChange(v)
+            }
+          }}
+          onBlur={onBlur}
+          style={{ width: 74 }}
+          classNames={{ input: 'mantine-dark-input' }}
+          aria-label={`${label} hex`}
+        />
+        <NumberInput
+          size="xs"
+          value={r}
+          min={0}
+          max={255}
+          allowDecimal={false}
+          hideControls
+          onChange={(v) => onChange(rgbToHex(v, g, b))}
+          onBlur={onBlur}
+          style={{ width: 44 }}
+          classNames={{ input: 'mantine-dark-input' }}
+          aria-label={`${label} red`}
+          leftSection={<Text size="xs" c="dimmed">R</Text>}
+        />
+        <NumberInput
+          size="xs"
+          value={g}
+          min={0}
+          max={255}
+          allowDecimal={false}
+          hideControls
+          onChange={(v) => onChange(rgbToHex(r, v, b))}
+          onBlur={onBlur}
+          style={{ width: 44 }}
+          classNames={{ input: 'mantine-dark-input' }}
+          aria-label={`${label} green`}
+          leftSection={<Text size="xs" c="dimmed">G</Text>}
+        />
+        <NumberInput
+          size="xs"
+          value={b}
+          min={0}
+          max={255}
+          allowDecimal={false}
+          hideControls
+          onChange={(v) => onChange(rgbToHex(r, g, v))}
+          onBlur={onBlur}
+          style={{ width: 44 }}
+          classNames={{ input: 'mantine-dark-input' }}
+          aria-label={`${label} blue`}
+          leftSection={<Text size="xs" c="dimmed">B</Text>}
+        />
+      </div>
+    </div>
+  )
+}
+
+// ─── StatusStyleRow ──────────────────────────────────────────────────────────
+
+function StatusStyleRow({ statusKey, draft, isOpen, onToggle, onUpdate, onCommit, onReset }) {
+  const lineStyleKeys = Object.keys(LINE_STYLE_PRESETS)
+
+  return (
+    <div style={{ border: '1px solid rgba(71,85,105,0.4)', borderRadius: 8, overflow: 'hidden' }}>
+      {/* Row header */}
+      <button
+        type="button"
+        onClick={onToggle}
+        style={{
+          width: '100%',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
+          padding: '8px 10px',
+          background: 'rgba(2,6,23,0.5)',
+          border: 'none',
+          cursor: 'pointer',
+          color: 'inherit',
+          textAlign: 'left',
+        }}
+      >
+        <div style={{ width: 14, height: 14, borderRadius: '50%', background: draft.ringColor, flexShrink: 0, border: '2px solid rgba(255,255,255,0.15)' }} />
+        <Text size="sm" fw={600} style={{ flex: 1 }}>{STATUS_LABELS[statusKey]}</Text>
+        <Text size="xs" c="dimmed">{isOpen ? '▲' : '▼'}</Text>
+      </button>
+
+      {/* Accordion body */}
+      {isOpen && (
+        <div style={{ padding: '10px 10px 12px', background: 'rgba(2,6,23,0.3)', display: 'flex', flexDirection: 'column', gap: 12 }}>
+          {/* Line Color */}
+          <RgbColorInput
+            label="Line Color"
+            value={draft.lineColor}
+            onChange={(v) => onUpdate({ lineColor: v })}
+            onBlur={onCommit}
+          />
+
+          {/* Fill Color + 3D Effect */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <RgbColorInput
+              label="Fill Color"
+              value={draft.fillColor}
+              onChange={(v) => onUpdate({ fillColor: v })}
+              onBlur={onCommit}
+            />
+            <Checkbox
+              size="xs"
+              label="3D Effect"
+              checked={draft.use3dEffect}
+              onChange={(e) => {
+                onUpdate({ use3dEffect: e.currentTarget.checked })
+                onCommit()
+              }}
+            />
+          </div>
+
+          {/* Text Color */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <Checkbox
+              size="xs"
+              label="Auto Contrast Text"
+              checked={draft.textColorMode === TEXT_COLOR_MODES.auto}
+              onChange={(e) => {
+                onUpdate({ textColorMode: e.currentTarget.checked ? TEXT_COLOR_MODES.auto : TEXT_COLOR_MODES.manual })
+                onCommit()
+              }}
+            />
+            {draft.textColorMode !== TEXT_COLOR_MODES.auto && (
+              <RgbColorInput
+                label="Text Color"
+                value={draft.textColor}
+                onChange={(v) => onUpdate({ textColor: v })}
+                onBlur={onCommit}
+              />
+            )}
+          </div>
+
+          {/* Line Style */}
+          <div>
+            <Text size="xs" c="dimmed" mb={4}>Line Style</Text>
+            <div style={{ display: 'flex', gap: 4 }}>
+              {lineStyleKeys.map((key) => (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => {
+                    onUpdate({ lineStyle: key })
+                    onCommit()
+                  }}
+                  style={{
+                    padding: '3px 8px',
+                    fontSize: 11,
+                    borderRadius: 4,
+                    border: '1px solid',
+                    cursor: 'pointer',
+                    background: draft.lineStyle === key ? 'rgba(59,130,246,0.25)' : 'rgba(15,23,42,0.6)',
+                    borderColor: draft.lineStyle === key ? 'rgba(59,130,246,0.7)' : 'rgba(71,85,105,0.5)',
+                    color: draft.lineStyle === key ? '#93c5fd' : '#94a3b8',
+                    fontWeight: draft.lineStyle === key ? 600 : 400,
+                  }}
+                >
+                  {LINE_STYLE_PRESETS[key].label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Reset */}
+          <div>
+            <Button
+              size="xs"
+              variant="subtle"
+              color="red"
+              onClick={onReset}
+            >
+              Reset to default
+            </Button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
 
 const collectAllNodes = (document) => {
   const all = []
@@ -56,6 +278,7 @@ export const SystemPanel = forwardRef(function SystemPanel(
   const [systemNameDraft, setSystemNameDraft] = useState('')
   const [statusDescriptionsDraft, setStatusDescriptionsDraft] = useState({ ...DEFAULT_STATUS_DESCRIPTIONS })
   const [statusStylesDraft, setStatusStylesDraft] = useState(() => normalizeStatusStyleOverrides({}))
+  const [expandedStatus, setExpandedStatus] = useState(null)
   const [releaseDraftId, setReleaseDraftId] = useState(null)
   const [releaseNameDraft, setReleaseNameDraft] = useState('')
   const [releaseMottoDraft, setReleaseMottoDraft] = useState('')
@@ -149,7 +372,7 @@ export const SystemPanel = forwardRef(function SystemPanel(
     onDraftChange,
   ])
 
-  const commitTextDrafts = (releaseId = releaseDraftId) => {
+  const commitTextDrafts = (releaseId = releaseDraftId, overrideStatusStyles = null) => {
     let nextRoadmapData = roadmapData
     let hasChanges = false
 
@@ -181,7 +404,7 @@ export const SystemPanel = forwardRef(function SystemPanel(
     }
 
     const currentStatusStyles = normalizeStatusStyleOverrides(roadmapData?.statusStyles ?? {})
-    const normalizedDraftStyles = normalizeStatusStyleOverrides(statusStylesDraft)
+    const normalizedDraftStyles = normalizeStatusStyleOverrides(overrideStatusStyles ?? statusStylesDraft)
     const hasStatusStyleChanges = STATUS_STYLE_KEYS.some((statusKey) => {
       const currentStyle = currentStatusStyles[statusKey]
       const nextStyle = normalizedDraftStyles[statusKey]
@@ -191,6 +414,8 @@ export const SystemPanel = forwardRef(function SystemPanel(
         || currentStyle.lineStyle !== nextStyle.lineStyle
         || currentStyle.textColorMode !== nextStyle.textColorMode
         || currentStyle.textColor !== nextStyle.textColor
+        || currentStyle.fillColor !== nextStyle.fillColor
+        || currentStyle.use3dEffect !== nextStyle.use3dEffect
       )
     })
 
@@ -615,133 +840,47 @@ export const SystemPanel = forwardRef(function SystemPanel(
                   ))}
                 </div>
 
-                <Text size="xs" fw={600} tt="uppercase" c="dimmed" lts="0.1em">Status style</Text>
-                <div className="skill-panel__compact-grid" style={{ gap: 10 }}>
+                <Text size="xs" fw={600} tt="uppercase" c="dimmed" lts="0.1em">Status styles</Text>
+                <Stack gap={6}>
                   {STATUS_STYLE_KEYS.map((statusKey) => {
-                    const baseStyle = STATUS_STYLES[statusKey] ?? STATUS_STYLES.later
                     const draft = statusStylesDraft[statusKey] ?? normalizeStatusStyleOverrides({})[statusKey]
-                    const textColorDisabled = draft.textColorMode !== TEXT_COLOR_MODES.manual
                     return (
-                      <div key={statusKey} style={{ border: '1px solid rgba(71, 85, 105, 0.45)', borderRadius: 10, padding: 10, background: 'rgba(2, 6, 23, 0.45)' }}>
-                        <Text size="xs" fw={700} mb={6}>{STATUS_LABELS[statusKey]}</Text>
-                        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 8 }}>
-                          <TextInput
-                            size="xs"
-                            type="color"
-                            label="Node ring color"
-                            value={draft.ringColor}
-                            onChange={(e) => {
-                              const ringColor = e.currentTarget.value
-                              setStatusStylesDraft((current) => ({
-                                ...current,
-                                [statusKey]: {
-                                  ...current[statusKey],
-                                  ringColor,
-                                },
-                              }))
-                            }}
-                            onBlur={() => commitTextDrafts()}
-                            classNames={{ input: 'mantine-dark-input', label: 'mantine-dark-label' }}
-                          />
-                          <TextInput
-                            size="xs"
-                            type="color"
-                            label="Line color"
-                            value={draft.lineColor}
-                            onChange={(e) => {
-                              const lineColor = e.currentTarget.value
-                              setStatusStylesDraft((current) => ({
-                                ...current,
-                                [statusKey]: {
-                                  ...current[statusKey],
-                                  lineColor,
-                                },
-                              }))
-                            }}
-                            onBlur={() => commitTextDrafts()}
-                            classNames={{ input: 'mantine-dark-input', label: 'mantine-dark-label' }}
-                          />
-                          <Select
-                            size="xs"
-                            label="Text color"
-                            value={draft.textColorMode}
-                            data={TEXT_COLOR_MODE_OPTIONS}
-                            onChange={(value) => {
-                              if (!value) {
-                                return
-                              }
-                              setStatusStylesDraft((current) => ({
-                                ...current,
-                                [statusKey]: {
-                                  ...current[statusKey],
-                                  textColorMode: value,
-                                },
-                              }))
-                            }}
-                            onBlur={() => commitTextDrafts()}
-                            classNames={{ input: 'mantine-dark-input', label: 'mantine-dark-label' }}
-                          />
-                          <TextInput
-                            size="xs"
-                            type="color"
-                            label="Text color override"
-                            value={draft.textColor}
-                            disabled={textColorDisabled}
-                            onChange={(e) => {
-                              const textColor = e.currentTarget.value
-                              setStatusStylesDraft((current) => ({
-                                ...current,
-                                [statusKey]: {
-                                  ...current[statusKey],
-                                  textColor,
-                                },
-                              }))
-                            }}
-                            onBlur={() => commitTextDrafts()}
-                            classNames={{ input: 'mantine-dark-input', label: 'mantine-dark-label' }}
-                          />
-                          <Select
-                            size="xs"
-                            label="Line style"
-                            value={draft.lineStyle}
-                            data={LINE_STYLE_OPTIONS}
-                            onChange={(value) => {
-                              if (!value) {
-                                return
-                              }
-                              setStatusStylesDraft((current) => ({
-                                ...current,
-                                [statusKey]: {
-                                  ...current[statusKey],
-                                  lineStyle: value,
-                                },
-                              }))
-                            }}
-                            onBlur={() => commitTextDrafts()}
-                            classNames={{ input: 'mantine-dark-input', label: 'mantine-dark-label' }}
-                          />
-                          <Button
-                            size="xs"
-                            variant="default"
-                            onClick={() => {
-                              setStatusStylesDraft((current) => ({
-                                ...current,
-                                [statusKey]: normalizeStatusStyleOverrides({ [statusKey]: {} })[statusKey],
-                              }))
-                            }}
-                            onBlur={() => commitTextDrafts()}
-                            style={{ alignSelf: 'end' }}
-                          >
-                            Reset
-                          </Button>
-                        </div>
-                        <Text size="xs" c="dimmed" mt={6}>
-                          Default ring: {baseStyle.ringBand} · default line: {baseStyle.linkStroke}
-                        </Text>
-                      </div>
+                      <StatusStyleRow
+                        key={statusKey}
+                        statusKey={statusKey}
+                        draft={draft}
+                        isOpen={expandedStatus === statusKey}
+                        onToggle={() => setExpandedStatus((prev) => prev === statusKey ? null : statusKey)}
+                        onUpdate={(patch) => {
+                          setStatusStylesDraft((current) => ({
+                            ...current,
+                            [statusKey]: { ...current[statusKey], ...patch },
+                          }))
+                        }}
+                        onCommit={() => commitTextDrafts()}
+                        onReset={() => {
+                          const resetEntry = normalizeStatusStyleOverrides({})[statusKey]
+                          const nextDraft = { ...statusStylesDraft, [statusKey]: resetEntry }
+                          setStatusStylesDraft(nextDraft)
+                          commitTextDrafts(releaseDraftId, nextDraft)
+                        }}
+                      />
                     )
                   })}
-                </div>
+                </Stack>
+
+                <Button
+                  size="xs"
+                  variant="subtle"
+                  color="gray"
+                  onClick={() => {
+                    const resetAll = normalizeStatusStyleOverrides({})
+                    setStatusStylesDraft(resetAll)
+                    commitTextDrafts(releaseDraftId, resetAll)
+                  }}
+                >
+                  Reset all styles
+                </Button>
               </Stack>
             </div>
           </Tabs.Panel>

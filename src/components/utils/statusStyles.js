@@ -6,6 +6,16 @@ export const TEXT_COLOR_MODES = Object.freeze({
   manual: 'manual',
 })
 
+// Default fill color and 3D-effect flag per status (derived from original glowSegment values)
+const STATUS_FILL_DEFAULTS = Object.freeze({
+  done:    { fillColor: '#74849c', use3dEffect: false },
+  now:     { fillColor: '#ef4444', use3dEffect: true },
+  next:    { fillColor: '#06b6d4', use3dEffect: true },
+  later:   { fillColor: '#74849c', use3dEffect: false },
+  someday: { fillColor: '#74849c', use3dEffect: false },
+  hidden:  { fillColor: '#74849c', use3dEffect: false },
+})
+
 export const LINE_STYLE_PRESETS = Object.freeze({
   solid: { label: 'Solid', dasharray: 'none' },
   dashed: { label: 'Dashed', dasharray: '8 8' },
@@ -83,6 +93,10 @@ export const normalizeStatusStyleOverrides = (value) => {
       ? TEXT_COLOR_MODES.manual
       : TEXT_COLOR_MODES.auto
     const textColor = toValidHexColor(next.textColor, getAutoContrastTextColor(ringColor))
+    const fillColorDefault = STATUS_FILL_DEFAULTS[statusKey]?.fillColor ?? '#74849c'
+    const fillColor = toValidHexColor(next.fillColor, fillColorDefault)
+    const use3dEffectDefault = STATUS_FILL_DEFAULTS[statusKey]?.use3dEffect ?? false
+    const use3dEffect = typeof next.use3dEffect === 'boolean' ? next.use3dEffect : use3dEffectDefault
 
     normalized[statusKey] = {
       ringColor,
@@ -90,6 +104,8 @@ export const normalizeStatusStyleOverrides = (value) => {
       lineStyle,
       textColorMode,
       textColor,
+      fillColor,
+      use3dEffect,
     }
   })
 
@@ -107,6 +123,15 @@ export const resolveStatusStyles = (statusStylesOverride) => {
       ? override.textColor
       : getAutoContrastTextColor(override.ringColor)
 
+    let glowSegment = 'transparent'
+    if (override.use3dEffect) {
+      const hex = override.fillColor
+      const r = Number.parseInt(hex.slice(1, 3), 16)
+      const g = Number.parseInt(hex.slice(3, 5), 16)
+      const b = Number.parseInt(hex.slice(5, 7), 16)
+      glowSegment = `rgba(${r},${g},${b},0.45)`
+    }
+
     resolved[statusKey] = {
       ...baseStyle,
       ring: override.ringColor,
@@ -115,6 +140,7 @@ export const resolveStatusStyles = (statusStylesOverride) => {
       textColor,
       linkStroke: override.lineColor,
       linkStrokeDasharray: LINE_STYLE_PRESETS[override.lineStyle].dasharray,
+      glowSegment,
     }
   })
 
