@@ -59,20 +59,6 @@ function RgbColorInput({ label, value, onChange, onBlur }) {
           style={{ minWidth: 128 }}
           classNames={{ input: 'mantine-dark-input' }}
         />
-        <TextInput
-          size="xs"
-          value={value}
-          onChange={(e) => {
-            const v = e.currentTarget.value
-            if (/^#[0-9a-fA-F]{0,6}$/.test(v)) {
-              onChange(v)
-            }
-          }}
-          onBlur={onBlur}
-          style={{ width: 74 }}
-          classNames={{ input: 'mantine-dark-input' }}
-          aria-label={`${label} hex`}
-        />
         <NumberInput
           size="xs"
           value={r}
