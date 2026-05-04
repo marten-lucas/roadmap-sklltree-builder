@@ -144,7 +144,7 @@ function StatusStyleRow({ statusKey, draft, isOpen, onToggle, onUpdate, onCommit
           textAlign: 'left',
         }}
       >
-        <div style={{ width: 14, height: 14, borderRadius: '50%', background: draft.ringColor, flexShrink: 0, border: '2px solid rgba(255,255,255,0.15)' }} />
+        <div style={{ width: 14, height: 14, borderRadius: '50%', background: draft.lineColor, flexShrink: 0, border: '2px solid rgba(255,255,255,0.15)' }} />
         <Text size="sm" fw={600} style={{ flex: 1 }}>{STATUS_LABELS[statusKey]}</Text>
         <Text size="xs" c="dimmed">{isOpen ? '▲' : '▼'}</Text>
       </button>
@@ -156,7 +156,7 @@ function StatusStyleRow({ statusKey, draft, isOpen, onToggle, onUpdate, onCommit
           <RgbColorInput
             label="Line Color"
             value={draft.lineColor}
-            onChange={(v) => onUpdate({ lineColor: v })}
+            onChange={(v) => onUpdate({ lineColor: v }, true)}
             onBlur={onCommit}
           />
 
@@ -165,7 +165,7 @@ function StatusStyleRow({ statusKey, draft, isOpen, onToggle, onUpdate, onCommit
             <RgbColorInput
               label="Fill Color"
               value={draft.fillColor}
-              onChange={(v) => onUpdate({ fillColor: v })}
+              onChange={(v) => onUpdate({ fillColor: v }, true)}
               onBlur={onCommit}
             />
             <Checkbox
@@ -173,8 +173,7 @@ function StatusStyleRow({ statusKey, draft, isOpen, onToggle, onUpdate, onCommit
               label="3D Effect"
               checked={draft.use3dEffect}
               onChange={(e) => {
-                onUpdate({ use3dEffect: e.currentTarget.checked })
-                onCommit()
+                onUpdate({ use3dEffect: e.currentTarget.checked }, true)
               }}
             />
           </div>
@@ -186,15 +185,14 @@ function StatusStyleRow({ statusKey, draft, isOpen, onToggle, onUpdate, onCommit
               label="Auto Contrast Text"
               checked={draft.textColorMode === TEXT_COLOR_MODES.auto}
               onChange={(e) => {
-                onUpdate({ textColorMode: e.currentTarget.checked ? TEXT_COLOR_MODES.auto : TEXT_COLOR_MODES.manual })
-                onCommit()
+                onUpdate({ textColorMode: e.currentTarget.checked ? TEXT_COLOR_MODES.auto : TEXT_COLOR_MODES.manual }, true)
               }}
             />
             {draft.textColorMode !== TEXT_COLOR_MODES.auto && (
               <RgbColorInput
                 label="Text Color"
                 value={draft.textColor}
-                onChange={(v) => onUpdate({ textColor: v })}
+                onChange={(v) => onUpdate({ textColor: v }, true)}
                 onBlur={onCommit}
               />
             )}
@@ -209,8 +207,7 @@ function StatusStyleRow({ statusKey, draft, isOpen, onToggle, onUpdate, onCommit
                   key={key}
                   type="button"
                   onClick={() => {
-                    onUpdate({ lineStyle: key })
-                    onCommit()
+                    onUpdate({ lineStyle: key }, true)
                   }}
                   style={{
                     padding: '3px 8px',
@@ -851,11 +848,17 @@ export const SystemPanel = forwardRef(function SystemPanel(
                         draft={draft}
                         isOpen={expandedStatus === statusKey}
                         onToggle={() => setExpandedStatus((prev) => prev === statusKey ? null : statusKey)}
-                        onUpdate={(patch) => {
-                          setStatusStylesDraft((current) => ({
-                            ...current,
-                            [statusKey]: { ...current[statusKey], ...patch },
-                          }))
+                        onUpdate={(patch, commitNow = false) => {
+                          setStatusStylesDraft((current) => {
+                            const nextDraft = {
+                              ...current,
+                              [statusKey]: { ...current[statusKey], ...patch },
+                            }
+                            if (commitNow) {
+                              commitTextDrafts(releaseDraftId, nextDraft)
+                            }
+                            return nextDraft
+                          })
                         }}
                         onCommit={() => commitTextDrafts()}
                         onReset={() => {

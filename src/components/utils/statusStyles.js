@@ -6,14 +6,14 @@ export const TEXT_COLOR_MODES = Object.freeze({
   manual: 'manual',
 })
 
-// Default fill color and 3D-effect flag per status (derived from original glowSegment values)
+// Default fill color and 3D-effect flag per status to match the legacy node background look.
 const STATUS_FILL_DEFAULTS = Object.freeze({
-  done:    { fillColor: '#74849c', use3dEffect: false },
-  now:     { fillColor: '#ef4444', use3dEffect: true },
-  next:    { fillColor: '#06b6d4', use3dEffect: true },
-  later:   { fillColor: '#74849c', use3dEffect: false },
-  someday: { fillColor: '#74849c', use3dEffect: false },
-  hidden:  { fillColor: '#74849c', use3dEffect: false },
+  done:    { fillColor: '#536075', use3dEffect: true },
+  now:     { fillColor: '#152d5e', use3dEffect: true },
+  next:    { fillColor: '#152d5e', use3dEffect: true },
+  later:   { fillColor: '#020617', use3dEffect: false },
+  someday: { fillColor: '#020617', use3dEffect: false },
+  hidden:  { fillColor: '#152d5e', use3dEffect: true },
 })
 
 export const LINE_STYLE_PRESETS = Object.freeze({
@@ -121,7 +121,7 @@ export const resolveStatusStyles = (statusStylesOverride) => {
     const override = normalizedOverrides[statusKey]
     const textColor = override.textColorMode === TEXT_COLOR_MODES.manual
       ? override.textColor
-      : getAutoContrastTextColor(override.ringColor)
+      : getAutoContrastTextColor(override.lineColor)
 
     let glowSegment = 'transparent'
     if (override.use3dEffect) {
@@ -134,13 +134,15 @@ export const resolveStatusStyles = (statusStylesOverride) => {
 
     resolved[statusKey] = {
       ...baseStyle,
-      ring: override.ringColor,
-      ringBand: override.ringColor,
-      badge: override.ringColor,
+      ring: override.lineColor,
+      ringBand: override.lineColor,
+      badge: override.lineColor,
       textColor,
       linkStroke: override.lineColor,
       linkStrokeDasharray: LINE_STYLE_PRESETS[override.lineStyle].dasharray,
       glowSegment,
+      fillColor: override.fillColor,
+      use3dEffect: override.use3dEffect,
     }
   })
 

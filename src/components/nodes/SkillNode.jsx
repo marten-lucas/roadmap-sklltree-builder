@@ -70,6 +70,46 @@ const buildSegmentConicStyle = (statusKeys, colorGetter, options = {}) => {
 
 const clamp = (value, min, max) => Math.min(max, Math.max(min, value))
 
+const HEX_COLOR_PATTERN = /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/
+
+const toNormalizedHex = (value, fallback = '#0f172a') => {
+  const raw = String(value ?? '').trim()
+  if (!HEX_COLOR_PATTERN.test(raw)) {
+    return fallback
+  }
+
+  if (raw.length === 4) {
+    const [hash, r, g, b] = raw
+    return `${hash}${r}${r}${g}${g}${b}${b}`.toLowerCase()
+  }
+
+  return raw.toLowerCase()
+}
+
+const buildNodeBackground = ({ statusKey, fillColor, use3dEffect, isSelected, isVeryClose }) => {
+  if (isVeryClose) {
+    return 'transparent'
+  }
+
+  const baseHex = toNormalizedHex(fillColor, '#0f172a')
+  if (!use3dEffect) {
+    return baseHex
+  }
+
+  const isDone = statusKey === 'done'
+  const center = isSelected
+    ? (isDone ? '#64768c' : '#1c58c3')
+    : baseHex
+  const middle = isSelected
+    ? (isDone ? '#2d3e55' : '#0e1c54')
+    : (isDone ? '#1d283c' : '#0f172a')
+  const edge = isSelected
+    ? (isDone ? '#0f1628' : '#02061a')
+    : (isDone ? '#0a101f' : '#020617')
+
+  return `radial-gradient(circle at 32% 28%, ${center} 0%, ${middle} 58%, ${edge} 100%)`
+}
+
 const _SkillNode = ({ node, nodeSize, isSelected, isPortalPeerHovered = false, onSelect, onSelectLevel, onZoomToNode, displayMode = 'full', labelMode = 'far', zoomScale = 1, scopeOptions = [], storyPointMap, releaseId = null, statusStyles = STATUS_STYLES }) => {
   const [hoveredLevelIndex, setHoveredLevelIndex] = useState(null)
   const lastRightClickRef = useRef(0)
@@ -153,18 +193,13 @@ const _SkillNode = ({ node, nodeSize, isSelected, isPortalPeerHovered = false, o
       : (0.36 + zoomGlowProgress * 0.18).toFixed(2),
     filter: `blur(${(isVeryClose ? 14 + zoomGlowProgress * 10 : 24 + zoomGlowProgress * 6).toFixed(2)}px)`,
   }
-  const isLowPriorityStatus = statusKey === 'later' || statusKey === 'someday'
-  const nodeBackground = isVeryClose
-    ? 'transparent'
-    : isLowPriorityStatus
-      ? 'linear-gradient(180deg, rgb(7, 14, 30) 0%, rgb(2, 6, 23) 100%)'
-      : isSelected
-        ? statusKey === 'done'
-          ? 'radial-gradient(circle at 32% 28%, rgb(100, 118, 140), rgb(45, 62, 85) 58%, rgb(15, 22, 40) 100%)'
-          : 'radial-gradient(circle at 35% 30%, rgb(28, 88, 195), rgb(14, 28, 84) 56%, rgb(2, 6, 26) 100%)'
-        : statusKey === 'done'
-          ? 'radial-gradient(circle at 32% 28%, rgb(83, 96, 117), rgb(29, 40, 60) 58%, rgb(10, 16, 31) 100%)'
-          : 'radial-gradient(circle at 32% 28%, rgb(21, 45, 94), rgb(15, 23, 42) 58%, rgb(2, 6, 23) 100%)'
+  const nodeBackground = buildNodeBackground({
+    statusKey,
+    fillColor: statusStylesResolved.fillColor,
+    use3dEffect: Boolean(statusStylesResolved.use3dEffect),
+    isSelected,
+    isVeryClose,
+  })
 
   const handleRingMouseMove = (event) => {
     const index = getNodeLevelIndexFromPointer({
