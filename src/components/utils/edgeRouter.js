@@ -327,7 +327,10 @@ export const buildRoutedEdgeLinks = ({ edgeRouting, nodesById, origin, nodeSize 
         return null
       }
 
-      const sweep = toAngle > fromAngle ? 1 : 0
+      // Always take the shorter angular path (handles 0°/360° wrap-around correctly).
+      const diff = toAngle - fromAngle
+      const normalizedDiff = ((diff + 180) % 360 + 360) % 360 - 180
+      const sweep = normalizedDiff > 0 ? 1 : 0
       return `A ${radius} ${radius} 0 0 ${sweep} ${toPoint.x} ${toPoint.y}`
     }
 
@@ -405,29 +408,51 @@ export const buildRoutedEdgeLinks = ({ edgeRouting, nodesById, origin, nodeSize 
         const corridorTrunkPoint = toCartesian(trunkAngle, corridorRadius, origin)
         const corridorChildPoint = toCartesian(childAngle, corridorRadius, origin)
 
+        // Detect if the child is angularly "between" the parent and trunk — in that case the
+        // standard trunk routing would double-back (parent→trunk→child reverses direction), so
+        // route the child directly from parent angle to child angle instead.
+        const toNorm = (d) => ((d + 180) % 360 + 360) % 360 - 180
+        const parentToTrunkNorm = toNorm(trunkAngle - parent.angle)
+        const parentToChildNorm = toNorm(childAngle - parent.angle)
+        const TRUNK_THRESHOLD = 0.5 // degrees — if trunk is this close to parent, skip the reversal check
+        const childIsBeyondTrunk = Math.abs(parentToTrunkNorm) < TRUNK_THRESHOLD ||
+          (Math.sign(parentToChildNorm) === Math.sign(parentToTrunkNorm) &&
+            Math.abs(parentToChildNorm) >= Math.abs(parentToTrunkNorm) - TRUNK_THRESHOLD)
+
         const parts = [`M ${parent.x} ${parent.y}`]
 
         // Always enter the corridor radially to avoid sweeping arcs across
         // populated source rings (which can trigger avoidable portalization).
         parts.push(`L ${corridorParentPoint.x} ${corridorParentPoint.y}`)
 
-        const parentToTrunkCorridorArc = buildArc(parent.angle, corridorRadius, trunkAngle, corridorTrunkPoint)
-        if (parentToTrunkCorridorArc) {
-          parts.push(parentToTrunkCorridorArc)
-        }
+        if (childIsBeyondTrunk) {
+          // Standard trunk routing: parent → trunk (shared) → child (individual).
+          const parentToTrunkCorridorArc = buildArc(parent.angle, corridorRadius, trunkAngle, corridorTrunkPoint)
+          if (parentToTrunkCorridorArc) {
+            parts.push(parentToTrunkCorridorArc)
+          }
 
-        // Arc along the corridor ring from trunk angle to child angle — strictly radial/arc routing.
-        const corridorArc = buildArc(trunkAngle, corridorRadius, childAngle, corridorChildPoint)
-        if (corridorArc) {
-          parts.push(corridorArc)
-        }
+          // Arc along the corridor ring from trunk angle to child angle.
+          const corridorArc = buildArc(trunkAngle, corridorRadius, childAngle, corridorChildPoint)
+          if (corridorArc) {
+            parts.push(corridorArc)
+          }
 
-        // Junction dot at each child's spoke-start on the corridor ring.
-        // The first and last children in the group's arc sweep are arc endpoints
-        // (elbow turns only) — they do not create a T-junction, so skip them.
-        const isArcExtreme = plan.childAngle === plan.minGroupAngle || plan.childAngle === plan.maxGroupAngle
-        if (!isArcExtreme) {
-          splitPoint = { x: corridorChildPoint.x, y: corridorChildPoint.y }
+          // Junction dot at each child's spoke-start on the corridor ring.
+          // The first and last children in the group's arc sweep are arc endpoints
+          // (elbow turns only) — they do not create a T-junction, so skip them.
+          const isArcExtreme = plan.childAngle === plan.minGroupAngle || plan.childAngle === plan.maxGroupAngle
+          if (!isArcExtreme) {
+            splitPoint = { x: corridorChildPoint.x, y: corridorChildPoint.y }
+          }
+        } else {
+          // Child is angularly between parent and trunk — going via trunk would reverse direction.
+          // Route directly from parent angle to child angle along the corridor (no trunk detour).
+          const directArc = buildArc(parent.angle, corridorRadius, childAngle, corridorChildPoint)
+          if (directArc) {
+            parts.push(directArc)
+          }
+          // No split point — this is a direct spoke, not a T-junction.
         }
 
         // Radial spoke from corridor ring down to child node.

@@ -27,6 +27,15 @@ const findSecondArcRadius = (path) => {
   return null
 }
 
+const findFirstArcRadius = (path) => {
+  const tokens = parsePathTokens(path)
+  for (let i = 0; i < tokens.length; i += 1) {
+    if (tokens[i] !== 'A') continue
+    return Number(tokens[i + 1])
+  }
+  return null
+}
+
 describe('edgeRouter shared corridor alignment', () => {
   it('uses one shared corridor radius per trunk group', () => {
     const parentId = 'parent'
@@ -101,11 +110,16 @@ describe('edgeRouter shared corridor alignment', () => {
     expect(near).toBeTruthy()
     expect(far).toBeTruthy()
 
+    // child-near (angle 26) is past the trunk (angle 10), so it gets full trunk routing: two arcs.
+    // child-far (angle 5) is between parent (angle 0) and trunk (angle 10), so it routes directly:
+    // one arc from parent angle to child angle — no double-back to trunk.
     const nearSecondArcRadius = findSecondArcRadius(near.path)
+    const farFirstArcRadius = findFirstArcRadius(far.path)
     const farSecondArcRadius = findSecondArcRadius(far.path)
 
     expect(nearSecondArcRadius).not.toBeNull()
-    expect(farSecondArcRadius).not.toBeNull()
-    expect(nearSecondArcRadius).toBeCloseTo(farSecondArcRadius, 6)
+    expect(farFirstArcRadius).not.toBeNull()
+    expect(farSecondArcRadius).toBeNull() // direct routing — only one arc
+    expect(nearSecondArcRadius).toBeCloseTo(farFirstArcRadius, 6) // same corridor radius
   })
 })

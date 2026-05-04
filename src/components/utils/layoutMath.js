@@ -39,6 +39,12 @@ export const buildRadialEdgePath = (sourceAngle, sourceRadius, targetAngle, targ
   ].join(' ')
 }
 
+const shortArcSweep = (fromAngle, toAngle) => {
+  const diff = toAngle - fromAngle
+  const normalizedDiff = ((diff + 180) % 360 + 360) % 360 - 180
+  return normalizedDiff > 0 ? 1 : 0
+}
+
 export const buildArcRadialPath = (sourceAngle, sourceRadius, targetAngle, targetRadius, origin) => {
   const source = toCartesian(sourceAngle, sourceRadius, origin)
   const sourceAtTargetAngle = toCartesian(targetAngle, sourceRadius, origin)
@@ -47,7 +53,7 @@ export const buildArcRadialPath = (sourceAngle, sourceRadius, targetAngle, targe
   const parts = [`M ${source.x} ${source.y}`]
 
   if (sourceRadius >= 1 && Math.abs(targetAngle - sourceAngle) >= 0.01) {
-    const sweep = targetAngle > sourceAngle ? 1 : 0
+    const sweep = shortArcSweep(sourceAngle, targetAngle)
     parts.push(`A ${sourceRadius} ${sourceRadius} 0 0 ${sweep} ${sourceAtTargetAngle.x} ${sourceAtTargetAngle.y}`)
   }
 
@@ -66,7 +72,7 @@ export const buildRadialArcPath = (sourceAngle, sourceRadius, targetAngle, targe
   const parts = [`M ${source.x} ${source.y}`]
 
   if (sourceRadius >= 1 && Math.abs(targetAngle - sourceAngle) >= 0.01) {
-    const sweep = targetAngle > sourceAngle ? 1 : 0
+    const sweep = shortArcSweep(sourceAngle, targetAngle)
     parts.push(`A ${sourceRadius} ${sourceRadius} 0 0 ${sweep} ${sourceAtTargetAngle.x} ${sourceAtTargetAngle.y}`)
   }
 

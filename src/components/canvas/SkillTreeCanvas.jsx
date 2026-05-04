@@ -227,7 +227,7 @@ export function SkillTreeCanvas({
   }, [filteredLinks, layoutNodesById, releaseId, statusStyles])
 
   const hoveredPeerNodeId = hoveredPortal
-    ? (hoveredPortal.type === 'source' ? hoveredPortal.targetId : hoveredPortal.sourceId)
+    ? (hoveredPortal.nodeId === hoveredPortal.sourceId ? hoveredPortal.targetId : hoveredPortal.sourceId)
     : null
   const setPortalHover = (portalKey) => {
     setHoveredPortalKey((prev) => (prev === portalKey ? prev : portalKey))

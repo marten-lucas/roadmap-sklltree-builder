@@ -1393,7 +1393,7 @@ export function SkillTree() {
 
       pushEndpoint(crossing.parentId, {
         key: `${key}:source`,
-        type: 'source',
+        type: 'target',
         sourceId: crossing.parentId,
         targetId: crossing.childId,
         tooltip: `Verbindung zu ${childNode.label}`,
@@ -1404,7 +1404,7 @@ export function SkillTree() {
 
       pushEndpoint(crossing.childId, {
         key: `${key}:target`,
-        type: 'target',
+        type: 'source',
         sourceId: crossing.parentId,
         targetId: crossing.childId,
         tooltip: `Connection from ${parentNode.label}`,
@@ -1455,12 +1455,14 @@ export function SkillTree() {
 
       // Place source portals (requires — inner hemisphere)
       sourceEndpoints.forEach((endpoint, index) => {
-        const angle = pickPortalSlotAngle({
-          type: endpoint.type,
-          inwardAngle,
-          blockedDirs: linkBlockedAngles,
-          reservedAngles,
-        })
+        const angle = index === 0
+          ? inwardAngle
+          : pickPortalSlotAngle({
+              type: endpoint.type,
+              inwardAngle,
+              blockedDirs: linkBlockedAngles,
+              reservedAngles,
+            })
         reservedAngles.push(angle)
         const orbit = portalOrbit + Math.abs(index - (sourceEndpoints.length - 1) / 2) * endpointOrbitStep
         const radians = toRadians(angle)
@@ -1478,12 +1480,14 @@ export function SkillTree() {
 
       // Place target portals (enables — outer hemisphere)
       targetEndpoints.forEach((endpoint, index) => {
-        const angle = pickPortalSlotAngle({
-          type: endpoint.type,
-          inwardAngle,
-          blockedDirs: linkBlockedAngles,
-          reservedAngles,
-        })
+        const angle = index === 0
+          ? inwardAngle + 180
+          : pickPortalSlotAngle({
+              type: endpoint.type,
+              inwardAngle,
+              blockedDirs: linkBlockedAngles,
+              reservedAngles,
+            })
         reservedAngles.push(angle)
         const orbit = portalOrbit + Math.abs(index - (targetEndpoints.length - 1) / 2) * endpointOrbitStep
         const radians = toRadians(angle)
